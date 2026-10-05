@@ -118,7 +118,9 @@ if (cfg.GetValue("Database:AutoCreate", true))
     var db = scope.ServiceProvider.GetRequiredService<NuraDbContext>();
     try
     {
-        await db.Database.EnsureCreatedAsync();
+        // SQL Server: apply EF migrations (creates/updates tables). InMemory has no schema, so just ensure it exists.
+        if (provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase)) await db.Database.EnsureCreatedAsync();
+        else await db.Database.MigrateAsync();
         await DbSeeder.SeedAsync(db, cfg.GetValue("Database:SeedDemoBatch", false));
     }
     catch (Exception ex)
