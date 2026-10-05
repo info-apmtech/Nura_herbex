@@ -12,6 +12,8 @@ using Nuraherbex.Shared.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 var cfg = builder.Configuration;
+// Machine-local settings (PayU keys etc.), git-ignored. Loaded last so it always applies, however the API is launched.
+cfg.AddJsonFile(Path.Combine(builder.Environment.ContentRootPath, "appsettings.Local.json"), optional: true, reloadOnChange: true);
 
 // ---- Options ---------------------------------------------------------------------------
 builder.Services.Configure<StoreOptions>(cfg.GetSection(StoreOptions.Section));
@@ -110,6 +112,16 @@ if (genIdx >= 0)
     await File.WriteAllTextAsync(args.ElementAtOrDefault(genIdx + 1) ?? "schema.sql", script);
     Console.WriteLine("Schema script written.");
     return;
+}
+
+// Startup summary so it is obvious which database / PayU mode this process really uses (no secrets printed).
+{
+    var csb = provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase) ? null : new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(cfg.GetConnectionString("Default"));
+    var payuKey = cfg["PayU:MerchantKey"];
+    app.Logger.LogInformation("[Startup] Environment={Env} | Database={Provider} {Server}/{Db} | PayU={Payu} ({PayuEnv}) | UserSecrets={Secrets}",
+        app.Environment.EnvironmentName, provider, csb?.DataSource ?? "-", csb?.InitialCatalog ?? "-",
+        string.IsNullOrWhiteSpace(payuKey) ? "NOT CONFIGURED" : $"key {payuKey[..Math.Min(2, payuKey.Length)]}***", cfg["PayU:Env"] ?? "test",
+        app.Environment.IsDevelopment() ? "enabled" : "off (not Development)");
 }
 
 if (cfg.GetValue("Database:AutoCreate", true))

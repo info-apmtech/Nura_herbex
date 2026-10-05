@@ -36,6 +36,8 @@ public class PayUOptions
     public string MerchantSalt { get; set; } = "";
     /// <summary>test | live</summary>
     public string Env { get; set; } = "test";
+    /// <summary>Demo only: when no key/salt is set, auto-approve payments without PayU. Never enable in production.</summary>
+    public bool AllowSimulation { get; set; }
     public bool IsConfigured => !string.IsNullOrWhiteSpace(MerchantKey) && !string.IsNullOrWhiteSpace(MerchantSalt);
     public string ActionUrl => Env == "live" ? "https://secure.payu.in/_payment" : "https://test.payu.in/_payment";
 }

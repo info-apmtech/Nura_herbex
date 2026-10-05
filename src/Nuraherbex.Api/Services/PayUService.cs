@@ -61,6 +61,9 @@ public class PayUService(NuraDbContext db, OrderService orders, IOptions<PayUOpt
         var surl = $"{callbackBase}/api/payments/payu-response";
         var furl = surl;
 
+        if (!_p.IsConfigured && !_p.AllowSimulation)
+            throw new InvalidOperationException("Online payment is not available: PayU merchant key/salt are not configured on the server.");
+
         if (!_p.IsConfigured)
         {
             log.LogWarning("[PayU] Merchant key/salt not set — simulation mode");
@@ -103,7 +106,7 @@ public class PayUService(NuraDbContext db, OrderService orders, IOptions<PayUOpt
         // PayU also calls this as a webhook, so a repeat of an already-settled payment is a no-op.
         if (attempt is { Status: "SUCCESS" } && saved is not null) return saved;
 
-        if (!_p.IsConfigured && G("simulated") == "true")
+        if (!_p.IsConfigured && _p.AllowSimulation && G("simulated") == "true")
         {
             log.LogInformation("[PayU Simulation] Verifying order {Order}", orderId);
             return await SettleAsync(attempt, saved, orderId, string.IsNullOrEmpty(G("mihpayid")) ? $"payu_sim_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}" : G("mihpayid"), txnid, raw, p);
