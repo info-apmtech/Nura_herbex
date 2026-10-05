@@ -1,3 +1,4 @@
+﻿using Microsoft.AspNetCore.Authorization;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,12 +13,13 @@ namespace Nuraherbex.Api.Controllers;
 /// <summary>
 /// WhatsApp Cloud API webhook.
 ///
-/// Meta setup:  App Dashboard → WhatsApp → Configuration → Webhook
+/// Meta setup:  App Dashboard â†’ WhatsApp â†’ Configuration â†’ Webhook
 ///   Callback URL : https://&lt;your-api-host&gt;/api/webhooks/whatsapp
 ///   Verify token : the value of WhatsApp:VerifyToken
 ///   Subscribe to : messages
 /// </summary>
 [ApiController]
+[AllowAnonymous]
 [Route("api/webhooks/whatsapp")]
 public class WhatsAppWebhookController(WhatsAppService whatsapp, IWebHostEnvironment env, ILogger<WhatsAppWebhookController> log) : ControllerBase
 {
@@ -37,7 +39,7 @@ public class WhatsAppWebhookController(WhatsAppService whatsapp, IWebHostEnviron
             return Content(challenge, "text/plain", Encoding.UTF8);
         }
 
-        if (misconfigured) log.LogError("[WhatsApp] WhatsApp:VerifyToken is not configured — cannot verify webhook");
+        if (misconfigured) log.LogError("[WhatsApp] WhatsApp:VerifyToken is not configured â€” cannot verify webhook");
         else log.LogWarning("[WhatsApp] Webhook verification rejected (mode={Mode})", mode);
         return Forbid();
     }
@@ -60,15 +62,15 @@ public class WhatsAppWebhookController(WhatsAppService whatsapp, IWebHostEnviron
         }
         else if (!env.IsDevelopment())
         {
-            log.LogError("[WhatsApp] WhatsApp:AppSecret is not configured — refusing unsigned events outside Development");
+            log.LogError("[WhatsApp] WhatsApp:AppSecret is not configured â€” refusing unsigned events outside Development");
             return StatusCode(503);
         }
-        else log.LogWarning("[WhatsApp] AppSecret not set — accepting unsigned event (Development only)");
+        else log.LogWarning("[WhatsApp] AppSecret not set â€” accepting unsigned event (Development only)");
 
         try { await whatsapp.ProcessWebhookAsync(Encoding.UTF8.GetString(raw)); }
         catch (Exception ex)
         {
-            // Always ack with 200 for a validated payload — Meta retries aggressively on non-2xx.
+            // Always ack with 200 for a validated payload â€” Meta retries aggressively on non-2xx.
             log.LogError(ex, "[WhatsApp] Failed to process event");
         }
         return Ok();
@@ -77,6 +79,7 @@ public class WhatsAppWebhookController(WhatsAppService whatsapp, IWebHostEnviron
 
 /// <summary>Shiprocket tracking webhook: maps courier status codes to order fulfillment status.</summary>
 [ApiController]
+[AllowAnonymous]
 [Route("api/webhooks/shiprocket")]
 public class ShiprocketWebhookController(
     NuraDbContext db,
@@ -127,7 +130,7 @@ public class ShiprocketWebhookController(
             { Status = mapped.Text, Location = location ?? "Express Sorting Facility", Time = Mapping.TimelineStamp(), Done = true, Active = true }];
         if (mapped.Status == "DELIVERED" && order.PaymentMethod == "COD") order.PaymentStatus = "COD_COLLECTED";
         await db.SaveChangesAsync();
-        log.LogInformation("[Shiprocket] Order {Order} → {Status}", order.Id, mapped.Status);
+        log.LogInformation("[Shiprocket] Order {Order} â†’ {Status}", order.Id, mapped.Status);
 
         // Notify only on a genuine transition so repeated courier scans never spam the customer.
         var notifyDelivered = mapped.Status == "DELIVERED" && previous != "DELIVERED";

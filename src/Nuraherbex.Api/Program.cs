@@ -93,6 +93,24 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
     o.KnownIPNetworks.Clear(); o.KnownProxies.Clear();
 });
 
+// ---- Swagger (API explorer at /swagger) ------------------------------------------------
+// Enabled in Development, or anywhere with Swagger:Enabled=true. Use the Authorize button for admin / customer JWTs.
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(o =>
+{
+    o.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo { Title = "Nura Herbex API", Version = "v1", Description = "Store, orders, PayU payments, admin, Shiprocket and WhatsApp webhooks." });
+    o.CustomSchemaIds(t => t.FullName?.Replace('+', '.'));
+    o.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.OpenApiSecurityScheme
+    {
+        Type = Microsoft.OpenApi.SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT",
+        Description = "Paste the token returned by POST /api/admin/login (admin) or /api/auth/login (customer). No 'Bearer ' prefix needed.",
+    });
+    // The WhatsApp event POST reads the raw body (needed for signature checks), so describe it manually for "Try it out".
+    o.OperationFilter<RawJsonBodyOperationFilter>();
+    // Lock icon / Authorize requirement only on endpoints that really need a login ([Authorize] and not [AllowAnonymous]).
+    o.OperationFilter<AuthorizeOperationFilter>();
+});
+
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
@@ -149,6 +167,19 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapGet("/", () => Results.Redirect("/api/health"));
+var swaggerOn = app.Environment.IsDevelopment() || cfg.GetValue("Swagger:Enabled", false);
+if (swaggerOn)
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(o =>
+    {
+        o.SwaggerEndpoint("/swagger/v1/swagger.json", "Nura Herbex API v1");
+        o.RoutePrefix = "swagger";
+        o.DocumentTitle = "Nura Herbex API";
+        o.EnableTryItOutByDefault();
+        o.DisplayRequestDuration();
+    });
+}
+app.MapGet("/", () => Results.Redirect(swaggerOn ? "/swagger" : "/api/health"));
 
 app.Run();

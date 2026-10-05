@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -12,6 +12,7 @@ using Nuraherbex.Shared.Models;
 namespace Nuraherbex.Api.Controllers;
 
 [ApiController]
+[AllowAnonymous]
 [Route("api")]
 public class HealthController : ControllerBase
 {
@@ -23,6 +24,7 @@ public class HealthController : ControllerBase
 }
 
 [ApiController]
+[AllowAnonymous]
 [Route("api/products")]
 public class ProductsController(ProductService products) : ControllerBase
 {
@@ -32,6 +34,7 @@ public class ProductsController(ProductService products) : ControllerBase
 }
 
 [ApiController]
+[AllowAnonymous]
 [Route("api/orders")]
 [EnableRateLimiting("orders")]
 public class OrdersController(OrderService orders, ProductService products, CustomerAuthService auth, ShiprocketService shiprocket) : ControllerBase
@@ -127,6 +130,7 @@ public class OrdersController(OrderService orders, ProductService products, Cust
 }
 
 [ApiController]
+[AllowAnonymous]
 [Route("api/payments")]
 public class PaymentsController(PayUService payu, IOptions<StoreOptions> store, ILogger<PaymentsController> log) : ControllerBase
 {
@@ -184,6 +188,7 @@ public class AuthController(CustomerAuthService auth, OrderService orders, Shipr
         catch (InvalidOperationException ex) { return StatusCode(failStatus, new AuthResponse { Success = false, Message = ex.Message }); }
     }
 
+    [AllowAnonymous]
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterRequest r)
     {
@@ -191,15 +196,19 @@ public class AuthController(CustomerAuthService auth, OrderService orders, Shipr
         catch (InvalidOperationException ex) { return BadRequest(new AuthResponse { Success = false, Message = ex.Message }); }
     }
 
+    [AllowAnonymous]
     [HttpPost("login")]
     public Task<IActionResult> Login(LoginRequest r) => Run(() => auth.LoginAsync(r), 401);
 
+    [AllowAnonymous]
     [HttpPost("send-otp")]
     public Task<IActionResult> SendOtp(SendOtpRequest r) => Run(() => auth.SendOtpAsync(r.Email));
 
+    [AllowAnonymous]
     [HttpPost("verify-otp")]
     public Task<IActionResult> VerifyOtp(VerifyOtpRequest r) => Run(() => auth.VerifyOtpAsync(r.Email, r.Otp), 401);
 
+    [AllowAnonymous]
     [HttpGet("check-user")]
     public async Task<CheckUserResponse> CheckUser([FromQuery] string? query, [FromQuery] string? email, [FromQuery] string? phone)
     {
@@ -246,6 +255,7 @@ public class AuthController(CustomerAuthService auth, OrderService orders, Shipr
 // Public content: Trust Passport batches, site copy, formulation, reviews
 // ---------------------------------------------------------------------------
 [ApiController]
+[AllowAnonymous]
 [Route("api/trust-batches")]
 public class TrustBatchesController(NuraDbContext db) : ControllerBase
 {
@@ -267,6 +277,7 @@ public class TrustBatchesController(NuraDbContext db) : ControllerBase
 }
 
 [ApiController]
+[AllowAnonymous]
 [Route("api/content")]
 public class ContentController(SettingsService settings) : ControllerBase
 {
@@ -285,6 +296,7 @@ public class ContentController(SettingsService settings) : ControllerBase
 }
 
 [ApiController]
+[AllowAnonymous]
 [Route("api/reviews")]
 public class ReviewsController(NuraDbContext db) : ControllerBase
 {
