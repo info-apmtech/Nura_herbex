@@ -1,0 +1,275 @@
+@import url('https://cdn.jsdelivr.net/npm/@fontsource/momo-trust-display@5.2.5/index.css');
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --header-color: #fff3bf;
+  --primary-purple: #9929ea;
+  --primary-purple-light: #cc66da;
+  --primary-purple-dark: #6818a5;
+  --brand-gold: #fff3bf;
+  --bg-deep: #08060c;
+  --bg-obsidian: #040307;
+  --header-height: 72px;
+  --scroll-progress: 0%;
+  --scroll-y: 0px;
+}
+
+html {
+  /* Native direct scroll: prevents mousewheel glide acceleration so user can read at their own pace */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(153, 41, 234, 0.4) #050409;
+}
+
+body {
+  background-color: #08060c;
+  color: #ffffff;
+  font-family: 'EB Garamond', Garamond, Georgia, serif;
+  font-size: 1.125rem;
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Big Headlines / Header text: Momo Trust Display with #fff3bf cream/buttercream yellow */
+h1, h2, h3, h4, h5, h6, .font-display, .font-heading {
+  font-family: 'Momo Trust Display', 'Plus Jakarta Sans', system-ui, sans-serif;
+  letter-spacing: -0.015em;
+  color: #fff3bf;
+}
+
+/* Explicit rule: ensure headings marked text-white show in #fff3bf */
+h1.text-white:not([class*="bg-clip-text"]),
+h2.text-white:not([class*="bg-clip-text"]),
+h3.text-white:not([class*="bg-clip-text"]),
+h4.text-white:not([class*="bg-clip-text"]),
+h5.text-white:not([class*="bg-clip-text"]),
+h6.text-white:not([class*="bg-clip-text"]),
+.font-display.text-white:not([class*="bg-clip-text"]),
+.font-heading.text-white:not([class*="bg-clip-text"]),
+h1 span.text-white:not([class*="bg-clip-text"]),
+h2 span.text-white:not([class*="bg-clip-text"]),
+h3 span.text-white:not([class*="bg-clip-text"]),
+h4 span.text-white:not([class*="bg-clip-text"]),
+.font-heading span.text-white:not([class*="bg-clip-text"]),
+.font-display span.text-white:not([class*="bg-clip-text"]) {
+  color: #fff3bf !important;
+}
+
+/* Small / Paragraph / Description / Editorial Text: Garamond */
+p, .font-body, .font-para, .font-serif, blockquote {
+  font-family: 'EB Garamond', Garamond, Georgia, serif;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #050409;
+}
+::-webkit-scrollbar-thumb {
+  background: #231238;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9929ea;
+}
+
+/* Glowing Top Scroll Progress Bar (100% GPU / CSS variable driven) */
+.scroll-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #9929ea, #cc66da, #faeb92, #cc66da);
+  box-shadow: 0 0 10px #cc66da, 0 0 20px rgba(153, 41, 234, 0.4);
+  z-index: 100;
+  width: var(--scroll-progress, 0%);
+  pointer-events: none;
+  transform: translateZ(0);
+  will-change: width;
+}
+
+/* Laser Beam Section Divider */
+.section-beam-divider {
+  position: relative;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(153, 41, 234, 0.4) 30%, rgba(204, 102, 218, 0.8) 50%, rgba(250, 235, 146, 0.6) 70%, transparent 100%);
+  margin: 0 auto;
+  overflow: visible;
+}
+
+.section-beam-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 2px;
+  background: #faeb92;
+  box-shadow: 0 0 20px 4px rgba(250, 235, 146, 0.9), 0 0 40px 10px rgba(153, 41, 234, 0.5);
+  border-radius: 9999px;
+}
+
+/* Floating Ambient Orbs (Optimized with pure radial gradient, zero blur overhead) */
+.floating-orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.22;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+/* Glassmorphic Pill Primitive */
+.glass-pill {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.015) 100%);
+  box-shadow: 
+    0 10px 30px -10px rgba(0, 0, 0, 0.6), 
+    inset 0 1px 1px rgba(255, 255, 255, 0.15), 
+    inset 0 -1px 2px rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-pill:hover {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 100%);
+  border-color: rgba(192, 132, 252, 0.5);
+  box-shadow: 0 20px 40px -10px rgba(168, 85, 247, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+/* Premium Dynamic Card Hover */
+.premium-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.premium-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+  transition: left 0.7s ease;
+  pointer-events: none;
+}
+
+.premium-card:hover::before {
+  left: 100%;
+}
+
+.premium-card:hover {
+  border-color: rgba(168, 85, 247, 0.4);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -15px rgba(168, 85, 247, 0.25);
+}
+
+/* Glow Utilities */
+.text-glow {
+  filter: drop-shadow(0 0 16px rgba(192, 132, 252, 0.45));
+}
+
+.box-glow {
+  box-shadow: 0 0 35px rgba(168, 85, 247, 0.28);
+}
+
+/* Liquid Meniscus & Wave Animations */
+@keyframes liquidWobble {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translateY(-3px) rotate(-1deg) scale(1.02);
+  }
+  50% {
+    transform: translateY(1px) rotate(1.5deg) scale(0.99);
+  }
+  75% {
+    transform: translateY(-2px) rotate(-0.5deg) scale(1.01);
+  }
+}
+
+.animate-meniscus {
+  animation: liquidWobble 6s ease-in-out infinite;
+}
+
+/* --------------------------------------------------------------------------
+   Cinematic Scroll Reveal (High-Performance GPU Composited, Zero Blur Lag)
+   -------------------------------------------------------------------------- */
+.reveal-on-scroll,
+.cinematic-reveal,
+.cinematic-box,
+.cinematic-text {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.reveal-on-scroll.is-visible,
+.cinematic-reveal.is-visible,
+.cinematic-box.is-visible,
+.cinematic-text.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Box-specific cinematic entrance with micro-scale */
+.cinematic-box {
+  transform: translateY(30px) scale(0.98);
+}
+.cinematic-box.is-visible {
+  transform: translateY(0) scale(1);
+}
+
+/* Cinematic text entrance */
+.cinematic-text {
+  transform: translateY(18px);
+}
+.cinematic-text.is-visible {
+  transform: translateY(0);
+}
+
+/* Stagger transition delays */
+.delay-75 { transition-delay: 75ms; }
+.delay-100 { transition-delay: 100ms; }
+.delay-150 { transition-delay: 150ms; }
+.delay-200 { transition-delay: 200ms; }
+.delay-250 { transition-delay: 250ms; }
+.delay-300 { transition-delay: 300ms; }
+.delay-400 { transition-delay: 400ms; }
+
+/* --------------------------------------------------------------------------
+   Hardware Acceleration & GPU Compositing for Butter-Smooth 60-120fps
+   -------------------------------------------------------------------------- */
+.cinematic-reveal,
+.cinematic-box,
+.cinematic-text,
+.premium-card,
+.floating-orb {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+video {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+img {
+  content-visibility: auto;
+}
+

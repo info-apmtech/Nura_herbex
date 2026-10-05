@@ -1,0 +1,576 @@
+@inject ApiClient Api
+@inject BrowserInterop Browser
+
+<div class="space-y-4">
+
+    @* Top Toolbar: Search, Status Filter & Add Order Button *@
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 flex-1">
+            <div class="relative flex-1 max-w-md">
+                <Icon Name="Search" Size="14" Class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <input type="text" @bind="_search" @bind:event="oninput"
+                       placeholder="Search by customer, phone, order ID, or AWB..."
+                       class="w-full pl-8 pr-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 focus:border-zinc-500 text-xs text-zinc-200 placeholder:text-zinc-600 outline-none transition-colors" />
+            </div>
+
+            <select @bind="_statusFilter"
+                    class="px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 outline-none cursor-pointer focus:border-zinc-500">
+                <option value="all">All Delivery Statuses</option>
+                <option value="in transit">In Transit</option>
+                <option value="delivered">Delivered</option>
+                <option value="order confirmed">Order Confirmed</option>
+            </select>
+        </div>
+
+        <button @onclick="OpenAddOrder"
+                class="px-3.5 py-1.5 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm">
+            <Icon Name="Plus" Size="14" />
+            <span>Create Test Order</span>
+        </button>
+    </div>
+
+    @* Orders Table *@
+    <div class="rounded-lg border border-zinc-800 bg-zinc-900/30 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                    <tr class="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono text-[11px] font-medium tracking-wider uppercase">
+                        <th class="px-4 py-3">Order ID &amp; Date</th>
+                        <th class="px-4 py-3">Customer Details</th>
+                        <th class="px-4 py-3">Items Ordered</th>
+                        <th class="px-4 py-3">Amount &amp; Payment</th>
+                        <th class="px-4 py-3">Shiprocket AWB</th>
+                        <th class="px-4 py-3">Delivery Status</th>
+                        <th class="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-800/60">
+                    @if (Loading)
+                    {
+                        <tr>
+                            <td colspan="7" class="p-8 text-center text-zinc-500">
+                                <Icon Name="RefreshCw" Size="20" Class="animate-spin mx-auto mb-2 text-zinc-400" />
+                                <span>Loading orders from database...</span>
+                            </td>
+                        </tr>
+                    }
+                    else if (FilteredOrders.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="7" class="p-8 text-center text-zinc-500">
+                                @(Orders.Count == 0
+                                    ? "No customer orders recorded yet. Live orders placed from the storefront or checkout will appear here."
+                                    : "No orders matched your search query.")
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var order in FilteredOrders)
+                        {
+                            <tr @key="order.Id" class="hover:bg-zinc-800/30 transition-colors">
+                                <td class="px-4 py-3 font-mono font-medium text-zinc-200 whitespace-nowrap">
+                                    <div>@order.Id</div>
+                                    <div class="text-[10px] text-zinc-500 font-sans font-normal mt-0.5">
+                                        @AdminFmt.Date(order.CreatedAt)
+                                    </div>
+                                </td>
+
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <div class="font-medium text-zinc-200">@order.CustomerName</div>
+                                    <div class="text-[11px] text-zinc-400 font-mono mt-0.5">
+                                        @order.CustomerPhone
+                                    </div>
+                                    <div class="text-[10px] text-zinc-500 truncate max-w-xs">
+                                        @order.ShippingAddress?.City, @order.ShippingAddress?.State
+                                    </div>
+                                </td>
+
+                                <td class="px-4 py-3">
+                                    @foreach (var item in order.Items)
+                                    {
+                                        <div class="text-xs text-zinc-300">
+                                            <span class="font-medium text-zinc-100">@(item.Quantity)x</span> @item.Name
+                                        </div>
+                                    }
+                                </td>
+
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <div class="font-semibold text-zinc-100 text-xs font-mono">
+                                        ₹@AdminFmt.Inr(order.TotalAmount)
+                                    </div>
+                                    <div class="text-[10px] font-mono mt-0.5 flex items-center gap-1">
+                                        @if (order.PaymentStatus == "PAID")
+                                        {
+                                            <Icon Name="CheckCircle2" Size="10" Class="text-emerald-400" />
+                                            <span class="text-emerald-400">ONLINE</span>
+                                        }
+                                        else if (order.PaymentMethod == "COD")
+                                        {
+                                            <span class="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
+                                            <span class="text-zinc-400">COD</span>
+                                        }
+                                        else if (order.PaymentStatus == "FAILED")
+                                        {
+                                            <Icon Name="AlertCircle" Size="10" Class="text-rose-400" />
+                                            <span class="text-rose-400">FAILED</span>
+                                        }
+                                        else
+                                        {
+                                            <Icon Name="Clock" Size="10" Class="text-amber-400" />
+                                            <span class="text-amber-400">ONLINE (Pending)</span>
+                                        }
+                                    </div>
+                                </td>
+
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <div class="font-mono text-zinc-300 flex items-center gap-1.5">
+                                        <span>@(string.IsNullOrEmpty(order.ShiprocketAwb) ? "Pending AWB" : order.ShiprocketAwb)</span>
+                                        @if (!string.IsNullOrEmpty(order.ShiprocketAwb))
+                                        {
+                                            var awb = order.ShiprocketAwb!;
+                                            <button @onclick="() => CopyAsync(awb)"
+                                                    class="text-zinc-500 hover:text-zinc-300 transition-colors"
+                                                    title="Copy AWB">
+                                                @if (_copiedText == awb)
+                                                {
+                                                    <Icon Name="Check" Size="12" Class="text-emerald-400" />
+                                                }
+                                                else
+                                                {
+                                                    <Icon Name="Copy" Size="12" />
+                                                }
+                                            </button>
+                                        }
+                                    </div>
+                                    <div class="text-[10px] text-zinc-500 mt-0.5">
+                                        @order.ShiprocketCourier
+                                    </div>
+                                </td>
+
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <span class="@($"inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium {(order.DeliveryStatus == "Delivered" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : order.DeliveryStatus == "Payment Pending" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" : "bg-zinc-800 text-zinc-300 border border-zinc-700/60")}")">
+                                        <span class="@($"w-1.5 h-1.5 rounded-full {(order.DeliveryStatus == "Delivered" ? "bg-emerald-400" : order.DeliveryStatus == "Payment Pending" ? "bg-amber-400" : "bg-zinc-400")}")"></span>
+                                        <span>@order.DeliveryStatus</span>
+                                    </span>
+                                </td>
+
+                                <td class="px-4 py-3 text-right whitespace-nowrap">
+                                    <button @onclick="() => OpenOrder(order)"
+                                            class="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium transition-colors cursor-pointer">
+                                        Track Progress
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@* ======================================================================= *@
+@* MODAL: SHIPROCKET ORDER DELIVERY TIMELINE (+ order actions)              *@
+@* ======================================================================= *@
+@if (_selected is not null)
+{
+    var o = _selected;
+    <div @onclick="CloseOrder"
+         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in text-left">
+        <div @onclick:stopPropagation
+             class="relative w-full max-w-lg bg-[#121215] border border-zinc-800 rounded-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <button @onclick="CloseOrder"
+                    class="absolute top-4 right-4 w-7 h-7 rounded-md bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors">
+                <Icon Name="X" Size="15" />
+            </button>
+
+            <div class="space-y-1">
+                <div class="text-[10px] font-mono text-zinc-400 uppercase font-medium">
+                    Shiprocket AWB Telemetry
+                </div>
+                <h3 class="text-base font-semibold text-zinc-100">
+                    Order @o.Id
+                </h3>
+                <p class="text-xs text-zinc-500">
+                    Customer: @o.CustomerName (@o.CustomerPhone)
+                </p>
+            </div>
+
+            @* Courier info card *@
+            <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800 text-xs space-y-1.5 font-mono">
+                <div class="flex justify-between">
+                    <span class="text-zinc-500">Payment Status</span>
+                    <span class="@($"font-medium {(o.PaymentStatus == "PAID" ? "text-emerald-400" : o.PaymentMethod == "COD" ? "text-blue-400" : "text-amber-400")}")">
+                        @(o.PaymentStatus == "PAID"
+                            ? $"PAID ({(string.IsNullOrEmpty(o.PaymentRef) ? "Verified" : o.PaymentRef)})"
+                            : o.PaymentMethod == "COD"
+                                ? "COD (Due on Delivery)"
+                                : "UNPAID (Pending Gateway)")
+                    </span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-zinc-500">Courier Partner</span>
+                    <span class="text-zinc-200 font-medium">@(string.IsNullOrEmpty(o.ShiprocketCourier) ? "Pending Assignment" : o.ShiprocketCourier)</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-zinc-500">AWB Tracking Code</span>
+                    <span class="text-zinc-200 font-medium flex items-center gap-1.5">
+                        <span>@(string.IsNullOrEmpty(o.ShiprocketAwb) ? "Awaiting Payment/Dispatch" : o.ShiprocketAwb)</span>
+                        @if (!string.IsNullOrEmpty(o.ShiprocketAwb))
+                        {
+                            var awb = o.ShiprocketAwb!;
+                            <button @onclick="() => CopyAsync(awb)" class="text-zinc-500 hover:text-zinc-300 transition-colors" title="Copy AWB">
+                                @if (_copiedText == awb)
+                                {
+                                    <Icon Name="Check" Size="12" Class="text-emerald-400" />
+                                }
+                                else
+                                {
+                                    <Icon Name="Copy" Size="12" />
+                                }
+                            </button>
+                        }
+                    </span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-zinc-500">Destination</span>
+                    <span class="text-zinc-300">@o.ShippingAddress?.City, @o.ShippingAddress?.Pincode</span>
+                </div>
+            </div>
+
+            @* Milestone Timeline *@
+            <div class="space-y-2.5 pt-1">
+                <span class="text-xs font-semibold text-zinc-200 block uppercase tracking-wider">
+                    Logistics Milestones
+                </span>
+                <div class="space-y-3 pl-2 border-l border-zinc-800 ml-2">
+                    @foreach (var ev in o.DeliveryTrackingEvents)
+                    {
+                        <div class="relative pl-3.5 space-y-0.5">
+                            <span class="@($"absolute -left-[5px] top-1.5 w-2 h-2 rounded-full {(ev.Active ? "bg-white ring-2 ring-zinc-700" : ev.Done ? "bg-emerald-500" : "bg-zinc-700")}")"></span>
+                            <div class="@($"text-xs font-medium {(ev.Active ? "text-white" : ev.Done ? "text-zinc-200" : "text-zinc-500")}")">
+                                @ev.Status
+                            </div>
+                            <div class="text-[10px] text-zinc-500 font-mono">
+                                @ev.Time
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Order actions (Blazor admin additions: Shiprocket retry, delivery, e-mail, WhatsApp) *@
+            <div class="space-y-2 pt-1 border-t border-zinc-800/80">
+                <span class="text-xs font-semibold text-zinc-200 block uppercase tracking-wider pt-3">
+                    Order Actions
+                </span>
+
+                @if (!string.IsNullOrEmpty(_actionMessage))
+                {
+                    <div class="@($"p-2.5 rounded-lg text-xs flex items-center gap-2 {(_actionOk ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border border-red-500/20 text-red-400")}")">
+                        <Icon Name="@(_actionOk ? "CheckCircle2" : "AlertCircle")" Size="14" Class="shrink-0" />
+                        <span>@_actionMessage</span>
+                    </div>
+                }
+
+                <div class="flex flex-wrap gap-2">
+                    @if (string.IsNullOrEmpty(o.ShiprocketAwb))
+                    {
+                        <button type="button" disabled="@_busy" @onclick="RetryShiprocketAsync"
+                                class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
+                            <Icon Name="Truck" Size="12" />
+                            <span>Retry Shiprocket</span>
+                        </button>
+                    }
+                    @if (o.DeliveryStatus != "Delivered")
+                    {
+                        <button type="button" disabled="@_busy" @onclick="MarkDeliveredAsync"
+                                class="px-2.5 py-1.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
+                            <Icon Name="CheckCircle2" Size="12" />
+                            <span>Mark Delivered</span>
+                        </button>
+                    }
+                    <button type="button" disabled="@_busy" @onclick="@(() => SendEmailAsync("confirmation"))"
+                            class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
+                        <Icon Name="Mail" Size="12" />
+                        <span>Send Confirmation Email</span>
+                    </button>
+                    <button type="button" disabled="@_busy" @onclick="@(() => SendEmailAsync("delivered"))"
+                            class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
+                        <Icon Name="Mail" Size="12" />
+                        <span>Send Delivered Email</span>
+                    </button>
+                    <button type="button" disabled="@_busy" @onclick="SendWhatsAppUpdateAsync"
+                            class="px-2.5 py-1.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
+                        <Icon Name="MessageCircle" Size="12" />
+                        <span>WhatsApp update</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="pt-2">
+                <button @onclick="CloseOrder"
+                        class="w-full py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-medium transition-colors cursor-pointer">
+                    Close Tracking
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ======================================================================= *@
+@* MODAL: CREATE MANUAL TEST ORDER                                          *@
+@* ======================================================================= *@
+@if (_showAdd)
+{
+    <div @onclick="CloseAddOrder"
+         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in text-left">
+        <div @onclick:stopPropagation
+             class="relative w-full max-w-lg bg-[#121215] border border-zinc-800 rounded-xl p-6 shadow-2xl space-y-4">
+            <button @onclick="CloseAddOrder"
+                    class="absolute top-4 right-4 w-7 h-7 rounded-md bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors">
+                <Icon Name="X" Size="15" />
+            </button>
+
+            <div class="space-y-1">
+                <h3 class="text-base font-semibold text-zinc-100">
+                    Create Test Order
+                </h3>
+                <p class="text-xs text-zinc-500">
+                    Simulate an order to verify database records &amp; Shiprocket tracking.
+                </p>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_addError))
+            {
+                <div class="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 flex items-center gap-2">
+                    <Icon Name="AlertCircle" Size="14" Class="shrink-0 text-red-400" />
+                    <span>@_addError</span>
+                </div>
+            }
+
+            <form @onsubmit="CreateOrderAsync" @onsubmit:preventDefault class="space-y-3 text-xs">
+                <div class="space-y-1">
+                    <label class="text-zinc-300 font-medium block">Customer Full Name</label>
+                    <input type="text" required placeholder="e.g. Siddharth Rao"
+                           @bind="_new.CustomerName" @bind:event="oninput"
+                           class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500" />
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                        <label class="text-zinc-300 font-medium block">Mobile Number</label>
+                        <input type="tel" required placeholder="+91 98765 43210"
+                               @bind="_new.CustomerPhone" @bind:event="oninput"
+                               class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500" />
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-zinc-300 font-medium block">Email</label>
+                        <input type="email" placeholder="siddharth@@example.com"
+                               @bind="_new.CustomerEmail" @bind:event="oninput"
+                               class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500" />
+                    </div>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-zinc-300 font-medium block">Delivery Address</label>
+                    <input type="text" required placeholder="Street, locality, landmark"
+                           @bind="_new.Address.AddressLine1" @bind:event="oninput"
+                           class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500" />
+                </div>
+
+                <div class="grid grid-cols-3 gap-2">
+                    <input type="text" placeholder="City"
+                           @bind="_new.Address.City" @bind:event="oninput"
+                           class="px-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500" />
+                    <input type="text" placeholder="State"
+                           @bind="_new.Address.State" @bind:event="oninput"
+                           class="px-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500" />
+                    <input type="text" placeholder="Pincode"
+                           @bind="_new.Address.Pincode" @bind:event="oninput"
+                           class="px-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500" />
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 pt-1">
+                    <div class="space-y-1">
+                        <label class="text-zinc-300 font-medium block">Product Tier</label>
+                        <select @bind="_new.ProductId"
+                                class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500">
+                            <option value="stamix-single">Single Canister (₹1,899)</option>
+                            <option value="stamix-duo">Duo Optimizer (₹5,499)</option>
+                            <option value="stamix-trio">Master Vitality System (₹7,999)</option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-zinc-300 font-medium block">Quantity</label>
+                        <input type="number" min="1" max="10"
+                               @bind="_new.Quantity" @bind:event="oninput"
+                               class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500" />
+                    </div>
+                </div>
+
+                <div class="pt-2 flex gap-2.5">
+                    <button type="submit" disabled="@_creating"
+                            class="flex-1 py-2 px-3 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs tracking-tight shadow-sm cursor-pointer transition-colors disabled:opacity-60">
+                        @(_creating ? "Dispatching..." : "Confirm & Dispatch Order")
+                    </button>
+                    <button type="button" @onclick="CloseAddOrder"
+                            class="px-4 py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white font-medium text-xs cursor-pointer transition-colors">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public List<OrderDto> Orders { get; set; } = new();
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public EventCallback OnReload { get; set; }
+
+    private string _search = "";
+    private string _statusFilter = "all";
+    private string _copiedText = "";
+
+    private OrderDto? _selected;
+    private bool _busy;
+    private string? _actionMessage;
+    private bool _actionOk;
+
+    private bool _showAdd;
+    private bool _creating;
+    private string? _addError;
+    private AdminCreateOrderRequest _new = NewOrderForm();
+
+    private static AdminCreateOrderRequest NewOrderForm() => new()
+    {
+        ProductId = "stamix-single",
+        Quantity = 1,
+        PaymentMethod = "ONLINE",
+        MarkPaid = true,
+        Address = new AddressDto { Country = "India" },
+    };
+
+    private List<OrderDto> FilteredOrders => Orders.Where(order =>
+    {
+        var matchesSearch =
+            AdminFmt.Has(order.CustomerName, _search) ||
+            (order.CustomerPhone ?? "").Contains(_search, StringComparison.Ordinal) ||
+            AdminFmt.Has(order.Id, _search) ||
+            AdminFmt.Has(order.ShiprocketAwb, _search);
+        if (_statusFilter == "all") return matchesSearch;
+        return matchesSearch && AdminFmt.Has(order.DeliveryStatus, _statusFilter);
+    }).ToList();
+
+    private async Task CopyAsync(string text)
+    {
+        await Browser.CopyToClipboardAsync(text);
+        _copiedText = text;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copiedText = "";
+        StateHasChanged();
+    }
+
+    private void OpenOrder(OrderDto order)
+    {
+        _selected = order;
+        _actionMessage = null;
+    }
+
+    private void CloseOrder() { _selected = null; _actionMessage = null; }
+
+    private void OpenAddOrder() { _new = NewOrderForm(); _addError = null; _showAdd = true; }
+    private void CloseAddOrder() { _showAdd = false; }
+
+    private async Task CreateOrderAsync()
+    {
+        _addError = null;
+        _creating = true;
+        // React: an empty email falls back to <name>@gmail.com
+        if (string.IsNullOrWhiteSpace(_new.CustomerEmail))
+            _new.CustomerEmail = $"{new string(_new.CustomerName.ToLowerInvariant().Where(c => !char.IsWhiteSpace(c)).ToArray())}@gmail.com";
+        _new.Address.Country = "India";
+        _new.Quantity = Math.Clamp(_new.Quantity, 1, 10);
+        var res = await Api.AdminCreateOrderAsync(_new);
+        _creating = false;
+        if (!res.Success)
+        {
+            _addError = res.Message ?? "Could not create the order.";
+            return;
+        }
+        _showAdd = false;
+        await OnReload.InvokeAsync();
+    }
+
+    private void ApplyUpdated(OrderDto? updated)
+    {
+        if (updated is not null) _selected = updated;
+    }
+
+    private async Task RetryShiprocketAsync()
+    {
+        if (_selected is null) return;
+        _busy = true; _actionMessage = null;
+        var res = await Api.AdminRetryShiprocketAsync(_selected.Id);
+        _actionOk = res.Success;
+        _actionMessage = res.Success
+            ? (res.Result?.ShiprocketAwb is { Length: > 0 } awb ? $"Shiprocket shipment created. AWB: {awb}" : "Shiprocket shipment created.")
+            : (res.Message ?? "Shiprocket retry failed.");
+        _busy = false;
+        await ReloadSelectedAsync();
+    }
+
+    private async Task MarkDeliveredAsync()
+    {
+        if (_selected is null) return;
+        _busy = true; _actionMessage = null;
+        var res = await Api.AdminMarkDeliveredAsync(_selected.Id);
+        _actionOk = res.Success;
+        _actionMessage = res.Success ? "Order marked as delivered." : (res.Message ?? "Could not mark the order delivered.");
+        if (res.Success) ApplyUpdated(res.Order);
+        _busy = false;
+        await OnReload.InvokeAsync();
+        await ReloadSelectedAsync(false);
+    }
+
+    private async Task SendEmailAsync(string type)
+    {
+        if (_selected is null) return;
+        _busy = true; _actionMessage = null;
+        var res = await Api.AdminSendEmailAsync(_selected.Id, type);
+        _actionOk = res.Success;
+        _actionMessage = res.Message ?? (res.Success ? "Email sent." : "Email could not be sent.");
+        _busy = false;
+    }
+
+    private async Task SendWhatsAppUpdateAsync()
+    {
+        if (_selected is null) return;
+        _busy = true; _actionMessage = null;
+        var o = _selected;
+        var res = await Api.AdminWhatsAppSendAsync(new WhatsAppSendRequest
+        {
+            Phone = o.CustomerPhone,
+            Text = $"Hi {o.CustomerName}, update on your order {o.Id}: {o.DeliveryStatus}",
+            OrderId = o.Id,
+        });
+        _actionOk = res.Success;
+        _actionMessage = res.Message ?? (res.Success ? "WhatsApp message sent." : "WhatsApp message could not be sent.");
+        _busy = false;
+    }
+
+    /// <summary>Reloads the list and re-selects the currently open order so the drawer shows fresh data.</summary>
+    private async Task ReloadSelectedAsync(bool reload = true)
+    {
+        var id = _selected?.Id;
+        if (reload) await OnReload.InvokeAsync();
+        if (id is null) return;
+        var fresh = Orders.FirstOrDefault(x => x.Id == id);
+        if (fresh is not null) _selected = fresh;
+    }
+}

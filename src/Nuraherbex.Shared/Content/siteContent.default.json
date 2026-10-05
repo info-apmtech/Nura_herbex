@@ -1,0 +1,189 @@
+{
+  "brand": {
+    "name": "Nura Herbex",
+    "productName": "Stamix",
+    "tagline": "Botanical Vitality Formula for Men"
+  },
+  "hero": {
+    "badge": "FORMULATED BY MEDICAL EXPERTS",
+    "headline": "Built For Men Who Run On Empty",
+    "subtext": "Stamix is a herbal health supplement for adult men — 17 botanicals, herbs, seeds and nuts, at a full 20 g daily serving. Expertly formulated to support everyday energy, stamina, focus and recovery.",
+    "ctaText": "SHOP STAMIX",
+    "secondaryCtaText": "Explore Formulation",
+    "stats": [
+      { "label": "20 g Daily Serving", "sub": "10 g twice daily" },
+      { "label": "0% Synthetic Fillers", "sub": "Zero maltodextrin" },
+      { "label": "GMP Certified Facility", "sub": "FSSAI compliant" }
+    ]
+  },
+  "marquee": [
+    "WHOLE ASHWAGANDHA ROOT",
+    "SHATAVARI ROOT",
+    "HIMALAYAN SHILAJIT",
+    "SAFED MUSLI",
+    "ZERO MALTODEXTRIN",
+    "NO ARTIFICIAL SWEETENERS",
+    "GMP CERTIFIED FACILITY",
+    "FORMULATED BY A UNANI PHYSICIAN"
+  ],
+  "scienceSection": {
+    "subtitle": "TARGETING ROOT FACTORS",
+    "title": "What Works Against You",
+    "intro": "These are well-documented factors in how men feel day to day. Stamix is built to support the body through them — it does not treat any of them.",
+    "factors": [
+      {
+        "id": "01",
+        "title": "Stress Load",
+        "description": "Sustained stress affects sleep, recovery and energy."
+      },
+      {
+        "id": "02",
+        "title": "Oxidative Stress",
+        "description": "Pollution, smoking and poor diet generate it; antioxidant-rich foods work against it."
+      },
+      {
+        "id": "03",
+        "title": "Nutritional Gaps",
+        "description": "Skipped meals and delivery food leave real shortfalls in zinc, magnesium and vitamin E."
+      },
+      {
+        "id": "04",
+        "title": "Poor Sleep",
+        "description": "Most of the body's recovery work happens in deep sleep."
+      },
+      {
+        "id": "05",
+        "title": "Sedentary Work",
+        "description": "Long unbroken sitting affects circulation and weight."
+      },
+      {
+        "id": "06",
+        "title": "Age-Related Change",
+        "description": "Energy and recovery genuinely shift through the thirties and forties."
+      }
+    ]
+  },
+  "solutionSection": {
+    "subtitle": "THE STAMIX FORMULA",
+    "title": "How Stamix Supports You",
+    "intro": "A deliberate 20 g daily serving of 17 whole botanicals, herbs, seeds and nuts built to provide nutritional foundation for active men.",
+    "pillars": [
+      {
+        "id": "01",
+        "title": "Supports Daily Energy",
+        "description": "Whole-food nutrition and traditional energy botanicals, with no caffeine and no stimulant crash."
+      },
+      {
+        "id": "02",
+        "title": "Supports Your Stress Response",
+        "description": "Ashwagandha and other adaptogenic herbs, traditionally used to help the body cope with sustained stress."
+      },
+      {
+        "id": "03",
+        "title": "Supports Recovery",
+        "description": "Nutritional support for the body's own repair processes, taken at night when most of that work happens."
+      }
+    ]
+  },
+  "journeySection": {
+    "subtitle": "THE TRAJECTORY",
+    "title": "Your Daily Progression",
+    "intro": "Natural botanical nutrition works with your daily routine over time, not overnight.",
+    "milestones": [
+      {
+        "period": "Days 1–7",
+        "title": "Systemic Introduction",
+        "description": "One 10 g scoop, twice daily. Whole Ashwagandha, Shatavari, and Safed Musli start providing foundational whole-root nourishment with zero synthetic jitters."
+      },
+      {
+        "period": "Days 8–21",
+        "title": "Steady Day-to-Day Vitality",
+        "description": "Consistent micronutrient delivery helps support everyday energy resilience and reduces afternoon sluggishness."
+      },
+      {
+        "period": "Days 22–45",
+        "title": "Deeper Rest & Recovery",
+        "description": "Nightly intake protocol supports physical relaxation and overnight natural restoration."
+      },
+      {
+        "period": "Days 45+",
+        "title": "Sustained Baseline",
+        "description": "Long-term herbal nutrition supports daily endurance, mental focus, and baseline physical vigor."
+      }
+    ]
+  },
+  "dailyRitualSection": {
+    "subtitle": "THE DAILY RITUAL",
+    "title": "Simple Intake Protocol",
+    "intro": "Two 10 g scoops per day (20 g total). Formulated to blend effortlessly into your morning and evening routines.",
+    "steps": [
+      {
+        "step": "01",
+        "title": "Morning 10 g Scoop",
+        "description": "Mix one 10 g scoop with 200ml warm milk or water alongside your breakfast to support morning stamina."
+      },
+      {
+        "step": "02",
+        "title": "Evening 10 g Scoop",
+        "description": "Take your second 10 g scoop post-dinner or before sleep to support natural nightly rest and restoration."
+      },
+      {
+        "step": "03",
+        "title": "Consistency Compounding",
+        "description": "Whole botanicals deliver compounding benefits with regular, uninterrupted daily intake."
+      }
+    ]
+  },
+  "ingredientsSection": {
+    "subtitle": "WHOLE BOTANICALS & SEEDS",
+    "title": "Key Botanical Actives",
+    "intro": "17 botanicals, herbs, seeds and nuts formulated by medical experts on traditional Unani principles.",
+    "items": [
+      {
+        "name": "Whole Ashwagandha Root",
+        "dose": "Whole Root Powder",
+        "desc": "Traditional adaptogenic root revered for supporting everyday energy, physical endurance, and a calm, resilient stress response."
+      },
+      {
+        "name": "Shatavari Root",
+        "dose": "Whole Root Powder",
+        "desc": "Deeply nourishing traditional botanical used to support systemic recovery, physical vigor, and restorative wellness."
+      },
+      {
+        "name": "Watermelon Seed",
+        "dose": "Natural Citrulline Source",
+        "desc": "Botanically rich whole seeds, traditionally valued as a natural whole-food source of amino acids and micronutrients."
+      },
+      {
+        "name": "Kaunch Beej (Mucuna pruriens)",
+        "dose": "Whole Seed Powder",
+        "desc": "Revered traditional Unani botanical seed used to support vigor, stamina, nervous system tone, and baseline male vitality."
+      }
+    ]
+  },
+  "shop": {
+    "badgeTitle": "FLAGSHIP FORMULATION",
+    "title": "OUR PRODUCT",
+    "subtitle": "Botanical Vitality Formula for Men · 17 Botanicals, Herbs, Seeds & Nuts",
+    "productCard": {
+      "title": "Stamix™ Botanical Vitality Formula",
+      "pack": "300g Canister · 15-Day Supply",
+      "price": 1899,
+      "originalPrice": 2499,
+      "discount": "20% OFF"
+    },
+    "pdp": {
+      "title": "Stamix™ Botanical Vitality Formula",
+      "subtitle": "15-Day Supply (300g) · Botanical Vitality Formula for Men",
+      "description": "Stamix is a herbal health supplement for adult men — 17 botanicals, herbs, seeds and nuts, at a full 20 g daily serving. Expertly formulated to support everyday energy, stamina, focus and recovery.",
+      "servingSize": "20g Daily (10g Twice Daily)",
+      "netQuantity": "300g (15 Servings · 15-Day Supply)",
+      "itemForm": "Herbal Health Supplement Powder",
+      "formulation": "Formulated on Unani Principles"
+    }
+  },
+  "footer": {
+    "tagline": "Botanical vitality formula for men — 17 botanicals, herbs, seeds and nuts, expertly formulated to support everyday energy, stamina, and recovery.",
+    "copyright": "© 2026 Nura Herbex. All rights reserved."
+  }
+}

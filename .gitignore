@@ -1,0 +1,18 @@
+## .NET
+bin/
+obj/
+obj_*/
+bin_*/
+*.user
+*.suo
+.vs/
+*.nupkg
+TestResults/
+
+## Secrets / local config — never commit
+appsettings.Local.json
+secrets.json
+.env
+
+## Generated CSS is committed-optional; node tooling lives in the repo root
+node_modules/

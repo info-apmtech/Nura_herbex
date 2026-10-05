@@ -1,0 +1,120 @@
+@inject ContentState ContentState
+@inject NavigationManager Nav
+@inject BrowserInterop Browser
+@inject IJSRuntime JS
+@implements IDisposable
+
+<section id="hero" class="relative min-h-[690px] lg:min-h-[760px] pt-20 sm:pt-28 pb-16 flex items-center overflow-hidden bg-[#08060c] text-left">
+  <div class="absolute inset-0 w-full h-full overflow-hidden pointer-events-none z-0">
+    <video id="hero-video" autoplay loop muted playsinline preload="auto" disablepictureinpicture
+           class="w-full h-full object-cover object-center opacity-45 sm:opacity-55 scale-105 pointer-events-none"
+           style="transform: translateZ(0); will-change: transform">
+      <source src="@Media.HeroVideo" type="video/mp4" />
+      <source src="/assets/images/WhatsApp_Video_2026-09-10_at_8.44.40_AM.mp4" type="video/mp4" />
+      <source src="/assets/images/WhatsApp%20Video%202026-09-10%20at%208.44.40%20AM.mp4" type="video/mp4" />
+    </video>
+    <div class="absolute inset-0 bg-gradient-to-r from-[#08060c] via-[#08060c]/85 to-[#08060c]/45"></div>
+    <div class="absolute inset-0 bg-gradient-to-t from-[#08060c] via-transparent to-[#08060c]/75"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_75%_50%,rgba(168,85,247,0.18),transparent_65%)]"></div>
+  </div>
+
+  <div class="absolute inset-0 w-full h-full pointer-events-none z-[1] opacity-60"
+       style="background-image: linear-gradient(rgba(255, 255, 255, 0.038) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.038) 1px, transparent 1px); background-size: 52px 52px; transform: translate3d(0, calc(var(--scroll-y, 0px) * 0.05), 0)"></div>
+
+  <div class="absolute top-0 right-0 w-[60vw] h-full pointer-events-none z-[1] will-change-transform"
+       style="background: radial-gradient(ellipse at 75% 55%, rgba(168, 85, 247, 0.28) 0%, rgba(139, 92, 246, 0.16) 35%, rgba(79, 70, 229, 0.06) 60%, transparent 80%), radial-gradient(circle at 85% 30%, rgba(216, 180, 254, 0.18) 0%, transparent 50%); transform: translate3d(0, calc(var(--scroll-y, 0px) * 0.12), 0)"></div>
+
+  <div class="absolute inset-0 pointer-events-none z-[2]">
+    <div class="absolute w-2 h-2 rounded-full bg-purple-400/50 top-[68%] left-[45%] animate-pulse"
+         style="transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.22), 0)"></div>
+    <div class="absolute w-1.5 h-1.5 rounded-full bg-purple-300/70 top-[74%] left-[55%] animate-pulse"
+         style="transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.09), 0)"></div>
+    <div class="absolute w-2.5 h-2.5 rounded-full bg-indigo-300/40 top-[62%] left-[62%] animate-pulse"
+         style="transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.28), 0)"></div>
+  </div>
+
+  <div class="absolute top-[36%] -left-4 text-transparent font-black tracking-wider pointer-events-none select-none whitespace-nowrap z-[1] text-[clamp(3.8rem,8.5vw,7.8rem)] stroke-white/5 will-change-transform"
+       style="-webkit-text-stroke: 1px rgba(255, 255, 255, 0.06); transform: translate3d(0, calc(var(--scroll-y, 0px) * 0.22), 0)">
+    NURA HERBEX
+  </div>
+  <div class="absolute bottom-0 -left-2 text-transparent font-black tracking-wider pointer-events-none select-none whitespace-nowrap z-[1] text-[clamp(5rem,13vw,11.5rem)] stroke-white/5 will-change-transform"
+       style="-webkit-text-stroke: 1px rgba(255, 255, 255, 0.045); transform: translate3d(0, calc(var(--scroll-y, 0px) * 0.14), 0)">
+    STAMIX
+  </div>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 relative z-10 w-full">
+    <div class="max-w-2xl flex flex-col items-start text-left">
+      <div class="inline-flex items-center justify-center w-8 h-4 rounded-full bg-white/[0.05] border border-white/20 mb-6 shadow-[0_0_15px_rgba(204,102,218,0.25)] animate-cinematic-text" title="Botanical Vitality Formula for Men">
+        <span class="w-1.5 h-1.5 rounded-full bg-[#faeb92] shadow-[0_0_8px_#faeb92]"></span>
+      </div>
+
+      <h1 class="text-4xl sm:text-6xl lg:text-[4.5rem] font-extrabold tracking-tight leading-[1.08] text-[#fff3bf] mb-6 animate-cinematic-text animate-cinematic-delay-1 font-heading">
+        @Or(HeroContent.Headline, "Built For Men Who Run On Empty")
+      </h1>
+
+      <p class="text-base sm:text-lg lg:text-xl text-slate-300 leading-relaxed max-w-xl mb-9 font-normal animate-cinematic-text animate-cinematic-delay-2">
+        @Or(HeroContent.Subtext, "Stamix is a herbal health supplement for adult men — 17 botanicals, herbs, seeds and nuts, at a full 20 g daily serving. Expertly formulated to support everyday energy, stamina, focus and recovery.")
+      </p>
+
+      <div class="flex items-center gap-3.5 flex-wrap mb-10 animate-cinematic-box animate-cinematic-delay-3">
+        <button
+          @onclick='() => Nav.NavigateTo("/shop")'
+          class="bg-[#9929ea] hover:bg-[#a83bed] text-white font-bold text-sm tracking-wider px-8 py-3.5 rounded-full shadow-xl shadow-[#9929ea]/30 hover:scale-105 hover:shadow-[#9929ea]/50 transition-all flex items-center gap-2.5 cursor-pointer group">
+          <span class="font-heading tracking-wider">@Or(HeroContent.CtaText, "SHOP STAMIX")</span>
+          <Icon Name="ArrowRight" Size="16" Class="group-hover:translate-x-1 transition-transform text-white" />
+        </button>
+
+        <button
+          @onclick='() => Nav.NavigateTo("/formulation")'
+          class="px-7 py-3.5 rounded-full bg-white/[0.07] hover:bg-white/[0.14] border border-white/20 hover:border-purple-400/50 text-white font-bold text-sm tracking-wider backdrop-blur-md shadow-lg transition-all hover:scale-105 flex items-center gap-2.5 cursor-pointer group">
+          <Icon Name="FlaskConical" Size="16" Class="text-purple-300 group-hover:text-purple-200 transition-colors" />
+          <span class="font-heading tracking-wider">FORMULATION</span>
+          <Icon Name="ArrowRight" Size="15" Class="group-hover:translate-x-0.5 transition-transform text-purple-300" />
+        </button>
+      </div>
+
+      <div class="flex items-start gap-8 sm:gap-14 pt-2 relative z-10 animate-cinematic-box animate-cinematic-delay-4">
+        <div class="relative group">
+          <span class="block font-display text-2xl sm:text-3xl font-bold text-white leading-tight drop-shadow-[0_0_12px_rgba(192,132,252,0.3)]">
+            <CountUp Value="20" Suffix=" g" Duration="1800" />
+          </span>
+          <span class="block text-xs sm:text-sm text-slate-400 mt-1 whitespace-nowrap">@Or(StatLabel(0), "Daily Serving")</span>
+        </div>
+        <div class="relative group">
+          <span class="block font-display text-2xl sm:text-3xl font-bold text-white leading-tight drop-shadow-[0_0_12px_rgba(192,132,252,0.3)]">
+            <CountUp Value="0" Suffix="%" Duration="1800" />
+          </span>
+          <span class="block text-xs sm:text-sm text-slate-400 mt-1 whitespace-nowrap">@Or(StatLabel(1), "Synthetic Fillers")</span>
+        </div>
+        <div class="relative group">
+          <span class="block font-display text-2xl sm:text-3xl font-bold text-white leading-tight drop-shadow-[0_0_12px_rgba(192,132,252,0.3)]">GMP</span>
+          <span class="block text-xs sm:text-sm text-slate-400 mt-1 whitespace-nowrap">@Or(StatLabel(2), "Certified Facility")</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <a href="#why-stamix"
+     @onclick='() => Browser.ScrollToIdAsync("why-stamix")' @onclick:preventDefault
+     aria-label="Scroll to explore"
+     class="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 text-slate-400 hover:text-white transition-opacity z-20 cursor-pointer group">
+    <span class="text-xs font-normal tracking-wide group-hover:text-purple-300 transition-colors">Scroll</span>
+    <div class="w-[18px] h-7 rounded-full border-[1.6px] border-white/40 flex justify-center pt-1.5 shadow-[0_0_10px_rgba(168,85,247,0.2)] bg-[#08060c]/40 group-hover:border-purple-400 transition-colors">
+      <div class="w-1 h-1.5 rounded-full bg-purple-400 shadow-[0_0_6px_#c084fc] animate-bounce"></div>
+    </div>
+  </a>
+</section>
+
+@code {
+    private HeroContent HeroContent => ContentState.Content?.Hero ?? new();
+    private static string Or(string? v, string fallback) => string.IsNullOrEmpty(v) ? fallback : v;
+    private string? StatLabel(int i) => i < HeroContent.Stats.Count ? HeroContent.Stats[i].Label : null;
+
+    protected override void OnInitialized() => ContentState.Changed += OnChanged;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await HomeJs.PlayVideoAsync(JS, "hero-video");
+    }
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => ContentState.Changed -= OnChanged;
+}

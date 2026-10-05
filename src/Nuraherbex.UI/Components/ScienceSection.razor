@@ -1,0 +1,151 @@
+@inject ContentState ContentState
+@inject BrowserInterop Browser
+@implements IDisposable
+
+<section class="py-24 lg:py-32 bg-[#07050b] relative z-10 text-left overflow-hidden" id="science">
+  <div class="absolute top-1/2 left-1/4 -translate-y-1/2 w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(88,28,135,0.18)_0%,transparent_70%)] pointer-events-none rounded-full"></div>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 xl:gap-12 items-center">
+
+      <div class="lg:col-span-5 flex flex-col justify-center">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="w-9 h-[1.5px] bg-slate-400"></span>
+          <span class="text-xs uppercase tracking-[0.25em] text-slate-300 font-semibold font-mono">
+            @Or(Sci.Subtitle, "THE SCIENCE")
+          </span>
+        </div>
+
+        <h2 class="text-4xl sm:text-5xl lg:text-[3.25rem] font-extrabold text-white tracking-tight leading-[1.12] mb-6">
+          @Or(Sci.Title, "What Works Against You")
+        </h2>
+
+        <p class="text-slate-400 text-sm sm:text-base leading-relaxed mb-8 max-w-md">
+          @Or(Sci.Intro, "These are well-documented factors in how men feel day to day. Stamix is built to support the body through them — it does not treat any of them.")
+        </p>
+
+        <div class="grid grid-cols-3 gap-2 sm:gap-4 border-y border-white/10 py-6 mb-8 max-w-md">
+          <div class="border-r border-white/10 pr-2 sm:pr-3">
+            <span class="block text-2xl sm:text-3xl font-extrabold text-white font-display">
+              <CountUp Value="100" Suffix="%" Duration="1800" />
+            </span>
+            <span class="block text-[9.5px] sm:text-[10px] uppercase tracking-wider text-slate-400 mt-1 font-semibold leading-tight">
+              Evidence Backed<br />Approach
+            </span>
+          </div>
+
+          <div class="border-r border-white/10 pr-2 sm:pr-3 pl-1 sm:pl-2">
+            <span class="block text-2xl sm:text-3xl font-extrabold text-white font-display">
+              <CountUp Value="1" Suffix="L+" Duration="1800" />
+            </span>
+            <span class="block text-[9.5px] sm:text-[10px] uppercase tracking-wider text-slate-400 mt-1 font-semibold leading-tight">
+              Trusted By<br />Indian Men
+            </span>
+          </div>
+
+          <div class="pl-1 sm:pl-2">
+            <span class="block text-2xl sm:text-3xl font-extrabold text-white font-display">
+              REAL
+            </span>
+            <span class="block text-[9.5px] sm:text-[10px] uppercase tracking-wider text-slate-400 mt-1 font-semibold leading-tight">
+              Real People<br />Transformations
+            </span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-5 flex-wrap">
+          <a
+            href="#formula"
+            @onclick="ScrollToFormula" @onclick:preventDefault
+            class="px-7 py-3.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs tracking-wider transition-all flex items-center gap-2.5 cursor-pointer shadow-lg shadow-purple-900/40 hover:shadow-purple-500/35 group hover:scale-105">
+            <span>Explore The Science</span>
+            <Icon Name="ArrowRight" Size="14" Class="text-white group-hover:translate-x-0.5 transition-transform" />
+          </a>
+        </div>
+      </div>
+
+      <div class="lg:col-span-7 grid grid-cols-1 md:grid-cols-7 border-l border-white/10">
+
+        <div class="md:col-span-4 border-r border-white/10 text-left flex flex-col justify-between">
+          @{ var causes = Causes; }
+          @for (var idx = 0; idx < causes.Count; idx++)
+          {
+            var cause = causes[idx];
+            var last = idx == causes.Count - 1;
+            <div
+              @key="cause.Num"
+              class="@($"border-b border-white/10 px-4 sm:px-6 py-4 flex items-start gap-4 group transition-colors hover:bg-white/[0.02] {(last ? "border-b-0" : "")}")">
+              <span class="font-mono text-xs text-slate-500 font-semibold shrink-0 pt-0.5 group-hover:text-purple-400 transition-colors">
+                @cause.Num
+              </span>
+              <div>
+                <h4 class="text-xs sm:text-sm font-bold uppercase tracking-wider text-white group-hover:text-purple-200 transition-colors">
+                  @cause.Title
+                </h4>
+                <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+                  @cause.Desc
+                </p>
+              </div>
+            </div>
+          }
+        </div>
+
+        <div class="md:col-span-3 relative min-h-[460px] md:min-h-full overflow-hidden group flex flex-col justify-between">
+          <img
+            src="@Media.ScienceBanner"
+            alt="Better Biology Builds A Stronger You"
+            class="absolute inset-0 w-full h-full object-cover object-center filter brightness-90 contrast-110 group-hover:scale-105 transition-transform duration-700"
+            loading="lazy"
+            decoding="async" />
+
+          <div class="absolute inset-0 bg-gradient-to-t from-[#07050b] via-purple-950/10 to-transparent pointer-events-none"></div>
+          <div class="absolute inset-0 bg-gradient-to-r from-[#07050b]/30 via-transparent to-[#07050b]/20 pointer-events-none"></div>
+
+          <div class="relative z-10 p-6 text-right font-mono text-[9px] sm:text-[10px] tracking-[0.22em] uppercase text-slate-300 font-semibold leading-relaxed drop-shadow-md select-none">
+            <div class="text-slate-300">BETTER</div>
+            <div class="text-slate-300">BIOLOGY</div>
+            <div class="text-slate-300">BUILDS</div>
+            <div class="text-slate-300">A STRONGER</div>
+            <div class="text-white font-bold">YOU</div>
+            <div class="w-7 h-[1.5px] bg-slate-400 ml-auto mt-2"></div>
+          </div>
+
+          <div class="relative z-10 p-6 text-right font-mono text-[8.5px] sm:text-[9.5px] tracking-[0.22em] uppercase text-slate-400 font-medium leading-relaxed drop-shadow-md select-none">
+            <div>SCIENCE</div>
+            <div>DISCIPLINE</div>
+            <div class="text-slate-200 font-semibold">REAL RESULTS</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+@code {
+    private record Cause(string Num, string Title, string Desc);
+
+    private ScienceSectionContent Sci => ContentState.Content?.ScienceSection ?? new();
+
+    private static readonly Cause[] Defaults =
+    {
+        new("01", "STRESS LOAD", "Sustained stress affects sleep, recovery and energy."),
+        new("02", "OXIDATIVE STRESS", "Pollution, smoking and poor diet generate it; antioxidant-rich foods work against it."),
+        new("03", "NUTRITIONAL GAPS", "Skipped meals and delivery food leave real shortfalls in zinc, magnesium and vitamin E."),
+        new("04", "POOR SLEEP", "Most of the body's recovery work happens in deep sleep."),
+        new("05", "SEDENTARY WORK", "Long unbroken sitting affects circulation and weight."),
+        new("06", "AGE-RELATED CHANGE", "Energy and recovery genuinely shift through the thirties and forties."),
+    };
+
+    private List<Cause> Causes => Sci.Factors is { Count: > 0 }
+        ? Sci.Factors.Select(f => new Cause(string.IsNullOrEmpty(f.Id) ? "01" : f.Id, f.Title, f.Description)).ToList()
+        : Defaults.ToList();
+
+    private static string Or(string? v, string fallback) => string.IsNullOrEmpty(v) ? fallback : v;
+
+    private Task ScrollToFormula() => Browser.ScrollToIdAsync("formula");
+
+    protected override void OnInitialized() => ContentState.Changed += OnChanged;
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => ContentState.Changed -= OnChanged;
+}

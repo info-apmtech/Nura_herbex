@@ -1,0 +1,50 @@
+<div class="space-y-4">
+
+    @* KPI Cards *@
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-1">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-mono font-medium">Total Orders</span>
+            <div class="text-2xl font-semibold text-zinc-100 font-mono tracking-tight">@Orders.Count</div>
+            <span class="text-[11px] text-zinc-500 font-normal">Verified Telemetry</span>
+        </div>
+
+        <div class="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-1">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-mono font-medium">Total Revenue</span>
+            <div class="text-2xl font-semibold text-zinc-100 font-mono tracking-tight">
+                ₹@AdminFmt.Inr(TotalRevenue)
+            </div>
+            <span class="text-[11px] text-zinc-500 font-normal">Prepaid &amp; COD Active</span>
+        </div>
+
+        <div class="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-1">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-mono font-medium">Shiprocket In-Transit</span>
+            <div class="text-2xl font-semibold text-zinc-100 font-mono tracking-tight">@InTransitCount</div>
+            <span class="text-[11px] text-zinc-500 font-normal">Air Cargo Active</span>
+        </div>
+
+        <div class="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-1">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-mono font-medium">Delivered Orders</span>
+            <div class="text-2xl font-semibold text-emerald-400 font-mono tracking-tight">@DeliveredCount</div>
+            <span class="text-[11px] text-emerald-500/80 font-normal">Doorstep Confirmed</span>
+        </div>
+    </div>
+
+    @* Quick Actions Panel *@
+    <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-2 text-left">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-200">
+            Logistics &amp; Quality Integration Summary
+        </h3>
+        <p class="text-xs text-zinc-400 leading-relaxed">
+            Nura Herbex operates a decentralized fulfillment network with Shiprocket priority air cargo for rapid 2–3 business day delivery across all Indian pin codes. Every batch is certified with full ICP-MS heavy metal reports and third-party testing published to the customer-facing Trust Passport.
+        </p>
+    </div>
+
+</div>
+
+@code {
+    [Parameter] public List<OrderDto> Orders { get; set; } = new();
+
+    private decimal TotalRevenue => Orders.Sum(o => o.TotalAmount);
+    private int InTransitCount => Orders.Count(o => o.DeliveryStatus == "In Transit");
+    private int DeliveredCount => Orders.Count(o => o.DeliveryStatus == "Delivered");
+}

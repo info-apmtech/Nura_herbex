@@ -1,0 +1,138 @@
+@inject NavigationManager Nav
+@inject BrowserInterop Browser
+@inject CartState Cart
+@inject ModalState Modal
+
+@* Port of CinematicFooter.jsx *@
+<footer class="w-full bg-[#06040a] px-4 sm:px-6 lg:px-10 pb-12 sm:pb-16 pt-8 relative z-20" id="site-footer">
+    @* Floating Dark Obsidian Luxury Card with Subtle Ambient Glow *@
+    <div class="max-w-7xl mx-auto rounded-[32px] sm:rounded-[36px] bg-[#0c0a16] border border-white/10 text-white px-8 sm:px-14 lg:px-16 py-12 sm:py-16 shadow-[0_25px_60px_rgba(0,0,0,0.85)] relative text-left overflow-hidden">
+
+        <div class="absolute -top-32 -right-32 w-96 h-96 bg-[radial-gradient(circle,rgba(147,51,234,0.12)_0%,transparent_70%)] rounded-full pointer-events-none"></div>
+        <div class="absolute -bottom-32 -left-32 w-96 h-96 bg-[radial-gradient(circle,rgba(79,70,229,0.12)_0%,transparent_70%)] rounded-full pointer-events-none"></div>
+        <div class="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(147,51,234,0.07),transparent)] pointer-events-none"></div>
+
+        @* Top Row *@
+        <div class="flex flex-col lg:flex-row justify-between gap-12 lg:gap-16 items-start relative z-10">
+
+            @* Left Column: Brand, Tagline, Social Icons *@
+            <div class="max-w-md flex flex-col items-start">
+                <div class="flex items-center gap-3 cursor-pointer group" @onclick="() => GoPage(string.Empty)">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#9929ea] to-[#cc66da] flex items-center justify-center text-white shrink-0 shadow-lg shadow-[#9929ea]/40 border border-[#cc66da]/30 group-hover:scale-105 transition-all">
+                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6zm4.5 9.5a1 1 0 0 0 1.414 0L16 9.414V13a1 1 0 1 0 2 0V7a1 1 0 0 0-1-1h-6a1 1 0 1 0 0 2h3.586l-6.086 6.086a1 1 0 0 0 0 1.414z" />
+                        </svg>
+                    </div>
+                    <span class="font-extrabold text-white text-xl tracking-tight font-heading group-hover:text-[#faeb92] transition-colors">
+                        Nura Herbex
+                    </span>
+                </div>
+
+                <p class="text-slate-300 text-sm sm:text-base leading-relaxed font-normal mt-4 mb-7 max-w-sm">
+                    Botanical vitality formula for men — 17 botanicals, herbs, seeds and nuts, expertly formulated to support everyday energy, stamina, and recovery.
+                </p>
+
+                <div class="flex items-center gap-3 text-slate-400">
+                    @* Instagram *@
+                    <a href="https://instagram.com" target="_blank" rel="noreferrer" aria-label="Instagram"
+                       class="w-9 h-9 rounded-xl bg-white/5 hover:bg-purple-600/20 border border-white/10 hover:border-purple-400/40 text-slate-300 hover:text-white flex items-center justify-center transition-all hover:scale-105">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+                            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                            <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+                        </svg>
+                    </a>
+
+                    @* LinkedIn *@
+                    <a href="https://linkedin.com" target="_blank" rel="noreferrer" aria-label="LinkedIn"
+                       class="w-9 h-9 rounded-xl bg-white/5 hover:bg-purple-600/20 border border-white/10 hover:border-purple-400/40 text-slate-300 hover:text-white flex items-center justify-center transition-all hover:scale-105">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.25c-.91 0-1.64.73-1.64 1.64s.73 1.64 1.64 1.64 1.64-.73 1.64-1.64-.73-1.64-1.64-1.64Z" />
+                        </svg>
+                    </a>
+
+                    @* GitHub *@
+                    <a href="https://github.com" target="_blank" rel="noreferrer" aria-label="GitHub"
+                       class="w-9 h-9 rounded-xl bg-white/5 hover:bg-purple-600/20 border border-white/10 hover:border-purple-400/40 text-slate-300 hover:text-white flex items-center justify-center transition-all hover:scale-105">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12.017C22 6.484 17.522 2 12 2z" />
+                        </svg>
+                    </a>
+                </div>
+            </div>
+
+            @* Right Section: 3 Navigation Columns *@
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-12 lg:gap-16 text-left w-full lg:w-auto">
+
+                @* Column 1: Explore & Shop *@
+                <div class="flex flex-col gap-3">
+                    <span class="font-bold text-white text-sm tracking-wide mb-1">
+                        Explore &amp; Shop
+                    </span>
+                    <button @onclick="() => GoPage(string.Empty)" class="@LinkClass">Home</button>
+                    <button @onclick='() => GoPage("/shop")' class="@LinkClass">Shop Stamix Store</button>
+                    <button @onclick='() => GoSection("ingredients")' class="@LinkClass">Botanical Formula</button>
+                    <button @onclick='() => GoSection("how-it-helps")' class="@LinkClass">How Stamix Helps</button>
+                    <button @onclick='() => GoSection("how-to-use")' class="@LinkClass">Daily Ritual Protocol</button>
+                </div>
+
+                @* Column 2: Science & Specs *@
+                <div class="flex flex-col gap-3">
+                    <span class="font-bold text-white text-sm tracking-wide mb-1">
+                        Science &amp; Specs
+                    </span>
+                    <button @onclick='() => GoSection("clinical-proof")' class="@LinkClass">Clinical Proof</button>
+                    <button @onclick='() => GoSection("why-stamix")' class="@LinkClass">Why Stamix</button>
+                    <button @onclick='() => GoSection("science")' class="@LinkClass">What Works Against You</button>
+                    <button @onclick='() => GoPage("/formulation")' class="@LinkClass">Clinical Formulation &amp; Dosages</button>
+                </div>
+
+                @* Column 3: Community & Order *@
+                <div class="flex flex-col gap-3">
+                    <span class="font-bold text-white text-sm tracking-wide mb-1">
+                        Community &amp; Order
+                    </span>
+                    <button @onclick='() => GoSection("testimonials")' class="@LinkClass">Verified Reviews</button>
+                    <button @onclick='() => GoPage("/track")' class="@LinkClass">Track Your Order</button>
+                    <button @onclick="() => Cart.SetOpen(true)" class="@LinkClass">View Shopping Cart</button>
+                    <button @onclick='() => GoPage("/trust-passport")' class="@LinkClass">Trust Passport</button>
+                    <button @onclick='() => Modal.Open("terms")' class="@LinkClass">Empty-Jar Guarantee</button>
+                </div>
+
+            </div>
+
+        </div>
+
+        @* Bottom Bar: Divider, Copyright & Legal Links *@
+        <div class="border-t border-white/10 pt-8 mt-12 sm:mt-16 flex flex-col sm:flex-row items-center justify-between gap-4 relative z-10">
+            <div class="text-xs text-slate-500 font-normal">
+                © 2026 Nura Herbex. All rights reserved.
+            </div>
+
+            <div class="flex items-center gap-6 text-xs text-slate-400">
+                <button @onclick='() => Modal.Open("privacy")' class="hover:text-purple-300 transition-colors cursor-pointer">Privacy Policy</button>
+                <button @onclick='() => Modal.Open("terms")' class="hover:text-purple-300 transition-colors cursor-pointer">Terms of Service</button>
+                <button @onclick='() => Modal.Open("privacy")' class="hover:text-purple-300 transition-colors cursor-pointer">Cookies</button>
+            </div>
+        </div>
+
+    </div>
+</footer>
+
+@code {
+    private const string LinkClass = "text-slate-400 hover:text-purple-300 hover:translate-x-0.5 text-xs sm:text-[13.5px] transition-all text-left cursor-pointer";
+
+    private bool IsHome => new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').Length == 0;
+
+    private async Task GoSection(string id)
+    {
+        if (IsHome) await Browser.ScrollToIdAsync(id, 120);
+        else Nav.NavigateTo("/#" + id);
+    }
+
+    private async Task GoPage(string route)
+    {
+        Nav.NavigateTo(route.Length == 0 ? "/" : route);
+        await Browser.ScrollToTopAsync();
+    }
+}

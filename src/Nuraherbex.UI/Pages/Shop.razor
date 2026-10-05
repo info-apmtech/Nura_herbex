@@ -1,0 +1,79 @@
+@page "/shop"
+@page "/store"
+@page "/products/stamix"
+@page "/product/stamix"
+@page "/products"
+@page "/product"
+@page "/shop/stamix"
+@using Nuraherbex.UI.Components.Shop
+@implements IDisposable
+@inject NavigationManager Nav
+@inject ApiClient Api
+@inject BrowserInterop Browser
+
+<div class="pt-4 sm:pt-14 md:pt-20 pb-24 bg-[#07050d] text-left text-slate-200 min-h-screen relative overflow-hidden">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+    @if (IsPdp)
+    {
+      <ShopPdpView Products="_products" />
+    }
+    else
+    {
+      <ShopPreviewView Products="_products" />
+    }
+  </div>
+</div>
+
+@code {
+    private static readonly string[] PdpPaths = { "products/stamix", "product/stamix", "products", "product", "shop/stamix" };
+    private static readonly string[] PreviewPaths = { "shop", "store" };
+
+    private bool IsPdp { get; set; }
+    private bool _metaDirty = true;
+    private List<ProductDto> _products = new();
+
+    protected override void OnInitialized()
+    {
+        Sync();
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _products = await Api.GetProductsAsync() ?? new(); }
+        catch { _products = new(); }
+    }
+
+    protected override void OnParametersSet() => Sync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_metaDirty)
+        {
+            _metaDirty = false;
+            await Browser.SetMetaAsync(IsPdp ? RouteMeta.Pdp : RouteMeta.Shop);
+        }
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        if (Sync()) _ = InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Recomputes IsPdp from the current path; ignores paths that belong to other pages. Returns true when the view changed.</summary>
+    private bool Sync()
+    {
+        var path = Nav.ToBaseRelativePath(Nav.Uri);
+        var cut = path.IndexOfAny(new[] { '?', '#' });
+        if (cut >= 0) path = path[..cut];
+        path = path.Trim('/').ToLowerInvariant();
+
+        bool? pdp = PdpPaths.Contains(path) ? true : PreviewPaths.Contains(path) ? false : null;
+        if (pdp is null || pdp == IsPdp) return false;
+        IsPdp = pdp.Value;
+        _metaDirty = true;
+        return true;
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

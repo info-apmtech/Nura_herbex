@@ -1,0 +1,31 @@
+<div class="@(Compact ? "" : "space-y-1")">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <label class="text-[11px] font-medium text-zinc-400 block">@Label</label>
+    }
+    @if (Rows > 0)
+    {
+        <textarea rows="@Rows" value="@Value" placeholder="@Placeholder"
+                  @oninput="OnInput"
+                  class="@(Compact ? "w-full px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs outline-none focus:border-zinc-600" : "w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs outline-none focus:border-zinc-500 transition-colors")"></textarea>
+    }
+    else
+    {
+        <input type="text" value="@Value" placeholder="@Placeholder"
+               @oninput="OnInput"
+               class="@(Compact ? "w-full px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs font-medium outline-none focus:border-zinc-600" : "w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs outline-none focus:border-zinc-500 transition-colors")" />
+    }
+</div>
+
+@code {
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    /// <summary>0 = single-line input, otherwise textarea rows.</summary>
+    [Parameter] public int Rows { get; set; }
+    /// <summary>Smaller nested-card styling (used inside repeated item cards).</summary>
+    [Parameter] public bool Compact { get; set; }
+
+    private Task OnInput(ChangeEventArgs e) => ValueChanged.InvokeAsync(e.Value?.ToString() ?? "");
+}

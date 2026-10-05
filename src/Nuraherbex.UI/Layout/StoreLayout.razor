@@ -1,0 +1,77 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Nav
+@inject BrowserInterop Browser
+@inject CartState Cart
+@inject AuthState Auth
+@inject ContentState Content
+
+@* Port of App.jsx AppContent shell (storefront variant): ambient orbs, sticky header, routed main, footer, cart drawer, modals. *@
+<div class="min-h-screen bg-[#07050b] text-slate-100 flex flex-col selection:bg-purple-600 selection:text-white relative">
+    <div class="scroll-progress-bar"></div>
+
+    <div class="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[1400px] h-full pointer-events-none z-0 opacity-40 overflow-hidden">
+        <div class="floating-orb w-[650px] h-[650px] bg-purple-700/20 top-[10%] -left-[10%]" style="transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.08), 0)"></div>
+        <div class="floating-orb w-[750px] h-[750px] bg-indigo-700/15 top-[40%] -right-[15%]" style="transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.12), 0)"></div>
+        <div class="floating-orb w-[600px] h-[600px] bg-purple-900/20 top-[75%] -left-[5%]" style="transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.06), 0)"></div>
+    </div>
+
+    <Header />
+
+    <main class="flex-1 relative z-10" id="main-content">
+        @Body
+    </main>
+
+    @if (!IsAccountPage)
+    {
+        <CinematicFooter />
+    }
+
+    <CartDrawer />
+    <Modals />
+</div>
+
+@code {
+    private bool IsAccountPage
+    {
+        get
+        {
+            var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').ToLowerInvariant();
+            return path is "/account" or "/my-account" or "/profile";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        Cart.Changed += Refresh;
+        Auth.Changed += Refresh;
+        Content.Changed += Refresh;
+        await Task.WhenAll(Cart.InitAsync(), Auth.InitAsync(), Content.InitAsync());
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Browser.InitScrollEffectsAsync();
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        // Same behaviour as App.jsx navigate(): jump to top on page change, unless targeting a #section.
+        if (!new Uri(e.Location).Fragment.StartsWith('#') || new Uri(e.Location).Fragment.Length <= 1)
+            await Browser.ScrollToTopAsync();
+        else
+            await Browser.ScrollToIdAsync(new Uri(e.Location).Fragment.TrimStart('#'));
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void Refresh() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        Cart.Changed -= Refresh;
+        Auth.Changed -= Refresh;
+        Content.Changed -= Refresh;
+    }
+}

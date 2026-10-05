@@ -1,0 +1,118 @@
+@inject ContentState ContentState
+@inject IJSRuntime JS
+@implements IDisposable
+
+<section class="py-24 lg:py-32 bg-[#050409] relative z-10 overflow-hidden text-left" id="solution">
+  <div class="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-[radial-gradient(circle,rgba(88,28,135,0.2)_0%,transparent_70%)] rounded-full pointer-events-none"></div>
+
+  <div class="relative w-full overflow-hidden mb-28 min-h-[88vh] lg:min-h-[880px] flex flex-col justify-between py-12 lg:py-16">
+
+    <div class="absolute inset-0 z-0">
+      <video id="solution-video" autoplay loop muted playsinline preload="metadata" disablepictureinpicture
+             class="w-full h-full object-cover object-center opacity-65 filter contrast-125 brightness-95 pointer-events-none"
+             style="transform: translateZ(0)">
+        <source src="@Media.SolutionVideo" type="video/mp4" />
+        <source src="/assets/images/58985-490319213_medium.mp4" type="video/mp4" />
+      </video>
+      <div class="absolute inset-0 bg-gradient-to-t from-[#050409] via-[#050409]/35 to-[#050409]/80"></div>
+      <div class="absolute inset-0 bg-gradient-to-r from-[#050409]/75 via-transparent to-[#050409]/75"></div>
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-[radial-gradient(circle,rgba(147,51,234,0.15)_0%,transparent_70%)] pointer-events-none rounded-full"></div>
+    </div>
+
+    <div class="relative z-10 w-full px-6 sm:px-10 lg:px-16 xl:px-24 flex flex-col justify-between flex-grow">
+      <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-8 mb-auto pt-2">
+
+        <div>
+          <div class="flex items-center gap-3 mb-4">
+            <span class="text-xs uppercase tracking-[0.25em] text-slate-300 font-semibold font-mono">
+              @Or(Sol.Subtitle, "THE SOLUTION")
+            </span>
+            <span class="w-9 h-[1.5px] bg-slate-400"></span>
+          </div>
+
+          <h2 class="text-3xl sm:text-5xl lg:text-6xl xl:text-7xl font-extrabold text-white tracking-tight leading-[1.08] drop-shadow-lg">
+            @Or(Sol.Title, "How Stamix Supports You")
+          </h2>
+        </div>
+
+        <div class="text-left lg:text-right font-mono text-[10px] sm:text-[11px] tracking-[0.25em] uppercase text-slate-300 font-semibold space-y-1.5 shrink-0 pt-2 select-none drop-shadow-md">
+          <div>MORE ENERGY</div>
+          <div>BETTER FOCUS</div>
+          <div>GREATER RESILIENCE</div>
+          <div class="w-36 h-[1.5px] bg-slate-500/60 lg:ml-auto my-2"></div>
+          <div class="text-slate-400 font-medium text-[9px] sm:text-[10px]">
+            BUILT FOR A STRONGER YOU
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-28 lg:mt-36">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-0 border-t border-b border-white/15 bg-black/40">
+
+          <div class="py-10 md:pr-10 md:border-r border-white/15 group">
+            <div class="flex items-center gap-3 mb-4">
+              <span class="text-2xl sm:text-3xl font-extrabold text-white font-mono group-hover:text-purple-300 transition-colors">@PId(0, "01")</span>
+              <span class="w-7 h-[1px] bg-white/30"></span>
+              <span class="text-[10px] sm:text-[11px] font-mono uppercase tracking-[0.2em] text-slate-300 font-semibold">DAILY ENERGY</span>
+            </div>
+            <h3 class="text-xl sm:text-2xl font-bold text-white mb-3">@PTitle(0, "Supports Daily Energy")</h3>
+            <p class="text-xs sm:text-sm text-slate-300/90 leading-relaxed max-w-sm">@PDesc(0, "Whole-food nutrition and traditional energy botanicals, with no caffeine and no stimulant crash.")</p>
+          </div>
+
+          <div class="py-10 md:px-10 md:border-r border-white/15 group">
+            <div class="flex items-center gap-3 mb-4">
+              <span class="text-2xl sm:text-3xl font-extrabold text-white font-mono group-hover:text-purple-300 transition-colors">@PId(1, "02")</span>
+              <span class="w-7 h-[1px] bg-white/30"></span>
+              <span class="text-[10px] sm:text-[11px] font-mono uppercase tracking-[0.2em] text-slate-300 font-semibold">STRESS RESPONSE</span>
+            </div>
+            <h3 class="text-xl sm:text-2xl font-bold text-white mb-3">@PTitle(1, "Supports Your Stress Response")</h3>
+            <p class="text-xs sm:text-sm text-slate-300/90 leading-relaxed max-w-sm">@PDesc(1, "Ashwagandha and other adaptogenic herbs, traditionally used to help the body cope with sustained stress.")</p>
+          </div>
+
+          <div class="py-10 md:pl-10 group">
+            <div class="flex items-center gap-3 mb-4">
+              <span class="text-2xl sm:text-3xl font-extrabold text-white font-mono group-hover:text-purple-300 transition-colors">@PId(2, "03")</span>
+              <span class="w-7 h-[1px] bg-white/30"></span>
+              <span class="text-[10px] sm:text-[11px] font-mono uppercase tracking-[0.2em] text-slate-300 font-semibold">NIGHT RECOVERY</span>
+            </div>
+            <h3 class="text-xl sm:text-2xl font-bold text-white mb-3">@PTitle(2, "Supports Recovery")</h3>
+            <p class="text-xs sm:text-sm text-slate-300/90 leading-relaxed max-w-sm">@PDesc(2, "Nutritional support for the body's own repair processes, taken at night when most of that work happens.")</p>
+          </div>
+
+        </div>
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-6 select-none">
+          <div class="font-mono text-[9px] sm:text-[10px] tracking-[0.25em] text-slate-400 uppercase leading-snug">
+            <div>DISCIPLINE</div>
+            <div>COMPOUNDS</div>
+            <div>RESULTS</div>
+          </div>
+
+          <div class="font-mono text-[9.5px] sm:text-[10.5px] tracking-[0.25em] text-slate-400 uppercase flex items-center gap-2.5">
+            <span class="w-7 h-[1px] bg-slate-500"></span>
+            <span>SCIENCE BACKED | REAL PROGRESS</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+@code {
+    private SolutionSectionContent Sol => ContentState.Content?.SolutionSection ?? new();
+    private List<TitledItem> Pillars => Sol.Pillars ?? new();
+
+    private static string Or(string? v, string fallback) => string.IsNullOrEmpty(v) ? fallback : v;
+    private string PId(int i, string f) => Or(i < Pillars.Count ? Pillars[i].Id : null, f);
+    private string PTitle(int i, string f) => Or(i < Pillars.Count ? Pillars[i].Title : null, f);
+    private string PDesc(int i, string f) => Or(i < Pillars.Count ? Pillars[i].Description : null, f);
+
+    protected override void OnInitialized() => ContentState.Changed += OnChanged;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await HomeJs.PlayVideoAsync(JS, "solution-video");
+    }
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => ContentState.Changed -= OnChanged;
+}

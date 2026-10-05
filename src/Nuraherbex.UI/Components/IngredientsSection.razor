@@ -1,0 +1,76 @@
+@inject NavigationManager Nav
+
+<section class="py-24 sm:py-32 bg-[#08060c] relative z-10 overflow-hidden" id="formula">
+  <div
+    class="absolute top-1/2 -left-40 w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(147,51,234,0.15)_0%,transparent_70%)] pointer-events-none rounded-full"
+    style="transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.05), 0)"></div>
+  <div
+    class="absolute bottom-10 right-0 w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(30,58,138,0.15)_0%,transparent_70%)] pointer-events-none rounded-full"></div>
+
+  <div class="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+    <div class="mb-16 text-center max-w-3xl mx-auto flex flex-col items-center">
+      <span class="text-sm sm:text-base font-medium text-purple-400 block mb-2">
+        Formulation
+      </span>
+      <h2 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.15]">
+        The <span class="text-transparent bg-clip-text bg-gradient-to-r from-purple-300 via-purple-400 to-indigo-300">Ingredient Matrix</span>
+      </h2>
+      <p class="text-sm sm:text-base text-slate-300 mt-4 leading-relaxed max-w-2xl font-light">
+        A synergistic blend of 17 herbs, seeds, nuts, and whole botanicals, formulated on Unani principles. Uncompromising quality, complete transparency.
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 w-full">
+      @foreach (var item in KeyIngredients)
+      {
+        <div
+          @key="item.Name"
+          @onclick="GoToFormulation"
+          class="relative h-[420px] sm:h-[500px] md:h-[560px] lg:h-[620px] overflow-hidden group cursor-pointer rounded-none">
+          <img
+            src="@item.Image"
+            alt="@item.Name"
+            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 rounded-none"
+            loading="lazy"
+            decoding="async" />
+
+          <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent pointer-events-none transition-opacity duration-300 group-hover:from-black/90"></div>
+
+          <div class="absolute bottom-0 left-0 right-0 p-6 sm:p-8 z-10 text-left">
+            <h3 class="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white group-hover:text-purple-300 transition-colors tracking-tight drop-shadow-md">
+              @item.Name
+            </h3>
+          </div>
+        </div>
+      }
+    </div>
+
+    <div class="mt-12 text-center">
+      <button
+        @onclick="GoToFormulation"
+        class="inline-flex items-center gap-2.5 px-8 py-4 rounded-full bg-gradient-to-r from-purple-700/80 to-indigo-700/80 hover:from-purple-600 hover:to-indigo-600 text-white text-xs sm:text-sm font-bold tracking-wider uppercase shadow-xl shadow-purple-900/40 hover:shadow-purple-700/60 transition-all cursor-pointer border border-purple-400/30 group">
+        <Icon Name="FlaskConical" Size="16" Class="text-[#fff3bf]" />
+        <span>Explore Complete Formulation &amp; Milligrams (17 Botanicals)</span>
+        <Icon Name="ArrowRight" Size="16" Class="group-hover:translate-x-1 transition-transform text-[#fff3bf]" />
+      </button>
+    </div>
+  </div>
+</section>
+
+@code {
+    private record KeyIngredient(string Name, string Dose, string Desc, string Image);
+
+    private static readonly KeyIngredient[] KeyIngredients =
+    {
+        new("Drumstick Flower, Bark and Seed", "Whole Botanical Blend",
+            "Traditional powerhouse delivering naturally occurring minerals, iron, and plant antioxidants to support vitality and everyday resilience.", Media.Incred1),
+        new("Whole Ashwagandha Root", "Traditional Whole Root",
+            "Pure whole root powder traditionally used to support stress response, promote restful sleep, and maintain steady everyday energy.", Media.Incred2),
+        new("Watermelon Seed, Natural Citrulline Source", "Cold-Pressed Whole Seed",
+            "Botanically rich whole seeds, traditionally valued as a natural whole-food source of amino acids and micronutrients.", Media.Incred3),
+        new("Kaunch Beej (Mucuna Pruriens)", "Traditional Whole Seed",
+            "Revered traditional Unani botanical seed used to support vigor, stamina, nervous system tone, and baseline male vitality.", Media.Incred4),
+    };
+
+    private void GoToFormulation() => Nav.NavigateTo("/formulation");
+}

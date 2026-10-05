@@ -1,0 +1,432 @@
+@implements IDisposable
+@inject ContentState Content
+@inject BrowserInterop Browser
+
+<div class="space-y-4 animate-in fade-in font-sans">
+
+    @* Top CMS Action Bar *@
+    <div class="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div class="space-y-0.5">
+            <div class="flex items-center gap-2">
+                <Icon Name="FileText" Size="16" Class="text-zinc-400" />
+                <h2 class="text-base font-semibold text-zinc-100 tracking-tight">
+                    Website Copy &amp; Text CMS
+                </h2>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 font-medium">
+                    Zero-Code Editor
+                </span>
+            </div>
+            <p class="text-xs text-zinc-500">
+                Edit headlines, benefits, dosage instructions, and copy without touching code.
+            </p>
+        </div>
+
+        @* Action Buttons *@
+        <div class="flex items-center gap-2 flex-wrap">
+            <button type="button" @onclick="SaveAsync" disabled="@Content.IsSaving"
+                    class="px-3.5 py-1.5 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm disabled:opacity-50">
+                <Icon Name="Save" Size="13" />
+                <span>@(Content.IsSaving ? "Saving..." : _saved ? "Saved Live! ✓" : "Save Changes")</span>
+            </button>
+
+            <button type="button" @onclick="ExportAsync"
+                    class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-zinc-300 hover:text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+                    title="Download copy as siteContent.json">
+                <Icon Name="Download" Size="13" />
+                <span>Export JSON</span>
+            </button>
+
+            <button type="button" @onclick="ResetAsync"
+                    class="px-3 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-xs font-medium text-red-400 hover:text-red-300 flex items-center gap-1.5 cursor-pointer transition-colors"
+                    title="Restore factory default copy">
+                <Icon Name="RotateCcw" Size="13" />
+                <span>Reset Defaults</span>
+            </button>
+        </div>
+    </div>
+
+    @* Success Toast / Banner *@
+    @if (_saved)
+    {
+        <div class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2 animate-in fade-in">
+            <Icon Name="CheckCircle" Size="15" Class="text-emerald-400 shrink-0" />
+            <span class="font-medium">
+                Changes saved successfully! The live website is now displaying your updated text.
+            </span>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(_notice))
+    {
+        <div class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2 animate-in fade-in">
+            <Icon Name="CheckCircle" Size="15" Class="text-emerald-400 shrink-0" />
+            <span class="font-medium">@_notice</span>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 flex items-center gap-2">
+            <Icon Name="AlertCircle" Size="15" Class="shrink-0 text-red-400" />
+            <span>@_error</span>
+        </div>
+    }
+
+    @* CMS Form Sections Grid *@
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        @* 1. Hero Section Card *@
+        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5">
+            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
+                    Hero Section Copy
+                </h3>
+            </div>
+
+            <AdminCmsField Label="Main Headline" Placeholder="Built For Men Who Run On Empty" @bind-Value="_d.Hero.Headline" />
+            <AdminCmsField Label="Subtext Paragraph" Rows="3" Placeholder="Stamix is a herbal health supplement for adult men..." @bind-Value="_d.Hero.Subtext" />
+
+            <div class="grid grid-cols-2 gap-3">
+                <AdminCmsField Label="CTA Button Text" @bind-Value="_d.Hero.CtaText" />
+                <AdminCmsField Label="Top Badge Text" @bind-Value="_d.Hero.Badge" />
+            </div>
+
+            <AdminCmsField Label="Secondary CTA Text" @bind-Value="_d.Hero.SecondaryCtaText" />
+
+            @if (_d.Hero.Stats.Count > 0)
+            {
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    @for (var i = 0; i < _d.Hero.Stats.Count; i++)
+                    {
+                        var stat = _d.Hero.Stats[i];
+                        var n = i + 1;
+                        <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-2">
+                            <span class="text-[10px] font-mono font-medium text-zinc-400 block">Hero Stat 0@n</span>
+                            <AdminCmsField Compact="true" Placeholder="Stat label" @bind-Value="stat.Label" />
+                            <AdminCmsField Compact="true" Placeholder="Stat sub-label" @bind-Value="stat.Sub" />
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* 2. Marquee Ticker Tape Card *@
+        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5">
+            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
+                    Marquee Ticker Tape
+                </h3>
+            </div>
+
+            <div class="space-y-1">
+                <label class="text-[11px] font-medium text-zinc-400 block">
+                    Ticker Items (One item per line)
+                </label>
+                <textarea rows="6" value="@_marqueeText" @oninput="OnMarqueeInput"
+                          class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs font-mono outline-none focus:border-zinc-500 leading-relaxed transition-colors"></textarea>
+                <span class="text-[10px] text-zinc-500">
+                    Each line appears as an item separated by subtle markers in the running ticker.
+                </span>
+            </div>
+        </div>
+
+        @* 3. Science Section ("What Works Against You") *@
+        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5 lg:col-span-2">
+            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
+                    Science Section: "What Works Against You"
+                </h3>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <AdminCmsField Label="Section Title" @bind-Value="_d.ScienceSection.Title" />
+                <AdminCmsField Label="Intro Statement / Disclaimer" @bind-Value="_d.ScienceSection.Intro" />
+            </div>
+            <AdminCmsField Label="Section Subtitle" @bind-Value="_d.ScienceSection.Subtitle" />
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
+                @for (var i = 0; i < _d.ScienceSection.Factors.Count; i++)
+                {
+                    var factor = _d.ScienceSection.Factors[i];
+                    var n = i + 1;
+                    <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-mono font-medium text-zinc-400">@(string.IsNullOrEmpty(factor.Id) ? $"0{n}" : factor.Id)</span>
+                            <div class="flex-1">
+                                <AdminCmsField Compact="true" @bind-Value="factor.Title" />
+                            </div>
+                        </div>
+                        <AdminCmsField Compact="true" Rows="2" @bind-Value="factor.Description" />
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* 4. Solution Section ("How Stamix Supports You") *@
+        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5 lg:col-span-2">
+            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
+                    Solution Section: 3 Core Pillars
+                </h3>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <AdminCmsField Label="Section Subtitle" @bind-Value="_d.SolutionSection.Subtitle" />
+                <AdminCmsField Label="Section Title" @bind-Value="_d.SolutionSection.Title" />
+                <AdminCmsField Label="Intro Statement" @bind-Value="_d.SolutionSection.Intro" />
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                @for (var i = 0; i < _d.SolutionSection.Pillars.Count; i++)
+                {
+                    var pillar = _d.SolutionSection.Pillars[i];
+                    var n = i + 1;
+                    <div class="p-3.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-2">
+                        <span class="text-[10px] font-mono font-medium text-zinc-400 block">Pillar 0@n</span>
+                        <AdminCmsField Compact="true" Placeholder="Pillar Title" @bind-Value="pillar.Title" />
+                        <AdminCmsField Compact="true" Rows="3" Placeholder="Pillar Description" @bind-Value="pillar.Description" />
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* 5. Shop Page & Flagship Card *@
+        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5">
+            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
+                    Shop &amp; Product Card
+                </h3>
+            </div>
+
+            <AdminCmsField Label="Product Name" @bind-Value="_d.Shop.ProductCard.Title" />
+            <AdminCmsField Label="Pack Subtitle" @bind-Value="_d.Shop.ProductCard.Pack" />
+
+            <div class="grid grid-cols-2 gap-3">
+                <div class="space-y-1">
+                    <label class="text-[11px] font-medium text-zinc-400 block">Price (₹)</label>
+                    <input type="number" @bind="_d.Shop.ProductCard.Price" @bind:event="oninput"
+                           class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs outline-none focus:border-zinc-500 transition-colors" />
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[11px] font-medium text-zinc-400 block">Original Price (₹)</label>
+                    <input type="number" @bind="_d.Shop.ProductCard.OriginalPrice" @bind:event="oninput"
+                           class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs outline-none focus:border-zinc-500 transition-colors" />
+                </div>
+            </div>
+
+            <AdminCmsField Label="Discount Badge" @bind-Value="_d.Shop.ProductCard.Discount" />
+            <AdminCmsField Label="Shop Badge Title" @bind-Value="_d.Shop.BadgeTitle" />
+            <AdminCmsField Label="Shop Page Title" @bind-Value="_d.Shop.Title" />
+            <AdminCmsField Label="Shop Page Subtitle" Rows="2" @bind-Value="_d.Shop.Subtitle" />
+        </div>
+
+        @* 6. Product Detail Page *@
+        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5">
+            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
+                    Product Detail Page
+                </h3>
+            </div>
+
+            <AdminCmsField Label="Title" @bind-Value="_d.Shop.Pdp.Title" />
+            <AdminCmsField Label="Subtitle" @bind-Value="_d.Shop.Pdp.Subtitle" />
+            <AdminCmsField Label="Description" Rows="4" @bind-Value="_d.Shop.Pdp.Description" />
+            <div class="grid grid-cols-2 gap-3">
+                <AdminCmsField Label="Serving Size" @bind-Value="_d.Shop.Pdp.ServingSize" />
+                <AdminCmsField Label="Net Quantity" @bind-Value="_d.Shop.Pdp.NetQuantity" />
+                <AdminCmsField Label="Item Form" @bind-Value="_d.Shop.Pdp.ItemForm" />
+                <AdminCmsField Label="Formulation" @bind-Value="_d.Shop.Pdp.Formulation" />
+            </div>
+        </div>
+
+        @* 7. Brand *@
+        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5">
+            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
+                    Brand Identity
+                </h3>
+            </div>
+
+            <AdminCmsField Label="Brand Name" @bind-Value="_d.Brand.Name" />
+            <AdminCmsField Label="Product Name" @bind-Value="_d.Brand.ProductName" />
+            <AdminCmsField Label="Tagline" @bind-Value="_d.Brand.Tagline" />
+        </div>
+
+        @* 8. Footer & Brand *@
+        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5">
+            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
+                    Footer &amp; Legal
+                </h3>
+            </div>
+
+            <AdminCmsField Label="Footer Tagline" Rows="3" @bind-Value="_d.Footer.Tagline" />
+            <AdminCmsField Label="Copyright Line" @bind-Value="_d.Footer.Copyright" />
+        </div>
+
+        @* 9. Journey Section *@
+        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5 lg:col-span-2">
+            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
+                    Journey Section: Milestones
+                </h3>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <AdminCmsField Label="Section Subtitle" @bind-Value="_d.JourneySection.Subtitle" />
+                <AdminCmsField Label="Section Title" @bind-Value="_d.JourneySection.Title" />
+                <AdminCmsField Label="Intro Statement" @bind-Value="_d.JourneySection.Intro" />
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
+                @for (var i = 0; i < _d.JourneySection.Milestones.Count; i++)
+                {
+                    var m = _d.JourneySection.Milestones[i];
+                    var n = i + 1;
+                    <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-2">
+                        <span class="text-[10px] font-mono font-medium text-zinc-400 block">Milestone 0@n</span>
+                        <AdminCmsField Compact="true" Placeholder="Period" @bind-Value="m.Period" />
+                        <AdminCmsField Compact="true" Placeholder="Title" @bind-Value="m.Title" />
+                        <AdminCmsField Compact="true" Rows="3" Placeholder="Description" @bind-Value="m.Description" />
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* 10. Daily Ritual Section *@
+        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5 lg:col-span-2">
+            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
+                    Daily Ritual Section: Steps
+                </h3>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <AdminCmsField Label="Section Subtitle" @bind-Value="_d.DailyRitualSection.Subtitle" />
+                <AdminCmsField Label="Section Title" @bind-Value="_d.DailyRitualSection.Title" />
+                <AdminCmsField Label="Intro Statement" @bind-Value="_d.DailyRitualSection.Intro" />
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
+                @for (var i = 0; i < _d.DailyRitualSection.Steps.Count; i++)
+                {
+                    var s = _d.DailyRitualSection.Steps[i];
+                    var n = i + 1;
+                    <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-2">
+                        <span class="text-[10px] font-mono font-medium text-zinc-400 block">Step 0@n</span>
+                        <AdminCmsField Compact="true" Placeholder="Step label" @bind-Value="s.Step" />
+                        <AdminCmsField Compact="true" Placeholder="Title" @bind-Value="s.Title" />
+                        <AdminCmsField Compact="true" Rows="3" Placeholder="Description" @bind-Value="s.Description" />
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* 11. Ingredients Section *@
+        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5 lg:col-span-2">
+            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
+                    Ingredients Section (Home Page)
+                </h3>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <AdminCmsField Label="Section Subtitle" @bind-Value="_d.IngredientsSection.Subtitle" />
+                <AdminCmsField Label="Section Title" @bind-Value="_d.IngredientsSection.Title" />
+                <AdminCmsField Label="Intro Statement" @bind-Value="_d.IngredientsSection.Intro" />
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
+                @for (var i = 0; i < _d.IngredientsSection.Items.Count; i++)
+                {
+                    var it = _d.IngredientsSection.Items[i];
+                    var n = i + 1;
+                    <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-2">
+                        <span class="text-[10px] font-mono font-medium text-zinc-400 block">Ingredient @n</span>
+                        <AdminCmsField Compact="true" Placeholder="Name" @bind-Value="it.Name" />
+                        <AdminCmsField Compact="true" Placeholder="Dose" @bind-Value="it.Dose" />
+                        <AdminCmsField Compact="true" Rows="3" Placeholder="Description" @bind-Value="it.Desc" />
+                    </div>
+                }
+            </div>
+        </div>
+
+    </div>
+
+    @* Bottom Save Bar *@
+    <div class="pt-2 flex justify-end">
+        <button type="button" @onclick="SaveAsync" disabled="@Content.IsSaving"
+                class="px-4 py-2 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs flex items-center gap-2 cursor-pointer transition-colors shadow-sm disabled:opacity-50">
+            <Icon Name="Save" Size="13" />
+            <span>@(Content.IsSaving ? "Saving Changes..." : _saved ? "Saved Live! ✓" : "Save All Changes")</span>
+        </button>
+    </div>
+
+</div>
+
+@code {
+    private SiteContent _d = SiteContent.Default();
+    private string _marqueeText = "";
+    private bool _saved;
+    private string? _error;
+    private string? _notice;
+    private int _token;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Content.Changed += OnChanged;
+        await Content.InitAsync();
+        LoadDraft();
+    }
+
+    private void LoadDraft()
+    {
+        _d = Content.Content.Clone();
+        _marqueeText = string.Join("\n", _d.Marquee);
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void OnMarqueeInput(ChangeEventArgs e)
+    {
+        _marqueeText = e.Value?.ToString() ?? "";
+        _d.Marquee = _marqueeText.Split('\n').Select(l => l.TrimEnd('\r')).Where(l => l.Length > 0).ToList();
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = null; _notice = null;
+        var res = await Content.SaveAsync(_d);
+        if (res.Success)
+        {
+            _saved = true;
+            var t = ++_token;
+            StateHasChanged();
+            await Task.Delay(3500);
+            if (t == _token) { _saved = false; StateHasChanged(); }
+        }
+        else
+        {
+            _error = res.Message ?? "Could not save site content.";
+        }
+    }
+
+    private async Task ExportAsync() =>
+        await Browser.DownloadTextAsync("siteContent.json", Content.ExportJson());
+
+    private async Task ResetAsync()
+    {
+        if (!await Browser.ConfirmAsync("Reset all site copy back to official compliant factory defaults?")) return;
+        _error = null; _notice = null;
+        var res = await Content.ResetToDefaultsAsync();
+        if (res.Success)
+        {
+            LoadDraft();
+            _notice = "Site copy has been reset to default compliance values.";
+        }
+        else
+        {
+            _error = res.Message ?? "Could not reset site content.";
+        }
+    }
+
+    public void Dispose() => Content.Changed -= OnChanged;
+}

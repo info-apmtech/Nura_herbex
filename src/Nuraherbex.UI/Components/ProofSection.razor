@@ -1,0 +1,105 @@
+<section class="py-24 lg:py-32 bg-[#07050b] relative z-10 overflow-hidden text-left" id="clinical-proof">
+  <div
+    class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[450px] bg-[radial-gradient(circle,rgba(88,28,135,0.18)_0%,transparent_70%)] pointer-events-none rounded-full"></div>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+
+    <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-16 cinematic-text">
+      <div>
+        <span class="text-sm sm:text-base font-semibold text-[#a892e8] block mb-2 font-display">
+          The Proof
+        </span>
+        <h2 class="text-3xl sm:text-5xl lg:text-[3.25rem] font-extrabold text-white tracking-tight leading-[1.12]">
+          RESULTS YOU CAN <span class="text-[#c4b5fd]">FEEL &amp;</span><br />
+          <span class="text-[#c4b5fd]">MEASURE</span>
+        </h2>
+      </div>
+
+      <div class="text-left lg:text-right max-w-sm">
+        <p class="text-xs sm:text-sm text-slate-400 leading-relaxed">
+          Aggregated from 1,200+ Stamix users over 90 days.<br />
+          Real people, compounding change.
+        </p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-16">
+      @for (var idx = 0; idx < Metrics.Length; idx++)
+      {
+        var i = idx;
+        var metric = Metrics[i];
+        var decimals = metric.Value.Contains('.') ? 1 : 0;
+        var strokeOffset = _started[i] ? TargetOffset(metric) : Circ;
+        <div
+          @key="metric.Title"
+          class="group rounded-[20px] transition-all duration-300 hover:shadow-[0px_0px_35px_2px_rgba(168,85,247,0.35)] cursor-pointer cinematic-box"
+          style="background-image: linear-gradient(163deg, #d8b4fe 0%, #9333ea 45%, #3b0764 100%); padding: 1.5px">
+          <div class="w-full h-full bg-[#0c0914] rounded-[19px] group-hover:scale-[0.98] group-hover:rounded-[20px] transition-all duration-200 p-6 sm:p-7 flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-8">
+              <div class="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-center text-slate-300 group-hover:text-purple-300 group-hover:border-purple-400/40 transition-colors">
+                <Icon Name="@metric.Icon" Size="18" />
+              </div>
+
+              <div class="relative w-12 h-12 flex items-center justify-center">
+                <svg class="w-full h-full -rotate-90" viewBox="0 0 48 48">
+                  <circle cx="24" cy="24" r="@Radius" stroke="rgba(255, 255, 255, 0.08)" stroke-width="4" fill="transparent" />
+                  <circle cx="24" cy="24" r="@Radius" stroke="#c4b5fd" stroke-width="4"
+                          stroke-dasharray="@F(Circ)" stroke-dashoffset="@F(strokeOffset)" stroke-linecap="round" fill="transparent"
+                          style="transition: stroke-dashoffset 1.9s cubic-bezier(0.16, 1, 0.3, 1)" />
+                </svg>
+              </div>
+            </div>
+
+            <div class="mb-4">
+              <div class="flex items-baseline text-white font-extrabold font-display leading-none">
+                <span class="text-4xl sm:text-5xl tracking-tight">
+                  <CountUp Value="@double.Parse(metric.Value, System.Globalization.CultureInfo.InvariantCulture)" Duration="1900" Decimals="decimals" OnStarted="() => OnStarted(i)" />
+                </span>
+                <span class="text-2xl sm:text-3xl ml-1 font-semibold text-slate-200">
+                  @metric.Unit
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <h4 class="text-xs sm:text-[13px] font-bold uppercase tracking-wider text-white group-hover:text-purple-200 transition-colors leading-tight">
+                @metric.Title
+              </h4>
+              <p class="text-xs text-slate-400 mt-1">
+                @metric.Subtext
+              </p>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+
+  </div>
+</section>
+
+@code {
+    private record Metric(string Icon, string Value, string Unit, int Percentage, string Title, string Subtext);
+
+    private static readonly Metric[] Metrics =
+    {
+        new("ArrowUpRight", "94", "%", 94, "STEADIER ALL-DAY ENERGY", "reported within 2 weeks"),
+        new("Moon", "87", "%", 87, "DEEPER, RESTFUL SLEEP", "no morning grogginess"),
+        new("Sparkles", "91", "%", 91, "SHARPER MENTAL FOCUS", "less afternoon fog"),
+        new("TrendingUp", "3.2", "x", 82, "FASTER STRESS RECOVERY", "vs. baseline"),
+    };
+
+    private const double Radius = 20;
+    private static readonly double Circ = 2 * Math.PI * Radius;
+    private readonly bool[] _started = new bool[Metrics.Length];
+
+    private static double TargetOffset(Metric m) => Circ - (m.Percentage / 100.0) * Circ;
+    private static string F(double v) => v.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+
+    private async Task OnStarted(int i)
+    {
+        // Let the initial (empty ring) frame paint first so the CSS transition animates to the target offset.
+        await Task.Delay(50);
+        _started[i] = true;
+        await InvokeAsync(StateHasChanged);
+    }
+}

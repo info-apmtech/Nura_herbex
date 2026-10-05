@@ -1,0 +1,300 @@
+@page "/trust-passport"
+@page "/trust-passport/{BatchNo?}"
+@page "/verify"
+@page "/verify-product"
+@page "/verify-batch"
+@using Nuraherbex.UI.Components.Verify
+@inject ApiClient Api
+@inject NavigationManager Nav
+@inject BrowserInterop Browser
+
+@{
+    var batch = ActiveBatch;
+}
+
+<div class="min-h-screen bg-[#09090b] text-zinc-100 pt-4 sm:pt-12 md:pt-20 pb-20 px-4 sm:px-6 lg:px-8 text-left font-sans selection:bg-zinc-800 selection:text-white">
+    <div class="max-w-xl mx-auto space-y-5">
+
+        @* 1. Back Navigation *@
+        <div class="flex items-center justify-between gap-2 pb-1 pr-12 sm:pr-0">
+            <button @onclick="HandleBack"
+                    class="flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer group shrink-0">
+                <Icon Name="ArrowLeft" Size="14" Class="group-hover:-translate-x-0.5 transition-transform" />
+                <span>Back to Shop</span>
+            </button>
+            <span class="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800 truncate">
+                @(batch is not null ? $"Batch: {BatchLabel(batch)}" : "Trust Passport · Official Registry")
+            </span>
+        </div>
+
+        @* 2. Top Hero Header *@
+        <div class="text-left space-y-2.5">
+            <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] font-mono font-medium uppercase tracking-wider">
+                <Icon Name="ShieldCheck" Size="12" Class="@(batch is not null ? "text-emerald-400" : "text-zinc-400")" />
+                <span>@(batch is not null ? "Trust Passport · Batch Verified" : "Trust Passport · Central Registry")</span>
+            </div>
+
+            <h1 class="text-xl sm:text-2xl font-semibold text-zinc-100 tracking-tight font-sans">
+                @(batch is not null ? "Your STAMIX Batch Is Verified" : "Verify Your STAMIX Batch")
+            </h1>
+
+            <p class="text-xs text-zinc-400 leading-relaxed font-normal">
+                @(batch is not null
+                    ? "The batch number matches central manufacturing records. Review authenticated test reports and laboratory certifications below."
+                    : "Enter the batch number printed on the bottom of your STAMIX canister to inspect third-party laboratory COAs, purity assays, and safety certifications.")
+            </p>
+
+            <div class="flex flex-wrap items-center gap-2 pt-0.5 text-[10px] font-mono text-zinc-300">
+                <div class="flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-900/60 border border-zinc-800">
+                    <Icon Name="CheckCircle2" Size="12" Class="text-emerald-400" />
+                    <span>AUTHENTIC PRODUCT</span>
+                </div>
+                <div class="flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-900/60 border border-zinc-800">
+                    <Icon Name="CheckCircle2" Size="12" Class="text-emerald-400" />
+                    <span>THIRD-PARTY TESTED</span>
+                </div>
+                <div class="flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-900/60 border border-zinc-800">
+                    <Icon Name="CheckCircle2" Size="12" Class="text-emerald-400" />
+                    <span>FULL TRANSPARENCY</span>
+                </div>
+            </div>
+        </div>
+
+        @* 3. Hero Visual Display *@
+        <div class="relative rounded-lg border border-zinc-800 bg-[#121215] p-6 overflow-hidden flex items-center justify-center min-h-[220px]">
+            <div class="relative z-10 w-40 sm:w-48 h-40 sm:h-48 flex items-center justify-center">
+                <img src="@Media.StamixMockup1"
+                     alt="Stamix Verified Canister"
+                     class="max-h-full max-w-full object-contain filter drop-shadow-[0_12px_24px_rgba(0,0,0,0.8)]" />
+
+                <div class="absolute -top-1 -right-2 sm:-right-4 px-2 py-1 rounded bg-zinc-900/90 border border-zinc-800 text-[9px] font-mono text-zinc-300 uppercase tracking-wider flex items-center gap-1">
+                    <Icon Name="BarChart3" Size="11" Class="text-zinc-400" />
+                    <span>NABL LAB VERIFIED</span>
+                </div>
+
+                <div class="absolute -bottom-1 -right-2 sm:-right-4 px-2 py-1 rounded bg-zinc-900/90 border border-zinc-800 text-[9px] font-mono text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                    <Icon Name="Check" Size="11" StrokeWidth="3" Class="text-emerald-400" />
+                    <span>@(batch is not null ? "SEAL CONFIRMED" : "CENTRAL REGISTRY")</span>
+                </div>
+            </div>
+        </div>
+
+        @* 4. Batch Search & Quick Switcher *@
+        <div class="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 space-y-2.5">
+            <form @onsubmit="HandleSearch" @onsubmit:preventDefault class="flex gap-2">
+                <div class="relative flex-1">
+                    <Icon Name="Search" Size="14" Class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                    <input @ref="_searchInput"
+                           type="text"
+                           @bind="_searchText" @bind:event="oninput"
+                           placeholder="Enter Batch No. from your canister or jar..."
+                           class="w-full pl-8 pr-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 font-mono placeholder:text-zinc-600 outline-none focus:border-zinc-500 transition-colors" />
+                </div>
+                <button type="submit"
+                        class="px-4 py-1.5 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs tracking-tight transition-colors cursor-pointer shrink-0 shadow-sm">
+                    Verify
+                </button>
+            </form>
+
+            @if (!string.IsNullOrEmpty(_feedback))
+            {
+                <div class="@($"text-[11px] font-mono font-medium {(_feedback.Contains("not found") || _feedback.Contains("Please enter") ? "text-amber-400" : "text-emerald-400")}")">
+                    @_feedback
+                </div>
+            }
+
+            @if (_batches.Count > 0)
+            {
+                <div class="flex items-center gap-1.5 flex-wrap pt-1">
+                    <span class="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">Active Batches:</span>
+                    @foreach (var b in _batches)
+                    {
+                        var bNo = BatchLabel(b);
+                        var isSelected = batch is not null && string.Equals(BatchLabel(batch), bNo, StringComparison.OrdinalIgnoreCase);
+                        <button @key="bNo" type="button" @onclick="() => SelectQuickBatch(bNo)"
+                                class="@($"px-2 py-0.5 rounded text-[11px] font-mono font-medium transition-colors cursor-pointer {(isSelected ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 shadow-sm" : "bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200")}")">
+                            #@bNo
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+
+        @* 5. Awaiting Batch or Verified Dossier *@
+        @if (batch is null)
+        {
+            <VerifyGuide />
+        }
+        else
+        {
+            <div class="space-y-4 pt-1 animate-in fade-in duration-300">
+                @* Official Verified Batch Authenticity Bar *@
+                <div class="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 space-y-2 text-left">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                                <Icon Name="ShieldCheck" Size="18" />
+                            </div>
+                            <div>
+                                <div class="text-[10px] font-mono text-emerald-400 uppercase font-semibold tracking-wider">OFFICIAL BATCH VERIFIED</div>
+                                <h2 class="text-sm sm:text-base font-bold text-zinc-100 font-sans">
+                                    @(string.IsNullOrEmpty(batch.ProductName) ? "STAMIX™ Botanical Vitality Formula (300g)" : batch.ProductName)
+                                </h2>
+                            </div>
+                        </div>
+
+                        <div class="px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs font-bold shrink-0">
+                            Batch: #@BatchLabel(batch)
+                        </div>
+                    </div>
+                </div>
+
+                @* Direct official batch certificate image *@
+                <div class="rounded-xl border border-zinc-800 bg-zinc-950 p-2 sm:p-4 shadow-2xl overflow-hidden flex items-center justify-center">
+                    <img src="@(string.IsNullOrEmpty(batch.DocumentUrl) ? VerifyCertificateSvg.Generate(batch) : batch.DocumentUrl)"
+                         alt="@($"Official Certificate for Batch {BatchLabel(batch)}")"
+                         class="w-full max-w-2xl h-auto object-contain rounded-lg border border-zinc-800/80 shadow-2xl" />
+                </div>
+
+                @* Bottom Action: Verify Another Batch *@
+                <div class="pt-2">
+                    <button type="button" @onclick="VerifyAnotherAsync"
+                            class="w-full py-2.5 px-4 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 hover:text-white font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer">
+                        <Icon Name="Search" Size="14" />
+                        <span>Verify Another Batch Number</span>
+                    </button>
+                </div>
+            </div>
+        }
+
+        @* Brand Signature Footer *@
+        <div class="text-center pt-6 pb-4 text-xs text-zinc-600 space-y-0.5">
+            <div class="font-semibold text-zinc-400 tracking-wider font-mono text-[11px] uppercase">Nura Herbex®</div>
+            <p class="text-[10px] text-zinc-600">Science. Tradition. A Stronger You.</p>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? BatchNo { get; set; }
+    [SupplyParameterFromQuery(Name = "batch")] public string? QBatch { get; set; }
+    [SupplyParameterFromQuery(Name = "batch_no")] public string? QBatchNo { get; set; }
+    [SupplyParameterFromQuery(Name = "id")] public string? QId { get; set; }
+
+    private List<TrustBatchDto> _batches = new();
+    private string _activeBatchNo = "";
+    private string _searchText = "";
+    private string _feedback = "";
+    private ElementReference _searchInput;
+    private bool _loaded;
+    private string? _lastRequested;
+    private int _feedbackToken;
+
+    private static string BatchLabel(TrustBatchDto b) => string.IsNullOrEmpty(b.BatchNo) ? b.Id : b.BatchNo;
+
+    private TrustBatchDto? ActiveBatch => string.IsNullOrEmpty(_activeBatchNo)
+        ? null
+        : _batches.FirstOrDefault(b => string.Equals(BatchLabel(b), _activeBatchNo, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _batches = (await Api.GetBatchesAsync()).Where(b => b.IsActive).ToList();
+        _loaded = true;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var requested = FirstNonEmpty(BatchNo, QBatch, QBatchNo, QId);
+        if (!_loaded) { _batches = (await Api.GetBatchesAsync()).Where(b => b.IsActive).ToList(); _loaded = true; }
+        if (requested == _lastRequested) return;
+        _lastRequested = requested;
+        if (string.IsNullOrEmpty(requested)) return;
+
+        var found = await FindAsync(requested);
+        if (found is not null)
+        {
+            _activeBatchNo = BatchLabel(found);
+            _searchText = _activeBatchNo;
+        }
+        else
+        {
+            _searchText = requested;
+        }
+    }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();
+
+    /// <summary>Looks the batch up in the loaded registry, falling back to the single-batch API endpoint.</summary>
+    private async Task<TrustBatchDto?> FindAsync(string batchNo)
+    {
+        var local = _batches.FirstOrDefault(b => string.Equals(BatchLabel(b), batchNo, StringComparison.OrdinalIgnoreCase));
+        if (local is not null) return local;
+        var res = await Api.GetBatchAsync(batchNo);
+        if (res.Success && res.Batch is not null && res.Batch.IsActive)
+        {
+            _batches.Add(res.Batch);
+            return res.Batch;
+        }
+        return null;
+    }
+
+    private async Task HandleSearch()
+    {
+        var clean = (_searchText ?? "").Trim().ToUpperInvariant();
+        if (string.IsNullOrEmpty(clean))
+        {
+            await ShowFeedback("Please enter a batch number from your canister or jar.", 4000);
+            return;
+        }
+
+        var found = await FindAsync(clean);
+        if (found is not null)
+        {
+            _activeBatchNo = BatchLabel(found);
+            await ShowFeedback($"✓ Batch {_activeBatchNo} verified authentic", 4000);
+        }
+        else
+        {
+            _activeBatchNo = "";
+            await ShowFeedback($"Batch \"{clean}\" not found in manufacturing records. Please check the code on your jar.", 6000);
+        }
+    }
+
+    private async Task SelectQuickBatch(string bNo)
+    {
+        _searchText = bNo;
+        _activeBatchNo = bNo;
+        await ShowFeedback($"✓ Batch {bNo} loaded from registry", 3000);
+    }
+
+    private async Task ShowFeedback(string msg, int ms)
+    {
+        var token = ++_feedbackToken;
+        _feedback = msg;
+        StateHasChanged();
+        await Task.Delay(ms);
+        if (token == _feedbackToken) { _feedback = ""; StateHasChanged(); }
+    }
+
+    private async Task VerifyAnotherAsync()
+    {
+        _activeBatchNo = "";
+        _searchText = "";
+        _lastRequested = null;
+        Nav.NavigateTo("/trust-passport", replace: true);
+        try { await _searchInput.FocusAsync(); } catch { }
+    }
+
+    private async Task HandleBack()
+    {
+        Nav.NavigateTo("/shop");
+        await Browser.ScrollToTopAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Browser.SetMetaAsync(RouteMeta.TrustPassport);
+    }
+}

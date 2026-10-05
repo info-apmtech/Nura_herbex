@@ -1,0 +1,35 @@
+@page "/account"
+@page "/my-account"
+@page "/profile"
+@using Nuraherbex.UI.Components.Account
+@implements IDisposable
+@inject AuthState Auth
+@inject BrowserInterop Browser
+
+@if (Auth.IsLoading)
+{
+    <div class="min-h-screen bg-[#07060b] text-slate-100 font-sans antialiased pt-24 pb-20 px-4 flex items-center justify-center">
+        <div class="text-center text-slate-400 space-y-3">
+            <Icon Name="RefreshCw" Size="20" Class="animate-spin mx-auto text-[#9929ea]" />
+            <div class="text-xs font-mono">Restoring your session...</div>
+        </div>
+    </div>
+}
+else if (!Auth.IsAuthenticated)
+{
+    <AccountSignedOut />
+}
+else
+{
+    <AccountDashboard />
+}
+
+@code {
+    protected override void OnInitialized() { Auth.Changed += OnChanged; }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Browser.SetMetaAsync(RouteMeta.Account);
+    }
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => Auth.Changed -= OnChanged;
+}

@@ -1,0 +1,52 @@
+@page "/"
+@inject BrowserInterop Browser
+
+<main class="w-full bg-[#07050b] relative">
+  <Hero />
+
+  <Marquee />
+
+  <div class="relative">
+    <RealitySection />
+    <div class="section-beam-divider max-w-5xl mx-auto"></div>
+  </div>
+
+  <div class="relative">
+    <ScienceSection />
+    <div class="section-beam-divider max-w-4xl mx-auto"></div>
+  </div>
+
+  <div class="relative">
+    <SolutionSection />
+    <div class="section-beam-divider max-w-5xl mx-auto"></div>
+  </div>
+
+  <div class="relative">
+    <ProofSection />
+    <div class="section-beam-divider max-w-4xl mx-auto"></div>
+  </div>
+
+  <div class="relative">
+    <JourneySection />
+    <div class="section-beam-divider max-w-5xl mx-auto"></div>
+  </div>
+
+  <div class="relative">
+    <IngredientsSection />
+    <div class="section-beam-divider max-w-4xl mx-auto"></div>
+  </div>
+
+  <div class="relative">
+    <DailyRitualSection />
+    <div class="section-beam-divider max-w-5xl mx-auto"></div>
+  </div>
+
+  <ReviewsSection />
+</main>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Browser.SetMetaAsync(RouteMeta.Home);
+    }
+}

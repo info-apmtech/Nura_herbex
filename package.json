@@ -1,0 +1,10 @@
+{
+  "name": "nuraherbex-blazor-styles",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Tailwind CSS build for the Blazor storefront. Uses the Tailwind CLI already installed in ../node_modules.",
+  "scripts": {
+    "css:build": "..\\node_modules\\.bin\\tailwindcss -c tailwind.config.js -i src/Nuraherbex.UI/Styles/app.css -o src/Nuraherbex.UI/wwwroot/css/nura.css --minify",
+    "css:watch": "..\\node_modules\\.bin\\tailwindcss -c tailwind.config.js -i src/Nuraherbex.UI/Styles/app.css -o src/Nuraherbex.UI/wwwroot/css/nura.css --watch"
+  }
+}

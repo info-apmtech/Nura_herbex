@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor" TreatAsLocalProperty="TargetFramework;TargetFrameworks;RuntimeIdentifier;RuntimeIdentifiers">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Nuraherbex.UI</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Nuraherbex.Shared\Nuraherbex.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

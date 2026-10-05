@@ -1,0 +1,9 @@
+[
+  {
+    "Name": "Web + API",
+    "Projects": [
+      { "Path": "src\\Nuraherbex.Api\\Nuraherbex.Api.csproj", "Action": "Start", "DebugTarget": "http" },
+      { "Path": "src\\Nuraherbex.Web\\Nuraherbex.Web.csproj", "Action": "Start", "DebugTarget": "http" }
+    ]
+  }
+]

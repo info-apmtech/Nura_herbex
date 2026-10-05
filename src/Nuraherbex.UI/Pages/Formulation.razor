@@ -1,0 +1,431 @@
+@page "/formulation"
+@page "/ingredients"
+@page "/the-formula"
+@inject NavigationManager Nav
+@inject ApiClient Api
+@inject BrowserInterop Browser
+
+<div class="min-h-screen bg-[#07050b] text-zinc-100 pt-4 sm:pt-12 md:pt-20 pb-24 px-4 sm:px-6 lg:px-8 font-sans selection:bg-purple-600 selection:text-white">
+  <div class="max-w-6xl mx-auto space-y-8">
+
+    @* 1. Header Navigation Bar (Minimal mobile top spacing & right clearance for sticky hamburger/cart) *@
+    <div class="flex items-center justify-between gap-3 pb-1 pr-12 sm:pr-0">
+      <button @onclick="HandleBack"
+              class="flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-white transition-colors cursor-pointer group shrink-0">
+        <Icon Name="ArrowLeft" Size="14" Class="group-hover:-translate-x-0.5 transition-transform text-[#cc66da]" />
+        <span>Back to Home</span>
+      </button>
+
+      <div class="flex items-center gap-2">
+        <span class="text-[10px] font-mono tracking-wider text-amber-400/90 bg-amber-950/40 px-2.5 py-1 rounded border border-amber-500/30 flex items-center gap-1">
+          <Icon Name="FlaskConical" Size="11" Class="text-amber-400" />
+          <span>100% LABEL TRANSPARENCY</span>
+        </span>
+      </div>
+    </div>
+
+    @* 2. Hero Formulation Header *@
+    <div class="relative rounded-2xl border border-white/10 bg-gradient-to-br from-purple-950/40 via-zinc-900/60 to-zinc-950/80 p-6 sm:p-10 overflow-hidden shadow-2xl backdrop-blur-xl">
+      @* Ambient Glow Orbs *@
+      <div class="absolute -top-24 -right-24 w-80 h-80 bg-purple-600/20 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -bottom-24 -left-24 w-80 h-80 bg-amber-600/15 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div class="relative z-10 space-y-4 max-w-3xl">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-900/40 border border-purple-500/30 text-purple-200 text-xs font-mono font-medium tracking-wide">
+          <Icon Name="Sparkles" Size="13" Class="text-amber-400" />
+          <span>CLINICALLY FORMULATED BOTANICAL SYNERGY</span>
+        </div>
+
+        <h1 class="text-2xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight font-heading leading-tight">
+          Every Milligram Accounted For. <br class="hidden sm:inline" />
+          <span class="bg-gradient-to-r from-[#fff3bf] via-[#cc66da] to-purple-400 bg-clip-text text-transparent">
+            Zero Proprietary Blends.
+          </span>
+        </h1>
+
+        <p class="text-sm sm:text-base text-zinc-300 leading-relaxed font-normal">
+          Most supplements conceal dosages behind unverified &quot;proprietary matrixes&quot;. STAMIX™ discloses the precise milligram inclusion of all 17 standardized botanical extracts, cellular energizers, and bio-catalysts in every daily therapeutic serving.
+        </p>
+
+        @* Quick Metrics Bar *@
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4">
+          <div class="bg-zinc-900/80 border border-white/5 rounded-xl p-3.5 flex flex-col justify-center">
+            <div class="flex items-center gap-1.5 text-zinc-400 text-xs font-mono mb-1">
+              <Icon Name="Scale" Size="13" Class="text-amber-400" />
+              <span>@(string.IsNullOrEmpty(_metrics.DailyServing?.Label) ? "DAILY SERVING" : _metrics.DailyServing!.Label)</span>
+            </div>
+            <div class="text-lg sm:text-xl font-black text-white font-mono">
+              @ServingMain
+            </div>
+            <span class="text-[11px] text-zinc-400 font-sans">
+              @ServingSub
+            </span>
+          </div>
+
+          <div class="bg-zinc-900/80 border border-white/5 rounded-xl p-3.5 flex flex-col justify-center">
+            <div class="flex items-center gap-1.5 text-zinc-400 text-xs font-mono mb-1">
+              <Icon Name="Leaf" Size="13" Class="text-emerald-400" />
+              <span>@(string.IsNullOrEmpty(_metrics.TotalIngredients?.Label) ? "ACTIVE INGREDIENTS" : _metrics.TotalIngredients!.Label)</span>
+            </div>
+            <div class="text-lg sm:text-xl font-black text-white font-mono">
+              @TotalIngredientsText
+            </div>
+            <span class="text-[11px] text-zinc-400 font-sans">Standardized Extracts</span>
+          </div>
+
+          <div class="bg-zinc-900/80 border border-white/5 rounded-xl p-3.5 flex flex-col justify-center">
+            <div class="flex items-center gap-1.5 text-zinc-400 text-xs font-mono mb-1">
+              <Icon Name="ShieldCheck" Size="13" Class="text-purple-400" />
+              <span>HPLC CERTIFIED</span>
+            </div>
+            <div class="text-lg sm:text-xl font-black text-white font-mono">100% Purity</div>
+            <span class="text-[11px] text-zinc-400 font-sans">NABL Third-Party Tested</span>
+          </div>
+
+          <div class="bg-zinc-900/80 border border-white/5 rounded-xl p-3.5 flex flex-col justify-center">
+            <div class="flex items-center gap-1.5 text-zinc-400 text-xs font-mono mb-1">
+              <Icon Name="Zap" Size="13" Class="text-yellow-400" />
+              <span>SYNTHETIC FILLERS</span>
+            </div>
+            <div class="text-lg sm:text-xl font-black text-emerald-400 font-mono">0.00%</div>
+            <span class="text-[11px] text-zinc-400 font-sans">No maltodextrin or silica</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    @* 3. Search & Category Filter Controls *@
+    <div class="space-y-4">
+      <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        @* Search Input *@
+        <div class="relative flex-1 max-w-md">
+          <Icon Name="Search" Size="15" Class="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+          <input type="text"
+                 @bind="_searchQuery" @bind:event="oninput"
+                 placeholder="Search ingredients, active compounds, or benefits..."
+                 class="w-full bg-zinc-900/90 border border-zinc-800 focus:border-purple-500 rounded-xl pl-9 pr-4 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500 transition-all" />
+          @if (!string.IsNullOrEmpty(_searchQuery))
+          {
+            <button @onclick="() => _searchQuery = string.Empty"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500 hover:text-zinc-300">
+              Clear
+            </button>
+          }
+        </div>
+
+        @* Serving Size Notice *@
+        <div class="flex items-center gap-2 text-xs font-mono text-zinc-400 bg-zinc-900/60 border border-zinc-800/80 px-3.5 py-2 rounded-xl shrink-0">
+          <Icon Name="Info" Size="13" Class="text-purple-400 shrink-0" />
+          <span>Amounts listed per daily dosage (20g / 2 Scoops)</span>
+        </div>
+      </div>
+
+      @* Category Filter Pills *@
+      <div class="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+        @foreach (var cat in Categories)
+        {
+          var c = cat;
+          <button @key="c" @onclick="() => _selectedCategory = c"
+                  class="@($"px-3.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer {(_selectedCategory == c ? "bg-purple-600 text-white shadow-md shadow-purple-600/20 border border-purple-400/30" : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border border-zinc-800/60")}")">
+            @c @(c == "All" ? $"({_ingredients.Count})" : "")
+          </button>
+        }
+      </div>
+    </div>
+
+    @* 4. Ingredients Table / Cards Matrix *@
+    <div class="space-y-4">
+      <div class="flex items-center justify-between text-xs text-zinc-400 px-1 font-mono">
+        <span>Showing @Filtered.Count of @_ingredients.Count ingredients</span>
+        <span>Batch Standard: STAMIX-BP-2025</span>
+      </div>
+
+      @* Table Container (Responsive) *@
+      <div class="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-md overflow-hidden shadow-xl">
+        @* Desktop Table Header *@
+        <div class="hidden lg:grid grid-cols-12 gap-4 px-6 py-3.5 bg-zinc-900/80 border-b border-zinc-800 text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
+          <div class="col-span-4">Ingredient &amp; Botanical Source</div>
+          <div class="col-span-2 text-right">Amount Added</div>
+          <div class="col-span-2">Standardization / Extract</div>
+          <div class="col-span-4">Clinical Mechanism &amp; Purpose</div>
+        </div>
+
+        @* List / Rows *@
+        <div class="divide-y divide-zinc-800/60">
+          @foreach (var item in Filtered)
+          {
+            <div @key="item.Id"
+                 class="p-4 sm:p-5 lg:px-6 lg:py-4 transition-colors hover:bg-zinc-800/20 grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-4 items-start lg:items-center">
+              @* Col 1: Ingredient Info *@
+              <div class="lg:col-span-4 space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold text-sm sm:text-base text-zinc-100 font-sans tracking-tight">
+                    @item.Name
+                  </span>
+                  @if (!string.IsNullOrEmpty(item.Category))
+                  {
+                    <span class="@($"inline-block lg:hidden px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider {CategoryBadge(item.Category)}")">
+                      @item.Category
+                    </span>
+                  }
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                  @if (!string.IsNullOrEmpty(item.BotanicalName))
+                  {
+                    <span class="text-zinc-400 italic font-serif">
+                      @item.BotanicalName
+                    </span>
+                  }
+                  @if (!string.IsNullOrEmpty(item.ActiveCompound))
+                  {
+                    <span class="hidden sm:inline-block text-[11px] text-zinc-500 font-mono">
+                      • Active: @item.ActiveCompound
+                    </span>
+                  }
+                </div>
+              </div>
+
+              @* Col 2: Amount Added *@
+              <div class="lg:col-span-2 flex items-baseline lg:justify-end gap-1.5">
+                <span class="text-xs font-mono text-zinc-500 lg:hidden">Dosage: </span>
+                <span class="text-base sm:text-lg font-black text-amber-300 font-mono tracking-tight">
+                  @item.Amount
+                </span>
+                <span class="text-[10px] text-zinc-400 font-mono">/ 20g</span>
+              </div>
+
+              @* Col 3: Extract / Specification *@
+              <div class="lg:col-span-2 text-xs text-zinc-300 font-mono space-y-1">
+                <span class="inline-block px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300">
+                  @(string.IsNullOrEmpty(item.ExtractRatio) ? "Standardized Extract" : item.ExtractRatio)
+                </span>
+                @if (!string.IsNullOrEmpty(item.Category))
+                {
+                  <div class="hidden lg:block text-[10px] text-zinc-400 uppercase tracking-wider">
+                    @item.Category
+                  </div>
+                }
+              </div>
+
+              @* Col 4: Purpose / Clinical Benefit *@
+              <div class="lg:col-span-4 text-xs text-zinc-300 leading-relaxed font-sans">
+                @item.Purpose
+              </div>
+            </div>
+          }
+
+          @if (Filtered.Count == 0)
+          {
+            <div class="py-12 px-4 text-center space-y-3">
+              <Icon Name="FlaskConical" Size="32" Class="mx-auto text-zinc-600 animate-pulse" />
+              <p class="text-sm text-zinc-400">No ingredients match your search query &quot;@_searchQuery&quot;.</p>
+              <button @onclick="ResetFilters"
+                      class="text-xs text-purple-400 hover:text-purple-300 underline cursor-pointer">
+                Reset filters
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+
+    @* 5. Scientific Formulation Principles *@
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+      <div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-2.5">
+        <div class="w-9 h-9 rounded-lg bg-purple-900/40 border border-purple-500/30 flex items-center justify-center text-purple-300">
+          <Icon Name="Activity" Size="18" />
+        </div>
+        <h3 class="text-sm font-semibold text-zinc-100 font-sans">1. Endothelial Vasodilation</h3>
+        <p class="text-xs text-zinc-400 leading-relaxed">
+          L-Citrulline combined with Beetroot and Horny Goat Weed (Icariin) stimulates endothelial nitric oxide synthase (eNOS), increasing blood flow and smooth muscle relaxation.
+        </p>
+      </div>
+
+      <div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-2.5">
+        <div class="w-9 h-9 rounded-lg bg-amber-900/40 border border-amber-500/30 flex items-center justify-center text-amber-300">
+          <Icon Name="Zap" Size="18" />
+        </div>
+        <h3 class="text-sm font-semibold text-zinc-100 font-sans">2. HPA Axis &amp; Cortisol Balance</h3>
+        <p class="text-xs text-zinc-400 leading-relaxed">
+          Gold-standard KSM-66® Ashwagandha downregulates serum cortisol by up to 27.9%, shielding natural testosterone synthesis from stress-induced degradation.
+        </p>
+      </div>
+
+      <div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-2.5">
+        <div class="w-9 h-9 rounded-lg bg-emerald-900/40 border border-emerald-500/30 flex items-center justify-center text-emerald-300">
+          <Icon Name="ShieldCheck" Size="18" />
+        </div>
+        <h3 class="text-sm font-semibold text-zinc-100 font-sans">3. 2000% Bioavailability</h3>
+        <p class="text-xs text-zinc-400 leading-relaxed">
+          Patented BioPerine® black pepper extract inhibits intestinal glucuronidation, vastly amplifying the systemic cellular absorption of herbal active compounds.
+        </p>
+      </div>
+    </div>
+
+    @* 6. Bottom Quality & Trust Passport Bridge *@
+    <div class="rounded-2xl border border-zinc-800 bg-gradient-to-r from-zinc-900 via-purple-950/20 to-zinc-900 p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="space-y-2 text-left">
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300 text-[10px] font-mono uppercase tracking-wider">
+          <Icon Name="Award" Size="12" Class="text-amber-400" />
+          <span>Independent Lab Verification</span>
+        </div>
+        <h3 class="text-lg sm:text-xl font-bold text-white tracking-tight">
+          Verify Lab Certificates for Every Batch
+        </h3>
+        <p class="text-xs text-zinc-400 max-w-xl leading-relaxed">
+          Every production batch is tested by ISO/IEC 17025 accredited laboratories for heavy metals (lead, arsenic, mercury), microbial pathogens, and active compound assays.
+        </p>
+      </div>
+
+      <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto shrink-0">
+        <button @onclick="HandleVerify"
+                class="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-zinc-700 hover:border-zinc-500 bg-zinc-800/80 hover:bg-zinc-800 text-xs font-semibold text-zinc-200 transition-all cursor-pointer flex items-center justify-center gap-2">
+          <Icon Name="ShieldCheck" Size="14" Class="text-purple-400" />
+          <span>Verify Batch COA</span>
+        </button>
+
+        <button @onclick="HandleShop"
+                class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#cc66da] to-purple-600 hover:from-[#d577e2] hover:to-purple-500 text-xs font-bold text-white shadow-lg shadow-purple-600/30 transition-all cursor-pointer flex items-center justify-center gap-2 group">
+          <Icon Name="ShoppingBag" Size="14" />
+          <span>Shop STAMIX™ Now</span>
+          <Icon Name="ChevronRight" Size="13" Class="group-hover:translate-x-0.5 transition-transform" />
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+@code {
+    private static readonly string[] Anchors = { "label", "clinical-data", "supplement-facts" };
+
+    private List<FormulationIngredientDto> _ingredients = DefaultIngredients();
+    private FormulationMetricsDto _metrics = new();
+    private string _searchQuery = "";
+    private string _selectedCategory = "All";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var ingTask = Api.GetIngredientsAsync();
+            var metTask = Api.GetMetricsAsync();
+            var ing = await ingTask;
+            var met = await metTask;
+            if (ing is { Count: > 0 }) _ingredients = ing;
+            if (met is not null) _metrics = met;
+        }
+        catch
+        {
+            // keep the offline defaults
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await Browser.SetMetaAsync(RouteMeta.Formulation);
+
+        var uri = new Uri(Nav.Uri);
+        var frag = uri.Fragment.TrimStart('#');
+        if (Anchors.Contains(frag)) await Browser.ScrollToIdAsync(frag);
+    }
+
+    private List<string> Categories =>
+        new[] { "All" }
+            .Concat(_ingredients.Select(i => string.IsNullOrEmpty(i.Category) ? "Botanical" : i.Category).Distinct())
+            .ToList();
+
+    private List<FormulationIngredientDto> Filtered
+    {
+        get
+        {
+            var q = _searchQuery?.Trim() ?? "";
+            return _ingredients.Where(item =>
+            {
+                var matchesCategory = _selectedCategory == "All" || item.Category == _selectedCategory;
+                var matchesSearch = q.Length == 0
+                    || Has(item.Name, _searchQuery!)
+                    || Has(item.BotanicalName, _searchQuery!)
+                    || Has(item.Purpose, _searchQuery!)
+                    || Has(item.Category, _searchQuery!)
+                    || Has(item.ActiveCompound, _searchQuery!);
+                return matchesCategory && matchesSearch;
+            }).ToList();
+        }
+    }
+
+    private static bool Has(string? source, string term) =>
+        !string.IsNullOrEmpty(source) && source.Contains(term, StringComparison.OrdinalIgnoreCase);
+
+    private string ServingMain
+    {
+        get
+        {
+            var v = _metrics.DailyServing?.Value;
+            return string.IsNullOrEmpty(v) ? "20,000 mg" : System.Text.RegularExpressions.Regex.Replace(v, @"\s*\(.*?\)", "", System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1)).Trim();
+        }
+    }
+
+    private string ServingSub
+    {
+        get
+        {
+            var v = _metrics.DailyServing?.Value;
+            if (!string.IsNullOrEmpty(v) && v.Contains('('))
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(v, @"\((.*?)\)");
+                if (m.Success) return m.Groups[1].Value;
+            }
+            return "2 scoops (10g twice daily)";
+        }
+    }
+
+    private string TotalIngredientsText
+    {
+        get
+        {
+            var auto = $"{_ingredients.Count} Botanicals";
+            var t = _metrics.TotalIngredients;
+            if (t is null || t.UseAutoCount) return auto;
+            return string.IsNullOrEmpty(t.Value) ? auto : t.Value;
+        }
+    }
+
+    private static string CategoryBadge(string category) =>
+        category.Contains("Nitric") ? "bg-amber-950/40 text-amber-300 border border-amber-500/20" :
+        category.Contains("Adaptogen") ? "bg-purple-950/40 text-purple-300 border border-purple-500/20" :
+        category.Contains("Vitality") ? "bg-rose-950/40 text-rose-300 border border-rose-500/20" :
+        "bg-zinc-800/60 text-zinc-300 border border-zinc-700/40";
+
+    private void ResetFilters() { _searchQuery = ""; _selectedCategory = "All"; }
+
+    private async Task HandleBack() { Nav.NavigateTo("/"); await Browser.ScrollToTopAsync(); }
+    private async Task HandleShop() { Nav.NavigateTo("/shop"); await Browser.ScrollToTopAsync(); }
+    private async Task HandleVerify() { Nav.NavigateTo("/trust-passport"); await Browser.ScrollToTopAsync(); }
+
+    private static FormulationIngredientDto I(string id, string name, string botanical, string amount, string category, string benefit) =>
+        new() { Id = id, Name = name, BotanicalName = botanical, Amount = amount, Category = category, Benefit = benefit };
+
+    private static List<FormulationIngredientDto> DefaultIngredients() => new()
+    {
+        I("ing-1", "Ashwagandha", "Withania somnifera (Root)", "1,500 mg", "Adaptogen & Vigor", "Supports adrenal resilience, reduces serum cortisol, and boosts stamina."),
+        I("ing-2", "Purified Himalayan Shilajit", "Asphaltum punjabianum (Exudate)", "500 mg", "Bioactive Minerals", "Contains >50% Fulvic Acid; accelerates mitochondrial ATP cellular energy."),
+        I("ing-3", "Safed Musli", "Chlorophytum borivilianum (Tuber)", "1,200 mg", "Strength & Vitality", "Rich in natural saponins to support male reproductive vitality and physical vigor."),
+        I("ing-4", "Gokshura (Tribulus)", "Tribulus terrestris (Fruit)", "1,000 mg", "Hormonal Balance", "Standardized to protodioscin to optimize nitric oxide and free testosterone."),
+        I("ing-5", "Kaunch Beej", "Mucuna pruriens (Seed)", "1,000 mg", "Neuro-Endocrine", "Natural L-DOPA precursor promoting dopamine, drive, and peak physical performance."),
+        I("ing-6", "Shatavari", "Asparagus racemosus (Root)", "800 mg", "Cellular Nourishment", "Rasayana rejuvenator that enhances tissue recovery and oxidative defense."),
+        I("ing-7", "Vidarikand", "Pueraria tuberosa (Tuber)", "750 mg", "Endurance & Bulk", "Supports healthy lean muscle tone and replenishes depleted vital fluids."),
+        I("ing-8", "Akarkara", "Anacyclus pyrethrum (Root)", "400 mg", "Nerve & Microcirculation", "Enhances nervous system response, libido, and vascular blood flow."),
+        I("ing-9", "Jaiphal (Nutmeg)", "Myristica fragrans (Seed)", "250 mg", "Restorative Synergy", "Aromatic therapeutic compound supporting deep neuromuscular relaxation."),
+        I("ing-10", "Elaichi (Green Cardamom)", "Elettaria cardamomum (Pod)", "300 mg", "Bioavailability Enhancer", "Improves digestion, cellular uptake, and nutrient bioavailability."),
+        I("ing-11", "Dalchini (Ceylon Cinnamon)", "Cinnamomum verum (Bark)", "300 mg", "Metabolic Support", "Supports healthy insulin sensitivity and blood glucose metabolism."),
+        I("ing-12", "California Almond Powder", "Prunus dulcis (Whole Nut)", "4,000 mg", "Nuts & Seed Matrix", "Plant protein, healthy monosaturated lipids, and bioavailable Vitamin E."),
+        I("ing-13", "Kashmiri Walnut Kernel", "Juglans regia (Nut)", "3,000 mg", "Nuts & Seed Matrix", "High-density plant Omega-3 ALA fatty acids for cardiovascular and brain health."),
+        I("ing-14", "Pistachio Matrix", "Pistacia vera (Nut)", "2,000 mg", "Nuts & Seed Matrix", "Potassium, lutein, and amino acids for sustained stamina output."),
+        I("ing-15", "Watermelon Seed Extract", "Citrullus lanatus (Seed)", "1,000 mg", "Nuts & Seed Matrix", "Naturally rich in L-Citrulline, promoting healthy arterial vasodilation."),
+        I("ing-16", "Pumpkin Seed Protein", "Cucurbita pepo (Seed)", "1,000 mg", "Trace Mineral Zinc", "Rich bioavailable zinc and magnesium crucial for prostate and hormone synthesis."),
+        I("ing-17", "Sunflower & Sesame Meal", "Helianthus annuus & Sesamum indicum", "1,000 mg", "Nuts & Seed Matrix", "Provides structural lignans, calcium, and complete amino acid profile."),
+    };
+}

@@ -1,0 +1,193 @@
+@implements IDisposable
+@inject ModalState Modal
+@inject ApiClient Api
+
+@* Port of Modals.jsx (review / privacy / terms) *@
+@if (!string.IsNullOrEmpty(Modal.Active))
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/85 animate-in fade-in duration-200">
+        <div class="relative w-full max-w-2xl bg-[#0d0a14] border border-purple-500/30 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-purple-950/50 text-left my-8 overflow-hidden max-h-[90vh] flex flex-col"
+             @onclick:stopPropagation>
+            @* Ambient Top Glow *@
+            <div class="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-24 bg-[radial-gradient(ellipse_at_top,rgba(168,85,247,0.25),transparent_70%)] pointer-events-none"></div>
+
+            @* Close Button *@
+            <button @onclick="Close" aria-label="Close modal"
+                    class="absolute top-5 right-5 w-9 h-9 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-slate-300 hover:text-white transition-all z-20 cursor-pointer">
+                <Icon Name="X" Size="18" />
+            </button>
+
+            <div class="overflow-y-auto pr-1">
+
+                @if (Modal.Active == "review")
+                {
+                    <div>
+                        <div class="flex items-center gap-2 text-purple-400 text-xs font-bold uppercase tracking-widest mb-2">
+                            <Icon Name="Star" Size="14" /> Community Accountability
+                        </div>
+                        <h3 class="text-2xl font-extrabold text-white mb-2">
+                            Submit Your Verification
+                        </h3>
+                        <p class="text-xs text-slate-400 mb-6">
+                            Your authentic feedback helps hundreds of men break through chronic fatigue and regain baseline vitality.
+                        </p>
+
+                        @if (!_submitted)
+                        {
+                            <form @onsubmit="SubmitReview" @onsubmit:preventDefault class="space-y-4">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-300 mb-1">Your Full Name</label>
+                                        <input type="text" required placeholder="e.g. Vikram Malhotra" @bind="_name" @bind:event="oninput"
+                                               class="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-xs outline-none focus:border-purple-500" />
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-300 mb-1">Age &amp; City</label>
+                                        <input type="text" required placeholder="e.g. 38, Pune" @bind="_city" @bind:event="oninput"
+                                               class="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-xs outline-none focus:border-purple-500" />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-300 mb-1">Primary Benefit Experienced</label>
+                                    <select @bind="_tag"
+                                            class="w-full px-4 py-2.5 rounded-xl bg-[#140f22] border border-white/10 text-white text-xs outline-none focus:border-purple-500">
+                                        <option value="Energy & Stamina">Energy &amp; Stamina</option>
+                                        <option value="Hormonal Health">Hormonal Health</option>
+                                        <option value="Muscle Recovery">Muscle Recovery</option>
+                                        <option value="Deep Sleep">Deep Sleep &amp; Recovery</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-300 mb-1">Review Headline</label>
+                                    <input type="text" required placeholder="e.g. Sustained power throughout high-stress workdays" @bind="_headline" @bind:event="oninput"
+                                           class="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-xs outline-none focus:border-purple-500" />
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-300 mb-1">Your Detailed Experience</label>
+                                    <textarea required rows="3" placeholder="Share your protocol, timeline of changes, and how your daily performance shifted..." @bind="_body" @bind:event="oninput"
+                                              class="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-xs outline-none focus:border-purple-500"></textarea>
+                                </div>
+
+                                @if (!string.IsNullOrEmpty(_error))
+                                {
+                                    <p class="text-xs text-red-400">@_error</p>
+                                }
+
+                                <button type="submit" disabled="@_busy"
+                                        class="w-full py-3.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-purple-500/20 transition-all cursor-pointer">
+                                    Submit Verified Review
+                                </button>
+                            </form>
+                        }
+                        else
+                        {
+                            <div class="p-8 rounded-2xl bg-purple-950/40 border border-purple-500/30 text-center animate-in zoom-in-95">
+                                <Icon Name="CheckCircle" Size="36" Class="text-emerald-400 mx-auto mb-3" />
+                                <h4 class="text-lg font-bold text-white mb-1">Review Received!</h4>
+                                <p class="text-xs text-slate-300 mb-6">
+                                    Thank you, @(string.IsNullOrEmpty(_name) ? "Brother" : _name). Your verification has been submitted for batch verification and will appear on the wall shortly.
+                                </p>
+                                <button @onclick="Close"
+                                        class="px-6 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold uppercase tracking-wider cursor-pointer">
+                                    Close Window
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @if (Modal.Active == "privacy")
+                {
+                    <div>
+                        <div class="flex items-center gap-2 text-purple-400 text-xs font-bold uppercase tracking-widest mb-2">
+                            <Icon Name="FileText" Size="14" /> Legal &amp; Data Protection
+                        </div>
+                        <h3 class="text-2xl font-extrabold text-white mb-4">
+                            Privacy Policy
+                        </h3>
+                        <div class="space-y-4 text-xs sm:text-sm text-slate-300 leading-relaxed">
+                            <p>
+                                At Nura Herbex, your privacy and health data are treated with military-grade confidentiality. We collect minimal telemetry strictly required for order fulfillment and formulation feedback.
+                            </p>
+                            <p>
+                                We never sell, broker, or lease your personal identifiers to third-party ad exchanges. All payment processing is conducted over 256-bit encrypted SSL gateways via RBI-compliant banking networks.
+                            </p>
+                        </div>
+                        <div class="mt-6 pt-4 border-t border-white/10 flex justify-end">
+                            <button @onclick="Close"
+                                    class="px-6 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold uppercase tracking-wider cursor-pointer">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                }
+
+                @if (Modal.Active == "terms")
+                {
+                    <div>
+                        <div class="flex items-center gap-2 text-purple-400 text-xs font-bold uppercase tracking-widest mb-2">
+                            <Icon Name="FileText" Size="14" /> Terms of Agreement
+                        </div>
+                        <h3 class="text-2xl font-extrabold text-white mb-4">
+                            Terms of Service
+                        </h3>
+                        <div class="space-y-4 text-xs sm:text-sm text-slate-300 leading-relaxed">
+                            <p>
+                                Stamix by Nura Herbex is a premium botanical nutritional supplement manufactured in FSSAI-licensed, GMP-certified facilities. These statements have not been evaluated by the FDA or medical authorities to diagnose, cure, or prevent disease.
+                            </p>
+                            <p>
+                                All purchases are backed by our 60-Day Empty-Jar Guarantee. If you are not satisfied with your experience, contact customer care within 60 days of delivery for a full refund.
+                            </p>
+                        </div>
+                        <div class="mt-6 pt-4 border-t border-white/10 flex justify-end">
+                            <button @onclick="Close"
+                                    class="px-6 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold uppercase tracking-wider cursor-pointer">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string _name = "";
+    private string _city = "";
+    private string _tag = "Energy & Stamina";
+    private string _headline = "";
+    private string _body = "";
+    private bool _submitted;
+    private bool _busy;
+    private string? _error;
+
+    protected override void OnInitialized() => Modal.Changed += OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void Close() => Modal.Close();
+
+    private async Task SubmitReview()
+    {
+        if (_busy) return;
+        _busy = true;
+        _error = null;
+        var res = await Api.SubmitReviewAsync(new ReviewDto
+        {
+            Name = _name,
+            City = _city,
+            Rating = 5,
+            Title = _headline,
+            Body = _body,
+        });
+        _busy = false;
+        if (res.Success) _submitted = true;
+        else _error = string.IsNullOrWhiteSpace(res.Message) ? "Could not submit your review. Please try again." : res.Message;
+    }
+
+    public void Dispose() => Modal.Changed -= OnChanged;
+}

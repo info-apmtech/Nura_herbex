@@ -1,0 +1,237 @@
+@page "/admin"
+@layout AdminLayout
+@implements IDisposable
+@inject AdminSession AdminAuth
+@inject ApiClient Api
+@inject NavigationManager Nav
+@inject BrowserInterop Browser
+
+@if (!_initDone)
+{
+    <div class="min-h-screen bg-[#09090b]"></div>
+}
+else if (!AdminAuth.IsAuthenticated)
+{
+    <AdminLogin OnLoggedIn="OnLoggedInAsync" />
+}
+else
+{
+    @* =================================================================== *@
+    @* AUTHENTICATED ADMIN DASHBOARD - Linear / Vercel Enterprise Utility   *@
+    @* =================================================================== *@
+    <div class="min-h-screen bg-[#09090b] text-zinc-100 pt-4 sm:pt-8 pb-20 px-4 sm:px-6 lg:px-8 text-left font-sans selection:bg-zinc-800 selection:text-white">
+        <div class="max-w-7xl mx-auto space-y-6">
+
+            @* 1. Top Admin Header Bar *@
+            <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-5 border-b border-zinc-800">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        <h1 class="text-lg sm:text-xl font-semibold text-zinc-100 tracking-tight">
+                            Nura Herbex Admin
+                        </h1>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
+                            v2.6 LIVE
+                        </span>
+                    </div>
+                    <p class="text-xs text-zinc-500">
+                        Orders Database · Shiprocket Logistics · Trust Passport Batches · Content CMS
+                    </p>
+                </div>
+
+                @* User Controls & Store Navigation *@
+                <div class="flex items-center gap-2">
+                    <button @onclick="@(() => Nav.NavigateTo("/shop"))"
+                            class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-zinc-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer">
+                        <Icon Name="ExternalLink" Size="13" />
+                        <span>Live Store</span>
+                    </button>
+
+                    <button @onclick="@(() => Nav.NavigateTo("/trust-passport"))"
+                            class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-zinc-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer">
+                        <Icon Name="ShieldCheck" Size="13" />
+                        <span>Trust Passport</span>
+                    </button>
+
+                    <button @onclick="LogoutAsync"
+                            class="px-3 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-xs font-medium text-red-400 hover:text-red-300 transition-colors flex items-center gap-1.5 cursor-pointer"
+                            title="Logout session">
+                        <Icon Name="LogOut" Size="13" />
+                        <span>Sign Out</span>
+                    </button>
+                </div>
+            </div>
+
+            @* 2. Admin Navigation Tabs (Linear-style Segmented Control) *@
+            <div class="flex items-center gap-1 p-1 bg-zinc-900/70 border border-zinc-800 rounded-lg overflow-x-auto no-scrollbar">
+                <button @onclick="@(() => _activeTab = "orders")"
+                        class="@TabClass("orders")">
+                    <Icon Name="Package" Size="14" />
+                    <span>Orders &amp; Shiprocket (@_orders.Count)</span>
+                </button>
+
+                <button @onclick="@(() => _activeTab = "customers")"
+                        class="@TabClass("customers")">
+                    <Icon Name="Users" Size="14" />
+                    <span>Registered Customers (@_customers.Count)</span>
+                </button>
+
+                <button @onclick="@(() => _activeTab = "batches")"
+                        class="@TabClass("batches")">
+                    <Icon Name="ShieldCheck" Size="14" />
+                    <span>Trust Passport Manager (@_batches.Count)</span>
+                </button>
+
+                <button @onclick="@(() => _activeTab = "formulation")"
+                        class="@TabClass("formulation")">
+                    <Icon Name="FlaskConical" Size="14" />
+                    <span>Formulation (@_ingredients.Count)</span>
+                </button>
+
+                <button @onclick="@(() => _activeTab = "content")"
+                        class="@TabClass("content")">
+                    <Icon Name="FileText" Size="14" />
+                    <span>Site Content CMS</span>
+                </button>
+
+                <button @onclick="@(() => _activeTab = "whatsapp")"
+                        class="@TabClass("whatsapp")">
+                    <Icon Name="MessageCircle" Size="14" />
+                    <span>WhatsApp</span>
+                </button>
+
+                <button @onclick="@(() => _activeTab = "overview")"
+                        class="@TabClass("overview")">
+                    <Icon Name="TrendingUp" Size="14" />
+                    <span>Overview &amp; Metrics</span>
+                </button>
+            </div>
+
+            @if (_activeTab == "orders")
+            {
+                <AdminOrdersTab Orders="_orders" Loading="_ordersLoading" OnReload="LoadOrdersAsync" />
+            }
+            else if (_activeTab == "customers")
+            {
+                <AdminCustomersTab Customers="_customers" Loading="_customersLoading" OnReload="LoadCustomersAsync" />
+            }
+            else if (_activeTab == "batches")
+            {
+                <AdminBatchesTab Batches="_batches" Loading="_batchesLoading" OnReload="LoadBatchesAsync" />
+            }
+            else if (_activeTab == "formulation")
+            {
+                <AdminFormulationTab Ingredients="_ingredients" Metrics="_metrics"
+                                     IngredientsChanged="OnIngredientsChanged" MetricsChanged="OnMetricsChanged" />
+            }
+            else if (_activeTab == "content")
+            {
+                <AdminContentTab />
+            }
+            else if (_activeTab == "whatsapp")
+            {
+                <AdminWhatsAppTab />
+            }
+            else if (_activeTab == "overview")
+            {
+                <AdminOverviewTab Orders="_orders" />
+            }
+
+        </div>
+    </div>
+}
+
+@code {
+    private bool _initDone;
+    private bool _dataLoaded;
+    private string _activeTab = "orders"; // orders | customers | batches | formulation | content | whatsapp | overview
+
+    private List<OrderDto> _orders = new();
+    private bool _ordersLoading = true;
+    private List<AdminCustomerDto> _customers = new();
+    private bool _customersLoading = true;
+    private List<TrustBatchDto> _batches = new();
+    private bool _batchesLoading = true;
+    private List<FormulationIngredientDto> _ingredients = AdminDefaults.Ingredients();
+    private FormulationMetricsDto _metrics = new();
+
+    protected override void OnInitialized() => AdminAuth.Changed += OnAuthChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await Browser.SetMetaAsync(RouteMeta.Admin);
+        await AdminAuth.InitAsync(); // validates a stored token with the server
+        _initDone = true;
+        if (AdminAuth.IsAuthenticated) await LoadAllAsync();
+        StateHasChanged();
+    }
+
+    private void OnAuthChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private string TabClass(string tab) =>
+        $"px-3.5 py-1.5 rounded-md text-xs font-medium tracking-tight flex items-center gap-2 transition-all cursor-pointer {(_activeTab == tab ? "bg-zinc-800 text-white shadow-sm border border-zinc-700/60" : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 border border-transparent")}";
+
+    private async Task OnLoggedInAsync()
+    {
+        _initDone = true;
+        StateHasChanged();
+        await LoadAllAsync();
+    }
+
+    private async Task LogoutAsync()
+    {
+        await AdminAuth.SignOutAsync();
+        _dataLoaded = false;
+        _orders = new(); _customers = new(); _batches = new();
+        _ordersLoading = _customersLoading = _batchesLoading = true;
+    }
+
+    private async Task LoadAllAsync()
+    {
+        if (_dataLoaded) return;
+        _dataLoaded = true;
+        await Task.WhenAll(LoadOrdersAsync(), LoadBatchesAsync(), LoadCustomersAsync(), LoadIngredientsAsync(), LoadMetricsAsync());
+    }
+
+    private async Task LoadOrdersAsync()
+    {
+        _ordersLoading = true; StateHasChanged();
+        var res = await Api.AdminOrdersAsync();
+        _orders = res.Success ? res.Orders : new();
+        _ordersLoading = false; StateHasChanged();
+    }
+
+    private async Task LoadCustomersAsync()
+    {
+        _customersLoading = true; StateHasChanged();
+        var res = await Api.AdminCustomersAsync();
+        if (res.Success) _customers = res.Customers;
+        _customersLoading = false; StateHasChanged();
+    }
+
+    private async Task LoadBatchesAsync()
+    {
+        _batchesLoading = true; StateHasChanged();
+        var res = await Api.AdminBatchesAsync();
+        _batches = res.Success ? res.Batches : new();
+        _batchesLoading = false; StateHasChanged();
+    }
+
+    private async Task LoadIngredientsAsync()
+    {
+        var data = await Api.GetIngredientsAsync();
+        if (data is { Count: > 0 }) { _ingredients = data; StateHasChanged(); }
+    }
+
+    private async Task LoadMetricsAsync()
+    {
+        var data = await Api.GetMetricsAsync();
+        if (data is not null) { _metrics = data; StateHasChanged(); }
+    }
+
+    private void OnIngredientsChanged(List<FormulationIngredientDto> list) => _ingredients = list;
+    private void OnMetricsChanged(FormulationMetricsDto m) => _metrics = m;
+
+    public void Dispose() => AdminAuth.Changed -= OnAuthChanged;
+}

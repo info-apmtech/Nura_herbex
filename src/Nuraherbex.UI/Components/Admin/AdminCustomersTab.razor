@@ -1,0 +1,409 @@
+<div class="space-y-4">
+
+    @* Top Toolbar: Search & Refresh *@
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 flex-1">
+            <div class="relative flex-1 max-w-md">
+                <Icon Name="Search" Size="14" Class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <input type="text" @bind="_search" @bind:event="oninput"
+                       placeholder="Search by customer name, email, phone, ID, or city..."
+                       class="w-full pl-8 pr-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 focus:border-zinc-500 text-xs text-zinc-200 placeholder:text-zinc-600 outline-none transition-colors" />
+            </div>
+
+            <span class="text-[11px] text-zinc-500 font-mono hidden md:inline">
+                @FilteredCustomers.Count of @Customers.Count accounts
+            </span>
+        </div>
+
+        <div class="flex items-center gap-2 self-end sm:self-auto">
+            <button @onclick="() => OnReload.InvokeAsync()"
+                    disabled="@Loading"
+                    class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                    title="Reload customer registry from database">
+                <Icon Name="RefreshCw" Size="12" Class="@(Loading ? "animate-spin" : "")" />
+                <span>Sync DB</span>
+            </button>
+        </div>
+    </div>
+
+    @* Metrics Overview Grid *@
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-1 text-left">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-mono font-medium flex items-center gap-1.5">
+                <Icon Name="Users" Size="12" Class="text-zinc-400" />
+                <span>Registered Users</span>
+            </span>
+            <div class="text-2xl font-semibold text-zinc-100 font-mono tracking-tight">
+                @Customers.Count
+            </div>
+            <span class="text-[11px] text-zinc-500 font-normal">Active in DB</span>
+        </div>
+
+        <div class="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-1 text-left">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-mono font-medium flex items-center gap-1.5">
+                <Icon Name="ShoppingBag" Size="12" Class="text-emerald-400" />
+                <span>Active Buyers</span>
+            </span>
+            <div class="text-2xl font-semibold text-emerald-400 font-mono tracking-tight">
+                @ActiveBuyersCount
+            </div>
+            <span class="text-[11px] text-emerald-500/80 font-normal">Placed ≥1 Order</span>
+        </div>
+
+        <div class="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-1 text-left">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-mono font-medium flex items-center gap-1.5">
+                <Icon Name="CreditCard" Size="12" Class="text-amber-400" />
+                <span>Total Member LTV</span>
+            </span>
+            <div class="text-2xl font-semibold text-amber-300 font-mono tracking-tight">
+                ₹@AdminFmt.Inr(TotalLtv)
+            </div>
+            <span class="text-[11px] text-zinc-500 font-normal">Account Cumulative Spend</span>
+        </div>
+
+        <div class="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-1 text-left">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-mono font-medium flex items-center gap-1.5">
+                <Icon Name="Package" Size="12" Class="text-purple-400" />
+                <span>Account Orders</span>
+            </span>
+            <div class="text-2xl font-semibold text-purple-300 font-mono tracking-tight">
+                @TotalOrdersPlaced
+            </div>
+            <span class="text-[11px] text-zinc-500 font-normal">Total Linked Purchases</span>
+        </div>
+    </div>
+
+    @* Customers Data Table *@
+    <div class="rounded-lg border border-zinc-800 bg-zinc-900/40 overflow-hidden text-left">
+        <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+                <thead class="bg-zinc-950/70 text-zinc-400 font-mono text-[11px] border-b border-zinc-800">
+                    <tr>
+                        <th class="px-4 py-3 text-left font-medium">Customer</th>
+                        <th class="px-4 py-3 text-left font-medium">Contact</th>
+                        <th class="px-4 py-3 text-left font-medium">Registered Date</th>
+                        <th class="px-4 py-3 text-left font-medium">Default Destination</th>
+                        <th class="px-4 py-3 text-left font-medium">Orders Placed</th>
+                        <th class="px-4 py-3 text-right font-medium">Lifetime Spend</th>
+                        <th class="px-4 py-3 text-right font-medium">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-800/60 font-sans">
+                    @if (Loading)
+                    {
+                        <tr>
+                            <td colspan="7" class="px-4 py-12 text-center text-zinc-500">
+                                <div class="flex flex-col items-center justify-center gap-2">
+                                    <Icon Name="RefreshCw" Size="18" Class="animate-spin text-zinc-400" />
+                                    <span class="text-xs">Fetching registered users strictly from database...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    else if (FilteredCustomers.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="7" class="px-4 py-12 text-center text-zinc-500">
+                                <div class="flex flex-col items-center justify-center gap-2">
+                                    <Icon Name="Users" Size="24" Class="text-zinc-600" />
+                                    <div class="font-medium text-zinc-300">
+                                        @(!string.IsNullOrEmpty(_search) ? "No matching customer accounts found" : "No customer accounts registered yet in database")
+                                    </div>
+                                    <div class="text-[11px] text-zinc-500 max-w-sm">
+                                        @(!string.IsNullOrEmpty(_search)
+                                            ? $"No results match your search query \"{_search}\". Try another keyword."
+                                            : "Registered users will appear here dynamically in real-time when customers create an account during checkout or via the Vitality Account Portal.")
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var cust in FilteredCustomers)
+                        {
+                            var name = string.IsNullOrEmpty(cust.FullName) ? "Vitality Customer" : cust.FullName;
+                            var initial = char.ToUpperInvariant(name.Length > 0 ? name[0] : 'C');
+                            var orderCount = OrderCount(cust);
+                            var joinDate = cust.CreatedAt == default ? "Recent" : AdminFmt.DateShort(cust.CreatedAt);
+                            var city = cust.ShippingAddress?.City;
+                            var state = cust.ShippingAddress?.State;
+                            var pincode = cust.ShippingAddress?.Pincode;
+                            var locString = !string.IsNullOrEmpty(city)
+                                ? $"{city}{(!string.IsNullOrEmpty(state) ? $", {state}" : "")}{(!string.IsNullOrEmpty(pincode) ? $" ({pincode})" : "")}"
+                                : null;
+
+                            <tr @key="cust.Id" class="hover:bg-zinc-800/30 transition-colors">
+                                @* Customer Profile & ID *@
+                                <td class="px-4 py-3">
+                                    <div class="flex items-center gap-2.5">
+                                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500/20 to-emerald-500/20 border border-zinc-700/60 flex items-center justify-center text-xs font-semibold text-zinc-200">
+                                            @initial
+                                        </div>
+                                        <div class="space-y-0.5">
+                                            <div class="font-medium text-zinc-100">@name</div>
+                                            <div class="font-mono text-[10px] text-zinc-500">@cust.Id</div>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                @* Contact Details *@
+                                <td class="px-4 py-3">
+                                    <div class="space-y-1">
+                                        <div class="flex items-center gap-1.5 text-zinc-300">
+                                            <Icon Name="Mail" Size="11" Class="text-zinc-500 shrink-0" />
+                                            <span class="truncate max-w-[180px]">@cust.Email</span>
+                                        </div>
+                                        @if (!string.IsNullOrEmpty(cust.Phone))
+                                        {
+                                            <div class="flex items-center gap-1.5 text-zinc-400 font-mono text-[11px]">
+                                                <Icon Name="Phone" Size="11" Class="text-zinc-500 shrink-0" />
+                                                <span>@cust.Phone</span>
+                                            </div>
+                                        }
+                                    </div>
+                                </td>
+
+                                @* Registered Date *@
+                                <td class="px-4 py-3 text-zinc-400 font-mono text-[11px] whitespace-nowrap">
+                                    <div class="flex items-center gap-1.5">
+                                        <Icon Name="Calendar" Size="11" Class="text-zinc-500" />
+                                        <span>@joinDate</span>
+                                    </div>
+                                </td>
+
+                                @* Destination *@
+                                <td class="px-4 py-3">
+                                    @if (locString is not null)
+                                    {
+                                        <div class="flex items-center gap-1.5 text-zinc-300">
+                                            <Icon Name="MapPin" Size="11" Class="text-zinc-500 shrink-0" />
+                                            <span class="truncate max-w-[170px]">@locString</span>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-zinc-600 italic">None saved</span>
+                                    }
+                                </td>
+
+                                @* Orders Placed *@
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    @if (orderCount > 0)
+                                    {
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-mono font-medium">
+                                            <Icon Name="CheckCircle2" Size="10" />
+                                            <span>@orderCount @(orderCount == 1 ? "order" : "orders")</span>
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500 font-mono text-[10px]">
+                                            No orders yet
+                                        </span>
+                                    }
+                                </td>
+
+                                @* Lifetime Spend *@
+                                <td class="px-4 py-3 text-right font-mono whitespace-nowrap font-medium text-zinc-200">
+                                    ₹@AdminFmt.Inr(cust.TotalSpent)
+                                </td>
+
+                                @* Action: Inspect *@
+                                <td class="px-4 py-3 text-right whitespace-nowrap">
+                                    <button @onclick="() => _selected = cust"
+                                            class="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ml-auto">
+                                        <Icon Name="Eye" Size="12" />
+                                        <span>View Profile</span>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@* ======================================================================= *@
+@* MODAL: CUSTOMER PROFILE & ORDERS DOSSIER                                 *@
+@* ======================================================================= *@
+@if (_selected is not null)
+{
+    var sc = _selected;
+    var scName = string.IsNullOrEmpty(sc.FullName) ? "Vitality Customer" : sc.FullName;
+    <div @onclick="@(() => _selected = null)"
+         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in text-left">
+        <div @onclick:stopPropagation
+             class="relative w-full max-w-2xl bg-[#121215] border border-zinc-800 rounded-xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <button @onclick="@(() => _selected = null)"
+                    class="absolute top-4 right-4 w-7 h-7 rounded-md bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors">
+                <Icon Name="X" Size="15" />
+            </button>
+
+            @* Header *@
+            <div class="border-b border-zinc-800 pb-4 flex items-center gap-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-emerald-500/20 border border-zinc-700/60 flex items-center justify-center text-lg font-bold text-zinc-200">
+                    @char.ToUpperInvariant(scName[0])
+                </div>
+                <div class="space-y-0.5">
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-base font-semibold text-zinc-100">
+                            @scName
+                        </h3>
+                        <span class="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-400">
+                            @sc.Id
+                        </span>
+                    </div>
+                    <p class="text-xs text-zinc-400 flex items-center gap-2">
+                        <span>Registered Member</span>
+                        <span>·</span>
+                        <span class="font-mono text-zinc-500">
+                            @(sc.CreatedAt == default ? "Recent" : AdminFmt.DateTimeFull(sc.CreatedAt))
+                        </span>
+                    </p>
+                </div>
+            </div>
+
+            @* Profile Information Grid *@
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800 space-y-1">
+                    <div class="text-[10px] uppercase font-mono text-zinc-500 flex items-center gap-1.5">
+                        <Icon Name="Mail" Size="11" />
+                        <span>Email Address</span>
+                    </div>
+                    <div class="font-mono text-zinc-200 break-all select-all">
+                        @sc.Email
+                    </div>
+                </div>
+
+                <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800 space-y-1">
+                    <div class="text-[10px] uppercase font-mono text-zinc-500 flex items-center gap-1.5">
+                        <Icon Name="Phone" Size="11" />
+                        <span>Contact Phone</span>
+                    </div>
+                    <div class="font-mono text-zinc-200 select-all">
+                        @(string.IsNullOrEmpty(sc.Phone) ? "Not provided" : sc.Phone)
+                    </div>
+                </div>
+
+                <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800 space-y-1 sm:col-span-2">
+                    <div class="text-[10px] uppercase font-mono text-zinc-500 flex items-center gap-1.5">
+                        <Icon Name="MapPin" Size="11" />
+                        <span>Default Shipping Address</span>
+                    </div>
+                    <div class="text-zinc-200">
+                        @if (!string.IsNullOrEmpty(sc.ShippingAddress?.AddressLine1))
+                        {
+                            <span>
+                                @sc.ShippingAddress!.AddressLine1@(!string.IsNullOrEmpty(sc.ShippingAddress.AddressLine2) ? $", {sc.ShippingAddress.AddressLine2}" : ""), @sc.ShippingAddress.City, @sc.ShippingAddress.State - @sc.ShippingAddress.Pincode
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="text-zinc-500 italic">No saved address yet</span>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* Order History *@
+            <div class="space-y-2.5 pt-2">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-xs font-semibold text-zinc-200 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                        <Icon Name="ShoppingBag" Size="12" />
+                        <span>Order History (@(sc.Orders.Count > 0 ? sc.Orders.Count : sc.OrdersCount))</span>
+                    </h4>
+                    <div class="text-xs font-mono text-zinc-400">
+                        Total Spent: <strong class="text-emerald-400">₹@AdminFmt.Inr(sc.TotalSpent)</strong>
+                    </div>
+                </div>
+
+                @if (sc.Orders.Count > 0)
+                {
+                    <div class="rounded-lg border border-zinc-800 overflow-hidden bg-zinc-950/50">
+                        <table class="w-full text-xs">
+                            <thead class="bg-zinc-900 text-zinc-400 font-mono text-[10px] border-b border-zinc-800">
+                                <tr>
+                                    <th class="p-2.5 text-left font-medium">Order ID</th>
+                                    <th class="p-2.5 text-left font-medium">Date</th>
+                                    <th class="p-2.5 text-left font-medium">Payment</th>
+                                    <th class="p-2.5 text-left font-medium">Status</th>
+                                    <th class="p-2.5 text-right font-medium">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-zinc-800/60 font-mono text-zinc-300">
+                                @foreach (var ord in sc.Orders)
+                                {
+                                    <tr @key="ord.Id" class="hover:bg-zinc-900/40">
+                                        <td class="p-2.5 font-medium text-zinc-100">
+                                            @ord.Id
+                                            @if (!string.IsNullOrEmpty(ord.ShiprocketAwb))
+                                            {
+                                                <div class="text-[10px] text-zinc-500 font-normal">
+                                                    AWB: @ord.ShiprocketAwb
+                                                </div>
+                                            }
+                                        </td>
+                                        <td class="p-2.5 text-zinc-400 text-[11px] whitespace-nowrap">
+                                            @(ord.CreatedAt == default ? "Recent" : AdminFmt.DateShort(ord.CreatedAt))
+                                        </td>
+                                        <td class="p-2.5">
+                                            <span class="text-zinc-300">@(string.IsNullOrEmpty(ord.PaymentMethod) ? "ONLINE" : ord.PaymentMethod)</span>
+                                            <div class="text-[10px] text-zinc-500">@ord.PaymentStatus</div>
+                                        </td>
+                                        <td class="p-2.5">
+                                            <span class="@($"inline-flex items-center px-2 py-0.5 rounded text-[10px] {(ord.DeliveryStatus == "Delivered" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-zinc-800 text-zinc-300")}")">
+                                                @(string.IsNullOrEmpty(ord.DeliveryStatus) ? "Processing" : ord.DeliveryStatus)
+                                            </span>
+                                        </td>
+                                        <td class="p-2.5 text-right font-semibold text-zinc-100">
+                                            ₹@AdminFmt.Inr(ord.TotalAmount)
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="p-4 rounded-lg bg-zinc-950/40 border border-zinc-800/80 text-center text-zinc-500 text-xs">
+                        This user has registered an account but has not placed any orders yet.
+                    </div>
+                }
+            </div>
+
+            @* Actions *@
+            <div class="flex gap-2.5 pt-3 border-t border-zinc-800">
+                <button @onclick="@(() => _selected = null)"
+                        class="w-full py-2 px-4 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 font-medium text-xs cursor-pointer transition-colors">
+                    Close Customer Dossier
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public List<AdminCustomerDto> Customers { get; set; } = new();
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public EventCallback OnReload { get; set; }
+
+    private string _search = "";
+    private AdminCustomerDto? _selected;
+
+    private static int OrderCount(AdminCustomerDto c) => c.OrdersCount > 0 ? c.OrdersCount : c.Orders.Count;
+
+    private List<AdminCustomerDto> FilteredCustomers => string.IsNullOrWhiteSpace(_search)
+        ? Customers
+        : Customers.Where(c =>
+            AdminFmt.Has(c.FullName, _search) || AdminFmt.Has(c.Email, _search) || AdminFmt.Has(c.Phone, _search) ||
+            AdminFmt.Has(c.Id, _search) || AdminFmt.Has(c.ShippingAddress?.City, _search) || AdminFmt.Has(c.ShippingAddress?.State, _search)).ToList();
+
+    private decimal TotalLtv => Customers.Sum(c => c.TotalSpent);
+    private int ActiveBuyersCount => Customers.Count(c => OrderCount(c) > 0);
+    private int TotalOrdersPlaced => Customers.Sum(OrderCount);
+}

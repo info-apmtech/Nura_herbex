@@ -1,0 +1,301 @@
+@implements IAsyncDisposable
+@inject NavigationManager Nav
+@inject BrowserInterop Browser
+@inject CartState Cart
+@inject AuthState Auth
+@inject IJSRuntime JS
+
+@* Port of Header.jsx (sticky/transparent header, floating side controls, editorial flyout menu drawer). *@
+<header class="fixed top-0 left-0 w-full z-40 transition-all duration-400 ease-out h-[72px] sm:h-20 flex items-center bg-transparent border-b border-transparent @(_isPastHero ? "-translate-y-full opacity-0 pointer-events-none" : "translate-y-0 opacity-100 pointer-events-auto")">
+    <div class="w-full px-6 sm:px-10 lg:px-14 flex items-center justify-between">
+
+        @* Brand Logo *@
+        <button @onclick="GoHome" class="flex items-center gap-1.5 text-left group cursor-pointer focus:outline-none">
+            <span class="font-black tracking-[-0.03em] text-2xl sm:text-3xl text-[#fff3bf] font-heading uppercase leading-none group-hover:text-[#cc66da] transition-colors">
+                NURA HERBEX<span class="text-xs font-normal align-super text-slate-400 ml-1">®</span>
+            </span>
+        </button>
+
+        @* Right Action Controls *@
+        <div class="flex items-center gap-3 sm:gap-3.5">
+
+            <button @onclick="OpenMenu" aria-label="Open Menu Drawer"
+                    class="w-10 h-10 rounded-full border border-white/30 hover:border-white flex flex-col items-center justify-center gap-1.5 bg-black/40 hover:bg-white/10 transition-all duration-300 cursor-pointer group shadow-sm">
+                <span class="w-4 h-[1.5px] bg-white group-hover:scale-x-110 transition-all duration-300 rounded-full"></span>
+                <span class="w-4 h-[1.5px] bg-white group-hover:scale-x-110 transition-all duration-300 rounded-full"></span>
+            </button>
+
+            <button @onclick="GoAccount" aria-label="Vitality Account" title="@AccountTitle"
+                    class="relative w-10 h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-sm @(IsAccount ? "border-[#9929ea] bg-purple-950/60 text-[#fff3bf]" : "border-white/30 hover:border-white bg-black/40 hover:bg-white/10 text-slate-200 hover:text-white")">
+                <Icon Name="User" Size="16" />
+                @if (Auth.IsAuthenticated)
+                {
+                    <span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-black"></span>
+                }
+            </button>
+
+            <button @onclick="OpenCart" aria-label="Open Cart"
+                    class="relative w-10 h-10 rounded-full border border-white/30 hover:border-white bg-black/40 hover:bg-white/10 flex items-center justify-center text-slate-200 hover:text-white transition-all cursor-pointer shadow-sm">
+                <Icon Name="ShoppingBag" Size="16" />
+                @if (Cart.ItemCount > 0)
+                {
+                    <span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#9929ea] text-[#fff3bf] font-bold text-[9px] flex items-center justify-center shadow-md shadow-[#9929ea]/50">
+                        @Cart.ItemCount
+                    </span>
+                }
+            </button>
+
+        </div>
+    </div>
+</header>
+
+@* Floating Vertical Side Controls (visible only outside hero) *@
+<div class="fixed right-4 sm:right-6 top-6 sm:top-8 z-40 flex flex-col items-center gap-3 transition-all duration-300 ease-out @(_isPastHero ? "opacity-100 translate-x-0 pointer-events-auto" : "opacity-0 translate-x-6 pointer-events-none")">
+    <button @onclick="OpenMenu" aria-label="Open Menu Drawer"
+            class="w-10 h-10 rounded-full border border-white/30 hover:border-white flex flex-col items-center justify-center gap-1.5 bg-[#06040a]/85 backdrop-blur-md hover:bg-white/15 text-white transition-all duration-300 cursor-pointer group shadow-lg shadow-black/80">
+        <span class="w-4 h-[1.5px] bg-white group-hover:scale-x-110 transition-all duration-300 rounded-full"></span>
+        <span class="w-4 h-[1.5px] bg-white group-hover:scale-x-110 transition-all duration-300 rounded-full"></span>
+    </button>
+
+    <button @onclick="GoAccount" aria-label="Vitality Account" title="@AccountTitle"
+            class="relative w-10 h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer shadow-lg shadow-black/80 @(IsAccount ? "border-[#9929ea] bg-purple-950/90 text-[#fff3bf]" : "border-white/30 hover:border-white bg-[#06040a]/85 backdrop-blur-md hover:bg-white/15 text-slate-200 hover:text-white")">
+        <Icon Name="User" Size="16" />
+        @if (Auth.IsAuthenticated)
+        {
+            <span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-black"></span>
+        }
+    </button>
+
+    <button @onclick="OpenCart" aria-label="Open Cart"
+            class="relative w-10 h-10 rounded-full border border-white/30 hover:border-white bg-[#06040a]/85 backdrop-blur-md hover:bg-white/15 flex items-center justify-center text-slate-200 hover:text-white transition-all cursor-pointer shadow-lg shadow-black/80">
+        <Icon Name="ShoppingBag" Size="16" />
+        @if (Cart.ItemCount > 0)
+        {
+            <span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#9929ea] text-[#fff3bf] font-bold text-[9px] flex items-center justify-center shadow-md shadow-[#9929ea]/50">
+                @Cart.ItemCount
+            </span>
+        }
+    </button>
+</div>
+
+@* Editorial Flyout Menu Drawer: backdrop overlay *@
+<div @onclick="CloseMenu" class="fixed inset-0 bg-black/80 z-50 transition-opacity duration-300 @(_isMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none")"></div>
+
+@* Slide-over Drawer Panel *@
+<aside class="fixed top-0 right-0 h-full w-full max-w-lg md:max-w-xl bg-black border-l border-white/10 z-50 shadow-2xl flex flex-col justify-between transition-all duration-500 ease-out transform @(_isMenuOpen ? "translate-x-0 opacity-100 visible pointer-events-auto" : "translate-x-full opacity-0 invisible pointer-events-none")"
+       style="background-color: #000000">
+    @* Drawer Header *@
+    <div class="p-5 sm:p-6 flex items-center justify-between border-b border-white/10">
+        <div class="flex items-center gap-2.5">
+            <span class="w-2.5 h-2.5 bg-red-500 rounded-sm"></span>
+            <span class="text-xs uppercase tracking-[0.25em] text-slate-300 font-mono font-bold">
+                MENU
+            </span>
+        </div>
+
+        <button @onclick="CloseMenu" aria-label="Close Menu"
+                class="w-10 h-10 rounded-full border border-white/20 hover:border-white flex items-center justify-center text-slate-300 hover:text-white transition-all duration-300 cursor-pointer hover:rotate-90 group">
+            <Icon Name="X" Size="18" Class="group-hover:scale-110 transition-transform" />
+        </button>
+    </div>
+
+    @* Main Bold Navigation Links *@
+    <div class="px-6 sm:px-10 py-4 sm:py-6 overflow-y-auto flex-grow flex flex-col justify-start">
+        <nav class="space-y-0.5 sm:space-y-1">
+            @{ var links = NavLinks(); }
+            @for (var i = 0; i < links.Count; i++)
+            {
+                var item = links[i];
+                var idx = i;
+                <button @key="item.Label" @onclick="() => item.Action()" class="w-full text-left py-2.5 sm:py-3.5 border-b border-white/10 group flex items-center justify-between cursor-pointer transition-colors">
+                    <span class="text-2xl sm:text-3xl lg:text-4xl font-extrabold uppercase tracking-tight text-[#fff3bf] group-hover:text-white group-hover:translate-x-2 transition-all duration-300 font-display">
+                        @item.Label
+                        @if (item.Active)
+                        {
+                            <span class="inline-block w-2 h-2 bg-red-500 rounded-sm ml-2.5 -translate-y-1"></span>
+                        }
+                    </span>
+                    <span class="text-xs font-mono text-slate-600 group-hover:text-purple-400 transition-colors">
+                        0@(idx + 1)
+                    </span>
+                </button>
+            }
+        </nav>
+    </div>
+
+    @* Drawer Footer: Contact Email + Social Links *@
+    <div class="p-5 sm:p-6 border-t border-white/10 space-y-4 bg-black" style="background-color: #000000">
+        <div>
+            <span class="block text-[10px] font-mono tracking-widest text-slate-400 uppercase mb-1.5 font-semibold">
+                (EMAIL)
+            </span>
+            <a href="mailto:care@nuraherbex.com" class="text-lg sm:text-xl font-extrabold text-[#f97316] hover:text-orange-400 tracking-tight transition-colors">
+                care@@nuraherbex.com
+            </a>
+        </div>
+
+        <div>
+            <span class="block text-[10px] font-mono tracking-widest text-slate-400 uppercase mb-2 font-semibold">
+                (SOCIALS)
+            </span>
+            <div class="grid grid-cols-2 gap-3 text-xs sm:text-sm font-medium text-slate-300">
+                <a href="https://instagram.com" target="_blank" rel="noreferrer" class="flex items-center gap-1 hover:text-orange-400 transition-colors group">
+                    <span>Instagram</span>
+                    <Icon Name="ArrowUpRight" Size="13" Class="text-slate-500 group-hover:text-orange-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </a>
+
+                <a href="https://youtube.com" target="_blank" rel="noreferrer" class="flex items-center gap-1 hover:text-orange-400 transition-colors group">
+                    <span>YouTube</span>
+                    <Icon Name="ArrowUpRight" Size="13" Class="text-slate-500 group-hover:text-orange-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </a>
+
+                <a href="https://linkedin.com" target="_blank" rel="noreferrer" class="flex items-center gap-1 hover:text-orange-400 transition-colors group">
+                    <span>LinkedIn</span>
+                    <Icon Name="ArrowUpRight" Size="13" Class="text-slate-500 group-hover:text-orange-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </a>
+            </div>
+        </div>
+    </div>
+</aside>
+
+@code {
+    private sealed record NavItem(string Label, Action Action, bool Active = false);
+
+    private bool _isPastHero;
+    private bool _isMenuOpen;
+    private bool _jsReady;
+    private DotNetObjectReference<Header>? _self;
+
+    private bool IsHome
+    {
+        get
+        {
+            var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').ToLowerInvariant();
+            return path.Length == 0;
+        }
+    }
+
+    private bool PathIs(params string[] paths)
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').ToLowerInvariant();
+        return paths.Contains(path);
+    }
+
+    private bool IsAccount => PathIs("/account", "/my-account", "/profile");
+
+    private string AccountTitle => Auth.IsAuthenticated
+        ? $"Account ({(string.IsNullOrEmpty(Auth.Customer?.FullName) ? "Member" : Auth.Customer!.FullName)})"
+        : "Sign In / Account";
+
+    private List<NavItem> NavLinks() => new()
+    {
+        new("HOME", GoHomeFromMenu, IsHome),
+        new("WHY STAMIX", () => GoSection("why-stamix")),
+        new("THE FORMULA", () => GoSection("formula")),
+        new("CLINICAL PROOF", () => GoSection("clinical-proof")),
+        new("HOW TO USE", () => GoSection("how-to-use")),
+        new("OUR STORY", () => GoSection("our-story")),
+        new("FORMULATION", () => GoPage("/formulation"), PathIs("/formulation", "/ingredients", "/the-formula")),
+        new("SHOP STAMIX", () => GoPage("/shop"), PathIs("/shop", "/store", "/products/stamix", "/product/stamix", "/products", "/product", "/shop/stamix")),
+        new("TRUST PASSPORT", () => GoPage("/trust-passport"), new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').ToLowerInvariant() is var p && (p.StartsWith("/trust-passport") || p is "/verify" or "/verify-product" or "/verify-batch")),
+        new("TRACK ORDER", () => GoPage("/track"), PathIs("/track", "/track-order")),
+        new(Auth.IsAuthenticated ? "MY ACCOUNT" : "SIGN IN / ACCOUNT", () => GoPage("/account"), IsAccount),
+    };
+
+    protected override void OnInitialized()
+    {
+        Cart.Changed += OnChanged;
+        Auth.Changed += OnChanged;
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            _self = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("nuraHeader.init", _self, IsHome);
+            _jsReady = true;
+        }
+        catch { }
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _isMenuOpen = false;
+        if (_jsReady)
+        {
+            try { await JS.InvokeVoidAsync("nuraHeader.lock", false); await JS.InvokeVoidAsync("nuraHeader.setHome", IsHome); } catch { }
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public void SetPastHero(bool past)
+    {
+        if (_isPastHero == past) return;
+        _isPastHero = past;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task OnEscape()
+    {
+        if (!_isMenuOpen) return;
+        await SetMenuAsync(false);
+        StateHasChanged();
+    }
+
+    private async Task SetMenuAsync(bool open)
+    {
+        _isMenuOpen = open;
+        if (_jsReady) { try { await JS.InvokeVoidAsync("nuraHeader.lock", open); } catch { } }
+    }
+
+    private Task OpenMenu() => SetMenuAsync(true);
+    private Task CloseMenu() => SetMenuAsync(false);
+    private void OpenCart() => Cart.SetOpen(true);
+
+    private async Task GoHome()
+    {
+        Nav.NavigateTo("/");
+        await Browser.ScrollToTopAsync();
+    }
+
+    private async void GoHomeFromMenu()
+    {
+        await SetMenuAsync(false);
+        Nav.NavigateTo("/");
+        await Browser.ScrollToTopAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void GoAccount() => Nav.NavigateTo("/account");
+
+    private async void GoPage(string route)
+    {
+        await SetMenuAsync(false);
+        Nav.NavigateTo(route);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void GoSection(string id)
+    {
+        await SetMenuAsync(false);
+        if (IsHome) await Browser.ScrollToIdAsync(id);
+        else Nav.NavigateTo("/#" + id);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Cart.Changed -= OnChanged;
+        Auth.Changed -= OnChanged;
+        Nav.LocationChanged -= OnLocationChanged;
+        if (_jsReady) { try { await JS.InvokeVoidAsync("nuraHeader.dispose"); } catch { } }
+        _self?.Dispose();
+    }
+}

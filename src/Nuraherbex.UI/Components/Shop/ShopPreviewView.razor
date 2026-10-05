@@ -1,0 +1,235 @@
+@implements IDisposable
+@inject NavigationManager Nav
+@inject BrowserInterop Browser
+
+@* =================================================================== *@
+@* STAGE 1: PRODUCT LISTING PREVIEW PAGE (LANDING DEFAULT)             *@
+@* =================================================================== *@
+<div class="animate-in fade-in duration-300 space-y-8">
+
+  @* 2. Full-Bleed Section Background with Auto-Switching Product Imagery & SHOP STAMIX Title *@
+  <div class="w-screen relative left-1/2 -translate-x-1/2 overflow-hidden text-center h-[220px] sm:h-[260px] md:h-[300px] flex flex-col items-center justify-center my-0">
+
+    @* Full-Bleed Auto-Switching Background Product Image Covering the Full Section *@
+    <div class="absolute inset-0 z-0 select-none pointer-events-none overflow-hidden">
+      @for (var idx = 0; idx < _heroBgImages.Length; idx++)
+      {
+        var i = idx;
+        <div @key="i" class="@($"absolute inset-0 transition-opacity duration-1000 ease-in-out {(i == _heroBgIndex ? "opacity-85" : "opacity-0")}")">
+          <img src="@_heroBgImages[i]"
+               alt="@($"Stamix Showcase {i + 1}")"
+               class="w-full h-full object-cover object-center scale-105 filter brightness-75 contrast-125" />
+          @* Cinematic Gradient Overlays for High-End Editorial Contrast *@
+          <div class="absolute inset-0 bg-gradient-to-t from-[#07050d] via-black/35 to-[#07050d]/80"></div>
+          <div class="absolute inset-0 bg-gradient-to-r from-[#07050d]/80 via-transparent to-[#07050d]/80"></div>
+        </div>
+      }
+
+      @* Subtle Ambient Radial Glow *@
+      <div class="absolute inset-0 bg-radial from-purple-900/25 via-transparent to-transparent pointer-events-none"></div>
+    </div>
+
+    @* Foreground Pure Headline: "SHOP STAMIX" *@
+    <div class="relative z-10 flex flex-col items-center px-4 w-full">
+      <h1 class="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black uppercase tracking-tight text-[#fff3bf] leading-none whitespace-nowrap select-none font-heading drop-shadow-[0_12px_45px_rgba(0,0,0,0.98)]">
+        SHOP STAMIX
+      </h1>
+    </div>
+
+  </div>
+
+  @* 3. Tilted Repeating Ticker Tapes (Slower, Stately Luxury Marquee Speed) *@
+  <div class="w-screen relative left-1/2 -translate-x-1/2 py-8 sm:py-12 my-2 sm:my-4 overflow-hidden select-none pointer-events-none">
+
+    @* Ribbon 1: High-Impact Stark White Tape (Angled -2deg, Slower Pace: 55s) *@
+    <div class="w-[160vw] -ml-[30vw] py-4 sm:py-6 bg-white text-black font-black uppercase text-sm sm:text-lg md:text-xl lg:text-2xl tracking-[0.18em] sm:tracking-[0.22em] transform -rotate-[2deg] shadow-[0_20px_45px_rgba(0,0,0,0.85)] flex items-center overflow-hidden z-10">
+      <div class="flex w-max animate-ticker" style="animation-duration: 55s">
+        @* Primary Track *@
+        <div class="flex items-center gap-8 sm:gap-12 px-6 whitespace-nowrap">
+          @for (var i = 0; i < 4; i++)
+          {
+            <span class="flex items-center gap-8 sm:gap-12">
+              <span class="font-extrabold tracking-widest">NURA HERBEX</span>
+              <span class="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-black shrink-0"></span>
+              <span>STAMIX™ BOTANICAL FORMULA</span>
+              <span class="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-black shrink-0"></span>
+              <span>17 BOTANICALS &amp; SEEDS</span>
+              <span class="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-black shrink-0"></span>
+              <span>ZERO SYNTHETIC FILLERS</span>
+              <span class="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-black shrink-0"></span>
+            </span>
+          }
+        </div>
+        @* Continuous Infinite Duplicate Track *@
+        <div class="flex items-center gap-8 sm:gap-12 px-6 whitespace-nowrap" aria-hidden="true">
+          @for (var i = 0; i < 4; i++)
+          {
+            <span class="flex items-center gap-8 sm:gap-12">
+              <span class="font-extrabold tracking-widest">NURA HERBEX</span>
+              <span class="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-black shrink-0"></span>
+              <span>STAMIX™ BOTANICAL FORMULA</span>
+              <span class="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-black shrink-0"></span>
+              <span>17 BOTANICALS &amp; SEEDS</span>
+              <span class="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-black shrink-0"></span>
+              <span>ZERO SYNTHETIC FILLERS</span>
+              <span class="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-black shrink-0"></span>
+            </span>
+          }
+        </div>
+      </div>
+    </div>
+
+    @* Ribbon 2: Deep Obsidian Tape (Angled +1.6deg, Slower Reverse Pace: 55s) *@
+    <div class="w-[160vw] -ml-[30vw] py-4 sm:py-6 bg-black border-y-2 border-white/25 text-white font-black uppercase text-sm sm:text-lg md:text-xl lg:text-2xl tracking-[0.18em] sm:tracking-[0.22em] transform rotate-[1.6deg] -mt-6 sm:-mt-8 md:-mt-10 shadow-[0_25px_55px_rgba(0,0,0,0.95)] flex items-center overflow-hidden z-20">
+      <div class="flex w-max animate-ticker" style="animation-direction: reverse; animation-duration: 55s">
+        @* Primary Track *@
+        <div class="flex items-center gap-8 sm:gap-12 px-6 whitespace-nowrap">
+          @for (var i = 0; i < 4; i++)
+          {
+            <span class="flex items-center gap-8 sm:gap-12">
+              <span class="text-purple-400 font-serif text-lg sm:text-xl md:text-2xl drop-shadow-[0_0_12px_rgba(192,132,252,0.8)]">✦</span>
+              <span>FORMULATED FOR MEN</span>
+              <span class="text-purple-400 font-serif text-lg sm:text-xl md:text-2xl drop-shadow-[0_0_12px_rgba(192,132,252,0.8)]">✦</span>
+              <span>WHOLE ASHWAGANDHA ROOT</span>
+              <span class="text-purple-400 font-serif text-lg sm:text-xl md:text-2xl drop-shadow-[0_0_12px_rgba(192,132,252,0.8)]">✦</span>
+              <span>ICP-MS PURITY TESTED</span>
+              <span class="text-purple-400 font-serif text-lg sm:text-xl md:text-2xl drop-shadow-[0_0_12px_rgba(192,132,252,0.8)]">✦</span>
+              <span>EVERYDAY VITALITY &amp; STAMINA</span>
+            </span>
+          }
+        </div>
+        @* Continuous Infinite Duplicate Track *@
+        <div class="flex items-center gap-8 sm:gap-12 px-6 whitespace-nowrap" aria-hidden="true">
+          @for (var i = 0; i < 4; i++)
+          {
+            <span class="flex items-center gap-8 sm:gap-12">
+              <span class="text-purple-400 font-serif text-lg sm:text-xl md:text-2xl drop-shadow-[0_0_12px_rgba(192,132,252,0.8)]">✦</span>
+              <span>FORMULATED FOR MEN</span>
+              <span class="text-purple-400 font-serif text-lg sm:text-xl md:text-2xl drop-shadow-[0_0_12px_rgba(192,132,252,0.8)]">✦</span>
+              <span>WHOLE ASHWAGANDHA ROOT</span>
+              <span class="text-purple-400 font-serif text-lg sm:text-xl md:text-2xl drop-shadow-[0_0_12px_rgba(192,132,252,0.8)]">✦</span>
+              <span>ICP-MS PURITY TESTED</span>
+              <span class="text-purple-400 font-serif text-lg sm:text-xl md:text-2xl drop-shadow-[0_0_12px_rgba(192,132,252,0.8)]">✦</span>
+              <span>EVERYDAY VITALITY &amp; STAMINA</span>
+            </span>
+          }
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  @* Section Header: Our Product *@
+  <div class="text-center pt-8 sm:pt-12 pb-6 space-y-2">
+
+    <h2 class="text-3xl sm:text-4xl md:text-5xl font-black uppercase tracking-tight text-white font-sans">
+      OUR PRODUCT
+    </h2>
+    <p class="text-xs sm:text-sm text-slate-400 max-w-md mx-auto">
+      Botanical Vitality Formula for Men · 17 Botanicals, Herbs, Seeds &amp; Nuts
+    </p>
+  </div>
+
+  @* 4. Compact Flagship Product Card (Matching Reference Layout with Sharp Corners) *@
+  <div class="max-w-[340px] sm:max-w-[360px] mx-auto pt-2 pb-6">
+    <div @onclick="OpenPdp"
+         class="group relative rounded-md bg-[#0e0a1b] border border-white/15 hover:border-purple-500/70 transition-all duration-300 shadow-xl hover:shadow-[0_15px_40px_rgba(168,85,247,0.25)] hover:-translate-y-1.5 cursor-pointer overflow-hidden flex flex-col">
+      @* Top Image Area: Zoomed Out Full Canister View with Floating Badges *@
+      <div class="relative w-full h-64 sm:h-72 bg-[#080512] flex items-center justify-center p-3 sm:p-4 overflow-hidden">
+        <img src="@Media.StamixMockup1"
+             alt="Stamix 15-Day Canister"
+             class="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-500 filter drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)]" />
+
+        @* Floating Circular Action / Wishlist Button (Top-Right) *@
+        <button @onclick="() => _isWishlisted = !_isWishlisted" @onclick:stopPropagation="true"
+                class="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 hover:bg-purple-600/40 border border-white/20 backdrop-blur-md flex items-center justify-center text-slate-300 hover:text-white transition-colors"
+                title="Wishlist">
+          <Icon Name="Heart" Size="14" Class="@(_isWishlisted ? "fill-red-500 text-red-500" : "")" />
+        </button>
+
+        @* Subtle 20% OFF discount pill right next to image bottom *@
+        <div class="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded bg-black/70 border border-purple-500/40 backdrop-blur-md text-[10px] font-mono font-bold text-purple-300">
+          20% OFF
+        </div>
+      </div>
+
+      @* Bottom Content Area *@
+      <div class="p-4 space-y-2.5 bg-[#0e0a1b] text-left">
+        @* Product Title *@
+        <div>
+          <h3 class="font-bold text-white text-base leading-snug group-hover:text-purple-300 transition-colors">
+            Stamix™ Botanical Vitality Formula
+          </h3>
+          <p class="text-xs text-slate-400 font-light mt-0.5">
+            300g Canister · 15-Day Supply
+          </p>
+        </div>
+
+        @* Clean Price Row *@
+        <div class="flex items-center justify-between pt-2 border-t border-white/10 text-xs font-mono">
+          <div class="flex items-baseline gap-2">
+            <span class="font-black text-white text-base">@SiteConfig.Money(Price)</span>
+            <span class="text-slate-500 text-xs line-through">@SiteConfig.Money(ComparePrice)</span>
+          </div>
+        </div>
+
+        @* Compact Sharp-Cornered Action Buttons with Asymmetric Proportions *@
+        <div class="flex items-center gap-2 pt-1">
+          <button @onclick="OpenPdp" @onclick:stopPropagation="true"
+                  class="flex-1 py-2.5 px-3 rounded-md bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1 shadow-md shadow-purple-950/40 transition-all cursor-pointer whitespace-nowrap">
+            <span>VIEW</span>
+            <Icon Name="ChevronRight" Size="13" />
+          </button>
+
+          <button @onclick="GoVerify" @onclick:stopPropagation="true"
+                  class="flex-[1.4] py-2.5 px-3 rounded-md bg-white/10 hover:bg-white/20 border border-white/15 hover:border-emerald-500/40 text-white font-bold text-[10px] sm:text-[11px] tracking-tight uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer group/verify whitespace-nowrap"
+                  title="Verify Product & Batch Authenticity">
+            <Icon Name="ShieldCheck" Size="13" Class="text-emerald-400 shrink-0 group-hover/verify:scale-110 transition-transform" />
+            <span>VERIFY PRODUCT</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+@code {
+    [Parameter] public List<ProductDto>? Products { get; set; }
+
+    private readonly string[] _heroBgImages = { Media.StamixMockup1, Media.StamixMockup2, Media.StamixMockup3 };
+    private int _heroBgIndex;
+    private bool _isWishlisted;
+    private System.Timers.Timer? _timer;
+
+    private ProductDto? Single => Products?.FirstOrDefault(p => p.Id == "stamix-single");
+    private decimal Price => Single is { Price: > 0 } s ? s.Price : 1899m;
+    private decimal ComparePrice => Single is { CompareAtPrice: > 0 } s ? s.CompareAtPrice!.Value : 2499m;
+
+    protected override void OnInitialized()
+    {
+        _timer = new System.Timers.Timer(3200);
+        _timer.Elapsed += (_, _) =>
+        {
+            _heroBgIndex = (_heroBgIndex + 1) % _heroBgImages.Length;
+            _ = InvokeAsync(StateHasChanged);
+        };
+        _timer.AutoReset = true;
+        _timer.Start();
+    }
+
+    private async Task OpenPdp()
+    {
+        Nav.NavigateTo("/products/stamix");
+        await Browser.ScrollToTopAsync();
+    }
+
+    private void GoVerify() => Nav.NavigateTo("/trust-passport");
+
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
+    }
+}

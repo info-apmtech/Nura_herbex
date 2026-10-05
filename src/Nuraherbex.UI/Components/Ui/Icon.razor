@@ -1,0 +1,19 @@
+@* Drop-in for lucide-react: <Icon Name="ShoppingBag" Size="18" Class="text-purple-400" />
+   Same 24x24 viewBox / 2px round stroke as lucide-react, so JSX <Foo size={n} strokeWidth={w} className="..." /> maps 1:1.
+   Any other attribute (onclick, style, aria-*) is passed to the <svg>. *@
+@if (LucideIcons.Paths.TryGetValue(Name, out var inner))
+{
+    <svg xmlns="http://www.w3.org/2000/svg" width="@Size" height="@Size" viewBox="0 0 24 24" fill="@Fill" stroke="currentColor"
+         stroke-width="@StrokeWidth" stroke-linecap="round" stroke-linejoin="round" class="lucide @Class" aria-hidden="true" @attributes="Extra">@((MarkupString)inner)</svg>
+}
+
+@code {
+    /// <summary>lucide-react component name, e.g. "ShoppingBag", "CheckCircle2".</summary>
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+    [Parameter] public double Size { get; set; } = 24;
+    [Parameter] public double StrokeWidth { get; set; } = 2;
+    /// <summary>"none" (default) or "currentColor" for filled icons (e.g. filled stars).</summary>
+    [Parameter] public string Fill { get; set; } = "none";
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? Extra { get; set; }
+}

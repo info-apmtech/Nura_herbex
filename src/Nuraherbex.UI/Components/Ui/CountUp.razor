@@ -1,0 +1,63 @@
+@implements IDisposable
+@inject IJSRuntime JS
+<span @ref="_el" class="@Class">@Prefix@Formatted@Suffix</span>
+
+@code {
+    [Parameter] public double Value { get; set; }
+    [Parameter] public int Duration { get; set; } = 1800;
+    [Parameter] public int Decimals { get; set; } = 0;
+    [Parameter] public string Prefix { get; set; } = "";
+    [Parameter] public string Suffix { get; set; } = "";
+    [Parameter] public string Class { get; set; } = "";
+    /// <summary>Fired once when the count-up animation starts (used to sync gauge rings).</summary>
+    [Parameter] public EventCallback OnStarted { get; set; }
+
+    private ElementReference _el;
+    private DotNetObjectReference<CountUp>? _self;
+    private double _count;
+    private bool _started;
+    private CancellationTokenSource? _cts;
+    private string Formatted => _count.ToString("F" + Decimals, System.Globalization.CultureInfo.InvariantCulture);
+
+    // Same as React's useCountUp: wait until the number is scrolled into view (15% visible), then animate from 0.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _self = DotNetObjectReference.Create(this);
+        try { await JS.InvokeVoidAsync("nura.whenVisible", _el, _self, 0.15); }
+        catch { await OnVisible(); } // no JS available: just animate
+    }
+
+    [JSInvokable]
+    public async Task OnVisible()
+    {
+        if (_started) return;
+        _started = true;
+        _cts = new CancellationTokenSource();
+        await AnimateAsync(_cts.Token);
+    }
+
+    private async Task AnimateAsync(CancellationToken ct)
+    {
+        try
+        {
+            if (OnStarted.HasDelegate) await OnStarted.InvokeAsync();
+            if (Value == 0) { _count = 0; return; }
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(16));
+            var start = DateTime.UtcNow;
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                var elapsed = (DateTime.UtcNow - start).TotalMilliseconds;
+                var progress = Math.Min(elapsed / Duration, 1.0);
+                var eased = progress >= 1 ? 1 : 1 - Math.Pow(2, -10 * progress); // easeOutExpo
+                _count = progress >= 1 ? Value : eased * Value;
+                await InvokeAsync(StateHasChanged);
+                if (progress >= 1) break;
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+
+    public void Dispose() { _cts?.Cancel(); _cts?.Dispose(); _self?.Dispose(); }
+}

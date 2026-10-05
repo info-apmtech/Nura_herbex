@@ -1,0 +1,8 @@
+@inherits LayoutComponentBase
+
+@* Admin portal has no storefront chrome (header/footer/cart) — page supplies its own enterprise header. *@
+<div class="min-h-screen bg-[#09090b] text-slate-100 flex flex-col selection:bg-purple-600 selection:text-white relative">
+    <main class="flex-1 relative z-10" id="main-content">
+        @Body
+    </main>
+</div>

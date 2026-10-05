@@ -1,0 +1,82 @@
+namespace Nuraherbex.Api.Options;
+
+public class StoreOptions
+{
+    public const string Section = "Store";
+    public string FrontendUrl { get; set; } = "http://localhost:5200";
+    public string ApiPublicUrl { get; set; } = "http://localhost:5118";
+    public string SupportEmail { get; set; } = "care@nuraherbex.com";
+    public string SupportPhone { get; set; } = "08888003430";
+    public decimal FreeShippingThreshold { get; set; } = 999;
+    public decimal FlatShippingFee { get; set; } = 99;
+}
+
+public class JwtOptions
+{
+    public const string Section = "Jwt";
+    public string Issuer { get; set; } = "nuraherbex-api";
+    public string Audience { get; set; } = "nuraherbex-clients";
+    /// <summary>HMAC signing key, minimum 32 characters. Set via user-secrets / environment.</summary>
+    public string Secret { get; set; } = "";
+    public int CustomerTokenDays { get; set; } = 30;
+    public int AdminTokenHours { get; set; } = 8;
+}
+
+public class AdminOptions
+{
+    public const string Section = "Admin";
+    public string Email { get; set; } = "";
+    public string Password { get; set; } = "";
+}
+
+public class PayUOptions
+{
+    public const string Section = "PayU";
+    public string MerchantKey { get; set; } = "";
+    public string MerchantSalt { get; set; } = "";
+    /// <summary>test | live</summary>
+    public string Env { get; set; } = "test";
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(MerchantKey) && !string.IsNullOrWhiteSpace(MerchantSalt);
+    public string ActionUrl => Env == "live" ? "https://secure.payu.in/_payment" : "https://test.payu.in/_payment";
+}
+
+public class ShiprocketOptions
+{
+    public const string Section = "Shiprocket";
+    public string ApiUrl { get; set; } = "https://apiv2.shiprocket.in/v1/external";
+    public string Email { get; set; } = "";
+    public string Password { get; set; } = "";
+    public string Token { get; set; } = "";
+    public string PickupLocation { get; set; } = "Primary";
+    public string WebhookToken { get; set; } = "";
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(Token) || (!string.IsNullOrWhiteSpace(Email) && !string.IsNullOrWhiteSpace(Password));
+}
+
+public class EmailOptions
+{
+    public const string Section = "Email";
+    public string ResendApiKey { get; set; } = "";
+    public string From { get; set; } = "Nura Herbex <care@nuraherbex.com>";
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ResendApiKey);
+}
+
+public class WhatsAppOptions
+{
+    public const string Section = "WhatsApp";
+    /// <summary>The string you type into "Verify token" in Meta's webhook configuration.</summary>
+    public string VerifyToken { get; set; } = "";
+    /// <summary>Meta App Secret — used to validate X-Hub-Signature-256 on incoming events.</summary>
+    public string AppSecret { get; set; } = "";
+    /// <summary>Permanent system-user access token for the Cloud API (outbound messages).</summary>
+    public string AccessToken { get; set; } = "";
+    public string PhoneNumberId { get; set; } = "";
+    public string ApiVersion { get; set; } = "v21.0";
+    public string DefaultCountryCode { get; set; } = "91";
+    /// <summary>Approved template names. Leave empty to send plain text (only deliverable inside the 24h customer-service window).</summary>
+    public string OrderConfirmationTemplate { get; set; } = "";
+    public string OrderShippedTemplate { get; set; } = "";
+    public string OrderDeliveredTemplate { get; set; } = "";
+    public string TemplateLanguage { get; set; } = "en";
+    public bool AutoReplyEnabled { get; set; } = true;
+    public bool CanSend => !string.IsNullOrWhiteSpace(AccessToken) && !string.IsNullOrWhiteSpace(PhoneNumberId);
+}

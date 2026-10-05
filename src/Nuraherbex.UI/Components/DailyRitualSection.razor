@@ -1,0 +1,265 @@
+@using System.Globalization
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@implements IDisposable
+
+<section class="relative bg-[#07050b] text-left" id="how-to-use">
+  <div id="daily-ritual-track" class="relative h-[320vh] sm:h-[350vh]">
+    <div class="sticky top-0 h-screen w-full flex flex-col justify-between pt-6 pb-6 overflow-hidden transform-gpu">
+
+      <div
+        class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-[radial-gradient(circle,rgba(147,51,234,0.12)_0%,transparent_70%)] pointer-events-none rounded-full"></div>
+
+      <div class="text-center z-20 px-4 relative pt-4 pb-2 shrink-0">
+        <span class="text-xs sm:text-sm font-medium text-[#cc66da] block mb-1 tracking-wide">
+          Usage
+        </span>
+        <h2 class="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+          The Daily <span class="text-[#cc66da]">Ritual</span>
+        </h2>
+      </div>
+
+      <div class="relative w-full flex-1 flex items-center overflow-hidden my-auto py-2">
+        <div
+          id="daily-ritual-slider"
+          class="flex items-center gap-4 sm:gap-6 pl-6 sm:pl-16 lg:pl-24 pr-6 sm:pr-16 lg:pr-24 w-max will-change-transform"
+          style="transform: translate3d(-@(F(_smoothProgress * _maxTranslate))px, 0, 0)">
+          @for (var idx = 0; idx < RitualSteps.Length; idx++)
+          {
+            var i = idx;
+            var step = RitualSteps[i];
+            <div
+              @key="step.Step"
+              @onclick="() => ScrollToStep(i)"
+              class="relative w-[84vw] sm:w-[65vw] md:w-[50vw] lg:w-[42vw] max-w-[620px] h-[48vh] min-h-[320px] max-h-[460px] lg:max-h-[490px] overflow-hidden group cursor-pointer rounded-none flex-shrink-0 shadow-2xl">
+              <img
+                src="@step.Image"
+                alt="@step.Title"
+                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 rounded-none"
+                loading="lazy"
+                decoding="async" />
+
+              <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent pointer-events-none transition-opacity duration-300 group-hover:from-black/95"></div>
+
+              <div class="absolute bottom-0 left-0 right-0 p-6 sm:p-8 md:p-10 z-10 text-left">
+                <span class="text-xs sm:text-sm font-mono font-bold text-[#faeb92] block mb-1.5 tracking-widest">
+                  @step.Step
+                </span>
+                <h3 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white group-hover:text-[#cc66da] transition-colors tracking-tight drop-shadow-md mb-2">
+                  @step.Title
+                </h3>
+                <p class="text-sm sm:text-base text-slate-200 leading-relaxed max-w-md font-light drop-shadow">
+                  @step.Desc
+                </p>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="z-20 flex items-center justify-center gap-3 w-full max-w-xs sm:max-w-md mx-auto px-4 pb-2 shrink-0">
+        @for (var idx = 0; idx < RitualSteps.Length; idx++)
+        {
+          var i = idx;
+          var barClass = ActiveStep == i
+              ? "bg-[#faeb92] shadow-[0_0_12px_rgba(250,235,146,0.9)] w-full"
+              : _smoothProgress * (RitualSteps.Length - 1) > i
+                  ? "bg-[#9929ea]/70 w-full"
+                  : "w-0";
+          <button
+            @key="i"
+            type="button"
+            @onclick="() => ScrollToStep(i)"
+            aria-label="@($"Jump to step {i + 1}")"
+            class="flex-1 h-[3px] sm:h-1 rounded-full bg-white/15 overflow-hidden relative cursor-pointer hover:bg-white/25 transition-colors group">
+            <div class="@($"h-full rounded-full transition-all duration-300 {barClass}")"></div>
+          </button>
+        }
+      </div>
+
+    </div>
+  </div>
+
+  <div id="daily-milestone-track" class="relative h-[320vh] sm:h-[350vh]">
+    <div class="sticky top-0 h-screen w-full flex flex-col justify-center items-center px-4 sm:px-6 overflow-hidden transform-gpu">
+
+      <div class="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-hidden">
+        <img
+          src="@Media.StamixMockup1"
+          alt="Stamix Product Background"
+          class="w-full h-full object-cover object-center select-none" />
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-[1px]"></div>
+        <div class="absolute inset-0 bg-gradient-to-t from-[#08060c] via-transparent to-[#08060c]/85"></div>
+        <div class="absolute inset-0 bg-gradient-to-r from-[#08060c]/70 via-transparent to-[#08060c]/70"></div>
+      </div>
+
+      <div class="relative z-10 w-full flex flex-col items-center text-center">
+
+        <div class="w-full overflow-hidden relative py-8">
+          <div
+            class="flex will-change-transform"
+            style="width: 300%; transform: translate3d(-@(F(_smoothMilestone * (2.0 / 3) * 100))%, 0, 0)">
+            @for (var idx = 0; idx < Milestones.Length; idx++)
+            {
+              var m = Milestones[idx];
+              var mCenter = idx / 2.0;
+              var dist = Math.Abs(_smoothMilestone - mCenter) * 2;
+              double opacity = 1;
+              if (dist > 0.35)
+              {
+                var t = Math.Min(1, (dist - 0.35) / 0.55);
+                opacity = Math.Max(0, 1 - t * t * (3 - 2 * t));
+              }
+              var scale = 0.96 + 0.04 * opacity;
+              var translateY = (1 - opacity) * 16;
+              <div
+                @key="m.Phase"
+                class="w-1/3 flex flex-col items-center justify-center text-center px-4 sm:px-8 pointer-events-auto"
+                style="opacity: @F(opacity); transform: scale(@F(scale)) translateY(@(F(translateY))px)">
+                <div class="max-w-xl mx-auto flex flex-col items-center">
+                  <span class="text-[#faeb92] font-medium text-base sm:text-lg mb-3 block tracking-wide font-mono drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+                    @m.Phase
+                  </span>
+                  <h3 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-tight mb-5 drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)]">
+                    @m.Title
+                  </h3>
+                  <p class="text-slate-200 text-sm sm:text-base lg:text-lg leading-relaxed font-light max-w-lg drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]">
+                    @m.Desc
+                  </p>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="w-full max-w-xs sm:max-w-md mx-auto mt-12 sm:mt-16 relative px-4">
+          <div class="h-[2px] bg-white/15 w-full absolute top-1/2 -translate-y-1/2 left-0 right-0 rounded-full"></div>
+
+          <div
+            class="h-[2px] bg-[#cc66da] absolute top-1/2 -translate-y-1/2 left-0 rounded-full shadow-[0_0_8px_rgba(204,102,218,0.8)]"
+            style="width: @(F(Math.Max(0, Math.Min(100, _smoothMilestone * 100))))%"></div>
+
+          <div class="relative flex justify-between items-center w-full z-10">
+            @for (var idx = 0; idx < Milestones.Length; idx++)
+            {
+              var i = idx;
+              var nodePosition = (double)i / (Milestones.Length - 1);
+              var isPassed = _smoothMilestone >= nodePosition - 0.04;
+              var isCurrent = ActiveMilestone == i;
+              <button
+                @key="i"
+                type="button"
+                @onclick="() => ScrollToMilestone(i)"
+                class="p-2 -m-2 cursor-pointer focus:outline-none group flex items-center justify-center"
+                aria-label="@($"Jump to milestone {i + 1}")">
+                <span
+                  class="@($"block rounded-full transition-all duration-300 {(isCurrent ? "w-3.5 h-3.5 bg-[#faeb92] ring-4 ring-[#cc66da]/50 shadow-[0_0_12px_#faeb92]" : isPassed ? "w-2.5 h-2.5 bg-[#cc66da]" : "w-2.5 h-2.5 bg-[#231238] group-hover:bg-[#3d2060]")}")"></span>
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="mt-8 sm:mt-10 flex justify-center z-20">
+          <button
+            type="button"
+            @onclick='() => Nav.NavigateTo("/shop")'
+            class="bg-[#9929ea] hover:bg-[#a83bed] text-white font-bold text-xs sm:text-sm tracking-wider px-7 sm:px-9 py-3 sm:py-3.5 rounded-full shadow-xl shadow-[#9929ea]/30 hover:scale-105 hover:shadow-[#9929ea]/50 transition-all flex items-center gap-2.5 cursor-pointer group">
+            <span class="font-heading">SHOP STAMIX</span>
+            <Icon Name="ArrowRight" Size="16" Class="group-hover:translate-x-1 transition-transform text-white" />
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</section>
+
+@code {
+    private record RitualStep(string Step, string Title, string Desc, string Image);
+    private record RitualMilestone(string Phase, string Title, string Desc);
+
+    private static readonly RitualStep[] RitualSteps =
+    {
+        new("01", "Scoop", "Take one 10 g scoop of Stamix powder, twice daily (20 g total daily serving).", Media.Step1),
+        new("02", "Mix", "Stir thoroughly into warm milk, lukewarm water, or your preferred beverage.", Media.Step2),
+        new("03", "Consume", "Take the first serving in the morning and the second in the evening/night for day-long stamina and overnight recovery.", Media.Step3),
+    };
+
+    private static readonly RitualMilestone[] Milestones =
+    {
+        new("Week 1-2", "The Shift", "Nutritional support begins working. Helps promote calm, steadier daily energy and better nighttime rest."),
+        new("Week 3-4", "The Build", "Adaptogenic herbs and traditional whole botanicals support stamina, focus and recovery from daily exertion."),
+        new("Month 2+", "The New Baseline", "Long-term herbal nourishment supports daily resilience, energy baseline and everyday vitality."),
+    };
+
+    private const string RitualId = "daily-ritual-track";
+    private const string SliderId = "daily-ritual-slider";
+    private const string MilestoneId = "daily-milestone-track";
+
+    private double _maxTranslate;
+    private double _targetProgress, _currentProgress, _smoothProgress;
+    private double _targetMilestone, _currentMilestone, _smoothMilestone;
+    private CancellationTokenSource? _cts;
+
+    private int ActiveStep => Math.Min(RitualSteps.Length - 1, Math.Max(0, (int)Math.Round(_smoothProgress * (RitualSteps.Length - 1), MidpointRounding.AwayFromZero)));
+    private int ActiveMilestone => Math.Min(Milestones.Length - 1, Math.Max(0, (int)Math.Round(_smoothMilestone * (Milestones.Length - 1), MidpointRounding.AwayFromZero)));
+    private static string F(double v) => v.ToString("0.####", CultureInfo.InvariantCulture);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await HomeJs.EnsureAsync(JS);
+        _cts = new CancellationTokenSource();
+        _ = LoopAsync(_cts.Token);
+    }
+
+    private async Task LoopAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(33));
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                var probe = await HomeJs.ProbeAsync(JS, RitualId, MilestoneId, SliderId);
+                var changed = false;
+
+                if (probe is { Length: >= 3 })
+                {
+                    if (probe[0] is { } r)
+                    {
+                        var total = r[1] - r[2];
+                        if (total > 0) _targetProgress = Math.Max(0, Math.Min(1, -r[0] / total));
+                    }
+                    if (probe[1] is { } m)
+                    {
+                        var total = m[1] - m[2];
+                        if (total > 0) _targetMilestone = Math.Max(0, Math.Min(1, -m[0] / total));
+                    }
+                    if (probe[2] is { } s)
+                    {
+                        var max = Math.Max(0, s[5] - s[4]);
+                        if (Math.Abs(max - _maxTranslate) > 0.5) { _maxTranslate = max; changed = true; }
+                    }
+                }
+
+                var diffR = _targetProgress - _currentProgress;
+                if (Math.Abs(diffR) > 0.0001) { _currentProgress += diffR * 0.20; _smoothProgress = _currentProgress; changed = true; }
+                else if (_currentProgress != _targetProgress) { _currentProgress = _targetProgress; _smoothProgress = _currentProgress; changed = true; }
+
+                var diffM = _targetMilestone - _currentMilestone;
+                if (Math.Abs(diffM) > 0.0001) { _currentMilestone += diffM * 0.20; _smoothMilestone = _currentMilestone; changed = true; }
+                else if (_currentMilestone != _targetMilestone) { _currentMilestone = _targetMilestone; _smoothMilestone = _currentMilestone; changed = true; }
+
+                if (changed) await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+
+    private Task ScrollToStep(int idx) => HomeJs.ScrollToProgressAsync(JS, RitualId, (double)idx / (RitualSteps.Length - 1));
+    private Task ScrollToMilestone(int idx) => HomeJs.ScrollToProgressAsync(JS, MilestoneId, (double)idx / (Milestones.Length - 1));
+
+    public void Dispose() { _cts?.Cancel(); _cts?.Dispose(); }
+}

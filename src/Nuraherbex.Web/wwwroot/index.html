@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#07050b" />
+    <meta name="description" content="Stamix is a herbal health supplement for adult men — 17 botanicals, herbs, seeds and nuts, at a full 20 g daily serving." />
+    <title>Nura Herbex — Stamix | Botanical Vitality Formula for Men</title>
+    <base href="/" />
+    <link rel="preload" id="webassembly" />
+    <link rel="stylesheet" href="_content/Nuraherbex.UI/css/nura.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link href="manifest.webmanifest" rel="manifest" />
+    <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
+    <script type="importmap"></script>
+    <style>
+        html, body { background: #07050b; }
+        .nura-splash { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; color: #fff3bf; font-family: 'Momo Trust Display', system-ui, sans-serif; letter-spacing: .35em; font-size: 12px; text-transform: uppercase; }
+        .nura-splash .bar { width: 120px; height: 2px; background: rgba(153,41,234,.25); overflow: hidden; border-radius: 9999px; }
+        .nura-splash .bar::after { content: ''; display: block; height: 100%; width: 40%; background: linear-gradient(90deg, #9929ea, #cc66da, #faeb92); animation: nura-load 1.2s ease-in-out infinite; }
+        @keyframes nura-load { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+        #blazor-error-ui { background: #1b1030; color: #fff3bf; border-top: 1px solid #9929ea; bottom: 0; display: none; left: 0; padding: .75rem 1.25rem; position: fixed; width: 100%; z-index: 1000; font-family: system-ui, sans-serif; font-size: 14px; }
+        #blazor-error-ui .reload { color: #cc66da; margin-left: 8px; }
+        #blazor-error-ui .dismiss { cursor: pointer; position: absolute; right: .75rem; top: .5rem; }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div class="nura-splash">
+            <span>Nura Herbex</span>
+            <div class="bar"></div>
+        </div>
+    </div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">✕</span>
+    </div>
+    <script src="_content/Nuraherbex.UI/js/nura.js"></script>
+    <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
+    <script>navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' });</script>
+</body>
+
+</html>

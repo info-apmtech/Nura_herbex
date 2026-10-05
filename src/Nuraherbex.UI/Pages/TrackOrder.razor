@@ -1,0 +1,817 @@
+@page "/track"
+@page "/track-order"
+@using System.Text.Json
+@inject NavigationManager Nav
+@inject ApiClient Api
+@inject BrowserInterop Browser
+@inject IJSRuntime JS
+
+<div class="min-h-screen bg-[#07050b] text-slate-100 pt-4 sm:pt-14 md:pt-20 pb-20 px-4 sm:px-6 lg:px-12 text-left font-sans selection:bg-purple-600 selection:text-white">
+    <div class="max-w-7xl mx-auto space-y-6">
+
+        @* 1. Top Navbar / Sub-header bar *@
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-white/10 pr-12 sm:pr-0">
+
+            @* Breadcrumb / Back Navigation *@
+            <div class="flex items-center gap-3">
+                <button @onclick="GoToStoreAsync"
+                        class="flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer group">
+                    <Icon Name="ArrowLeft" Size="16" Class="group-hover:-translate-x-1 transition-transform" />
+                    <span>Back to Store</span>
+                </button>
+                <span class="text-slate-600">/</span>
+                <div class="flex items-center gap-2 text-white font-bold text-sm tracking-wide">
+                    <Icon Name="Package" Size="16" Class="text-purple-400" />
+                    <span>Consignment Tracking</span>
+                </div>
+            </div>
+
+            @* Top Search Bar *@
+            <div class="flex items-center gap-3 w-full md:w-auto">
+                <form @onsubmit="HandleSearch" @onsubmit:preventDefault class="relative flex-1 md:w-80">
+                    <Icon Name="Search" Size="15" Class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input type="text" @bind="_searchInput" @bind:event="oninput"
+                           placeholder="Search Order ID / Phone / AWB..."
+                           class="w-full pl-9 pr-10 py-2 rounded-xl bg-[#0e0b18] border border-white/10 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 text-xs sm:text-sm text-white placeholder:text-slate-500 outline-none transition-all" />
+                    <button type="submit" disabled="@_isSearching"
+                            class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white transition-colors">
+                        @if (_isSearching)
+                        {
+                            <Icon Name="RefreshCw" Size="14" Class="animate-spin text-purple-400" />
+                        }
+                        else
+                        {
+                            <Icon Name="Search" Size="14" />
+                        }
+                    </button>
+                </form>
+
+                @* Official Logistics Node Badge *@
+                <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0e0b18] border border-white/10">
+                    <div class="w-6 h-6 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-[10px] font-bold text-white shadow-sm">
+                        SR
+                    </div>
+                    <div class="text-left text-[11px] leading-tight">
+                        <span class="font-bold text-white block">Shiprocket Gateway</span>
+                        <span class="text-emerald-400 text-[9px] font-mono">Live Sync</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        @* SCENARIO A: INITIAL EMPTY STATE *@
+        @if (!_hasSearched && _order is null)
+        {
+            <div class="py-16 px-4 text-center max-w-2xl mx-auto space-y-6">
+                <div class="w-20 h-20 mx-auto rounded-3xl bg-purple-900/30 border border-purple-500/30 flex items-center justify-center text-purple-400 shadow-2xl shadow-purple-900/40">
+                    <Icon Name="Truck" Size="38" StrokeWidth="1.75" />
+                </div>
+
+                <div class="space-y-2">
+                    <h1 class="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                        Track Your Shipment
+                    </h1>
+                    <p class="text-slate-400 text-sm font-light leading-relaxed">
+                        Enter your <span class="text-purple-300 font-medium">Order ID</span> (e.g. NH-457503) or the <span class="text-purple-300 font-medium">10-digit mobile number</span> used during checkout to monitor live Shiprocket dispatch updates and delivery progress.
+                    </p>
+                </div>
+
+                @* Main Search Box *@
+                <form @onsubmit="HandleSearch" @onsubmit:preventDefault class="relative max-w-lg mx-auto flex items-center gap-2">
+                    <div class="relative flex-1">
+                        <Icon Name="Search" Size="18" Class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input type="text" @bind="_searchInput" @bind:event="oninput"
+                               placeholder="Order ID (e.g. NH-457503) or Phone..."
+                               class="w-full pl-11 pr-4 py-4 rounded-2xl bg-[#0c0916] border border-white/15 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/40 text-sm text-white placeholder:text-slate-500 outline-none transition-all shadow-xl font-mono"
+                               autofocus />
+                    </div>
+                    <button type="submit" disabled="@(_isSearching || string.IsNullOrWhiteSpace(_searchInput))"
+                            class="px-6 py-4 rounded-2xl bg-[#9929ea] hover:bg-[#a83bed] disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-purple-700/30 shrink-0">
+                        @(_isSearching ? "Searching..." : "Track")
+                    </button>
+                </form>
+
+                @* Trust Badges *@
+                <div class="pt-6 grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-white/10 text-left">
+                    <div class="p-4 rounded-2xl bg-[#0c0916] border border-white/5 space-y-1">
+                        <div class="flex items-center gap-2 text-purple-400 font-bold text-xs">
+                            <Icon Name="ShieldCheck" Size="16" />
+                            <span>Shiprocket Auto-Dispatch</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 font-light">Direct warehouse integration with real-time courier telemetry.</p>
+                    </div>
+
+                    <div class="p-4 rounded-2xl bg-[#0c0916] border border-white/5 space-y-1">
+                        <div class="flex items-center gap-2 text-emerald-400 font-bold text-xs">
+                            <Icon Name="Truck" Size="16" />
+                            <span>Priority Express Air</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 font-light">Rapid transit via Blue Dart, Delhivery, and DTDC networks.</p>
+                    </div>
+
+                    <div class="p-4 rounded-2xl bg-[#0c0916] border border-white/5 space-y-1">
+                        <div class="flex items-center gap-2 text-indigo-400 font-bold text-xs">
+                            <Icon Name="Package" Size="16" />
+                            <span>Tamper-Proof Seal</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 font-light">Discrete medical-grade packaging with batch authentication.</p>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* SCENARIO B: SEARCH ERROR *@
+        @if (_hasSearched && _searchError is not null && _order is null)
+        {
+            <div class="py-16 px-4 text-center max-w-lg mx-auto space-y-6">
+                <div class="w-16 h-16 mx-auto rounded-3xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-xl">
+                    <Icon Name="AlertCircle" Size="32" />
+                </div>
+
+                <div class="space-y-2">
+                    <h2 class="text-2xl font-black text-white">No Order Found</h2>
+                    <p class="text-slate-400 text-xs sm:text-sm font-light leading-relaxed">
+                        @_searchError
+                    </p>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-[#0c0916] border border-white/10 text-left space-y-2 text-xs text-slate-400">
+                    <span class="font-bold text-white block">Helpful Tips:</span>
+                    <ul class="list-disc list-inside space-y-1 text-slate-400 font-light">
+                        <li>Check your order confirmation email or SMS for your exact Order ID.</li>
+                        <li>Ensure the phone number matches the 10-digit number used during checkout.</li>
+                        <li>Orders placed via Cash on Delivery appear immediately upon placement.</li>
+                    </ul>
+                </div>
+
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                    <button @onclick="TryAnother"
+                            class="w-full sm:w-auto px-5 py-3 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-bold text-white transition-all cursor-pointer">
+                        Try Another Search
+                    </button>
+                    <a href="mailto:@SiteConfig.ContactEmail?subject=Order%20Tracking%20Assistance"
+                       class="w-full sm:w-auto px-5 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition-all cursor-pointer flex items-center justify-center gap-2">
+                        <Icon Name="MessageSquare" Size="14" />
+                        <span>Contact Customer Care</span>
+                    </a>
+                </div>
+            </div>
+        }
+
+        @* SCENARIO C: ACTIVE ORDER DISPLAYED *@
+        @if (_order is { } order)
+        {
+            <div class="space-y-6">
+
+                @* 2. Order ID Headline & Action Buttons Row *@
+                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pt-2">
+                    <div>
+                        <h1 class="text-2xl sm:text-4xl font-black text-white tracking-tight flex items-center gap-3">
+                            <span>Order ID :</span>
+                            <span class="font-mono text-transparent bg-clip-text bg-gradient-to-r from-purple-300 via-fuchsia-300 to-indigo-300">
+                                @order.OrderId
+                            </span>
+                        </h1>
+                        <p class="text-slate-400 text-xs sm:text-sm mt-1.5 font-light">
+                            Direct Shiprocket logistics telemetry, courier tracking (AWB), and doorstep delivery milestones.
+                        </p>
+                    </div>
+
+                    @* Action Buttons Row *@
+                    <div class="flex items-center gap-3 self-stretch sm:self-auto shrink-0">
+                        @if (!string.IsNullOrEmpty(order.TrackUrl))
+                        {
+                            <a href="@order.TrackUrl" target="_blank" rel="noopener noreferrer"
+                               class="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-purple-900/40 hover:bg-purple-900/70 border border-purple-500/40 text-xs font-bold text-purple-200 hover:text-white transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm">
+                                <Icon Name="ExternalLink" Size="14" Class="text-purple-300" />
+                                <span>Shiprocket Tracker</span>
+                            </a>
+                        }
+
+                        <button @onclick="PrintAsync"
+                                class="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-[#0e0b18] hover:bg-[#151124] border border-white/15 hover:border-white/30 text-xs font-bold text-slate-200 hover:text-white transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm">
+                            <Icon Name="FileText" Size="14" Class="text-slate-400" />
+                            <span>Print invoice</span>
+                        </button>
+
+                        <a href="mailto:@SiteConfig.ContactEmail?subject=Inquiry%20regarding%20Order%20@(Uri.EscapeDataString(order.OrderId))"
+                           class="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-[#f97316] hover:bg-orange-500 active:bg-orange-600 text-xs font-extrabold uppercase tracking-wider text-white transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-orange-600/30 hover:shadow-orange-600/50">
+                            <Icon Name="MessageSquare" Size="14" />
+                            <span>Support</span>
+                        </a>
+                    </div>
+                </div>
+
+                @* 3. Main 2-Column Dashboard Grid *@
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+                    @* LEFT COLUMN *@
+                    <div class="lg:col-span-8 space-y-6">
+
+                        @* Status Banner & 4-Step Stepper Cards *@
+                        <div class="rounded-2xl bg-[#0a0714] border border-white/10 p-6 sm:p-7 shadow-2xl space-y-6">
+
+                            @* Status Banner Row *@
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-white/10">
+                                <div class="flex items-center gap-2.5">
+                                    <span class="@($"w-2.5 h-2.5 rounded-full animate-pulse {(order.CurrentStage == 3 ? "bg-emerald-400 shadow-[0_0_8px_#10b981]" : "bg-orange-400 shadow-[0_0_8px_#f97316]")}")"></span>
+                                    <span class="text-base sm:text-lg font-extrabold text-white tracking-tight">
+                                        @order.StatusText
+                                    </span>
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-mono text-slate-400">
+                                        AWB Code :
+                                    </span>
+                                    <span class="text-xs sm:text-sm font-mono font-bold text-purple-300">
+                                        @order.TrackingNo
+                                    </span>
+                                    @if (order.IsAwbAssigned)
+                                    {
+                                        <button @onclick="() => CopyResiAsync(order.TrackingNo)" title="Copy Tracking Number"
+                                                class="p-1 rounded-md bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer">
+                                            @if (_copiedResi)
+                                            {
+                                                <Icon Name="Check" Size="12" Class="text-emerald-400" />
+                                            }
+                                            else
+                                            {
+                                                <Icon Name="Copy" Size="12" />
+                                            }
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+
+                            @* 4-Step Horizontal Stepper Cards *@
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+
+                                @* Step 1: Order Made *@
+                                <div class="@($"p-4 rounded-xl border transition-all flex flex-col justify-between {(order.CurrentStage >= 0 ? "bg-[#120e22] border-white/15" : "bg-[#0b0816] border-white/5 opacity-60")}")">
+                                    <div class="w-9 h-9 rounded-lg bg-orange-500/15 border border-orange-500/30 flex items-center justify-center text-orange-400 mb-3">
+                                        <Icon Name="FileText" Size="18" />
+                                    </div>
+                                    <div>
+                                        <h4 class="text-xs sm:text-sm font-bold text-white leading-tight">
+                                            Order made
+                                        </h4>
+                                        <p class="text-[11px] text-slate-400 font-light mt-0.5">
+                                            Order received
+                                        </p>
+                                    </div>
+                                </div>
+
+                                @* Step 2: Order Confirmed / Paid *@
+                                <div class="@($"p-4 rounded-xl border transition-all flex flex-col justify-between {(order.CurrentStage >= 1 ? "bg-[#120e22] border-white/15" : "bg-[#0b0816] border-white/5 opacity-60")}")">
+                                    <div class="w-9 h-9 rounded-lg bg-orange-500/15 border border-orange-500/30 flex items-center justify-center text-orange-400 mb-3">
+                                        <Icon Name="CreditCard" Size="18" />
+                                    </div>
+                                    <div>
+                                        <h4 class="text-xs sm:text-sm font-bold text-white leading-tight">
+                                            Confirmed
+                                        </h4>
+                                        <p class="text-[11px] text-slate-400 font-light mt-0.5">
+                                            Waybill assigned
+                                        </p>
+                                    </div>
+                                </div>
+
+                                @* Step 3: Shipped / In Transit *@
+                                <div class="@($"p-4 rounded-xl border transition-all flex flex-col justify-between {(order.CurrentStage == 2 ? "bg-[#1a112c] border-orange-500/70 shadow-[0_0_20px_rgba(249,115,22,0.2)] ring-1 ring-orange-500/50" : order.CurrentStage > 2 ? "bg-[#120e22] border-white/15" : "bg-[#0b0816] border-white/5 opacity-60")}")">
+                                    <div class="@($"w-9 h-9 rounded-lg flex items-center justify-center shadow-md mb-3 {(order.CurrentStage == 2 ? "bg-orange-500 text-white shadow-orange-500/30" : "bg-orange-500/15 border border-orange-500/30 text-orange-400")}")">
+                                        <Icon Name="Truck" Size="18" />
+                                    </div>
+                                    <div>
+                                        <h4 class="text-xs sm:text-sm font-extrabold text-white leading-tight flex items-center justify-between">
+                                            <span>Shipped</span>
+                                            @if (order.CurrentStage == 2)
+                                            {
+                                                <span class="w-1.5 h-1.5 rounded-full bg-orange-400 animate-ping"></span>
+                                            }
+                                        </h4>
+                                        <p class="text-[11px] text-orange-300 font-medium mt-0.5">
+                                            In transit
+                                        </p>
+                                    </div>
+                                </div>
+
+                                @* Step 4: Completed *@
+                                <div class="@($"p-4 rounded-xl border transition-all flex flex-col justify-between {(order.CurrentStage >= 3 ? "bg-[#120e22] border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]" : "bg-[#0b0816] border-white/5 opacity-60")}")">
+                                    <div class="@($"w-9 h-9 rounded-lg flex items-center justify-center mb-3 {(order.CurrentStage >= 3 ? "bg-emerald-500 text-white shadow-emerald-500/30" : "bg-white/5 border border-white/10 text-slate-400")}")">
+                                        <Icon Name="CheckCircle2" Size="18" />
+                                    </div>
+                                    <div>
+                                        <h4 class="text-xs sm:text-sm font-bold text-white leading-tight">
+                                            Delivered
+                                        </h4>
+                                        <p class="text-[11px] text-slate-400 font-light mt-0.5">
+                                            Doorstep delivery
+                                        </p>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                        @* Shipping Addresses (Seller + Buyer) *@
+                        <div class="rounded-2xl bg-[#0a0714] border border-white/10 p-6 sm:p-7 shadow-2xl">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 divide-y md:divide-y-0 md:divide-x divide-white/10">
+
+                                @* Shipping Address (Seller) *@
+                                <div class="space-y-3 pb-6 md:pb-0">
+                                    <div class="flex items-center justify-between">
+                                        <h4 class="text-sm font-bold text-white tracking-wide">
+                                            Dispatch Warehouse (Seller)
+                                        </h4>
+                                        <span class="text-xs font-mono text-purple-400">
+                                            Primary Node
+                                        </span>
+                                    </div>
+
+                                    <div class="space-y-1 text-xs text-slate-400 font-light leading-relaxed">
+                                        <span class="font-bold text-slate-200 block text-sm">
+                                            Nura Herbex Fulfillment Labs
+                                        </span>
+                                        <p>Plot No. 79, SF No. 93/51, SV Nagar, Senneerkuppam</p>
+                                        <p>Poonamallee, Chennai 600056</p>
+                                        <p>India</p>
+                                    </div>
+                                </div>
+
+                                @* Shipping Address (Buyer) *@
+                                <div class="space-y-3 pt-6 md:pt-0 md:pl-8">
+                                    <div class="flex items-center justify-between">
+                                        <h4 class="text-sm font-bold text-white tracking-wide">
+                                            Destination Address (Buyer)
+                                        </h4>
+                                        <span class="text-xs font-mono text-emerald-400 flex items-center gap-1">
+                                            <Icon Name="CheckCircle" Size="12" />
+                                            Verified
+                                        </span>
+                                    </div>
+
+                                    <div class="space-y-1 text-xs text-slate-400 font-light leading-relaxed">
+                                        <span class="font-bold text-slate-200 block text-sm">
+                                            @order.BuyerName
+                                        </span>
+                                        @if (!string.IsNullOrEmpty(order.BuyerPhone))
+                                        {
+                                            <p class="font-mono text-slate-300">@order.BuyerPhone</p>
+                                        }
+                                        <p>@order.BuyerStreet</p>
+                                        <p>@order.BuyerCity</p>
+                                        <p>@order.BuyerCountry</p>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        @* Order Items *@
+                        <div class="rounded-2xl bg-[#0a0714] border border-white/10 p-6 sm:p-7 shadow-2xl space-y-4">
+                            <h4 class="text-sm font-bold text-white tracking-wide mb-2">
+                                Consignment Items
+                            </h4>
+
+                            <div class="space-y-3">
+                                @foreach (var item in order.Items)
+                                {
+                                    <div class="p-4 rounded-xl bg-[#0f0b1e] border border-white/5 flex items-center justify-between gap-4">
+                                        <div class="flex items-center gap-4">
+                                            <div class="w-14 h-14 rounded-xl bg-[#161226] border border-white/10 p-1 flex items-center justify-center shrink-0 overflow-hidden">
+                                                <img src="@item.Image" alt="@item.Name" class="w-full h-full object-contain drop-shadow-md" />
+                                            </div>
+
+                                            <div>
+                                                <span class="text-[10px] font-mono uppercase tracking-wider text-purple-400 block font-semibold">
+                                                    Herbal Health Supplement for Men
+                                                </span>
+                                                <h5 class="text-sm sm:text-base font-extrabold text-white tracking-tight mt-0.5">
+                                                    @item.Name
+                                                </h5>
+                                                <p class="text-xs text-slate-400 font-light mt-0.5">
+                                                    @item.Spec
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div class="text-right shrink-0">
+                                            <span class="text-sm sm:text-base font-mono font-bold text-white">
+                                                @item.Qty X @(item.Price == 0 ? "FREE" : $"₹{Inr(item.Price)}.00")
+                                            </span>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        @* Order Summary & Financials *@
+                        <div class="rounded-2xl bg-[#0a0714] border border-white/10 p-6 sm:p-7 shadow-2xl space-y-4">
+                            <h4 class="text-sm font-bold text-white tracking-wide">
+                                Financial Summary
+                            </h4>
+
+                            <div class="space-y-2.5 text-xs sm:text-sm text-slate-300">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-400">Product Price Subtotal</span>
+                                    <span class="font-mono font-medium text-white">
+                                        ₹@(Inr(order.ProductPrice)).00
+                                    </span>
+                                </div>
+
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-400">Shipping</span>
+                                    <span class="font-mono font-medium text-emerald-400">
+                                        FREE (Express Air)
+                                    </span>
+                                </div>
+
+                                @if (order.Discount > 0)
+                                {
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-slate-400">Promotional Discount</span>
+                                        <span class="font-mono font-medium text-orange-400">
+                                            -₹@(Math.Abs(order.Discount)).00
+                                        </span>
+                                    </div>
+                                }
+
+                                <div class="pt-3 border-t border-white/10 flex justify-between items-baseline">
+                                    <div>
+                                        <span class="text-sm sm:text-base font-extrabold text-white block">
+                                            Total Amount
+                                        </span>
+                                        <span class="text-[11px] font-mono text-slate-400">
+                                            @order.PaymentLabel
+                                        </span>
+                                    </div>
+                                    <span class="text-xl sm:text-2xl font-black font-mono text-transparent bg-clip-text bg-gradient-to-r from-purple-300 via-white to-orange-300">
+                                        ₹@(Inr(order.Total)).00
+                                    </span>
+                                </div>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    @* RIGHT COLUMN: "Package Travel" Live Telemetry Sidebar *@
+                    <div class="lg:col-span-4 space-y-6">
+
+                        <div class="rounded-2xl bg-[#0a0714] border border-white/10 p-6 sm:p-7 shadow-2xl sticky top-28 space-y-6">
+
+                            @* Sidebar Header *@
+                            <div class="flex items-start justify-between pb-5 border-b border-white/10">
+                                <div>
+                                    <h3 class="text-lg font-extrabold text-white tracking-tight">
+                                        Package travel
+                                    </h3>
+                                    <p class="text-xs text-slate-400 font-light mt-0.5">
+                                        Live Shiprocket transit checkpoints
+                                    </p>
+                                </div>
+                                @if (!string.IsNullOrEmpty(order.TrackUrl))
+                                {
+                                    <a href="@order.TrackUrl" target="_blank" rel="noopener noreferrer"
+                                       title="Open on Shiprocket Official Website"
+                                       class="p-1 rounded-lg text-slate-400 hover:text-white transition-colors">
+                                        <Icon Name="ExternalLink" Size="16" />
+                                    </a>
+                                }
+                            </div>
+
+                            @* Vertical Milestone Stepper Timeline *@
+                            <div class="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[2px] before:bg-white/15">
+                                @foreach (var step in order.Events)
+                                {
+                                    <div class="relative group">
+
+                                        @* Node Bullet *@
+                                        <div class="@($"absolute -left-6 top-1 w-4 h-4 rounded-full flex items-center justify-center transition-all {(step.Active ? "bg-orange-500 text-white ring-4 ring-orange-500/25 shadow-[0_0_12px_#f97316]" : step.Completed ? "bg-purple-900/90 border border-purple-400 text-purple-300" : "bg-[#0f0b1a] border border-white/20 text-transparent")}")">
+                                            @if (step.Active)
+                                            {
+                                                <span class="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                                            }
+                                            else if (step.Completed)
+                                            {
+                                                <Icon Name="Check" Size="9" StrokeWidth="3" />
+                                            }
+                                        </div>
+
+                                        @* Event Details *@
+                                        <div>
+                                            <h5 class="@($"text-xs sm:text-[13px] font-bold leading-snug {(step.Active ? "text-orange-400 font-extrabold" : step.Completed ? "text-slate-200" : "text-slate-500")}")">
+                                                @step.Title
+                                            </h5>
+                                            @if (!string.IsNullOrEmpty(step.Location))
+                                            {
+                                                <span class="block text-[10px] text-slate-400 mt-0.5">
+                                                    @step.Location
+                                                </span>
+                                            }
+                                            <span class="block text-[11px] font-mono text-slate-500 mt-0.5">
+                                                @step.Time
+                                            </span>
+                                        </div>
+
+                                    </div>
+                                }
+                            </div>
+
+                            @* Courier Carrier Badge Box *@
+                            <div class="p-4 rounded-xl bg-[#0f0b1e] border border-white/5 flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-purple-950/80 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                                        <Icon Name="Truck" Size="16" />
+                                    </div>
+                                    <div>
+                                        <span class="text-xs font-bold text-white block">
+                                            @order.Courier
+                                        </span>
+                                        <span class="text-[10px] text-slate-400 font-mono">
+                                            Shiprocket Priority Logistics
+                                        </span>
+                                    </div>
+                                </div>
+                                <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]"></span>
+                            </div>
+
+                            @* Shiprocket Official Tracker Link Card *@
+                            @if (!string.IsNullOrEmpty(order.TrackUrl))
+                            {
+                                <a href="@order.TrackUrl" target="_blank" rel="noopener noreferrer"
+                                   class="block p-3 rounded-xl bg-purple-950/30 hover:bg-purple-950/50 border border-purple-500/20 text-center transition-all group">
+                                    <span class="text-[11px] font-bold text-purple-300 group-hover:text-purple-200 flex items-center justify-center gap-1.5">
+                                        <span>View Real-Time Carrier Telemetry</span>
+                                        <Icon Name="ExternalLink" Size="12" />
+                                    </span>
+                                    <span class="text-[9px] text-slate-400 block mt-0.5">
+                                        Direct tracking via shiprocket.co
+                                    </span>
+                                </a>
+                            }
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+        }
+
+        @* Brand Sign-off *@
+        <div class="text-center pt-8 pb-4 border-t border-white/5 space-y-1">
+            <span class="font-extrabold uppercase tracking-widest text-xs text-slate-400">
+                NURA HERBEX®
+            </span>
+            <p class="text-[11px] font-mono text-slate-500">
+                Science. Tradition. A Stronger You.
+            </p>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "id"), Parameter] public string? IdParam { get; set; }
+    [SupplyParameterFromQuery(Name = "order"), Parameter] public string? OrderParam { get; set; }
+    [SupplyParameterFromQuery(Name = "orderId"), Parameter] public string? OrderIdParam { get; set; }
+    [SupplyParameterFromQuery(Name = "query"), Parameter] public string? QueryParam { get; set; }
+
+    private sealed record TrackEvent(string Title, string Location, string Time, bool Completed, bool Active);
+    private sealed record TrackItem(string Name, string Spec, decimal Price, int Qty, string Image);
+
+    private sealed class TrackView
+    {
+        public string OrderId = "";
+        public string TrackingNo = "";
+        public bool IsAwbAssigned;
+        public string StatusText = "";
+        public int CurrentStage;
+        public string Courier = "";
+        public string? TrackUrl;
+        public string BuyerName = "", BuyerPhone = "", BuyerStreet = "", BuyerCity = "", BuyerCountry = "";
+        public List<TrackItem> Items = new();
+        public decimal ProductPrice, Discount, Total;
+        public string PaymentLabel = "";
+        public List<TrackEvent> Events = new();
+    }
+
+    private string _searchInput = "";
+    private TrackView? _order;
+    private bool _isSearching;
+    private string? _searchError;
+    private bool _hasSearched;
+    private bool _copiedResi;
+    private string? _handledQuery;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var q = FirstNonEmpty(IdParam, OrderParam, OrderIdParam, QueryParam);
+        if (q == _handledQuery) return;
+        _handledQuery = q;
+        if (!string.IsNullOrEmpty(q))
+        {
+            _searchInput = q;
+            await FetchLiveTrackingAsync(q);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Browser.SetMetaAsync(RouteMeta.Track);
+    }
+
+    private static string FirstNonEmpty(params string?[] values) => values.FirstOrDefault(v => !string.IsNullOrEmpty(v)) ?? "";
+
+    private async Task HandleSearch() => await FetchLiveTrackingAsync(_searchInput);
+
+    private async Task FetchLiveTrackingAsync(string? queryToSearch)
+    {
+        var clean = (queryToSearch ?? "").Trim();
+        if (clean.Length == 0) return;
+
+        _isSearching = true;
+        _searchError = null;
+        _hasSearched = true;
+        StateHasChanged();
+
+        var res = await Api.TrackOrderAsync(clean);
+        if (res.Success && res.Order is not null)
+        {
+            _order = Normalize(res.Order);
+            _searchError = null;
+        }
+        else
+        {
+            _order = null;
+            _searchError = string.IsNullOrEmpty(res.Message)
+                ? $"No active order found for \"{clean}\". Please verify your Order ID or phone number."
+                : res.Message;
+        }
+        _isSearching = false;
+    }
+
+    private void TryAnother()
+    {
+        _hasSearched = false;
+        _searchInput = "";
+        _searchError = null;
+    }
+
+    private async Task CopyResiAsync(string code)
+    {
+        if (string.IsNullOrEmpty(code)) return;
+        await Browser.CopyToClipboardAsync(code);
+        _copiedResi = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copiedResi = false;
+        StateHasChanged();
+    }
+
+    private async Task PrintAsync()
+    {
+        try { await JS.InvokeVoidAsync("print"); } catch { }
+    }
+
+    private async Task GoToStoreAsync()
+    {
+        Nav.NavigateTo("/shop");
+        await Browser.ScrollToTopAsync();
+    }
+
+    // ----------------------------------------------------------------- helpers
+    private static string Inr(decimal v)
+    {
+        var s = ((long)Math.Round(v)).ToString();
+        var neg = s.StartsWith('-');
+        if (neg) s = s.Substring(1);
+        if (s.Length > 3)
+        {
+            var head = s.Substring(0, s.Length - 3);
+            var tail = s.Substring(s.Length - 3);
+            var parts = new List<string>();
+            while (head.Length > 2) { parts.Insert(0, head.Substring(head.Length - 2)); head = head.Substring(0, head.Length - 2); }
+            if (head.Length > 0) parts.Insert(0, head);
+            s = string.Join(",", parts) + "," + tail;
+        }
+        return neg ? "-" + s : s;
+    }
+
+    private static string Stamp(DateTime d) => d.ToString("d/M/yyyy, h:mm:ss tt", System.Globalization.CultureInfo.InvariantCulture).ToLowerInvariant();
+
+    private static string Str(JsonElement el, string name)
+    {
+        if (el.ValueKind == JsonValueKind.Object && el.TryGetProperty(name, out var v))
+        {
+            if (v.ValueKind == JsonValueKind.String) return v.GetString() ?? "";
+            if (v.ValueKind is JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False) return v.ToString();
+        }
+        return "";
+    }
+
+    /// <summary>Transforms the API order into the tracking view model (port of normalizeOrderForTracking).</summary>
+    private static TrackView Normalize(OrderDto o)
+    {
+        var fStatus = (o.FulfillmentStatus ?? "").ToUpperInvariant();
+        var dStatus = (o.DeliveryStatus ?? "").ToUpperInvariant();
+
+        var stage = 0;
+        if (fStatus == "DELIVERED" || dStatus.Contains("DELIVERED")) stage = 3;
+        else if (fStatus is "IN_TRANSIT" or "OUT_FOR_DELIVERY" or "SHIPPED" || dStatus.Contains("TRANSIT") || dStatus.Contains("OUT FOR DELIVERY")) stage = 2;
+        else if (fStatus is "AWB_ASSIGNED" or "SHIPMENT_CREATED" || o.PaymentStatus == "PAID") stage = 1;
+
+        var events = new List<TrackEvent>();
+        var now = Stamp(DateTime.Now);
+
+        // Live Shiprocket scans
+        if (o.ShiprocketTracking is { ValueKind: JsonValueKind.Object } sr
+            && sr.TryGetProperty("shipment_track_activities", out var acts) && acts.ValueKind == JsonValueKind.Array)
+        {
+            var idx = 0;
+            foreach (var act in acts.EnumerateArray())
+            {
+                var title = Str(act, "activity");
+                if (title.Length == 0) title = Str(act, "status");
+                if (title.Length == 0) title = "Courier Scan";
+                var loc = Str(act, "location");
+                if (loc.Length == 0) loc = "Express Facility";
+                var date = Str(act, "date");
+                if (date.Length == 0) date = now;
+                events.Add(new TrackEvent(title, loc, date, true, idx == 0));
+                idx++;
+            }
+        }
+
+        if (o.DeliveryTrackingEvents is { Count: > 0 })
+        {
+            var idx = 0;
+            foreach (var ev in o.DeliveryTrackingEvents)
+            {
+                events.Add(new TrackEvent(
+                    string.IsNullOrEmpty(ev.Status) ? "Milestone Recorded" : ev.Status,
+                    string.IsNullOrEmpty(ev.Location) ? "Fulfillment Center" : ev.Location!,
+                    string.IsNullOrEmpty(ev.Time) ? now : ev.Time!,
+                    true,
+                    events.Count == 0 && idx == 0));
+                idx++;
+            }
+        }
+
+        if (events.Count == 0)
+        {
+            events.Add(new TrackEvent(
+                o.PaymentMethod == "COD" ? "Order Confirmed (Cash on Delivery)" : "Order Confirmed & Paid via PayU",
+                "Nura Herbex Fulfillment Labs, Chennai",
+                o.CreatedAt == default ? now : Stamp(o.CreatedAt.ToLocalTime()),
+                true, true));
+        }
+
+        // Shiprocket official web tracking link
+        var awb = o.ShiprocketAwb;
+        var awbReal = !string.IsNullOrEmpty(awb) && !awb!.StartsWith("SR-PENDING-");
+        var trackUrl = o.ShiprocketTrackUrl;
+        if (string.IsNullOrEmpty(trackUrl))
+        {
+            if (awbReal) trackUrl = $"https://shiprocket.co/tracking/{awb}";
+            else if (!string.IsNullOrEmpty(o.ShiprocketOrderId)) trackUrl = $"https://shiprocket.co/tracking?order_id={o.ShiprocketOrderId}";
+        }
+
+        var ship = o.ShippingAddress;
+        return new TrackView
+        {
+            OrderId = o.Id,
+            TrackingNo = awbReal ? awb! : "AWB Generation in Progress",
+            IsAwbAssigned = awbReal,
+            StatusText = !string.IsNullOrEmpty(o.DeliveryStatus)
+                ? o.DeliveryStatus
+                : stage == 3 ? "Delivered to Recipient" : stage >= 2 ? "In Transit with Courier Partner" : "Order Confirmed & Packing in Progress",
+            CurrentStage = stage,
+            Courier = string.IsNullOrEmpty(o.ShiprocketCourier) ? "Shiprocket Express Logistics" : o.ShiprocketCourier!,
+            TrackUrl = trackUrl,
+            BuyerName = string.IsNullOrEmpty(o.CustomerName) ? "Customer" : o.CustomerName,
+            BuyerPhone = o.CustomerPhone ?? "",
+            BuyerStreet = ship?.AddressLine1 ?? "",
+            BuyerCity = $"{ship?.City}, {ship?.State} {ship?.Pincode}",
+            BuyerCountry = string.IsNullOrEmpty(ship?.Country) ? "India" : ship!.Country,
+            Items = o.Items.Select(it => new TrackItem(
+                string.IsNullOrEmpty(it.Name) ? "STAMIX™ Botanical Vitality Formula" : it.Name,
+                string.IsNullOrEmpty(it.Sku) ? "Clinical Serving" : it.Sku,
+                it.Price,
+                it.Quantity > 0 ? it.Quantity : 1,
+                string.IsNullOrEmpty(it.Image) ? Media.StamixMockup1 : it.Image!)).ToList(),
+            ProductPrice = o.Subtotal != 0 ? o.Subtotal : o.TotalAmount,
+            Discount = o.DiscountAmount,
+            Total = o.TotalAmount,
+            PaymentLabel = o.PaymentMethod == "COD"
+                ? "Cash on Delivery (Pay at Doorstep)"
+                : $"Prepaid Online (PayU Verified · {(string.IsNullOrEmpty(o.PaymentRef) ? "Captured" : o.PaymentRef)})",
+            Events = events,
+        };
+    }
+}

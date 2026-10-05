@@ -1,0 +1,331 @@
+@implements IDisposable
+@inject ApiClient Api
+@inject BrowserInterop Browser
+
+<div class="space-y-4">
+
+    @* Header *@
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-lg bg-zinc-900/40 border border-zinc-800">
+        <div class="space-y-0.5">
+            <div class="flex items-center gap-2">
+                <h3 class="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+                    <Icon Name="MessageCircle" Size="16" Class="text-emerald-400" />
+                    <span>WhatsApp Business Messaging</span>
+                </h3>
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950/60 border border-emerald-800/60 text-emerald-300">
+                    Cloud API
+                </span>
+            </div>
+            <p class="text-xs text-zinc-400">
+                Inbound customer messages, outbound order updates and delivery receipts. The log refreshes automatically every 15 seconds.
+            </p>
+        </div>
+
+        <button type="button" @onclick="() => RefreshAsync(true)" disabled="@_loading"
+                class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+                title="Reload status and messages">
+            <Icon Name="RefreshCw" Size="12" Class="@(_loading ? "animate-spin" : "")" />
+            <span>Refresh</span>
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_loadError))
+    {
+        <div class="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 flex items-center gap-2">
+            <Icon Name="AlertCircle" Size="14" Class="shrink-0 text-red-400" />
+            <span>@_loadError</span>
+        </div>
+    }
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        @* Connection status card *@
+        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5">
+            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
+                    Connection Status
+                </h3>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+                <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800 space-y-1">
+                    <span class="text-[10px] text-zinc-400 uppercase tracking-wider font-mono font-medium block">Configured</span>
+                    @if (_status?.Configured == true)
+                    {
+                        <div class="text-sm font-semibold text-emerald-400 font-mono flex items-center gap-1.5">
+                            <Icon Name="CheckCircle2" Size="14" />
+                            <span>Yes</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-sm font-semibold text-amber-400 font-mono flex items-center gap-1.5">
+                            <Icon Name="AlertCircle" Size="14" />
+                            <span>No</span>
+                        </div>
+                    }
+                </div>
+                <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800 space-y-1">
+                    <span class="text-[10px] text-zinc-400 uppercase tracking-wider font-mono font-medium block">Inbound</span>
+                    <div class="text-xl font-semibold text-zinc-100 font-mono">@(_status?.InboundCount ?? 0)</div>
+                </div>
+                <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800 space-y-1">
+                    <span class="text-[10px] text-zinc-400 uppercase tracking-wider font-mono font-medium block">Outbound</span>
+                    <div class="text-xl font-semibold text-zinc-100 font-mono">@(_status?.OutboundCount ?? 0)</div>
+                </div>
+            </div>
+
+            @if (_status?.Configured != true)
+            {
+                <p class="text-[11px] text-amber-300/90 leading-relaxed">
+                    Outgoing messages are disabled until the WhatsApp credentials (access token and phone number ID) are set in the API configuration.
+                </p>
+            }
+
+            <div class="space-y-1.5 pt-1">
+                <span class="text-[11px] font-semibold text-zinc-300 uppercase tracking-wider font-mono block">Webhook Setup</span>
+                <ol class="list-decimal list-inside space-y-1 text-[11px] text-zinc-400 leading-relaxed">
+                    <li>
+                        In Meta App Dashboard open <span class="text-zinc-200">WhatsApp → Configuration → Webhook</span>.
+                    </li>
+                    <li>
+                        <span class="text-zinc-300">Callback URL:</span>
+                        <span class="font-mono text-emerald-300 break-all select-all">@(string.IsNullOrEmpty(_status?.WebhookUrlHint) ? "https://<your-api-host>/api/webhooks/whatsapp" : _status!.WebhookUrlHint)</span>
+                        @if (!string.IsNullOrEmpty(_status?.WebhookUrlHint))
+                        {
+                            <button type="button" @onclick="() => CopyAsync(_status!.WebhookUrlHint!)"
+                                    class="inline-flex align-middle ml-1 text-zinc-500 hover:text-zinc-300 transition-colors" title="Copy callback URL">
+                                @if (_copied)
+                                {
+                                    <Icon Name="Check" Size="12" Class="text-emerald-400" />
+                                }
+                                else
+                                {
+                                    <Icon Name="Copy" Size="12" />
+                                }
+                            </button>
+                        }
+                    </li>
+                    <li>
+                        <span class="text-zinc-300">Verify token:</span>
+                        <span class="font-mono text-zinc-200">the value of WhatsApp:VerifyToken</span> in the API configuration.
+                    </li>
+                    <li>
+                        Subscribe to the <span class="font-mono text-zinc-200">messages</span> field.
+                    </li>
+                </ol>
+            </div>
+        </div>
+
+        @* Send message form *@
+        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5">
+            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
+                    Send Message
+                </h3>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_sendMessage))
+            {
+                <div class="@($"p-2.5 rounded-lg text-xs flex items-center gap-2 {(_sendOk ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border border-red-500/20 text-red-400")}")">
+                    <Icon Name="@(_sendOk ? "CheckCircle2" : "AlertCircle")" Size="14" Class="shrink-0" />
+                    <span>@_sendMessage</span>
+                </div>
+            }
+
+            <form @onsubmit="SendAsync" @onsubmit:preventDefault class="space-y-3 text-xs">
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                        <label class="text-[11px] font-medium text-zinc-400 block">Phone (with country code)</label>
+                        <input type="tel" required placeholder="+91 98765 43210"
+                               @bind="_send.Phone" @bind:event="oninput"
+                               class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs font-mono outline-none focus:border-zinc-500 transition-colors" />
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[11px] font-medium text-zinc-400 block">Order ID (optional)</label>
+                        <input type="text" placeholder="ORD-123456"
+                               @bind="_orderId" @bind:event="oninput"
+                               class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs font-mono outline-none focus:border-zinc-500 transition-colors" />
+                    </div>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-[11px] font-medium text-zinc-400 block">Message</label>
+                    <textarea rows="4" required placeholder="Type your message..."
+                              @bind="_send.Text" @bind:event="oninput"
+                              class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs outline-none focus:border-zinc-500 transition-colors"></textarea>
+                </div>
+
+                <div class="flex justify-end">
+                    <button type="submit" disabled="@_sending"
+                            class="px-3.5 py-1.5 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm disabled:opacity-60">
+                        @if (_sending)
+                        {
+                            <Icon Name="RefreshCw" Size="13" Class="animate-spin" />
+                        }
+                        else
+                        {
+                            <Icon Name="Send" Size="13" />
+                        }
+                        <span>@(_sending ? "Sending..." : "Send Message")</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+    </div>
+
+    @* Message log *@
+    <div class="rounded-lg border border-zinc-800 bg-zinc-900/30 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                    <tr class="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono text-[11px] font-medium tracking-wider uppercase">
+                        <th class="px-4 py-3">Direction</th>
+                        <th class="px-4 py-3">Phone</th>
+                        <th class="px-4 py-3">Profile Name</th>
+                        <th class="px-4 py-3">Message</th>
+                        <th class="px-4 py-3">Status</th>
+                        <th class="px-4 py-3">Order ID</th>
+                        <th class="px-4 py-3">Time</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-800/60">
+                    @if (_loading && _messages.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="7" class="p-8 text-center text-zinc-500">
+                                <Icon Name="RefreshCw" Size="20" Class="animate-spin mx-auto mb-2 text-zinc-400" />
+                                <span>Loading WhatsApp messages...</span>
+                            </td>
+                        </tr>
+                    }
+                    else if (_messages.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="7" class="p-8 text-center text-zinc-500">
+                                No WhatsApp messages yet. Customer messages and your replies will appear here.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var m in _messages)
+                        {
+                            <tr @key="m.Id" class="hover:bg-zinc-800/30 transition-colors">
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <span class="@($"inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium {(m.Direction == "inbound" ? "bg-sky-500/10 text-sky-400 border border-sky-500/20" : "bg-purple-500/10 text-purple-300 border border-purple-500/20")}")">
+                                        <Icon Name="@(m.Direction == "inbound" ? "ArrowLeft" : "ArrowRight")" Size="10" />
+                                        <span>@(m.Direction == "inbound" ? "IN" : "OUT")</span>
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 font-mono text-zinc-300 whitespace-nowrap">@m.Phone</td>
+                                <td class="px-4 py-3 text-zinc-300 whitespace-nowrap">@(string.IsNullOrEmpty(m.ProfileName) ? "—" : m.ProfileName)</td>
+                                <td class="px-4 py-3 text-zinc-200 max-w-md">
+                                    <div class="line-clamp-2 break-words">@(string.IsNullOrEmpty(m.Body) ? $"[{m.Type}]" : m.Body)</div>
+                                </td>
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <span class="@($"inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium {StatusClass(m.Status)}")">
+                                        <span>@m.Status</span>
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 font-mono text-zinc-400 whitespace-nowrap">@(string.IsNullOrEmpty(m.OrderId) ? "—" : m.OrderId)</td>
+                                <td class="px-4 py-3 font-mono text-[11px] text-zinc-500 whitespace-nowrap">@AdminFmt.DateTimeShort(m.CreatedAt)</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@code {
+    private readonly CancellationTokenSource _cts = new();
+    private WhatsAppStatusDto? _status;
+    private List<WhatsAppMessageDto> _messages = new();
+    private bool _loading = true;
+    private string? _loadError;
+
+    private readonly WhatsAppSendRequest _send = new();
+    private string _orderId = "";
+    private bool _sending;
+    private bool _sendOk;
+    private string? _sendMessage;
+    private bool _copied;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync(true);
+        _ = PollAsync();
+    }
+
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_cts.Token))
+            {
+                await InvokeAsync(async () => { await RefreshAsync(false); });
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+
+    private async Task RefreshAsync(bool showSpinner)
+    {
+        if (showSpinner) { _loading = true; StateHasChanged(); }
+        var statusTask = Api.AdminWhatsAppStatusAsync();
+        var msgTask = Api.AdminWhatsAppMessagesAsync(100);
+        await Task.WhenAll(statusTask, msgTask);
+        if (_cts.IsCancellationRequested) return;
+        var status = await statusTask;
+        var msgs = await msgTask;
+        if (status.Success) _status = status;
+        if (msgs.Success) _messages = msgs.Messages;
+        _loadError = (!status.Success || !msgs.Success) ? (msgs.Message ?? status.Message ?? "Could not load WhatsApp data.") : null;
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task SendAsync()
+    {
+        _sendMessage = null;
+        _sending = true;
+        _send.OrderId = string.IsNullOrWhiteSpace(_orderId) ? null : _orderId.Trim();
+        var res = await Api.AdminWhatsAppSendAsync(_send);
+        _sending = false;
+        _sendOk = res.Success;
+        _sendMessage = res.Message ?? (res.Success ? "Message sent" : "Message could not be sent.");
+        if (res.Success) { _send.Text = ""; }
+        await RefreshAsync(false);
+    }
+
+    private async Task CopyAsync(string text)
+    {
+        await Browser.CopyToClipboardAsync(text);
+        _copied = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = false;
+        StateHasChanged();
+    }
+
+    private static string StatusClass(string? status) => status switch
+    {
+        "failed" => "bg-red-500/10 text-red-400 border border-red-500/20",
+        "read" => "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+        "delivered" => "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+        "sent" => "bg-zinc-800 text-zinc-300 border border-zinc-700/60",
+        _ => "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+    };
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

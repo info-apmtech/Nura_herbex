@@ -1,0 +1,90 @@
+@inject AdminSession Admin
+@inject NavigationManager Nav
+
+<div class="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col justify-center items-center px-4 py-12 text-left font-sans selection:bg-zinc-800 selection:text-white">
+    <div class="w-full max-w-sm bg-[#121215] border border-zinc-800 rounded-xl p-6 shadow-2xl space-y-5">
+
+        @* Header Branding *@
+        <div class="space-y-1.5">
+            <div class="w-9 h-9 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-300">
+                <Icon Name="Lock" Size="16" />
+            </div>
+            <h1 class="text-base font-semibold tracking-tight text-zinc-100 uppercase font-mono pt-1">
+                Nura Herbex Admin
+            </h1>
+            <p class="text-xs text-zinc-400">
+                Operations, order telemetry &amp; content management
+            </p>
+        </div>
+
+        @* Error Notice *@
+        @if (!string.IsNullOrEmpty(_authError))
+        {
+            <div class="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 flex items-center gap-2">
+                <Icon Name="AlertCircle" Size="14" Class="shrink-0 text-red-400" />
+                <span>@_authError</span>
+            </div>
+        }
+
+        @* Login Form *@
+        <form @onsubmit="HandleLogin" @onsubmit:preventDefault class="space-y-3.5 text-xs">
+            <div class="space-y-1.5">
+                <label class="text-zinc-300 font-medium block text-xs">Administrator Email</label>
+                <input type="email" required @bind="_email" @bind:event="oninput"
+                       placeholder="Enter administrator email..."
+                       class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/20 text-zinc-100 placeholder:text-zinc-600 outline-none transition-colors" />
+            </div>
+
+            <div class="space-y-1.5">
+                <label class="text-zinc-300 font-medium block text-xs">Password</label>
+                <input type="password" required @bind="_password" @bind:event="oninput"
+                       placeholder="Enter password..."
+                       class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/20 text-zinc-100 placeholder:text-zinc-600 outline-none transition-colors" />
+            </div>
+
+            <button type="submit" disabled="@_loggingIn"
+                    class="w-full py-2.5 px-3 rounded-md bg-white hover:bg-zinc-200 disabled:opacity-60 disabled:cursor-not-allowed text-zinc-950 font-medium text-xs tracking-tight transition-colors cursor-pointer shadow-sm flex items-center justify-center gap-2">
+                @if (_loggingIn)
+                {
+                    <Icon Name="RefreshCw" Size="13" Class="animate-spin text-zinc-800" />
+                }
+                <span>@(_loggingIn ? "Authenticating with Server..." : "Sign In to Portal")</span>
+            </button>
+        </form>
+
+        @* Quick Return to Store *@
+        <div class="pt-2 text-center border-t border-zinc-800/80">
+            <button @onclick="@(() => Nav.NavigateTo("/shop"))"
+                    class="text-xs text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
+                ← Return to Storefront
+            </button>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnLoggedIn { get; set; }
+
+    private string _email = "";
+    private string _password = "";
+    private string _authError = "";
+    private bool _loggingIn;
+
+    private async Task HandleLogin()
+    {
+        _authError = "";
+        _loggingIn = true;
+        var res = await Admin.LoginAsync(_email, _password);
+        if (res.Success && !string.IsNullOrEmpty(res.Token))
+        {
+            _password = "";
+            _authError = "";
+            _loggingIn = false;
+            await OnLoggedIn.InvokeAsync();
+            return;
+        }
+        _authError = string.IsNullOrWhiteSpace(res.Message) ? "Invalid administrator credentials. Access denied." : res.Message!;
+        _loggingIn = false;
+    }
+}

@@ -1,0 +1,377 @@
+@using Nuraherbex.UI.Components.Account
+@inject AuthState Auth
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="min-h-screen bg-[#07060b] text-slate-100 font-sans antialiased pt-24 pb-20 px-4 sm:px-6 lg:px-8 flex flex-col justify-center text-left">
+
+    @* Top Return Link *@
+    <div class="max-w-5xl mx-auto w-full mb-6">
+        <button @onclick="@(() => Nav.NavigateTo("/"))"
+                class="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-slate-400 hover:text-white transition-colors cursor-pointer">
+            <span>← RETURN TO STORE</span>
+        </button>
+    </div>
+
+    <div class="max-w-md mx-auto w-full">
+        <div class="bg-[#0e0a1b] border border-white/10 rounded-xl p-6 sm:p-8 shadow-2xl space-y-6">
+            <div class="text-center space-y-1 pb-1">
+                <div class="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-[#9929ea] text-white font-bold text-sm tracking-wide shadow-md mx-auto mb-2">
+                    NH
+                </div>
+                <h1 class="text-xl font-bold tracking-tight text-[#fff3bf]">
+                    @(_authMode == "login" ? "Vitality Account Portal" : "Create Vitality Account")
+                </h1>
+                <p class="text-xs text-slate-400">
+                    @(_authMode == "login"
+                        ? "Sign in to access your orders and real-time shipment telemetry."
+                        : "Register your account to manage orders and track shipments.")
+                </p>
+            </div>
+
+            <div>
+                @* Segmented Auth Mode Switch *@
+                <div class="flex items-center p-1 bg-black/50 border border-white/10 rounded-md mb-6">
+                    <button type="button" @onclick="@(() => SetMode("login"))"
+                            class="@($"flex-1 py-2 rounded text-xs font-bold uppercase tracking-wider transition-all cursor-pointer {(_authMode == "login" ? "bg-[#9929ea] text-white shadow-sm" : "text-slate-400 hover:text-white")}")">
+                        Sign In
+                    </button>
+                    <button type="button" @onclick="@(() => SetMode("register"))"
+                            class="@($"flex-1 py-2 rounded text-xs font-bold uppercase tracking-wider transition-all cursor-pointer {(_authMode == "register" ? "bg-[#9929ea] text-white shadow-sm" : "text-slate-400 hover:text-white")}")">
+                        Create Account
+                    </button>
+                </div>
+
+                @* Status Alerts *@
+                @if (!string.IsNullOrEmpty(_authError))
+                {
+                    <div class="p-3 mb-5 rounded bg-red-950/50 border border-red-500/30 flex items-start gap-2.5 text-xs text-red-200">
+                        <Icon Name="AlertCircle" Size="15" Class="shrink-0 mt-0.5 text-red-400" />
+                        <span>@_authError</span>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(_authSuccess))
+                {
+                    <div class="p-3 mb-5 rounded bg-emerald-950/50 border border-emerald-500/30 flex items-start gap-2.5 text-xs text-emerald-200">
+                        <Icon Name="CheckCircle2" Size="15" Class="shrink-0 mt-0.5 text-emerald-400" />
+                        <span>@_authSuccess</span>
+                    </div>
+                }
+
+                @if (_authMode == "login")
+                {
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between pb-1 text-xs">
+                            <span class="text-slate-400 font-medium">Sign in using:</span>
+                            <div class="inline-flex rounded-md bg-black/50 p-0.5 border border-white/10 text-[11px]">
+                                <button type="button" @onclick="@(() => SetMethod("password"))"
+                                        class="@($"px-2.5 py-1 rounded transition-colors font-semibold cursor-pointer {(_loginMethod == "password" ? "bg-[#9929ea] text-white shadow-xs" : "text-slate-400 hover:text-white")}")">
+                                    Password
+                                </button>
+                                <button type="button" @onclick="@(() => SetMethod("otp"))"
+                                        class="@($"px-2.5 py-1 rounded transition-colors font-semibold cursor-pointer {(_loginMethod == "otp" ? "bg-[#9929ea] text-white shadow-xs" : "text-slate-400 hover:text-white")}")">
+                                    Email OTP
+                                </button>
+                            </div>
+                        </div>
+
+                        @if (_loginMethod == "password")
+                        {
+                            <form @onsubmit="HandleLoginSubmit" @onsubmit:preventDefault class="space-y-4 text-xs">
+                                <div class="space-y-1.5">
+                                    <label class="font-semibold text-slate-300 block">Registered Email or Mobile Number</label>
+                                    <input type="text" required placeholder="e.g. client@@example.com or 9876543210"
+                                           @bind="_emailOrPhone" @bind:event="oninput"
+                                           class="w-full px-3 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label class="font-semibold text-slate-300 block">Password</label>
+                                    <div class="relative">
+                                        <input type="@(_showPassword ? "text" : "password")" required placeholder="Enter your account password"
+                                               @bind="_password" @bind:event="oninput"
+                                               class="w-full pl-3 pr-9 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
+                                        <button type="button" @onclick="() => _showPassword = !_showPassword"
+                                                class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors cursor-pointer">
+                                            <Icon Name="@(_showPassword ? "EyeOff" : "Eye")" Size="15" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <button type="submit" disabled="@_authLoading"
+                                        class="w-full py-2.5 px-4 rounded-md bg-[#9929ea] hover:bg-[#8620cf] text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm mt-3">
+                                    @if (_authLoading)
+                                    {
+                                        <Icon Name="RefreshCw" Size="13" Class="animate-spin" />
+                                        <span>Authenticating Client...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Sign In to Vitality Portal</span>
+                                        <Icon Name="ArrowRight" Size="13" />
+                                    }
+                                </button>
+                            </form>
+                        }
+                        else
+                        {
+                            <div class="space-y-3.5 text-xs">
+                                @if (!_otpSent)
+                                {
+                                    <form @onsubmit="HandleSendOtp" @onsubmit:preventDefault class="space-y-3">
+                                        <div class="space-y-1.5">
+                                            <label class="font-semibold text-slate-300 block">Registered Email Address</label>
+                                            <input type="email" required placeholder="name@@example.com"
+                                                   value="@OtpEmailDisplay"
+                                                   @oninput="OnOtpEmailInput"
+                                                   class="w-full px-3 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
+                                            <p class="text-[11px] text-slate-400">A 6-digit one-time code will be dispatched to this email.</p>
+                                        </div>
+
+                                        <button type="submit" disabled="@_authLoading"
+                                                class="w-full py-2.5 px-4 rounded-md bg-[#9929ea] hover:bg-[#8620cf] text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
+                                            @if (_authLoading)
+                                            {
+                                                <Icon Name="RefreshCw" Size="13" Class="animate-spin" />
+                                                <span>Sending Code...</span>
+                                            }
+                                            else
+                                            {
+                                                <Icon Name="Mail" Size="13" />
+                                                <span>Send OTP Code</span>
+                                            }
+                                        </button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <form @onsubmit="HandleVerifyOtp" @onsubmit:preventDefault class="space-y-3">
+                                        <div class="p-2.5 rounded bg-black/40 border border-white/10 text-[11px] text-slate-300 flex items-center justify-between">
+                                            <span>Code sent to <strong class="font-mono text-[#fff3bf]">@_otpEmail</strong></span>
+                                            <button type="button" @onclick="EditOtpEmail"
+                                                    class="text-purple-400 hover:text-purple-300 underline">
+                                                Edit
+                                            </button>
+                                        </div>
+
+                                        <div class="space-y-1.5">
+                                            <label class="font-semibold text-slate-300 block">Enter 6-Digit Code</label>
+                                            <input type="text" required maxlength="6" placeholder="000000"
+                                                   value="@_otpCode"
+                                                   @oninput="OnOtpInput"
+                                                   class="w-full text-center tracking-[0.4em] font-mono text-base px-3 py-2 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all" />
+                                        </div>
+
+                                        <button type="submit" disabled="@_authLoading"
+                                                class="w-full py-2.5 px-4 rounded-md bg-[#9929ea] hover:bg-[#8620cf] text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
+                                            @if (_authLoading)
+                                            {
+                                                <Icon Name="RefreshCw" Size="13" Class="animate-spin" />
+                                                <span>Verifying...</span>
+                                            }
+                                            else
+                                            {
+                                                <Icon Name="CheckCircle2" Size="13" />
+                                                <span>Verify &amp; Sign In</span>
+                                            }
+                                        </button>
+
+                                        <div class="text-center text-[11px]">
+                                            @if (_otpCountdown > 0)
+                                            {
+                                                <span class="text-slate-500 font-mono">Resend code in @(_otpCountdown)s</span>
+                                            }
+                                            else
+                                            {
+                                                <button type="button" @onclick="HandleSendOtp"
+                                                        class="text-[#fff3bf] font-semibold hover:underline cursor-pointer">
+                                                    Resend Code
+                                                </button>
+                                            }
+                                        </div>
+                                    </form>
+                                }
+                            </div>
+                        }
+
+                        <div class="text-center pt-3 text-xs text-slate-400">
+                            Don't have an account yet?
+                            <button type="button" @onclick="@(() => { _authMode = "register"; _authError = ""; })"
+                                    class="text-purple-400 hover:text-purple-300 font-semibold underline cursor-pointer">
+                                Register here
+                            </button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <form @onsubmit="HandleRegisterSubmit" @onsubmit:preventDefault class="space-y-4 text-xs">
+                        <div class="space-y-1.5">
+                            <label class="font-semibold text-slate-300 block">Full Legal Name *</label>
+                            <input type="text" required placeholder="e.g. Siddharth Rao"
+                                   @bind="_regFullName" @bind:event="oninput"
+                                   class="w-full px-3 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div class="space-y-1.5">
+                                <label class="font-semibold text-slate-300 block">Email Address *</label>
+                                <input type="email" required placeholder="name@@example.com"
+                                       @bind="_regEmail" @bind:event="oninput"
+                                       class="w-full px-3 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
+                            </div>
+
+                            <div class="space-y-1.5">
+                                <label class="font-semibold text-slate-300 block">Phone Number *</label>
+                                <input type="tel" required placeholder="10-digit number"
+                                       @bind="_regPhone" @bind:event="oninput"
+                                       class="w-full px-3 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
+                            </div>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label class="font-semibold text-slate-300 block">Password (min. 6 characters) *</label>
+                            <div class="relative">
+                                <input type="@(_showPassword ? "text" : "password")" required minlength="6" placeholder="Create a secure password"
+                                       @bind="_regPassword" @bind:event="oninput"
+                                       class="w-full pl-3 pr-9 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
+                                <button type="button" @onclick="() => _showPassword = !_showPassword"
+                                        class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors cursor-pointer">
+                                    <Icon Name="@(_showPassword ? "EyeOff" : "Eye")" Size="15" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <button type="submit" disabled="@_authLoading"
+                                class="w-full py-2.5 px-4 rounded-md bg-[#9929ea] hover:bg-[#8620cf] text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm mt-3">
+                            @if (_authLoading)
+                            {
+                                <Icon Name="RefreshCw" Size="13" Class="animate-spin" />
+                                <span>Registering Account in DB...</span>
+                            }
+                            else
+                            {
+                                <span>Activate Vitality Account</span>
+                                <Icon Name="ArrowRight" Size="13" />
+                            }
+                        </button>
+
+                        <div class="text-center pt-2 text-xs text-slate-400">
+                            Already registered?
+                            <button type="button" @onclick="@(() => { _authMode = "login"; _authError = ""; })"
+                                    class="text-purple-400 hover:text-purple-300 font-semibold underline cursor-pointer">
+                                Sign in here
+                            </button>
+                        </div>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _authMode = "login";
+    private string _loginMethod = "password";
+    private string _emailOrPhone = "";
+    private string _password = "";
+    private bool _showPassword;
+    private string _regFullName = "", _regEmail = "", _regPhone = "", _regPassword = "";
+    private bool _authLoading;
+    private string _authError = "";
+    private string _authSuccess = "";
+
+    private string _otpEmail = "";
+    private string _otpCode = "";
+    private bool _otpSent;
+    private int _otpCountdown;
+    private System.Threading.CancellationTokenSource? _cts;
+
+    private string OtpEmailDisplay =>
+        !string.IsNullOrEmpty(_otpEmail) ? _otpEmail : (_emailOrPhone.Contains('@') ? _emailOrPhone : "");
+
+    private void SetMode(string m) { _authMode = m; _authError = ""; _authSuccess = ""; }
+    private void SetMethod(string m) { _loginMethod = m; _authError = ""; _authSuccess = ""; }
+
+    private void OnOtpEmailInput(ChangeEventArgs e) => _otpEmail = e.Value?.ToString() ?? "";
+
+    private void OnOtpInput(ChangeEventArgs e) =>
+        _otpCode = new string((e.Value?.ToString() ?? "").Where(char.IsDigit).ToArray());
+
+    private void EditOtpEmail() { _otpSent = false; _otpCode = ""; }
+
+    private async Task HandleLoginSubmit()
+    {
+        _authError = ""; _authSuccess = ""; _authLoading = true;
+        var res = await Auth.LoginAsync(_emailOrPhone, _password);
+        if (!res.Success) _authError = res.Message ?? "Login failed. Please verify your credentials.";
+        _authLoading = false;
+    }
+
+    private async Task HandleSendOtp()
+    {
+        if (string.IsNullOrWhiteSpace(_otpEmail)) _otpEmail = OtpEmailDisplay;
+        if (string.IsNullOrWhiteSpace(_otpEmail))
+        {
+            _authError = "Please enter your email address to receive a login code";
+            return;
+        }
+        _authError = ""; _authSuccess = ""; _authLoading = true;
+        var res = await Auth.SendOtpAsync(_otpEmail);
+        if (res.Success)
+        {
+            _otpSent = true;
+            _otpCountdown = 30;
+            _authSuccess = res.Message ?? $"Login code dispatched to {_otpEmail}";
+            _ = RunCountdown();
+        }
+        else _authError = res.Message ?? "Failed to dispatch verification code";
+        _authLoading = false;
+    }
+
+    private async Task RunCountdown()
+    {
+        _cts?.Cancel();
+        _cts = new System.Threading.CancellationTokenSource();
+        var ct = _cts.Token;
+        try
+        {
+            while (_otpCountdown > 0)
+            {
+                await Task.Delay(1000, ct);
+                _otpCountdown--;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private async Task HandleVerifyOtp()
+    {
+        if (string.IsNullOrWhiteSpace(_otpCode) || _otpCode.Trim().Length < 6)
+        {
+            _authError = "Please enter the 6-digit verification code";
+            return;
+        }
+        _authError = ""; _authSuccess = ""; _authLoading = true;
+        var res = await Auth.VerifyOtpAsync(_otpEmail, _otpCode);
+        if (!res.Success) _authError = res.Message ?? "Invalid or expired code. Please try again.";
+        _authLoading = false;
+    }
+
+    private async Task HandleRegisterSubmit()
+    {
+        _authError = ""; _authSuccess = ""; _authLoading = true;
+        var res = await Auth.RegisterAsync(new RegisterRequest
+        {
+            FullName = _regFullName,
+            Email = _regEmail,
+            Phone = _regPhone,
+            Password = _regPassword,
+        });
+        if (!res.Success) _authError = res.Message ?? "Account registration failed. Please try again.";
+        _authLoading = false;
+    }
+
+    public void Dispose() { _cts?.Cancel(); _cts?.Dispose(); }
+}
