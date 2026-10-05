@@ -13,6 +13,7 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<PaymentAttempt> PaymentAttempts => Set<PaymentAttempt>();
     public DbSet<TrustBatch> TrustBatches => Set<TrustBatch>();
     public DbSet<SiteSetting> SiteSettings => Set<SiteSetting>();
     public DbSet<Review> Reviews => Set<Review>();
@@ -109,6 +110,26 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.Property(x => x.Amount).HasPrecision(18, 2);
             e.HasIndex(x => x.OrderId);
             e.HasIndex(x => x.GatewayPaymentId);
+        });
+
+        b.Entity<PaymentAttempt>(e =>
+        {
+            e.ToTable("payment_attempts");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.OrderId).HasMaxLength(32);
+            e.Property(x => x.TxnId).HasMaxLength(128);
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.FailureReason).HasMaxLength(500);
+            e.Property(x => x.GatewayStatus).HasMaxLength(64);
+            e.Property(x => x.PayuPaymentId).HasMaxLength(64);
+            e.Property(x => x.PaymentMode).HasMaxLength(32);
+            e.Property(x => x.CustomerName).HasMaxLength(200);
+            e.Property(x => x.CustomerEmail).HasMaxLength(256);
+            e.Property(x => x.CustomerPhone).HasMaxLength(32);
+            e.HasIndex(x => x.OrderId);
+            e.HasIndex(x => x.TxnId);
+            e.HasIndex(x => x.CreatedAt);
         });
 
         b.Entity<TrustBatch>(e =>

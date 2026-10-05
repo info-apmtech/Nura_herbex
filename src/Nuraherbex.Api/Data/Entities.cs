@@ -96,6 +96,31 @@ public class Payment
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>
+/// One PayU checkout attempt. Online orders are NOT written to <see cref="Order"/> until PayU confirms payment —
+/// the order is held here as a snapshot and every failed / cancelled attempt is kept as a failure record.
+/// Status: CREATED (order held, not yet sent to PayU) | INITIATED | SUCCESS | FAILED | CANCELLED
+/// </summary>
+public class PaymentAttempt
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string OrderId { get; set; } = "";
+    public string? TxnId { get; set; }
+    public decimal Amount { get; set; }
+    public string Status { get; set; } = "CREATED";
+    public string? FailureReason { get; set; }
+    public string? GatewayStatus { get; set; }
+    public string? PayuPaymentId { get; set; }
+    public string? PaymentMode { get; set; }
+    public string CustomerName { get; set; } = "";
+    public string CustomerEmail { get; set; } = "";
+    public string CustomerPhone { get; set; } = "";
+    public string OrderSnapshotJson { get; set; } = "";
+    public string? GatewayResponse { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
 public class TrustBatch
 {
     public string Id { get; set; } = "";

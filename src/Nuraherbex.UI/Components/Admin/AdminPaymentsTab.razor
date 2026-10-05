@@ -1,0 +1,78 @@
+@* PayU attempts: successful payments (order created) and the stored failure / cancelled records. *@
+<div class="space-y-4">
+
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-1.5">
+            @foreach (var f in new[] { "ALL", "SUCCESS", "FAILED", "CANCELLED", "INITIATED" })
+            {
+                <button @onclick="() => _filter = f"
+                        class="px-2.5 py-1 rounded-md text-[11px] font-mono border cursor-pointer transition-colors @(_filter == f ? "bg-zinc-800 text-white border-zinc-600" : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200")">
+                    @f (@Count(f))
+                </button>
+            }
+        </div>
+        <button @onclick="() => OnReload.InvokeAsync()" disabled="@Loading"
+                class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 self-end sm:self-auto">
+            <Icon Name="RefreshCw" Size="12" Class="@(Loading ? "animate-spin" : "")" />
+            <span>Sync DB</span>
+        </button>
+    </div>
+
+    <div class="rounded-lg border border-zinc-800 overflow-x-auto">
+        <table class="w-full text-left text-xs">
+            <thead class="bg-zinc-900/70 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
+                <tr>
+                    <th class="px-3 py-2">When</th>
+                    <th class="px-3 py-2">Order</th>
+                    <th class="px-3 py-2">Customer</th>
+                    <th class="px-3 py-2">Amount</th>
+                    <th class="px-3 py-2">Status</th>
+                    <th class="px-3 py-2">Mode</th>
+                    <th class="px-3 py-2">PayU ID / Txn</th>
+                    <th class="px-3 py-2">Reason</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-800/70 text-zinc-300">
+                @if (Visible.Count == 0)
+                {
+                    <tr><td colspan="8" class="px-3 py-8 text-center text-zinc-500">@(Loading ? "Loading payments..." : "No payment attempts yet.")</td></tr>
+                }
+                @foreach (var a in Visible)
+                {
+                    <tr class="hover:bg-zinc-900/40">
+                        <td class="px-3 py-2 whitespace-nowrap font-mono text-zinc-400">@a.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</td>
+                        <td class="px-3 py-2 font-mono text-zinc-100">@a.OrderId</td>
+                        <td class="px-3 py-2">
+                            <div class="text-zinc-200">@a.CustomerName</div>
+                            <div class="text-[10px] text-zinc-500">@a.CustomerPhone · @a.CustomerEmail</div>
+                        </td>
+                        <td class="px-3 py-2 font-mono">₹@AdminFmt.Inr(a.Amount)</td>
+                        <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full border text-[10px] font-mono @StatusClass(a.Status)">@a.Status</span></td>
+                        <td class="px-3 py-2 text-zinc-400">@(a.PaymentMode ?? "—")</td>
+                        <td class="px-3 py-2 font-mono text-[10px] text-zinc-500">@(a.PayuPaymentId ?? "—")<br />@a.TxnId</td>
+                        <td class="px-3 py-2 text-rose-300/90 max-w-[260px]">@(a.FailureReason ?? "")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<PaymentAttemptDto> Attempts { get; set; } = new();
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public EventCallback OnReload { get; set; }
+
+    private string _filter = "ALL";
+
+    private List<PaymentAttemptDto> Visible => _filter == "ALL" ? Attempts : Attempts.Where(a => a.Status == _filter).ToList();
+    private int Count(string f) => f == "ALL" ? Attempts.Count : Attempts.Count(a => a.Status == f);
+
+    private static string StatusClass(string s) => s switch
+    {
+        "SUCCESS" => "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
+        "FAILED" => "bg-rose-500/10 text-rose-300 border-rose-500/30",
+        "CANCELLED" => "bg-amber-500/10 text-amber-300 border-amber-500/30",
+        _ => "bg-zinc-800 text-zinc-300 border-zinc-700",
+    };
+}

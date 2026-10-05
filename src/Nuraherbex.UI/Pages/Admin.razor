@@ -70,6 +70,12 @@ else
                     <span>Orders &amp; Shiprocket (@_orders.Count)</span>
                 </button>
 
+                <button @onclick="@(() => _activeTab = "payments")"
+                        class="@TabClass("payments")">
+                    <Icon Name="CreditCard" Size="14" />
+                    <span>Payments (@_payments.Count(p => p.Status == "FAILED" || p.Status == "CANCELLED") failed)</span>
+                </button>
+
                 <button @onclick="@(() => _activeTab = "customers")"
                         class="@TabClass("customers")">
                     <Icon Name="Users" Size="14" />
@@ -111,6 +117,10 @@ else
             {
                 <AdminOrdersTab Orders="_orders" Loading="_ordersLoading" OnReload="LoadOrdersAsync" />
             }
+            else if (_activeTab == "payments")
+            {
+                <AdminPaymentsTab Attempts="_payments" Loading="_paymentsLoading" OnReload="LoadPaymentsAsync" />
+            }
             else if (_activeTab == "customers")
             {
                 <AdminCustomersTab Customers="_customers" Loading="_customersLoading" OnReload="LoadCustomersAsync" />
@@ -148,6 +158,8 @@ else
 
     private List<OrderDto> _orders = new();
     private bool _ordersLoading = true;
+    private List<PaymentAttemptDto> _payments = new();
+    private bool _paymentsLoading = true;
     private List<AdminCustomerDto> _customers = new();
     private bool _customersLoading = true;
     private List<TrustBatchDto> _batches = new();
@@ -183,15 +195,15 @@ else
     {
         await AdminAuth.SignOutAsync();
         _dataLoaded = false;
-        _orders = new(); _customers = new(); _batches = new();
-        _ordersLoading = _customersLoading = _batchesLoading = true;
+        _orders = new(); _customers = new(); _batches = new(); _payments = new();
+        _ordersLoading = _customersLoading = _batchesLoading = _paymentsLoading = true;
     }
 
     private async Task LoadAllAsync()
     {
         if (_dataLoaded) return;
         _dataLoaded = true;
-        await Task.WhenAll(LoadOrdersAsync(), LoadBatchesAsync(), LoadCustomersAsync(), LoadIngredientsAsync(), LoadMetricsAsync());
+        await Task.WhenAll(LoadOrdersAsync(), LoadPaymentsAsync(), LoadBatchesAsync(), LoadCustomersAsync(), LoadIngredientsAsync(), LoadMetricsAsync());
     }
 
     private async Task LoadOrdersAsync()
@@ -200,6 +212,14 @@ else
         var res = await Api.AdminOrdersAsync();
         _orders = res.Success ? res.Orders : new();
         _ordersLoading = false; StateHasChanged();
+    }
+
+    private async Task LoadPaymentsAsync()
+    {
+        _paymentsLoading = true; StateHasChanged();
+        var res = await Api.AdminPaymentsAsync();
+        _payments = res.Success ? res.Attempts : new();
+        _paymentsLoading = false; StateHasChanged();
     }
 
     private async Task LoadCustomersAsync()

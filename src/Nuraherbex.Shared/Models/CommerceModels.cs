@@ -200,6 +200,29 @@ public class OrderResponse : ApiResult
     public OrderDto? Order { get; set; }
 }
 
+public class PaymentAttemptDto
+{
+    public string OrderId { get; set; } = "";
+    public string? TxnId { get; set; }
+    public decimal Amount { get; set; }
+    /// <summary>CREATED | INITIATED | SUCCESS | FAILED | CANCELLED</summary>
+    public string Status { get; set; } = "";
+    public string? FailureReason { get; set; }
+    public string? PayuPaymentId { get; set; }
+    public string? PaymentMode { get; set; }
+    public string CustomerName { get; set; } = "";
+    public string CustomerEmail { get; set; } = "";
+    public string CustomerPhone { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class PaymentAttemptListResponse : ApiResult
+{
+    public int Count { get; set; }
+    public List<PaymentAttemptDto> Attempts { get; set; } = new();
+}
+
 public class OrderListResponse : ApiResult
 {
     public int Count { get; set; }

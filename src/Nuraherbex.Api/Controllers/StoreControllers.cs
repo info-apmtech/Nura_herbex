@@ -79,7 +79,7 @@ public class OrdersController(OrderService orders, ProductService products, Cust
                 catch { /* account creation must never block the order */ }
             }
 
-            var order = await orders.CreateAsync(req, customerId);
+            var order = await orders.CreateAsync(req, customerId, holdUntilPaid: true);
             return StatusCode(201, new CreateOrderResponse { Success = true, OrderId = order.Id, Order = order.ToDto(), CustomerAuth = customerAuth });
         }
         catch (Exception ex) when (ex is InvalidOperationException)

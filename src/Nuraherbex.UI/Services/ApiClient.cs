@@ -134,6 +134,7 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<ShipmentResponse> AdminRetryShiprocketAsync(string orderId) => Call<ShipmentResponse>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/retry-shiprocket", null, Who.Admin);
     public Task<OrderResponse> AdminMarkDeliveredAsync(string orderId) => Call<OrderResponse>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/deliver", null, Who.Admin);
     public Task<ApiResult> AdminSendEmailAsync(string orderId, string type) => Call<ApiResult>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/send-email", new AdminEmailRequest { Type = type }, Who.Admin);
+    public Task<PaymentAttemptListResponse> AdminPaymentsAsync() => Call<PaymentAttemptListResponse>(HttpMethod.Get, "api/admin/payments", null, Who.Admin);
     public Task<AdminCustomerListResponse> AdminCustomersAsync() => Call<AdminCustomerListResponse>(HttpMethod.Get, "api/admin/customers", null, Who.Admin);
 
     public Task<TrustBatchListResponse> AdminBatchesAsync() => Call<TrustBatchListResponse>(HttpMethod.Get, "api/admin/batches", null, Who.Admin);

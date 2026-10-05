@@ -30,6 +30,7 @@
 <body>
     <div id="app">
         <div class="nura-splash">
+            <img src="icon-192.png" alt="Nura Herbex" width="96" height="96" style="border-radius:20px" />
             <span>Nura Herbex</span>
             <div class="bar"></div>
         </div>
@@ -42,7 +43,25 @@
     </div>
     <script src="_content/Nuraherbex.UI/js/nura.js"></script>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
-    <script>navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' });</script>
+    <script>
+        (function () {
+            if (!('serviceWorker' in navigator)) return;
+            var local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+            if (local) {
+                // Local development: never keep an offline cache. Remove any stale worker/cache left by an earlier build
+                // (a stale cache makes Blazor hang on the loading screen), and reload once if one was found.
+                navigator.serviceWorker.getRegistrations().then(function (regs) {
+                    var had = regs.length > 0;
+                    return Promise.all(regs.map(function (r) { return r.unregister(); }))
+                        .then(function () { return window.caches ? caches.keys() : []; })
+                        .then(function (keys) { had = had || keys.length > 0; return Promise.all(keys.map(function (k) { return caches.delete(k); })); })
+                        .then(function () { if (had && !sessionStorage.getItem('nura-sw-cleared')) { sessionStorage.setItem('nura-sw-cleared', '1'); location.reload(); } });
+                }).catch(function () { });
+            } else {
+                navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' }).catch(function () { });
+            }
+        })();
+    </script>
 </body>
 
 </html>

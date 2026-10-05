@@ -138,6 +138,22 @@ public class AdminController(
         return Ok(new ApiResult { Success = sent, Message = sent ? $"Email sent to {o.CustomerEmail}" : "Email not sent (Resend not configured or rejected the request)." });
     }
 
+    /// <summary>PayU attempts: SUCCESS rows have an order; FAILED / CANCELLED rows are the stored failure records.</summary>
+    [HttpGet("payments"), Authorize(Roles = "admin")]
+    public async Task<PaymentAttemptListResponse> ListPayments([FromQuery] string? status)
+    {
+        var q = db.PaymentAttempts.AsNoTracking().Where(a => a.Status != "CREATED");
+        if (!string.IsNullOrWhiteSpace(status)) q = q.Where(a => a.Status == status.ToUpper());
+        var rows = await q.OrderByDescending(a => a.CreatedAt).Take(500).ToListAsync();
+        var list = rows.Select(a => new PaymentAttemptDto
+        {
+            OrderId = a.OrderId, TxnId = a.TxnId, Amount = a.Amount, Status = a.Status, FailureReason = a.FailureReason,
+            PayuPaymentId = a.PayuPaymentId, PaymentMode = a.PaymentMode, CustomerName = a.CustomerName, CustomerEmail = a.CustomerEmail,
+            CustomerPhone = a.CustomerPhone, CreatedAt = a.CreatedAt, UpdatedAt = a.UpdatedAt,
+        }).ToList();
+        return new PaymentAttemptListResponse { Success = true, Count = list.Count, Attempts = list };
+    }
+
     [HttpGet("customers"), Authorize(Roles = "admin")]
     public async Task<AdminCustomerListResponse> ListCustomers()
     {

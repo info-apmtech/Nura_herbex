@@ -17,7 +17,11 @@ public partial class OrderService(
 
     public static string NewOrderId() => $"NH-{Random.Shared.Next(100000, 999999)}";
 
-    public async Task<Order> CreateAsync(CreateOrderRequest req, string? customerId)
+    /// <param name="holdUntilPaid">
+    /// Public checkout: an ONLINE order is not saved to the orders table. It is held as a <see cref="PaymentAttempt"/> snapshot and only
+    /// becomes a real order once PayU confirms payment (see <see cref="ConfirmHeldOrderAsync"/>).
+    /// </param>
+    public async Task<Order> CreateAsync(CreateOrderRequest req, string? customerId, bool holdUntilPaid = false)
     {
         var c = req.Customer;
         var s = req.Shipping;
@@ -66,11 +70,42 @@ public partial class OrderService(
             await products.DecrementStockAsync(order);
         }
 
+        if (!isCod && holdUntilPaid)
+        {
+            db.PaymentAttempts.Add(new PaymentAttempt
+            {
+                OrderId = order.Id, Amount = order.TotalAmount, Status = "CREATED",
+                CustomerName = order.CustomerName, CustomerEmail = order.CustomerEmail, CustomerPhone = order.CustomerPhone,
+                OrderSnapshotJson = System.Text.Json.JsonSerializer.Serialize(order),
+            });
+            await db.SaveChangesAsync();
+            return order;
+        }
+
         db.Orders.Add(order);
         await db.SaveChangesAsync();
 
         if (isCod) NotifyConfirmed(order);
         return order;
+    }
+
+    /// <summary>Latest not-yet-paid checkout attempt for an order id, or null.</summary>
+    public Task<PaymentAttempt?> FindHeldAttemptAsync(string orderId) =>
+        db.PaymentAttempts.Where(a => a.OrderId == orderId && a.Status != "SUCCESS")
+            .OrderByDescending(a => a.CreatedAt).FirstOrDefaultAsync();
+
+    /// <summary>PayU confirmed payment: create the real order from the held snapshot, then settle it (stock, Shiprocket, notifications).</summary>
+    public async Task<Order> ConfirmHeldOrderAsync(PaymentAttempt attempt, string? paymentRef, string? txnId, string rawGatewayJson)
+    {
+        var order = await GetAsync(attempt.OrderId);
+        if (order is null)
+        {
+            order = System.Text.Json.JsonSerializer.Deserialize<Order>(attempt.OrderSnapshotJson)
+                ?? throw new InvalidOperationException("Held order data is missing");
+            db.Orders.Add(order);
+            await db.SaveChangesAsync();
+        }
+        return await MarkPaidAsync(order.Id, paymentRef, txnId, rawGatewayJson);
     }
 
     public Task<Order?> GetAsync(string id) => db.Orders.FirstOrDefaultAsync(o => o.Id == id);
