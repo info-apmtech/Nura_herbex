@@ -41,7 +41,10 @@ public class WhatsAppWebhookController(WhatsAppService whatsapp, IWebHostEnviron
 
         if (misconfigured) log.LogError("[WhatsApp] WhatsApp:VerifyToken is not configured â€” cannot verify webhook");
         else log.LogWarning("[WhatsApp] Webhook verification rejected (mode={Mode})", mode);
-        return Forbid();
+        // Plain 403 (not Forbid(), which goes through the JWT handler and looks like an auth failure).
+        return StatusCode(403, misconfigured
+            ? "WhatsApp:VerifyToken is not configured on the server."
+            : "Verification failed: send hub.mode=subscribe, hub.verify_token=<WhatsApp:VerifyToken> and hub.challenge.");
     }
 
     /// <summary>Event delivery. The signature is validated against the exact raw bytes Meta signed.</summary>
