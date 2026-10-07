@@ -157,3 +157,111 @@ public class ShiprocketWebhookController(
         return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
     }
 }
+
+/// <summary>
+/// Shadowfax push-callback receiver (Client Portal → Webhook tab → URL <c>{ApiPublicUrl}/api/webhooks/shadowfax</c>).
+/// Maps Shadowfax <c>event</c> ids to order fulfillment status. Events with no fulfillment meaning (not contactable, on hold, NDR…) are
+/// recorded on the tracking timeline only.
+/// </summary>
+[ApiController]
+[AllowAnonymous]
+[Route("api/webhooks/shadowfax")]
+public class ShadowfaxWebhookController(
+    NuraDbContext db,
+    IOptions<ShadowfaxOptions> options,
+    IServiceScopeFactory scopes,
+    ILogger<ShadowfaxWebhookController> log) : ControllerBase
+{
+    private static readonly Dictionary<string, (string? Status, string Text)> EventMap = new()
+    {
+        ["picked"] = ("PICKED_UP", "Picked Up by Courier"),
+        ["recd_at_rev_hub"] = ("PICKED_UP", "Received at Pickup Hub"),
+        ["received_from_client_warehouse"] = ("PICKED_UP", "Received from Warehouse"),
+        ["item_manifested"] = ("IN_TRANSIT", "Packed for Transit"),
+        ["bag_in_transit"] = ("IN_TRANSIT", "In Transit between Hubs"),
+        ["bag_received_at_via"] = ("IN_TRANSIT", "In Transit between Hubs"),
+        ["bag_received"] = ("IN_TRANSIT", "Arrived at Destination Facility"),
+        ["recd_at_fwd_dc"] = ("IN_TRANSIT", "Arrived at Delivery City"),
+        ["recd_at_fwd_hub"] = ("IN_TRANSIT", "Arrived at Delivery Hub"),
+        ["assigned_for_delivery"] = ("IN_TRANSIT", "Assigned for Delivery"),
+        ["ofd"] = ("OUT_FOR_DELIVERY", "Out for Delivery"),
+        ["delivered"] = ("DELIVERED", "Delivered to Recipient"),
+        ["rts"] = ("RTO", "Return Initiated"),
+        ["rts_in_process"] = ("RTO", "Return in Progress"),
+        ["rts_ofd"] = ("RTO", "Return Out for Delivery"),
+        ["rts_d"] = ("RTO", "Returned to Seller"),
+        ["rto"] = ("RTO", "Return Initiated"),
+        ["rto_in_process"] = ("RTO", "Return in Progress"),
+        ["rto_d"] = ("RTO", "Returned to Seller"),
+        ["cancelled_by_seller"] = ("CANCELLED", "Shipment Cancelled"),
+        ["cancelled_by_customer"] = ("CANCELLED", "Shipment Cancelled"),
+        ["nc"] = (null, "Delivery Attempted: Customer Not Reachable"),
+        ["na"] = (null, "Delivery Not Attempted"),
+        ["cid"] = (null, "Delivery Rescheduled at Customer Request"),
+        ["on_hold"] = (null, "Shipment On Hold"),
+        ["reopen_ndr"] = (null, "Delivery Will Be Re-attempted"),
+        ["lost"] = (null, "Shipment Reported Lost"),
+    };
+
+    // Terminal states are never overwritten by a late or out-of-order scan.
+    private static readonly HashSet<string> Terminal = ["DELIVERED", "CANCELLED"];
+
+    [HttpPost]
+    public async Task<IActionResult> Receive([FromBody] System.Text.Json.JsonElement payload)
+    {
+        var expected = options.Value.WebhookToken;
+        if (!string.IsNullOrEmpty(expected))
+        {
+            var supplied = Request.Headers.Authorization.FirstOrDefault()?.Trim();
+            if (supplied != expected && supplied != $"Token {expected}")
+                return Unauthorized(new ApiResult { Success = false, Message = "Unauthorized webhook request" });
+        }
+
+        string? Str(string name) => payload.TryGetProperty(name, out var v) && v.ValueKind != System.Text.Json.JsonValueKind.Null ? v.ToString() : null;
+        var awb = Str("awb_number");
+        var orderId = Str("order_id");
+        var ev = Str("event")?.ToLowerInvariant() ?? "";
+        const string ok = "Webhook processed successfully";
+
+        if ((awb is null && orderId is null) || !EventMap.TryGetValue(ev, out var mapped))
+            return Ok(new ApiResult { Success = true, Message = ok });
+
+        var order = await db.Orders.FirstOrDefaultAsync(o =>
+            (orderId != null && o.Id == orderId) || (awb != null && o.ShiprocketAwb == awb));
+        if (order is null) return Ok(new ApiResult { Success = true, Message = ok });
+
+        var previous = order.FulfillmentStatus;
+        var location = Str("current_location");
+        var detail = Str("comments");
+
+        order.DeliveryStatus = mapped.Text;
+        order.UpdatedAt = DateTime.UtcNow;
+        if (mapped.Status is not null && !Terminal.Contains(previous)) order.FulfillmentStatus = mapped.Status;
+        order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto
+            { Status = mapped.Text, Location = location ?? detail ?? "Shadowfax Facility", Time = Mapping.TimelineStamp(), Done = true, Active = true }];
+        if (mapped.Status == "DELIVERED" && order.PaymentMethod == "COD") order.PaymentStatus = "COD_COLLECTED";
+        await db.SaveChangesAsync();
+        log.LogInformation("[Shadowfax] Order {Order} {Event} → {Status}", order.Id, ev, order.FulfillmentStatus);
+
+        // Notify only on a genuine transition so repeated scans never spam the customer.
+        var notifyDelivered = mapped.Status == "DELIVERED" && previous != "DELIVERED";
+        var notifyShipped = mapped.Status is "PICKED_UP" or "IN_TRANSIT" && previous is "PENDING" or "SHIPMENT_CREATED" or "AWB_ASSIGNED";
+        if (!notifyDelivered && !notifyShipped) return Ok(new ApiResult { Success = true, Message = ok });
+
+        var snapshot = order;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = scopes.CreateScope();
+                var wa = scope.ServiceProvider.GetRequiredService<WhatsAppService>();
+                var mail = scope.ServiceProvider.GetRequiredService<EmailService>();
+                if (notifyDelivered) { await mail.SendOrderDeliveredAsync(snapshot); await wa.NotifyDeliveredAsync(snapshot); }
+                else await wa.NotifyShippedAsync(snapshot);
+            }
+            catch (Exception ex) { log.LogWarning(ex, "Shadowfax webhook notification failed"); }
+        });
+
+        return Ok(new ApiResult { Success = true, Message = ok });
+    }
+}

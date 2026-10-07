@@ -276,12 +276,20 @@
                 }
 
                 <div class="flex flex-wrap gap-2">
-                    @if (string.IsNullOrEmpty(o.ShiprocketAwb))
+                    @if (string.IsNullOrEmpty(o.ShiprocketAwb) || o.FulfillmentStatus == "CANCELLED")
                     {
                         <button type="button" disabled="@_busy" @onclick="RetryShiprocketAsync"
                                 class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
                             <Icon Name="Truck" Size="12" />
-                            <span>Retry Shiprocket</span>
+                            <span>Retry Shipment</span>
+                        </button>
+                    }
+                    @if (o.Courier == "Shadowfax" && !string.IsNullOrEmpty(o.ShiprocketAwb) && o.FulfillmentStatus is not ("CANCELLED" or "DELIVERED" or "RTO"))
+                    {
+                        <button type="button" disabled="@_busy" @onclick="CancelShipmentAsync"
+                                class="px-2.5 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
+                            <Icon Name="AlertCircle" Size="12" />
+                            <span>Cancel Shipment</span>
                         </button>
                     }
                     @if (o.DeliveryStatus != "Delivered")
@@ -521,6 +529,17 @@
         _actionMessage = res.Success
             ? (res.Result?.ShiprocketAwb is { Length: > 0 } awb ? $"Shiprocket shipment created. AWB: {awb}" : "Shiprocket shipment created.")
             : (res.Message ?? "Shiprocket retry failed.");
+        _busy = false;
+        await ReloadSelectedAsync();
+    }
+
+    private async Task CancelShipmentAsync()
+    {
+        if (_selected is null) return;
+        _busy = true; _actionMessage = null;
+        var res = await Api.AdminCancelShipmentAsync(_selected.Id);
+        _actionOk = res.Success;
+        _actionMessage = res.Message ?? (res.Success ? "Shipment cancelled." : "Could not cancel the shipment.");
         _busy = false;
         await ReloadSelectedAsync();
     }

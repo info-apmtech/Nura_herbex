@@ -37,7 +37,7 @@ public class ProductsController(ProductService products) : ControllerBase
 [AllowAnonymous]
 [Route("api/orders")]
 [EnableRateLimiting("orders")]
-public class OrdersController(OrderService orders, ProductService products, CustomerAuthService auth, ShiprocketService shiprocket) : ControllerBase
+public class OrdersController(OrderService orders, ProductService products, CustomerAuthService auth, ShippingGateway shipping) : ControllerBase
 {
     [HttpPost("validate")]
     public async Task<IActionResult> Validate(ValidateCartRequest req)
@@ -91,6 +91,14 @@ public class OrdersController(OrderService orders, ProductService products, Cust
         }
     }
 
+    /// <summary>Pincode delivery check for checkout. serviceable = null means "unknown" (no courier check available) so checkout is never blocked on an outage.</summary>
+    [HttpGet("serviceability/{pincode}")]
+    public async Task<IActionResult> Serviceability(string pincode)
+    {
+        var ok = await shipping.IsServiceableAsync(pincode);
+        return Ok(new { success = true, pincode, serviceable = ok });
+    }
+
     [HttpGet("track")]
     public async Task<IActionResult> Track([FromQuery] string? query, [FromQuery] string? id)
     {
@@ -112,21 +120,7 @@ public class OrdersController(OrderService orders, ProductService products, Cust
         return order is null ? NotFound(new ApiResult { Success = false, Message = "Order not found" }) : Ok(new OrderResponse { Success = true, Order = order.ToDto() });
     }
 
-    private async Task EnrichTrackingAsync(OrderDto dto)
-    {
-        if (!string.IsNullOrWhiteSpace(dto.ShiprocketAwb) && !dto.ShiprocketAwb.StartsWith("SR-PENDING-"))
-        {
-            dto.ShiprocketTrackUrl = $"https://shiprocket.co/tracking/{dto.ShiprocketAwb}";
-            var live = await shiprocket.FetchLiveTrackingAsync(dto.ShiprocketAwb);
-            if (live is { } td)
-            {
-                dto.ShiprocketTracking = td;
-                if (td.TryGetProperty("track_url", out var u) && u.ValueKind == System.Text.Json.JsonValueKind.String) dto.ShiprocketTrackUrl = u.GetString();
-            }
-        }
-        else if (!string.IsNullOrWhiteSpace(dto.ShiprocketOrderId))
-            dto.ShiprocketTrackUrl = $"https://shiprocket.co/tracking?order_id={dto.ShiprocketOrderId}";
-    }
+    private Task EnrichTrackingAsync(OrderDto dto) => shipping.EnrichTrackingAsync(dto);
 }
 
 [ApiController]
@@ -178,7 +172,7 @@ public class PaymentsController(PayUService payu, IOptions<StoreOptions> store, 
 
 [ApiController]
 [Route("api/auth")]
-public class AuthController(CustomerAuthService auth, OrderService orders, ShiprocketService shiprocket) : ControllerBase
+public class AuthController(CustomerAuthService auth, OrderService orders, ShippingGateway shipping) : ControllerBase
 {
     private string? CurrentId => User.FindFirstValue(ClaimTypes.NameIdentifier);
 
@@ -238,15 +232,7 @@ public class AuthController(CustomerAuthService auth, OrderService orders, Shipr
 
         var list = (await orders.ListForCustomerAsync(c.Email, c.Phone)).Select(o => o.ToDto()).ToList();
         foreach (var dto in list)
-        {
-            if (!string.IsNullOrWhiteSpace(dto.ShiprocketAwb) && !dto.ShiprocketAwb.StartsWith("SR-PENDING-"))
-            {
-                dto.ShiprocketTrackUrl = $"https://shiprocket.co/tracking/{dto.ShiprocketAwb}";
-                dto.ShiprocketTracking = await shiprocket.FetchLiveTrackingAsync(dto.ShiprocketAwb);
-            }
-            else if (!string.IsNullOrWhiteSpace(dto.ShiprocketOrderId))
-                dto.ShiprocketTrackUrl = $"https://shiprocket.co/tracking?order_id={dto.ShiprocketOrderId}";
-        }
+            await shipping.EnrichTrackingAsync(dto);
         return Ok(new OrderListResponse { Success = true, Count = list.Count, Orders = list });
     }
 }

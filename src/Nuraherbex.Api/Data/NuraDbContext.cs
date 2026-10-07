@@ -94,6 +94,7 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.Property(x => x.PaymentStatus).HasMaxLength(32);
             e.Property(x => x.FulfillmentStatus).HasMaxLength(32);
             e.Property(x => x.ShiprocketAwb).HasMaxLength(64);
+            e.Property(x => x.Courier).HasMaxLength(16);
             e.HasIndex(x => x.CreatedAt);
             e.HasIndex(x => x.CustomerPhone);
             e.HasIndex(x => x.ShiprocketAwb);

@@ -8,7 +8,7 @@ namespace Nuraherbex.Api.Services;
 public partial class OrderService(
     NuraDbContext db,
     ProductService products,
-    ShiprocketService shiprocket,
+    ShippingGateway shipping,
     IServiceScopeFactory scopes,
     ILogger<OrderService> log)
 {
@@ -181,35 +181,55 @@ public partial class OrderService(
         return order;
     }
 
-    /// <summary>Manual / retry push to Shiprocket (admin).</summary>
+    /// <summary>Manual / retry push to the active courier platform (admin).</summary>
     public async Task<ShiprocketResult> RetryShiprocketAsync(string orderId)
     {
         var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
         if (order.PaymentStatus != "PAID" && order.PaymentMethod != "COD")
             throw new InvalidOperationException("Cannot ship an unpaid online order. Verify payment first.");
+        if (!string.IsNullOrWhiteSpace(order.ShiprocketAwb) && !order.ShiprocketAwb.StartsWith("SR-PENDING-") && order.FulfillmentStatus != "CANCELLED")
+            throw new InvalidOperationException("This order already has a shipment. Cancel it first to re-book.");
 
-        var res = await shiprocket.CreateOrderAsync(order, new ParcelSpecs());
-        Apply(order, res);
+        var (res, courier) = await shipping.CreateOrderAsync(order, new ParcelSpecs());
+        Apply(order, res, courier);
         await db.SaveChangesAsync();
         return res;
+    }
+
+    /// <summary>Cancels the booked Shadowfax shipment (admin). Order stays; fulfillment returns to a re-shippable state once Shadowfax confirms.</summary>
+    public async Task<string> CancelShipmentAsync(string orderId, string? reason)
+    {
+        var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
+        var msg = await shipping.CancelAsync(order, string.IsNullOrWhiteSpace(reason) ? "Cancelled by client" : reason.Trim());
+        var queued = msg.Contains("queued", StringComparison.OrdinalIgnoreCase);
+        if (!queued)
+        {
+            order.FulfillmentStatus = "CANCELLED";
+            order.DeliveryStatus = "Shipment Cancelled";
+        }
+        order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto { Status = queued ? "Shipment cancellation queued" : "Shipment Cancelled", Time = Mapping.TimelineStamp(), Done = true, Active = true }];
+        order.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return msg;
     }
 
     private async Task TryDispatchAsync(Order order, ParcelSpecs parcel)
     {
         try
         {
-            var res = await shiprocket.CreateOrderAsync(order, parcel);
-            if (res.Success) Apply(order, res);
+            var (res, courier) = await shipping.CreateOrderAsync(order, parcel);
+            if (res.Success) Apply(order, res, courier);
         }
         catch (Exception ex)
         {
-            log.LogError(ex, "[Shiprocket] Dispatch deferred for {Order}", order.Id);
-            order.Notes += $" | Shiprocket auto-dispatch deferred: {ex.Message}";
+            log.LogError(ex, "[{Courier}] Dispatch deferred for {Order}", shipping.ActiveProvider, order.Id);
+            order.Notes += $" | {shipping.ActiveProvider} auto-dispatch deferred: {ex.Message}";
         }
     }
 
-    private static void Apply(Order order, ShiprocketResult res)
+    private static void Apply(Order order, ShiprocketResult res, string courier)
     {
+        order.Courier = courier;
         order.ShiprocketOrderId = res.ShiprocketOrderId;
         order.ShiprocketShipmentId = res.ShiprocketShipmentId;
         order.ShiprocketAwb = res.ShiprocketAwb;

@@ -72,6 +72,8 @@ public class Order
     public string? PaymentRef { get; set; }
     public string? PayuTxnId { get; set; }
     public string FulfillmentStatus { get; set; } = "PENDING";
+    /// <summary>Courier platform that booked this shipment: Shiprocket | Shadowfax (null = Shiprocket, pre-dates multi-courier). The Shiprocket* fields hold that platform's ids.</summary>
+    public string? Courier { get; set; }
     public string? ShiprocketOrderId { get; set; }
     public string? ShiprocketShipmentId { get; set; }
     public string? ShiprocketAwb { get; set; }

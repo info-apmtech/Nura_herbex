@@ -110,6 +110,7 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<AuthResponse> RegisterAsync(RegisterRequest r) => Call<AuthResponse>(HttpMethod.Post, "api/auth/register", r);
     public Task<AuthResponse> SendOtpAsync(string email) => Call<AuthResponse>(HttpMethod.Post, "api/auth/send-otp", new SendOtpRequest { Email = email });
     public Task<AuthResponse> VerifyOtpAsync(string email, string otp) => Call<AuthResponse>(HttpMethod.Post, "api/auth/verify-otp", new VerifyOtpRequest { Email = email, Otp = otp });
+    public async Task<PincodeCheckResponse> CheckPincodeAsync(string pincode) => await GetRaw<PincodeCheckResponse>($"api/orders/serviceability/{Uri.EscapeDataString(pincode)}") ?? new();
     public async Task<CheckUserResponse> CheckUserAsync(string query) => await GetRaw<CheckUserResponse>($"api/auth/check-user?query={Uri.EscapeDataString(query)}") ?? new();
     public Task<CustomerResponse> GetMeAsync() => Call<CustomerResponse>(HttpMethod.Get, "api/auth/me", null, Who.Customer);
     public Task<CustomerResponse> UpdateMeAsync(UpdateProfileRequest r) => Call<CustomerResponse>(HttpMethod.Put, "api/auth/me", r, Who.Customer);
@@ -132,6 +133,7 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<OrderListResponse> AdminOrdersAsync() => Call<OrderListResponse>(HttpMethod.Get, "api/admin/orders", null, Who.Admin);
     public Task<OrderResponse> AdminCreateOrderAsync(AdminCreateOrderRequest r) => Call<OrderResponse>(HttpMethod.Post, "api/admin/orders", r, Who.Admin);
     public Task<ShipmentResponse> AdminRetryShiprocketAsync(string orderId) => Call<ShipmentResponse>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/retry-shiprocket", null, Who.Admin);
+    public Task<ApiResult> AdminCancelShipmentAsync(string orderId) => Call<ApiResult>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/cancel-shipment", null, Who.Admin);
     public Task<OrderResponse> AdminMarkDeliveredAsync(string orderId) => Call<OrderResponse>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/deliver", null, Who.Admin);
     public Task<ApiResult> AdminSendEmailAsync(string orderId, string type) => Call<ApiResult>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/send-email", new AdminEmailRequest { Type = type }, Who.Admin);
     public Task<PaymentAttemptListResponse> AdminPaymentsAsync() => Call<PaymentAttemptListResponse>(HttpMethod.Get, "api/admin/payments", null, Who.Admin);

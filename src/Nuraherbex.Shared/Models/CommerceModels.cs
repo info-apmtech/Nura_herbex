@@ -154,6 +154,8 @@ public class OrderDto
 
     /// <summary>PENDING | SHIPMENT_CREATED | AWB_ASSIGNED | PICKED_UP | IN_TRANSIT | OUT_FOR_DELIVERY | DELIVERED | RTO | CANCELLED</summary>
     public string FulfillmentStatus { get; set; } = "PENDING";
+    /// <summary>Shiprocket | Shadowfax (null = Shiprocket). The Shiprocket* fields hold that courier platform's ids.</summary>
+    public string? Courier { get; set; }
     public string? ShiprocketOrderId { get; set; }
     public string? ShiprocketShipmentId { get; set; }
     public string? ShiprocketAwb { get; set; }
@@ -321,6 +323,13 @@ public class CustomerResponse : ApiResult
     public CustomerDto? Customer { get; set; }
 }
 
+public class PincodeCheckResponse
+{
+    public bool Success { get; set; }
+    /// <summary>null = unknown (courier check unavailable); never block checkout on null.</summary>
+    public bool? Serviceable { get; set; }
+}
+
 public class CheckUserResponse
 {
     public bool Exists { get; set; }
@@ -373,6 +382,7 @@ public class ShipmentResultDto
 {
     public bool Success { get; set; }
     public bool Simulated { get; set; }
+    public string? Courier { get; set; }
     public string? ShiprocketOrderId { get; set; }
     public string? ShiprocketShipmentId { get; set; }
     public string? ShiprocketAwb { get; set; }

@@ -21,6 +21,8 @@ builder.Services.Configure<JwtOptions>(cfg.GetSection(JwtOptions.Section));
 builder.Services.Configure<AdminOptions>(cfg.GetSection(AdminOptions.Section));
 builder.Services.Configure<PayUOptions>(cfg.GetSection(PayUOptions.Section));
 builder.Services.Configure<ShiprocketOptions>(cfg.GetSection(ShiprocketOptions.Section));
+builder.Services.Configure<ShadowfaxOptions>(cfg.GetSection(ShadowfaxOptions.Section));
+builder.Services.Configure<ShippingOptions>(cfg.GetSection(ShippingOptions.Section));
 builder.Services.Configure<EmailOptions>(cfg.GetSection(EmailOptions.Section));
 builder.Services.Configure<WhatsAppOptions>(cfg.GetSection(WhatsAppOptions.Section));
 
@@ -44,6 +46,8 @@ builder.Services.AddScoped<SettingsService>();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddHttpClient<EmailService>();
 builder.Services.AddHttpClient<ShiprocketService>();
+builder.Services.AddHttpClient<ShadowfaxService>();
+builder.Services.AddScoped<ShippingGateway>();
 builder.Services.AddHttpClient<WhatsAppService>();
 
 // ---- Auth (JWT for customers and admins) ----------------------------------------------

@@ -249,8 +249,12 @@ else
                                 Pincode *
                             </label>
                             <input type="text" required maxlength="6" placeholder="6-digit"
-                                   value="@_f.Pincode" @oninput="e => _f.Pincode = Digits(e.Value?.ToString())"
+                                   value="@_f.Pincode" @oninput="OnPincodeInputAsync"
                                    class="w-full sm:w-1/2 px-4 py-3 rounded-xl bg-black/40 border border-white/15 text-white text-xs outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all" />
+                            @if (_pincodeServiceable == false)
+                            {
+                                <p class="mt-1.5 text-[11px] text-amber-400">We may not be able to deliver to this pincode yet. You can still place the order and we will contact you if delivery is not possible.</p>
+                            }
                         </div>
                     </div>
                 </div>
@@ -604,6 +608,21 @@ else
 }
 
 @code {
+    // null = unknown / not checked. Advisory only: checkout is never blocked on this.
+    private bool? _pincodeServiceable;
+
+    private async Task OnPincodeInputAsync(ChangeEventArgs e)
+    {
+        _f.Pincode = Digits(e.Value?.ToString());
+        _pincodeServiceable = null;
+        if (_f.Pincode.Length != 6) return;
+
+        var pin = _f.Pincode;
+        var res = await Api.CheckPincodeAsync(pin);
+        if (_f.Pincode == pin) _pincodeServiceable = res.Serviceable; // ignore stale replies if the user kept typing
+        StateHasChanged();
+    }
+
     [SupplyParameterFromQuery(Name = "status"), Parameter] public string? StatusParam { get; set; }
     [SupplyParameterFromQuery(Name = "orderId"), Parameter] public string? OrderIdParam { get; set; }
     [SupplyParameterFromQuery(Name = "message"), Parameter] public string? MessageParam { get; set; }

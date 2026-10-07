@@ -109,11 +109,19 @@ public class AdminController(
                 Success = true,
                 Result = new ShipmentResultDto
                 {
-                    Success = res.Success, Simulated = res.Simulated, ShiprocketOrderId = res.ShiprocketOrderId, ShiprocketShipmentId = res.ShiprocketShipmentId,
+                    Success = res.Success, Simulated = res.Simulated, Courier = (await orders.GetAsync(id))?.Courier, ShiprocketOrderId = res.ShiprocketOrderId, ShiprocketShipmentId = res.ShiprocketShipmentId,
                     ShiprocketAwb = res.ShiprocketAwb, ShiprocketCourier = res.ShiprocketCourier, DeliveryStatus = res.DeliveryStatus,
                 },
             });
         }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResult { Success = false, Message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
+    }
+
+    [HttpPost("orders/{id}/cancel-shipment"), Authorize(Roles = "admin")]
+    public async Task<IActionResult> CancelShipment(string id, [FromQuery] string? reason)
+    {
+        try { return Ok(new ApiResult { Success = true, Message = await orders.CancelShipmentAsync(id, reason) }); }
         catch (KeyNotFoundException ex) { return NotFound(new ApiResult { Success = false, Message = ex.Message }); }
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }

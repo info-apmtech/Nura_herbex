@@ -278,11 +278,11 @@
                                                 <span class="text-white font-mono font-bold tracking-wider">@order.ShiprocketAwb</span>
                                             </div>
 
-                                            <a href="@(string.IsNullOrEmpty(order.ShiprocketTrackUrl) ? $"https://shiprocket.co/tracking/{order.ShiprocketAwb}" : order.ShiprocketTrackUrl)"
+                                            <a href="@(string.IsNullOrEmpty(order.ShiprocketTrackUrl) ? (order.Courier == "Shadowfax" ? "#" : $"https://shiprocket.co/tracking/{order.ShiprocketAwb}") : order.ShiprocketTrackUrl)"
                                                target="_blank" rel="noreferrer"
                                                class="w-full py-2 rounded-md bg-[#9929ea] hover:bg-[#8620cf] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors shadow-sm">
                                                 <Icon Name="Truck" Size="13" />
-                                                <span>Track on Shiprocket</span>
+                                                <span>Track Shipment</span>
                                                 <Icon Name="ExternalLink" Size="11" />
                                             </a>
                                         </div>

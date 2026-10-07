@@ -54,6 +54,49 @@ public class ShiprocketOptions
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Token) || (!string.IsNullOrWhiteSpace(Email) && !string.IsNullOrWhiteSpace(Password));
 }
 
+public class ShippingOptions
+{
+    public const string Section = "Shipping";
+    /// <summary>Courier platform used for NEW orders: Shiprocket | Shadowfax. Existing orders keep the courier they were booked with.</summary>
+    public string Provider { get; set; } = "Shiprocket";
+}
+
+public class ShadowfaxAddress
+{
+    public string Name { get; set; } = "";
+    public string Contact { get; set; } = "";
+    public string AddressLine1 { get; set; } = "";
+    public string AddressLine2 { get; set; } = "";
+    public string City { get; set; } = "";
+    public string State { get; set; } = "";
+    public string Pincode { get; set; } = "";
+    public string Email { get; set; } = "";
+    /// <summary>Warehouse code registered with Shadowfax (optional).</summary>
+    public string UniqueCode { get; set; } = "";
+    public bool IsComplete => !string.IsNullOrWhiteSpace(Contact) && !string.IsNullOrWhiteSpace(AddressLine1)
+        && !string.IsNullOrWhiteSpace(City) && !string.IsNullOrWhiteSpace(State) && !string.IsNullOrWhiteSpace(Pincode);
+}
+
+public class ShadowfaxOptions
+{
+    public const string Section = "Shadowfax";
+    /// <summary>staging | production</summary>
+    public string Env { get; set; } = "staging";
+    public string Token { get; set; } = "";
+    public string StagingToken { get; set; } = "";
+    /// <summary>marketplace (Shadowfax picks up from the seller) | warehouse (you hand over at a Shadowfax facility).</summary>
+    public string OrderType { get; set; } = "marketplace";
+    /// <summary>Value Shadowfax sends in the callback Authorization header (set in the Shadowfax client portal, Webhook tab).</summary>
+    public string WebhookToken { get; set; } = "";
+    public ShadowfaxAddress Pickup { get; set; } = new();
+    /// <summary>Return-to-seller / return-to-origin address. Falls back to <see cref="Pickup"/> when empty.</summary>
+    public ShadowfaxAddress Return { get; set; } = new();
+    public bool IsProduction => Env.Equals("production", StringComparison.OrdinalIgnoreCase);
+    public string ApiUrl => IsProduction ? "https://dale.shadowfax.in/api" : "https://dale.staging.shadowfax.in/api";
+    public string ActiveToken => IsProduction ? Token : StagingToken;
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ActiveToken);
+}
+
 public class EmailOptions
 {
     public const string Section = "Email";

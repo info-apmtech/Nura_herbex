@@ -470,13 +470,13 @@
                                         Package travel
                                     </h3>
                                     <p class="text-xs text-slate-400 font-light mt-0.5">
-                                        Live Shiprocket transit checkpoints
+                                        Live courier transit checkpoints
                                     </p>
                                 </div>
                                 @if (!string.IsNullOrEmpty(order.TrackUrl))
                                 {
                                     <a href="@order.TrackUrl" target="_blank" rel="noopener noreferrer"
-                                       title="Open on Shiprocket Official Website"
+                                       title="Open courier tracking page"
                                        class="p-1 rounded-lg text-slate-400 hover:text-white transition-colors">
                                         <Icon Name="ExternalLink" Size="16" />
                                     </a>
@@ -532,7 +532,7 @@
                                             @order.Courier
                                         </span>
                                         <span class="text-[10px] text-slate-400 font-mono">
-                                            Shiprocket Priority Logistics
+                                            Priority Logistics
                                         </span>
                                     </div>
                                 </div>
@@ -549,7 +549,7 @@
                                         <Icon Name="ExternalLink" Size="12" />
                                     </span>
                                     <span class="text-[9px] text-slate-400 block mt-0.5">
-                                        Direct tracking via shiprocket.co
+                                        Direct tracking on the courier website
                                     </span>
                                 </a>
                             }
@@ -778,7 +778,8 @@
         var trackUrl = o.ShiprocketTrackUrl;
         if (string.IsNullOrEmpty(trackUrl))
         {
-            if (awbReal) trackUrl = $"https://shiprocket.co/tracking/{awb}";
+            if (o.Courier == "Shadowfax") { /* Shadowfax supplies its own link with live tracking */ }
+            else if (awbReal) trackUrl = $"https://shiprocket.co/tracking/{awb}";
             else if (!string.IsNullOrEmpty(o.ShiprocketOrderId)) trackUrl = $"https://shiprocket.co/tracking?order_id={o.ShiprocketOrderId}";
         }
 
