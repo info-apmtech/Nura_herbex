@@ -27,7 +27,7 @@ dotnet run --project src/Nuraherbex.Api
 dotnet run --project src/Nuraherbex.Web
 ```
 
-* Admin portal: `/admin` — dev credentials are in `src/Nuraherbex.Api/appsettings.Development.json` (**dev only — override in production**).
+* Admin portal: `/admin`. Configure the administrator with `pwsh -File tools/Set-AdminCredentials.ps1`; this prompts for a password and stores a salted PBKDF2 hash in git-ignored `src/Nuraherbex.Api/appsettings.Local.json`. Restart the API after changing credentials. Development defaults apply only when no local credentials are configured.
 * Payments run in **simulation mode** until `PayU:MerchantKey/MerchantSalt` are set; Shiprocket simulates until credentials are set; emails are skipped until `Email:ResendApiKey` is set.
 
 ### CSS (Tailwind)
@@ -101,3 +101,13 @@ Admin (JWT, role `admin`): `POST /api/admin/login`, `GET /api/admin/verify|order
 * Set `Jwt:Secret` (32+ chars), `Admin:Email/Password`, `Store:FrontendUrl`, `Store:ApiPublicUrl`, `Cors:Origins` (the web app origin) via environment/secrets — the values in `appsettings.Development.json` are for local use only.
 * PayU: set `PayU:MerchantKey/MerchantSalt/Env=live`; the PayU `surl/furl` is `<ApiPublicUrl>/api/payments/payu-response`, which redirects the browser back to `<FrontendUrl>/checkout`.
 * Shiprocket: set credentials and, in Shiprocket's panel, the webhook URL `<ApiPublicUrl>/api/webhooks/shiprocket/webhook` with the token from `Shiprocket:WebhookToken` sent as `x-api-key`.
+
+### Admin authentication
+
+The server issues the `admin` JWT role after administrator login. The entire admin API controller requires that role, with anonymous access allowed only for the rate-limited login endpoint. Customer accounts cannot access admin operations. Admin sessions expire after `Jwt:AdminTokenHours` (default 8 hours).
+
+`Admin:PasswordHash` takes precedence over the legacy `Admin:Password` setting. The setup script preserves unrelated local configuration. Keep local settings out of source control. Password changes affect new logins; already issued tokens remain valid until expiry.
+
+Run the isolated authentication checks with `dotnet run --project tools/AdminAuthChecks`. These use a temporary in-memory database and do not touch store data or configured integrations.
+
+Current management areas include orders, customers, payments, batches, content and formulation. Product creation/editing and coupon management are not implemented yet.

@@ -15,6 +15,7 @@ namespace Nuraherbex.Api.Controllers;
 
 [ApiController]
 [Route("api/admin")]
+[Authorize(Roles = "admin")]
 public class AdminController(
     NuraDbContext db,
     OrderService orders,
@@ -36,18 +37,20 @@ public class AdminController(
 
     // ---- Auth ------------------------------------------------------------------------
 
-    [HttpPost("login"), EnableRateLimiting("admin-login")]
+    [HttpPost("login"), AllowAnonymous, EnableRateLimiting("admin-login")]
     public IActionResult Login(AdminLoginRequest req)
     {
         if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrEmpty(req.Password))
             return BadRequest(new AdminLoginResponse { Success = false, Message = "Email and password are required" });
 
         var o = admin.Value;
-        if (string.IsNullOrWhiteSpace(o.Email) || string.IsNullOrEmpty(o.Password))
+        if (string.IsNullOrWhiteSpace(o.Email) || (string.IsNullOrEmpty(o.PasswordHash) && string.IsNullOrEmpty(o.Password)))
             return StatusCode(503, new AdminLoginResponse { Success = false, Message = "Admin credentials are not configured on the server." });
 
         var emailOk = SafeEquals(req.Email.Trim().ToLowerInvariant(), o.Email.Trim().ToLowerInvariant());
-        var passOk = SafeEquals(req.Password, o.Password);
+        var passOk = !string.IsNullOrEmpty(o.PasswordHash)
+            ? AdminPassword.Verify(req.Password, o.PasswordHash)
+            : SafeEquals(req.Password, o.Password); // Compatibility for existing environment-based credentials.
         if (!(emailOk & passOk))
         {
             log.LogWarning("[Security] Failed admin login attempt for {Email}", req.Email);
