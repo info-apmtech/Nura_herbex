@@ -1,16 +1,13 @@
 <div class="sa-widget">
   @if (_isOpen)
   {
-    <section class="sa-panel" id="sa-panel" role="dialog" aria-modal="false" aria-labelledby="sa-title" @onkeydown="HandleKeyDown">
+    <section class="sa-panel" id="stamix-chat-panel" role="dialog" aria-modal="false" aria-labelledby="sa-title" @onkeydown="HandleKeyDown">
       <header class="sa-header">
-        <div class="sa-brand-mark" aria-hidden="true"><Icon Name="Sparkles" Size="18" /></div>
+        <div class="sa-brand-mark" aria-hidden="true"><Icon Name="Sparkles" Size="19" /></div>
         <div class="sa-heading">
           <h2 id="sa-title">Stamix Assistant</h2>
-          <span><i></i> Product guide</span>
+          <span>Product guide <i aria-hidden="true"></i> Orders &amp; support</span>
         </div>
-        <button type="button" class="sa-close" aria-label="Close Stamix Assistant" @onclick="() => _isOpen = false">
-          <Icon Name="X" Size="18" />
-        </button>
       </header>
 
       <div class="sa-conversation" aria-live="polite" aria-relevant="additions">
@@ -33,11 +30,14 @@
 
         @if (!_hasAsked)
         {
-          <div class="sa-prompts" aria-label="Suggested questions">
-            <button type="button" @onclick='() => Ask("How should I use Stamix?")'>How to use</button>
-            <button type="button" @onclick='() => Ask("What are the ingredients?")'>Ingredients</button>
-            <button type="button" @onclick='() => Ask("Where can I see batch reports?")'>Batch reports</button>
-            <button type="button" @onclick='() => Ask("How can I track my order?")'>Track an order</button>
+          <div class="sa-prompts">
+            <span class="sa-prompts-label">SUGGESTED QUESTIONS</span>
+            <div class="sa-prompt-list" aria-label="Suggested questions">
+              <button type="button" @onclick='() => Ask("What are the ingredients?")'>Ingredients</button>
+              <button type="button" @onclick='() => Ask("How should I use Stamix?")'>Directions</button>
+              <button type="button" @onclick='() => Ask("Where can I see batch reports?")'>Batch reports</button>
+              <button type="button" @onclick='() => Ask("How can I track my order?")'>Track an order</button>
+            </div>
           </div>
         }
       </div>
@@ -49,29 +49,62 @@
             <Icon Name="Send" Size="16" />
           </button>
         </form>
-        <p class="sa-disclaimer">General product information only. Follow your pack label; consult a healthcare professional for personal advice.</p>
+        <p class="sa-disclaimer">General product information only. Follow your pack label and consult a healthcare professional for personal advice.</p>
       </div>
     </section>
   }
-  else
+  else if (_showWelcome)
   {
-    <button type="button" class="sa-launcher" aria-label="Open Stamix Assistant" aria-haspopup="dialog" aria-controls="sa-panel" aria-expanded="false" @onclick="() => _isOpen = true">
-      <span class="sa-launcher-icon"><Icon Name="MessageCircle" Size="21" /></span>
-      <span>Ask Stamix</span>
-      <span class="sa-launcher-sparkle" aria-hidden="true"><Icon Name="Sparkles" Size="14" /></span>
-    </button>
+    <aside class="sa-preview" aria-label="Stamix Assistant welcome">
+      <div class="sa-preview-heading">
+        <span class="sa-preview-mark" aria-hidden="true"><Icon Name="Sparkles" Size="16" /></span>
+        <span class="sa-preview-title">Stamix Assistant</span>
+        <button type="button" class="sa-preview-close" aria-label="Dismiss welcome message" @onclick="DismissWelcome">
+          <Icon Name="X" Size="15" />
+        </button>
+      </div>
+      <button type="button" class="sa-preview-body" @onclick="OpenAssistant">
+        <span class="sa-preview-greeting">Curious about Stamix?</span>
+        <span class="sa-preview-copy">Ask about ingredients, directions, or batch quality reports. I’m here to help.</span>
+        <span class="sa-preview-link">Ask a question <span aria-hidden="true">→</span></span>
+      </button>
+    </aside>
   }
+
+  <button type="button" class="sa-launcher" aria-label="@(_isOpen ? "Close Stamix Assistant" : "Open Stamix Assistant")" aria-haspopup="dialog" aria-controls="stamix-chat-panel" aria-expanded="@_isOpen" @onclick="ToggleAssistant">
+    <Icon Name="@(_isOpen ? "X" : "MessageCircle")" Size="@(_isOpen ? 23 : 25)" />
+    @if (!_isOpen)
+    {
+      <span class="sa-launcher-status" aria-hidden="true"></span>
+    }
+  </button>
 </div>
 
 @code {
     private bool _isOpen;
+    private bool _showWelcome = true;
     private bool _hasAsked;
     private string _draft = string.Empty;
 
     private readonly List<AssistantMessage> _messages =
     [
-        new(false, "Hi, I’m the Stamix product guide. Ask me about the formula, suggested use, batch reports, or your order.")
+        new(false, "Welcome to Stamix support. Ask about product details, suggested use, ingredients, batch reports, or an order.")
     ];
+
+    private void ToggleAssistant()
+    {
+        if (!_isOpen)
+            _showWelcome = false;
+        _isOpen = !_isOpen;
+    }
+
+    private void OpenAssistant()
+    {
+        _showWelcome = false;
+        _isOpen = true;
+    }
+
+    private void DismissWelcome() => _showWelcome = false;
 
     private void Ask(string question)
     {
@@ -100,7 +133,7 @@
     {
         var text = question.ToLowerInvariant();
 
-        if (ContainsAny(text, "pregnan", "medication", "medicine", "drug", "condition", "diabetes", "blood pressure", "allerg", "side effect", "diagnos", "treat", "cure", "safe for me", "doctor"))
+        if (ContainsAny(text, "pregnan", "medication", "medicine", "drug", "condition", "diabetes", "blood pressure", "allerg", "side effect", "diagnos", "treat", "cure", "safe for me", "is it safe", "safe to use", "doctor"))
         {
             return new(false,
                 "I can share general product information, but I can’t assess personal health risks or advise on treatment. Please check the full ingredient list with a qualified healthcare professional before using a supplement, especially if you have a health condition, take medication, or have an allergy.",
@@ -180,5 +213,7 @@
 
     private sealed record AssistantMessage(bool FromUser, string Text, string? ActionLabel = null, string? ActionUrl = null);
 }
+
+
 
 
