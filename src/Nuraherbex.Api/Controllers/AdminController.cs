@@ -102,12 +102,13 @@ public class AdminController(
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
+    [HttpPost("orders/{id}/retry-shipment"), Authorize(Roles = "admin")]
     [HttpPost("orders/{id}/retry-shiprocket"), Authorize(Roles = "admin")]
-    public async Task<IActionResult> RetryShiprocket(string id)
+    public async Task<IActionResult> RetryShipment(string id)
     {
         try
         {
-            var res = await orders.RetryShiprocketAsync(id);
+            var res = await orders.RetryShipmentAsync(id);
             return Ok(new ShipmentResponse
             {
                 Success = true,

@@ -278,7 +278,7 @@
                 <div class="flex flex-wrap gap-2">
                     @if (string.IsNullOrEmpty(o.ShiprocketAwb) || o.FulfillmentStatus == "CANCELLED")
                     {
-                        <button type="button" disabled="@_busy" @onclick="RetryShiprocketAsync"
+                        <button type="button" disabled="@_busy" @onclick="RetryShipmentAsync"
                                 class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
                             <Icon Name="Truck" Size="12" />
                             <span>Retry Shipment</span>
@@ -520,15 +520,16 @@
         if (updated is not null) _selected = updated;
     }
 
-    private async Task RetryShiprocketAsync()
+    private async Task RetryShipmentAsync()
     {
         if (_selected is null) return;
         _busy = true; _actionMessage = null;
-        var res = await Api.AdminRetryShiprocketAsync(_selected.Id);
+        var res = await Api.AdminRetryShipmentAsync(_selected.Id);
         _actionOk = res.Success;
+        var courier = string.IsNullOrWhiteSpace(res.Result?.Courier) ? "Courier" : res.Result.Courier;
         _actionMessage = res.Success
-            ? (res.Result?.ShiprocketAwb is { Length: > 0 } awb ? $"Shiprocket shipment created. AWB: {awb}" : "Shiprocket shipment created.")
-            : (res.Message ?? "Shiprocket retry failed.");
+            ? (res.Result?.ShiprocketAwb is { Length: > 0 } awb ? $"{courier} shipment created. AWB: {awb}" : $"{courier} shipment created.")
+            : (res.Message ?? "Shipment retry failed.");
         _busy = false;
         await ReloadSelectedAsync();
     }

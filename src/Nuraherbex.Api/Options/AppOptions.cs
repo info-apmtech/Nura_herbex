@@ -58,8 +58,8 @@ public class ShiprocketOptions
 public class ShippingOptions
 {
     public const string Section = "Shipping";
-    /// <summary>Courier platform used for NEW orders: Shiprocket | Shadowfax. Existing orders keep the courier they were booked with.</summary>
-    public string Provider { get; set; } = "Shiprocket";
+    /// <summary>Courier platform used for NEW orders: Shadowfax | Shiprocket. Existing orders keep the courier they were booked with.</summary>
+    public string Provider { get; set; } = "Shadowfax";
 }
 
 public class ShadowfaxAddress
@@ -74,8 +74,9 @@ public class ShadowfaxAddress
     public string Email { get; set; } = "";
     /// <summary>Warehouse code registered with Shadowfax (optional).</summary>
     public string UniqueCode { get; set; } = "";
-    public bool IsComplete => !string.IsNullOrWhiteSpace(Contact) && !string.IsNullOrWhiteSpace(AddressLine1)
-        && !string.IsNullOrWhiteSpace(City) && !string.IsNullOrWhiteSpace(State) && !string.IsNullOrWhiteSpace(Pincode);
+    public bool IsComplete => !string.IsNullOrWhiteSpace(AddressLine1)
+        && !string.IsNullOrWhiteSpace(City) && !string.IsNullOrWhiteSpace(Pincode)
+        && Pincode.Length == 6 && Pincode.All(char.IsDigit);
 }
 
 public class ShadowfaxOptions
@@ -87,6 +88,8 @@ public class ShadowfaxOptions
     public string StagingToken { get; set; } = "";
     /// <summary>marketplace (Shadowfax picks up from the seller) | warehouse (you hand over at a Shadowfax facility).</summary>
     public string OrderType { get; set; } = "marketplace";
+    /// <summary>Regular or Surface, as provisioned for this Shadowfax account.</summary>
+    public string ServiceTier { get; set; } = "Regular";
     /// <summary>Value Shadowfax sends in the callback Authorization header (set in the Shadowfax client portal, Webhook tab).</summary>
     public string WebhookToken { get; set; } = "";
     public ShadowfaxAddress Pickup { get; set; } = new();

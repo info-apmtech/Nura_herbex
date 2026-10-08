@@ -182,7 +182,7 @@ public partial class OrderService(
     }
 
     /// <summary>Manual / retry push to the active courier platform (admin).</summary>
-    public async Task<ShiprocketResult> RetryShiprocketAsync(string orderId)
+    public async Task<ShiprocketResult> RetryShipmentAsync(string orderId)
     {
         var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
         if (order.PaymentStatus != "PAID" && order.PaymentMethod != "COD")
@@ -190,7 +190,8 @@ public partial class OrderService(
         if (!string.IsNullOrWhiteSpace(order.ShiprocketAwb) && !order.ShiprocketAwb.StartsWith("SR-PENDING-") && order.FulfillmentStatus != "CANCELLED")
             throw new InvalidOperationException("This order already has a shipment. Cancel it first to re-book.");
 
-        var (res, courier) = await shipping.CreateOrderAsync(order, new ParcelSpecs());
+        var parcel = new ParcelSpecs { WeightKg = order.Items.Sum(i => (i.WeightKg > 0 ? i.WeightKg : 0.38m) * i.Quantity) };
+        var (res, courier) = await shipping.CreateOrderAsync(order, parcel);
         Apply(order, res, courier);
         await db.SaveChangesAsync();
         return res;

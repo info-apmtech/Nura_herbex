@@ -7,7 +7,7 @@ using Nuraherbex.Api.Options;
 namespace Nuraherbex.Api.Services;
 
 /// <summary>
-/// Routes shipping work to the right courier platform. New orders go to <c>Shipping:Provider</c>;
+/// Routes shipping work to the right courier platform. New orders default to Shadowfax and can be set with <c>Shipping:Provider</c>;
 /// tracking and cancellation follow the courier recorded on the order (null = Shiprocket, for orders booked before multi-courier).
 /// </summary>
 public class ShippingGateway(ShiprocketService shiprocket, ShadowfaxService shadowfax, IOptions<ShippingOptions> options)
@@ -15,7 +15,7 @@ public class ShippingGateway(ShiprocketService shiprocket, ShadowfaxService shad
     public const string Shiprocket = "Shiprocket";
     public const string Shadowfax = "Shadowfax";
 
-    public string ActiveProvider => options.Value.Provider.Equals(Shadowfax, StringComparison.OrdinalIgnoreCase) ? Shadowfax : Shiprocket;
+    public string ActiveProvider => string.Equals(options.Value.Provider, Shiprocket, StringComparison.OrdinalIgnoreCase) ? Shiprocket : Shadowfax;
 
     public static bool IsShadowfax(string? courier) => Shadowfax.Equals(courier, StringComparison.OrdinalIgnoreCase);
 

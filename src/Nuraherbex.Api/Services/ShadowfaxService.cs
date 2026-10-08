@@ -10,7 +10,7 @@ using Nuraherbex.Shared.Models;
 namespace Nuraherbex.Api.Services;
 
 /// <summary>
-/// Shadowfax Unified Forward API (https://sfxunifiedapi.docs.apiary.io): order creation, tracking, cancellation, pincode serviceability.
+/// Shadowfax Forward Logistics API: order creation, tracking, cancellation, and pincode serviceability.
 /// Results reuse <see cref="ShiprocketResult"/> so the order pipeline treats every courier the same way.
 /// </summary>
 public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> options, ILogger<ShadowfaxService> log)
@@ -28,9 +28,18 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
         var isCod = order.PaymentMethod == "COD";
         var ship = order.ShippingAddress;
         var ret = _o.Return.IsComplete ? _o.Return : _o.Pickup;
+        ValidateAddress(_o.Pickup, "pickup", requireContact: !warehouse);
+        ValidateAddress(ret, "return", requireContact: !warehouse);
+        if (string.IsNullOrWhiteSpace(order.CustomerName) || Phone10(order.CustomerPhone).Length != 10
+            || string.IsNullOrWhiteSpace(ship.AddressLine1) || string.IsNullOrWhiteSpace(ship.City) || string.IsNullOrWhiteSpace(ship.State))
+            throw new InvalidOperationException("Shadowfax: customer name, 10-digit phone, address, city, and state are required.");
+        if (order.Items.Count == 0)
+            throw new InvalidOperationException("Shadowfax requires at least one order item.");
 
-        var volumetricGrams = parcel.LengthCm * parcel.BreadthCm * parcel.HeightCm / 5000m * 1000m;
+        var volumetricWeightKg = parcel.LengthCm * parcel.BreadthCm * parcel.HeightCm / 5000m;
         var productValue = Math.Max(order.Subtotal - order.DiscountAmount, 0);
+        if (!int.TryParse(ship.Pincode, out var deliveryPincode) || deliveryPincode is < 100000 or > 999999)
+            throw new InvalidOperationException("Shadowfax: customer delivery pincode must be a valid 6-digit Indian pincode.");
 
         var body = new Dictionary<string, object?>
         {
@@ -38,26 +47,26 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
             ["order_details"] = new
             {
                 client_order_id = order.Id,
-                actual_weight = (int)Math.Round(parcel.WeightKg * 1000m),
-                volumetric_weight = (int)Math.Round(volumetricGrams),
+                actual_weight = parcel.WeightKg,
+                volumetric_weight = volumetricWeightKg,
                 product_value = productValue,
-                payment_mode = isCod ? "COD" : "Prepaid",
+                payment_mode = isCod ? "cod" : "prepaid",
                 cod_amount = isCod ? order.TotalAmount : 0m,
                 total_amount = order.TotalAmount,
-                order_service = "regular",
+                order_service = "Regular",
             },
             ["customer_details"] = new
             {
                 name = order.CustomerName,
                 contact = Phone10(order.CustomerPhone),
                 address_line_1 = ship.AddressLine1,
-                address_line_2 = ship.AddressLine2 ?? "",
+                address2 = ship.AddressLine2 ?? "",
                 city = ship.City,
                 state = ship.State,
-                pincode = int.TryParse(ship.Pincode, out var pin) ? pin : 0,
+                pincode = deliveryPincode,
             },
-            ["pickup_details"] = Address(_o.Pickup, withEmail: false),
-            [warehouse ? "rto_details" : "rts_details"] = Address(ret, withEmail: !warehouse),
+            ["pickup_details"] = PickupAddress(_o.Pickup, warehouse ? "warehouse" : "seller"),
+            ["return_details"] = ReturnAddress(ret, warehouse ? "origin" : "seller"),
             ["product_details"] = order.Items.Select(i => new
             {
                 sku_name = i.Name,
@@ -70,7 +79,9 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
         };
 
         var res = await SendAsync(HttpMethod.Post, "/v3/clients/orders/", body);
-        // Shadowfax reports validation failures as HTTP 200 with { message: "Failure", errors: "..." }.
+        // Forward order validation failures can be HTTP 200 with { message: "Failure" }.
+        if (!string.Equals(res?["message"]?.ToString(), "Success", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Shadowfax: {res?["errors"]?.ToString() ?? res?["message"]?.ToString() ?? "order creation was rejected"}");
         var data = res?["data"];
         var awb = data?["awb_number"]?.ToString();
         if (string.IsNullOrWhiteSpace(awb))
@@ -140,7 +151,7 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
         try
         {
             var res = await SendAsync(HttpMethod.Get, $"/v1/clients/serviceability/?service=customer_delivery&page=1&count=10&pincodes={pincode}", null);
-            return FindPincode(res, pincode);
+            return HasServiceForPincode(res, pincode, _o.ServiceTier);
         }
         catch (Exception ex)
         {
@@ -149,25 +160,56 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
         }
     }
 
-    private static bool FindPincode(JsonNode? node, string pincode) => node switch
-    {
-        JsonArray a => a.Any(n => FindPincode(n, pincode)),
-        JsonObject o => o.Any(kv => FindPincode(kv.Value, pincode)),
-        JsonValue v => v.ToString() == pincode,
-        _ => false,
-    };
+    private static bool HasServiceForPincode(JsonNode? node, string pincode, string tier) => node is JsonArray rows
+        && rows.OfType<JsonObject>().Any(row =>
+            row["code"]?.ToString() == pincode
+            && row["services"] is JsonArray services
+            && services.Any(service => string.Equals(service?.ToString(), tier, StringComparison.OrdinalIgnoreCase)));
 
-    private static object Address(ShadowfaxAddress a, bool withEmail) => withEmail
-        ? new
+    private static void ValidateAddress(ShadowfaxAddress address, string label, bool requireContact)
+    {
+        if (!address.IsComplete)
+            throw new InvalidOperationException($"Shadowfax:{label} address needs a street address, city, and valid 6-digit pincode.");
+        if (requireContact && (string.IsNullOrWhiteSpace(address.Name) || Phone10(address.Contact).Length != 10))
+            throw new InvalidOperationException($"Shadowfax:{label} address needs a contact name and valid 10-digit phone.");
+        if (!int.TryParse(address.Pincode, out var pincode) || pincode is < 100000 or > 999999)
+            throw new InvalidOperationException($"Shadowfax:{label} address must use a valid 6-digit Indian pincode.");
+    }
+
+    private static object PickupAddress(ShadowfaxAddress a, string type)
+    {
+        var address = new Dictionary<string, object?>
         {
-            name = a.Name, contact = Phone10(a.Contact), address_line_1 = a.AddressLine1, address_line_2 = a.AddressLine2,
-            city = a.City, state = a.State, pincode = int.Parse(a.Pincode), email = a.Email, unique_code = a.UniqueCode,
-        }
-        : new
-        {
-            name = a.Name, contact = Phone10(a.Contact), address_line_1 = a.AddressLine1, address_line_2 = a.AddressLine2,
-            city = a.City, state = a.State, pincode = int.Parse(a.Pincode), unique_code = a.UniqueCode,
+            ["pickup_type"] = type,
+            ["address_line_1"] = a.AddressLine1,
+            ["city"] = a.City,
+            ["pincode"] = int.Parse(a.Pincode),
         };
+        if (type == "seller" || !string.IsNullOrWhiteSpace(a.Name)) address["name"] = a.Name;
+        if (type == "seller" || Phone10(a.Contact).Length > 0) address["contact"] = Phone10(a.Contact);
+        if (!string.IsNullOrWhiteSpace(a.AddressLine2)) address["address_line_2"] = a.AddressLine2;
+        if (!string.IsNullOrWhiteSpace(a.State)) address["state"] = a.State;
+        if (!string.IsNullOrWhiteSpace(a.UniqueCode)) address["unique_code"] = a.UniqueCode;
+        return address;
+    }
+
+    private static object ReturnAddress(ShadowfaxAddress a, string type)
+    {
+        var address = new Dictionary<string, object?>
+        {
+            ["return_type"] = type,
+            ["address_line_1"] = a.AddressLine1,
+            ["pincode"] = int.Parse(a.Pincode),
+        };
+        if (type == "seller" || !string.IsNullOrWhiteSpace(a.Name)) address["name"] = a.Name;
+        if (type == "seller" || Phone10(a.Contact).Length > 0) address["contact"] = Phone10(a.Contact);
+        if (!string.IsNullOrWhiteSpace(a.AddressLine2)) address["address_line_2"] = a.AddressLine2;
+        if (!string.IsNullOrWhiteSpace(a.City)) address["city"] = a.City;
+        if (!string.IsNullOrWhiteSpace(a.State)) address["state"] = a.State;
+        if (!string.IsNullOrWhiteSpace(a.UniqueCode)) address["unique_code"] = a.UniqueCode;
+        if (!string.IsNullOrWhiteSpace(a.Email)) address["email"] = a.Email;
+        return address;
+    }
 
     private static string Phone10(string? phone)
     {

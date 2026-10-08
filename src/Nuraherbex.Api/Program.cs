@@ -102,7 +102,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(o =>
 {
-    o.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo { Title = "Nura Herbex API", Version = "v1", Description = "Store, orders, PayU payments, admin, Shiprocket and WhatsApp webhooks." });
+    o.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo { Title = "Nura Herbex API", Version = "v1", Description = "Store, orders, PayU payments, admin, Shadowfax shipping, legacy Shiprocket tracking, and WhatsApp webhooks." });
     o.CustomSchemaIds(t => t.FullName?.Replace('+', '.'));
     o.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.OpenApiSecurityScheme
     {
