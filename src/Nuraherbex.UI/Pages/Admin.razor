@@ -1,4 +1,5 @@
 @page "/admin"
+@page "/admin/{Section}"
 @layout AdminLayout
 @implements IDisposable
 @inject AdminSession AdminAuth
@@ -8,7 +9,7 @@
 
 @if (!_initDone)
 {
-    <div class="min-h-screen bg-[#09090b]"></div>
+    <div class="admin-loading" role="status"><span class="admin-brand-symbol">N</span><p>Opening your workspace…</p></div>
 }
 else if (!AdminAuth.IsAuthenticated)
 {
@@ -16,145 +17,50 @@ else if (!AdminAuth.IsAuthenticated)
 }
 else
 {
-    @* =================================================================== *@
-    @* AUTHENTICATED ADMIN DASHBOARD - Linear / Vercel Enterprise Utility   *@
-    @* =================================================================== *@
-    <div class="min-h-screen bg-[#09090b] text-zinc-100 pt-4 sm:pt-8 pb-20 px-4 sm:px-6 lg:px-8 text-left font-sans selection:bg-zinc-800 selection:text-white">
-        <div class="max-w-7xl mx-auto space-y-6">
-
-            @* 1. Top Admin Header Bar *@
-            <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-5 border-b border-zinc-800">
-                <div class="space-y-1">
-                    <div class="flex items-center gap-2.5">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                        <h1 class="text-lg sm:text-xl font-semibold text-zinc-100 tracking-tight">
-                            Nura Herbex Admin
-                        </h1>
-                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
-                            v2.6 LIVE
-                        </span>
-                    </div>
-                    <p class="text-xs text-zinc-500">
-                        Orders Database · Shiprocket Logistics · Trust Passport Batches · Content CMS
-                    </p>
-                </div>
-
-                @* User Controls & Store Navigation *@
-                <div class="flex items-center gap-2">
-                    <button @onclick="@(() => Nav.NavigateTo("/shop"))"
-                            class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-zinc-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer">
-                        <Icon Name="ExternalLink" Size="13" />
-                        <span>Live Store</span>
-                    </button>
-
-                    <button @onclick="@(() => Nav.NavigateTo("/trust-passport"))"
-                            class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-zinc-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer">
-                        <Icon Name="ShieldCheck" Size="13" />
-                        <span>Trust Passport</span>
-                    </button>
-
-                    <button @onclick="LogoutAsync"
-                            class="px-3 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-xs font-medium text-red-400 hover:text-red-300 transition-colors flex items-center gap-1.5 cursor-pointer"
-                            title="Logout session">
-                        <Icon Name="LogOut" Size="13" />
-                        <span>Sign Out</span>
-                    </button>
-                </div>
+    <div class="admin-shell">
+        <aside class="admin-sidebar @(_mobileMenu ? "is-open" : "")" aria-label="Admin navigation">
+            <a class="admin-brand" href="/admin"><span class="admin-brand-symbol">N</span><span>Nura Herbex<small>STORE ADMINISTRATION</small></span></a>
+            <div class="admin-store-label"><span class="admin-store-dot"></span> Your store workspace</div>
+            <nav>@foreach (var item in Navigation) { @if (item.Id == "overview") { <span class="admin-nav-label">MANAGE</span> } @if (item.Id == "batches") { <span class="admin-nav-label">STOREFRONT &amp; SUPPORT</span> }<button class="admin-nav-item @(_activeTab == item.Id ? "is-active" : "")" aria-current="@(_activeTab == item.Id ? "page" : null)" @onclick="() => Navigate(item.Id)"><Icon Name="@item.Icon" Size="19" /><span>@item.Label</span>@if (item.Id == "orders" && _orders.Any(o => o.FulfillmentStatus == "PENDING")) { <small>@_orders.Count(o => o.FulfillmentStatus == "PENDING")</small> }</button> }</nav>
+            <div class="admin-sidebar-bottom"><a class="admin-nav-item" href="/shop"><Icon Name="ExternalLink" Size="18" /> View storefront</a><div class="admin-user"><span class="admin-avatar">A</span><span><strong>Administrator</strong><small>@AdminAuth.Email</small></span><button class="admin-icon-btn" title="Sign out" aria-label="Sign out" @onclick="LogoutAsync"><Icon Name="LogOut" Size="18" /></button></div></div>
+        </aside>
+        @if (_mobileMenu) { <button class="admin-mobile-backdrop" aria-label="Close navigation" @onclick="() => _mobileMenu = false"></button> }
+        <div class="admin-main"><header class="admin-topbar"><div class="admin-actions"><button class="admin-icon-btn admin-menu-toggle" aria-label="Toggle navigation" aria-expanded="@_mobileMenu" @onclick="() => _mobileMenu = !_mobileMenu"><Icon Name="Menu" Size="22" /></button><span class="admin-breadcrumb">Workspace <span>/</span> <strong>@PageName</strong></span></div><div class="admin-actions"><span class="admin-today">@DateTime.Now.ToString("ddd, dd MMM yyyy")</span><a class="admin-btn admin-btn-small" href="/shop"><Icon Name="ExternalLink" Size="15" /> Open store</a></div></header>
+        <main class="admin-content">
+        @if (_loadErrors.Count > 0) { <div role="alert" class="admin-error">@string.Join(" · ", _loadErrors.Select(e => e.Key + ": " + e.Value)) <button class="admin-btn admin-btn-small" @onclick="RefreshAsync">Retry</button></div> }
+        @if (_activeTab == "products") { <AdminProductsTab /> }
+        else if (_activeTab == "coupons") { <AdminCouponsTab /> }
+        else if (_activeTab == "overview") { <AdminDashboard Orders="_orders" Customers="_customers" Loading="@(_ordersLoading || _customersLoading)" OnNavigate="Navigate" /> }
+        else
+        {
+            <div class="admin-section-heading"><div><span class="admin-eyebrow">STORE OPERATIONS</span><h2>@PageName</h2><p>Manage your @PageName.ToLowerInvariant() in one place.</p></div></div>
+            <div class="admin-legacy">
+            @if (_activeTab == "orders") { <AdminOrdersTab Orders="_orders" Loading="_ordersLoading" OnReload="LoadOrdersAsync" /> }
+            else if (_activeTab == "payments") { <AdminPaymentsTab Attempts="_payments" Loading="_paymentsLoading" OnReload="LoadPaymentsAsync" /> }
+            else if (_activeTab == "customers") { <AdminCustomersTab Customers="_customers" Loading="_customersLoading" OnReload="LoadCustomersAsync" /> }
+            else if (_activeTab == "batches") { <AdminBatchesTab Batches="_batches" Loading="_batchesLoading" OnReload="LoadBatchesAsync" /> }
+            else if (_activeTab == "formulation") { <AdminFormulationTab Ingredients="_ingredients" Metrics="_metrics" IngredientsChanged="OnIngredientsChanged" MetricsChanged="OnMetricsChanged" /> }
+            else if (_activeTab == "content") { <AdminContentTab /> }
+            else if (_activeTab == "whatsapp") { <AdminWhatsAppTab /> }
             </div>
-
-            @* 2. Admin Navigation Tabs (Linear-style Segmented Control) *@
-            <div class="flex items-center gap-1 p-1 bg-zinc-900/70 border border-zinc-800 rounded-lg overflow-x-auto no-scrollbar">
-                <button @onclick="@(() => _activeTab = "orders")"
-                        class="@TabClass("orders")">
-                    <Icon Name="Package" Size="14" />
-                    <span>Orders &amp; Shiprocket (@_orders.Count)</span>
-                </button>
-
-                <button @onclick="@(() => _activeTab = "payments")"
-                        class="@TabClass("payments")">
-                    <Icon Name="CreditCard" Size="14" />
-                    <span>Payments (@_payments.Count(p => p.Status == "FAILED" || p.Status == "CANCELLED") failed)</span>
-                </button>
-
-                <button @onclick="@(() => _activeTab = "customers")"
-                        class="@TabClass("customers")">
-                    <Icon Name="Users" Size="14" />
-                    <span>Registered Customers (@_customers.Count)</span>
-                </button>
-
-                <button @onclick="@(() => _activeTab = "batches")"
-                        class="@TabClass("batches")">
-                    <Icon Name="ShieldCheck" Size="14" />
-                    <span>Trust Passport Manager (@_batches.Count)</span>
-                </button>
-
-                <button @onclick="@(() => _activeTab = "formulation")"
-                        class="@TabClass("formulation")">
-                    <Icon Name="FlaskConical" Size="14" />
-                    <span>Formulation (@_ingredients.Count)</span>
-                </button>
-
-                <button @onclick="@(() => _activeTab = "content")"
-                        class="@TabClass("content")">
-                    <Icon Name="FileText" Size="14" />
-                    <span>Site Content CMS</span>
-                </button>
-
-                <button @onclick="@(() => _activeTab = "whatsapp")"
-                        class="@TabClass("whatsapp")">
-                    <Icon Name="MessageCircle" Size="14" />
-                    <span>WhatsApp</span>
-                </button>
-
-                <button @onclick="@(() => _activeTab = "overview")"
-                        class="@TabClass("overview")">
-                    <Icon Name="TrendingUp" Size="14" />
-                    <span>Overview &amp; Metrics</span>
-                </button>
-            </div>
-
-            @if (_activeTab == "orders")
-            {
-                <AdminOrdersTab Orders="_orders" Loading="_ordersLoading" OnReload="LoadOrdersAsync" />
-            }
-            else if (_activeTab == "payments")
-            {
-                <AdminPaymentsTab Attempts="_payments" Loading="_paymentsLoading" OnReload="LoadPaymentsAsync" />
-            }
-            else if (_activeTab == "customers")
-            {
-                <AdminCustomersTab Customers="_customers" Loading="_customersLoading" OnReload="LoadCustomersAsync" />
-            }
-            else if (_activeTab == "batches")
-            {
-                <AdminBatchesTab Batches="_batches" Loading="_batchesLoading" OnReload="LoadBatchesAsync" />
-            }
-            else if (_activeTab == "formulation")
-            {
-                <AdminFormulationTab Ingredients="_ingredients" Metrics="_metrics"
-                                     IngredientsChanged="OnIngredientsChanged" MetricsChanged="OnMetricsChanged" />
-            }
-            else if (_activeTab == "content")
-            {
-                <AdminContentTab />
-            }
-            else if (_activeTab == "whatsapp")
-            {
-                <AdminWhatsAppTab />
-            }
-            else if (_activeTab == "overview")
-            {
-                <AdminOverviewTab Orders="_orders" />
-            }
-
-        </div>
+        }
+        <footer class="admin-footer"><span>Nura Herbex · Store administration</span><span>Made for your everyday operations</span></footer>
+        </main></div>
     </div>
 }
-
 @code {
+    [Parameter] public string? Section { get; set; }
+    private readonly Dictionary<string, string> _loadErrors = new();
+    private bool _mobileMenu;
+    private static readonly (string Id, string Label, string Icon)[] Navigation = { ("overview", "Overview", "TrendingUp"), ("products", "Products", "Package"), ("orders", "Orders", "ShoppingBag"), ("coupons", "Coupons", "Tag"), ("customers", "Customers", "Users"), ("payments", "Payments", "CreditCard"), ("batches", "Product batches", "ShieldCheck"), ("formulation", "Formulation", "FlaskConical"), ("content", "Store content", "FileText"), ("whatsapp", "WhatsApp", "MessageCircle") };
+    private string PageName => Navigation.FirstOrDefault(n => n.Id == _activeTab).Label ?? "Overview";
+    protected override void OnParametersSet() => _activeTab = Navigation.Any(n => n.Id == Section) ? Section! : "overview";
+    private void Navigate(string id) { _mobileMenu = false; Nav.NavigateTo("/admin/" + id); }
+    private void RecordError(string key, ApiResult result) { if (result.Success) _loadErrors.Remove(key); else _loadErrors[key] = result.Message ?? "Could not load data."; }
+    private async Task RefreshAsync() { _dataLoaded = false; await LoadAllAsync(); }
     private bool _initDone;
     private bool _dataLoaded;
-    private string _activeTab = "orders"; // orders | customers | batches | formulation | content | whatsapp | overview
+    private string _activeTab = "overview"; // orders | customers | batches | formulation | content | whatsapp | overview
 
     private List<OrderDto> _orders = new();
     private bool _ordersLoading = true;
@@ -209,7 +115,7 @@ else
     private async Task LoadOrdersAsync()
     {
         _ordersLoading = true; StateHasChanged();
-        var res = await Api.AdminOrdersAsync();
+        var res = await Api.AdminOrdersAsync(); RecordError("Orders", res);
         _orders = res.Success ? res.Orders : new();
         _ordersLoading = false; StateHasChanged();
     }
@@ -217,7 +123,7 @@ else
     private async Task LoadPaymentsAsync()
     {
         _paymentsLoading = true; StateHasChanged();
-        var res = await Api.AdminPaymentsAsync();
+        var res = await Api.AdminPaymentsAsync(); RecordError("Payments", res);
         _payments = res.Success ? res.Attempts : new();
         _paymentsLoading = false; StateHasChanged();
     }
@@ -225,7 +131,7 @@ else
     private async Task LoadCustomersAsync()
     {
         _customersLoading = true; StateHasChanged();
-        var res = await Api.AdminCustomersAsync();
+        var res = await Api.AdminCustomersAsync(); RecordError("Customers", res);
         if (res.Success) _customers = res.Customers;
         _customersLoading = false; StateHasChanged();
     }
@@ -233,7 +139,7 @@ else
     private async Task LoadBatchesAsync()
     {
         _batchesLoading = true; StateHasChanged();
-        var res = await Api.AdminBatchesAsync();
+        var res = await Api.AdminBatchesAsync(); RecordError("Batches", res);
         _batches = res.Success ? res.Batches : new();
         _batchesLoading = false; StateHasChanged();
     }

@@ -36,7 +36,7 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
             using var req = new HttpRequestMessage(method, path);
             var token = who == Who.Admin ? tokens.AdminToken : who == Who.Customer ? tokens.CustomerToken : null;
             if (!string.IsNullOrEmpty(token)) req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            if (body is not null) req.Content = JsonContent.Create(body, options: J);
+            if (body is not null) req.Content = new StringContent(JsonSerializer.Serialize(body, body.GetType(), J), System.Text.Encoding.UTF8, "application/json");
 
             using var res = await http.SendAsync(req);
             var text = await res.Content.ReadAsStringAsync();
@@ -87,6 +87,7 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     }
 
     // ------------------------------------------------------------------ catalog / cart / orders
+    public Task<ProductListResponse> GetCatalogAsync() => Call<ProductListResponse>(HttpMethod.Get, "api/products");
     public async Task<List<ProductDto>> GetProductsAsync() => (await Call<ProductListResponse>(HttpMethod.Get, "api/products")).Products;
 
     public Task<OrderTotalsDto> ValidateCartAsync(ValidateCartRequest req) => Call<OrderTotalsDto>(HttpMethod.Post, "api/orders/validate", req);
@@ -152,4 +153,11 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<WhatsAppStatusDto> AdminWhatsAppStatusAsync() => Call<WhatsAppStatusDto>(HttpMethod.Get, "api/admin/whatsapp/status", null, Who.Admin);
     public Task<WhatsAppMessageListResponse> AdminWhatsAppMessagesAsync(int take = 100) => Call<WhatsAppMessageListResponse>(HttpMethod.Get, $"api/admin/whatsapp/messages?take={take}", null, Who.Admin);
     public Task<ApiResult> AdminWhatsAppSendAsync(WhatsAppSendRequest r) => Call<ApiResult>(HttpMethod.Post, "api/admin/whatsapp/send", r, Who.Admin);
+    public Task<AdminProductListResponse> AdminCatalogAsync() => Call<AdminProductListResponse>(HttpMethod.Get, "api/admin/catalog/products", null, Who.Admin);
+    public Task<AdminProductResponse> AdminSaveProductAsync(AdminProductDto p, bool create) => Call<AdminProductResponse>(create ? HttpMethod.Post : HttpMethod.Put, "api/admin/catalog/products" + (create ? "" : "/" + Uri.EscapeDataString(p.Id)), p, Who.Admin);
+    public Task<ApiResult> AdminArchiveProductAsync(string id) => Call<ApiResult>(HttpMethod.Delete, "api/admin/catalog/products/" + Uri.EscapeDataString(id), null, Who.Admin);
+    public Task<AdminCouponListResponse> AdminCouponsAsync() => Call<AdminCouponListResponse>(HttpMethod.Get, "api/admin/catalog/coupons", null, Who.Admin);
+    public Task<AdminCouponResponse> AdminSaveCouponAsync(CouponDto c, bool create) => Call<AdminCouponResponse>(create ? HttpMethod.Post : HttpMethod.Put, "api/admin/catalog/coupons" + (create ? "" : "/" + Uri.EscapeDataString(c.Code)), c, Who.Admin);
+    public Task<ApiResult> AdminDisableCouponAsync(string code) => Call<ApiResult>(HttpMethod.Delete, "api/admin/catalog/coupons/" + Uri.EscapeDataString(code), null, Who.Admin);
+    public Task<CustomerResponse> AdminUpdateCustomerAsync(string id, UpdateProfileRequest r) => Call<CustomerResponse>(HttpMethod.Put, "api/admin/customers/" + Uri.EscapeDataString(id), r, Who.Admin);
 }

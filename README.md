@@ -110,4 +110,15 @@ The server issues the `admin` JWT role after administrator login. The entire adm
 
 Run the isolated authentication checks with `dotnet run --project tools/AdminAuthChecks`. These use a temporary in-memory database and do not touch store data or configured integrations.
 
-Current management areas include orders, customers, payments, batches, content and formulation. Product creation/editing and coupon management are not implemented yet.
+The admin workspace includes products, coupons, orders, customers, payments, batches, content, formulation and WhatsApp. Open `/admin` for the dashboard, `/admin/products` for the catalog or `/admin/coupons` for offers.
+### Catalog and offers
+
+- Products: create drafts, edit names/descriptions/images, set prices and cost, update stock and parcel dimensions, publish, and archive. Archived products stay in admin history and cannot be bought. SKU values must be unique. The editor rejects saves made from a stale product version.
+- Coupons: create percentage or fixed discounts, set minimum order amounts, percentage caps, expiry dates (end of day UTC), enable/disable, and inspect order usage counts. Codes are normalized to uppercase and cannot be renamed. Checkout enforces these rules and limits discounts to the cart subtotal.
+- The live shop (`/shop`) and product pages (`/catalog/{id}`) use the API catalog. Pricing is recalculated by the server at checkout. Manual orders use the current catalog and support coupons; payment collection must be explicitly recorded.
+- Customers: edit contact name, phone, and default address from the customer detail view. Account email and past order details remain intact.
+- Catalog API: admin-only `GET/POST /api/admin/catalog/products`, `PUT/DELETE /api/admin/catalog/products/{id}`, `GET/POST /api/admin/catalog/coupons`, `PUT/DELETE /api/admin/catalog/coupons/{code}`. DELETE archives products or disables coupons. `PUT /api/admin/customers/{id}` updates contact details.
+- Admin styling is isolated in `src/Nuraherbex.UI/wwwroot/css/admin.css`. The responsive sidebar groups everyday operations and storefront tools. The overview uses real orders, customer counts, stock and offer data.
+- Verification: `dotnet run --project tools/AdminAuthChecks -c Release` exercises role restrictions, catalog publication, price and stock validation, coupon rules, customer updates and archival with an isolated in-memory database. Use `pwsh -File build-ui.ps1 -Project src/Nuraherbex.Web/Nuraherbex.Web.csproj -Configuration Release` when Visual Studio holds Debug assemblies open.
+
+No database migration is required for these management screens: they use the existing products, coupons, customers and orders tables. Product images are provided by URL; binary image uploading and payment refunds are not implemented by this change. Production payment/courier credentials and live transaction verification are separate deployment requirements.

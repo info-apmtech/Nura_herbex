@@ -1,0 +1,51 @@
+@inject ApiClient Api
+@inject BrowserInterop Browser
+
+<div class="admin-section-heading"><div><span class="admin-eyebrow">GROW YOUR STORE</span><h2>Coupons <span class="admin-count">@_coupons.Count</span></h2><p>Create offers your customers can use at checkout.</p></div>@if (_editor is null) { <button class="admin-btn admin-btn-primary" @onclick="New"><Icon Name="Plus" Size="17" /> Create coupon</button> }</div>
+@if (_message is not null) { <div role="status" class="admin-notice">@_message</div> }
+@if (_error is not null) { <div role="alert" class="admin-error">@_error</div> }
+@if (_editor is not null)
+{
+    <form @onsubmit="SaveAsync" @onsubmit:preventDefault class="admin-editor-grid">
+        <section class="admin-card"><h3>@(_creating ? "New coupon" : "Edit coupon")</h3><div class="admin-fields">
+            <label class="admin-span-2">Coupon code<input required minlength="3" maxlength="64" pattern="[A-Za-z0-9_-]+" disabled="@(!_creating)" @bind:event="oninput" @bind="_editor.Code" placeholder="e.g. WELCOME10" /><small>Customers enter this code at checkout. Codes cannot be renamed.</small></label>
+            <label>Discount type<select @bind="_editor.DiscountType"><option value="PERCENTAGE">Percentage (%)</option><option value="FIXED">Fixed amount (₹)</option></select></label>
+            <label>Discount value<input required type="number" min="0.01" max="@(_editor.DiscountType == "PERCENTAGE" ? 100 : 10000000)" step="0.01" @bind:event="oninput" @bind="_editor.DiscountValue" /></label>
+            <label>Minimum order (₹)<input required type="number" min="0" max="10000000" step="0.01" @bind:event="oninput" @bind="_editor.MinOrderAmount" /><small>0 means no minimum purchase.</small></label>
+            @if (_editor.DiscountType == "PERCENTAGE") { <label>Maximum discount (₹)<input required type="number" min="0" max="10000000" step="0.01" @bind:event="oninput" @bind="_editor.MaxDiscountCap" /><small>0 means no discount cap.</small></label> }
+            <label>Expiry date (UTC)<input type="date" @bind:event="oninput" @bind="_expiryDate" @bind:format="yyyy-MM-dd" /><small>Valid through the selected day, UTC. Leave empty for no expiry.</small></label>
+            <label>Status<select @bind="_editor.IsActive"><option value="True">Enabled</option><option value="False">Disabled</option></select></label>
+        </div><div class="admin-form-footer"><button type="button" class="admin-btn" disabled="@_saving" @onclick="CloseAsync">Cancel</button><button class="admin-btn admin-btn-primary" disabled="@_saving">@(_saving ? "Saving…" : "Save coupon")</button></div></section>
+        <aside class="admin-card admin-offer-preview"><span class="admin-eyebrow">OFFER PREVIEW</span><Icon Name="Tag" Size="40" /><h2>@(_editor.DiscountType == "PERCENTAGE" ? $"{_editor.DiscountValue:0.##}% off" : $"₹{_editor.DiscountValue:0.##} off")</h2><p>On orders of ₹@AdminFmt.Inr(_editor.MinOrderAmount) or more</p><strong class="admin-coupon-code">@(_editor.Code.Length > 0 ? _editor.Code.ToUpperInvariant() : "YOURCODE")</strong><p class="admin-help">Discounts never exceed the cart subtotal. Shipping is calculated separately.</p></aside>
+    </form>
+}
+else
+{
+    <section class="admin-card admin-table-card"><div class="admin-toolbar"><label class="admin-search"><Icon Name="Search" Size="18" /><input aria-label="Search coupons" placeholder="Search coupon codes…" @bind="_search" @bind:event="oninput" @bind:after="ResetPage" /></label><select aria-label="Filter coupon status" @bind="_status" @bind:after="ResetPage"><option value="all">All coupons</option><option value="active">Active</option><option value="expired">Expired</option><option value="disabled">Disabled</option></select><button class="admin-btn" @onclick="LoadAsync" disabled="@_loading"><Icon Name="RefreshCw" Size="16" /> Refresh</button></div>
+    <div class="admin-table-scroll"><table class="admin-table"><thead><tr><th>Code</th><th>Discount</th><th>Status</th><th>Minimum order</th><th>Expires (UTC)</th><th>Orders used</th><th>Actions</th></tr></thead><tbody>
+    @if (_loading) { <tr><td colspan="7" class="admin-empty">Loading coupons…</td></tr> }
+    else if (!Filtered.Any()) { <tr><td colspan="7" class="admin-empty"><Icon Name="Tag" Size="32" /><h3>No coupons found</h3><p>Create an offer or adjust your filters.</p></td></tr> }
+    else { @foreach (var c in Filtered.Skip((_page - 1) * 10).Take(10)) { <tr @key="c.Code"><td><strong class="admin-coupon-code">@c.Code</strong></td><td><strong>@(c.DiscountType == "PERCENTAGE" ? $"{c.DiscountValue:0.##}%" : $"₹{c.DiscountValue:0.##}")</strong>@if (c.DiscountType == "PERCENTAGE" && c.MaxDiscountCap > 0) { <small class="admin-cell-note">Up to ₹@AdminFmt.Inr(c.MaxDiscountCap)</small> }</td><td><span class="admin-badge @Status(c)">@Status(c)</span></td><td>₹@AdminFmt.Inr(c.MinOrderAmount)</td><td>@(c.ExpiresAt?.ToString("dd MMM yyyy") ?? "No expiry")</td><td>@c.OrdersUsed</td><td><div class="admin-actions"><button class="admin-btn admin-btn-small" @onclick="() => Edit(c)">Edit</button>@if (c.IsActive) { <button class="admin-link-danger" disabled="@_saving" @onclick="() => DisableAsync(c)">Disable</button> }</div></td></tr> } }
+    </tbody></table></div><div class="admin-pagination"><span>@Filtered.Count() coupons · Page @_page of @Pages</span><div class="admin-actions"><button class="admin-btn admin-btn-small" disabled="@(_page <= 1)" @onclick="() => _page--">Previous</button><button class="admin-btn admin-btn-small" disabled="@(_page >= Pages)" @onclick="() => _page++">Next</button></div></div></section>
+}
+@code {
+    private List<AdminCouponDto> _coupons = new();
+    private CouponDto? _editor;
+    private DateTime? _expiryDate;
+    private string _search = "", _status = "all";
+    private string? _error, _message;
+    private bool _creating, _saving, _loading;
+    private int _page = 1;
+    private static string Status(CouponDto c) => !c.IsActive ? "disabled" : c.ExpiresAt < DateTime.UtcNow ? "expired" : "active";
+    private IEnumerable<AdminCouponDto> Filtered => _coupons.Where(c => AdminFmt.Has(c.Code, _search) && (_status == "all" || Status(c) == _status));
+    private int Pages => Math.Max(1, (int)Math.Ceiling(Filtered.Count() / 10d));
+    private void ResetPage() => _page = 1;
+    protected override Task OnInitializedAsync() => LoadAsync();
+    private async Task LoadAsync() { _loading = true; _error = null; var r = await Api.AdminCouponsAsync(); if (r.Success) _coupons = r.Coupons; else _error = r.Message; _page = Math.Min(_page, Pages); _loading = false; }
+    private void New() { _creating = true; _error = null; _message = null; _expiryDate = null; _editor = new() { DiscountValue = 10, IsActive = true }; }
+    private void Edit(CouponDto c) { _creating = false; _error = null; _message = null; _editor = System.Text.Json.JsonSerializer.Deserialize<CouponDto>(System.Text.Json.JsonSerializer.Serialize(c)); _expiryDate = c.ExpiresAt?.Date; }
+    private async Task CloseAsync() { if (await Browser.ConfirmAsync("Discard changes and return to coupons?")) { _editor = null; _error = null; } }
+    private async Task SaveAsync() { if (_editor is null || _saving) return; _saving = true; _editor.Code = _editor.Code.Trim().ToUpperInvariant(); _editor.ExpiresAt = _expiryDate.HasValue ? DateTime.SpecifyKind(_expiryDate.Value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc) : null; var r = await Api.AdminSaveCouponAsync(_editor, _creating); _saving = false; if (!r.Success) { _error = r.Message; return; } _editor = null; _message = "Coupon saved successfully."; await LoadAsync(); await Browser.ScrollToTopAsync(); }
+    private async Task DisableAsync(CouponDto c) { if (!await Browser.ConfirmAsync($"Disable {c.Code}? Customers will no longer be able to apply it.")) return; _saving = true; var r = await Api.AdminDisableCouponAsync(c.Code); _saving = false; if (!r.Success) { _error = r.Message; return; } _message = r.Message; await LoadAsync(); await Browser.ScrollToTopAsync(); }
+}
+

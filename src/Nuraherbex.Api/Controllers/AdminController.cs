@@ -81,16 +81,17 @@ public class AdminController(
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(r.CustomerEmail) || !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(r.CustomerEmail)) return BadRequest(new ApiResult { Message = "A valid customer email is required." });
             var order = await orders.CreateAsync(new CreateOrderRequest
             {
                 Customer = new CheckoutCustomerDto
                 {
                     FullName = r.CustomerName, Phone = r.CustomerPhone,
-                    Email = string.IsNullOrWhiteSpace(r.CustomerEmail) ? $"{r.CustomerName.ToLowerInvariant().Replace(" ", "")}@gmail.com" : r.CustomerEmail,
+                    Email = r.CustomerEmail.Trim(),
                 },
                 Shipping = r.Address,
                 Items = [new CartLineDto { Id = r.ProductId, Quantity = Math.Max(1, r.Quantity) }],
-                PaymentMethod = r.PaymentMethod,
+                PaymentMethod = r.PaymentMethod, CouponCode = r.CouponCode,
             }, null);
 
             if (r.PaymentMethod != "COD" && r.MarkPaid)
@@ -248,6 +249,23 @@ public class AdminController(
         Products = (await db.Products.AsNoTracking().OrderBy(p => p.Price).ToListAsync()).Select(p => p.ToDto()).ToList(),
     };
 
+    [HttpPut("customers/{id}")]
+    public async Task<IActionResult> UpdateCustomer(string id, UpdateProfileRequest r)
+    {
+        if (string.IsNullOrWhiteSpace(r.FullName) || r.FullName.Trim().Length > 200)
+            return BadRequest(new ApiResult { Message = "Customer name is required (maximum 200 characters)." });
+        var phone = new string((r.Phone ?? "").Where(char.IsDigit).ToArray());
+        if (phone.Length is < 10 or > 15) return BadRequest(new ApiResult { Message = "Enter a phone number with 10–15 digits." });
+        var address = r.ShippingAddress;
+        if (address is null || string.IsNullOrWhiteSpace(address.AddressLine1) || address.AddressLine1.Length > 500 || string.IsNullOrWhiteSpace(address.City) || address.City.Length > 100 || string.IsNullOrWhiteSpace(address.State) || address.State.Length > 100 || !System.Text.RegularExpressions.Regex.IsMatch(address.Pincode ?? "", @"^[1-9][0-9]{5}$"))
+            return BadRequest(new ApiResult { Message = "Enter a complete address and a valid six-digit Indian pincode." });
+        var customer = await db.Customers.FindAsync(id);
+        if (customer is null) return NotFound(new ApiResult { Message = "Customer not found." });
+        if (await db.Customers.AnyAsync(c => c.Id != id && c.Phone == phone)) return Conflict(new ApiResult { Message = "This phone number is already used by another customer." });
+        customer.FullName = r.FullName.Trim(); customer.Phone = phone; customer.ShippingAddress = address; customer.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return Ok(new CustomerResponse { Success = true, Customer = customer.ToDto(), Message = "Customer profile updated. Existing order addresses are unchanged." });
+    }
     // ---- WhatsApp --------------------------------------------------------------------
 
     [HttpGet("whatsapp/status"), Authorize(Roles = "admin")]

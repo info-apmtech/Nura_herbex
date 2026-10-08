@@ -21,7 +21,7 @@
                     class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                     title="Reload customer registry from database">
                 <Icon Name="RefreshCw" Size="12" Class="@(Loading ? "animate-spin" : "")" />
-                <span>Sync DB</span>
+                <span>Refresh</span>
             </button>
         </div>
     </div>
@@ -36,7 +36,7 @@
             <div class="text-2xl font-semibold text-zinc-100 font-mono tracking-tight">
                 @Customers.Count
             </div>
-            <span class="text-[11px] text-zinc-500 font-normal">Active in DB</span>
+            <span class="text-[11px] text-zinc-500 font-normal">Registered accounts</span>
         </div>
 
         <div class="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-1 text-left">
@@ -309,6 +309,7 @@
                 </div>
             </div>
 
+            <AdminCustomerEditor Customer="sc" OnSaved="OnReload" />
             @* Order History *@
             <div class="space-y-2.5 pt-2">
                 <div class="flex items-center justify-between">
@@ -380,7 +381,7 @@
             <div class="flex gap-2.5 pt-3 border-t border-zinc-800">
                 <button @onclick="@(() => _selected = null)"
                         class="w-full py-2 px-4 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 font-medium text-xs cursor-pointer transition-colors">
-                    Close Customer Dossier
+                    Close customer details
                 </button>
             </div>
         </div>

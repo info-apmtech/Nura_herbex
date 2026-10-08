@@ -1,0 +1,74 @@
+@inject ApiClient Api
+@inject BrowserInterop Browser
+
+@if (_editor is not null)
+{
+    <div class="admin-section-heading"><div><span class="admin-eyebrow">CATALOG / PRODUCTS</span><h2>@(_creating ? "Add a product" : "Edit product")</h2><p>Details, pricing and availability for your storefront.</p></div><button class="admin-btn" disabled="@_saving" @onclick="CloseAsync">Back to products</button></div>
+    <form @onsubmit="SaveAsync" @onsubmit:preventDefault>
+        <div class="admin-editor-grid">
+            <div class="admin-stack">
+                <section class="admin-card"><h3>Product details</h3><div class="admin-fields">
+                    <label class="admin-span-2">Product name<input required maxlength="300" @bind:event="oninput" @bind="_editor.Name" placeholder="e.g. Stamix Vitality Mix · 300g" /></label>
+                    <label>SKU<input required maxlength="64" @bind:event="oninput" @bind="_editor.Sku" placeholder="STAMIX-300" /><small>A unique stock keeping code.</small></label>
+                    <label>Category<input maxlength="100" @bind:event="oninput" @bind="_editor.Category" placeholder="e.g. Herbal nutrition" /></label>
+                    <label class="admin-span-2">Subtitle<input maxlength="300" @bind:event="oninput" @bind="_editor.Subtitle" placeholder="A short description for the product card" /></label>
+                    <label class="admin-span-2">Description<textarea rows="5" maxlength="10000" @bind:event="oninput" @bind="_editor.Description" placeholder="Describe the product, pack contents and usage." /></label>
+                </div></section>
+                <section class="admin-card"><h3>Pricing &amp; inventory</h3><div class="admin-fields">
+                    <label>Selling price (₹)<input type="number" required min="0.01" max="10000000" step="0.01" @bind:event="oninput" @bind="_editor.Price" /></label>
+                    <label>Compare-at price (₹)<input type="number" min="@_editor.Price" max="10000000" step="0.01" @bind:event="oninput" @bind="_editor.CompareAtPrice" /><small>Optional original price, shown crossed out.</small></label>
+                    <label>Cost per item (₹)<input type="number" required min="0" max="10000000" step="0.01" @bind:event="oninput" @bind="_editor.CostPrice" /><small>Only visible to administrators.</small></label>
+                    <label>Available stock<input type="number" required min="0" max="1000000" @bind:event="oninput" @bind="_editor.StockQuantity" /></label>
+                </div></section>
+                <section class="admin-card"><h3>Shipping &amp; compliance</h3><p class="admin-help">Use packed dimensions for accurate courier bookings.</p><div class="admin-fields">
+                    <label>Weight (kg)<input type="number" required min="0.001" max="1000" step="0.001" @bind:event="oninput" @bind="_editor.WeightKg" /></label>
+                    <label>Length (cm)<input type="number" required min="0.01" max="1000" step="0.01" @bind:event="oninput" @bind="_editor.LengthCm" /></label>
+                    <label>Width (cm)<input type="number" required min="0.01" max="1000" step="0.01" @bind:event="oninput" @bind="_editor.BreadthCm" /></label>
+                    <label>Height (cm)<input type="number" required min="0.01" max="1000" step="0.01" @bind:event="oninput" @bind="_editor.HeightCm" /></label>
+                    <label>HSN code<input maxlength="32" @bind:event="oninput" @bind="_editor.HsnCode" /></label>
+                    <label>FSSAI license<input maxlength="64" @bind:event="oninput" @bind="_editor.FssaiLicense" /></label>
+                </div></section>
+            </div>
+            <div class="admin-stack">
+                <section class="admin-card"><h3>Publishing</h3><label class="admin-label">Product status<select @bind="_editor.Status"><option value="draft">Draft</option><option value="active">Active</option><option value="archived">Archived</option></select></label><p class="admin-help">Active products appear in the shop. Drafts and archived products cannot be purchased.</p></section>
+                <section class="admin-card"><h3>Product image</h3><div class="admin-image-preview">@if (!string.IsNullOrWhiteSpace(_editor.ImageUrl)) { <img src="@_editor.ImageUrl" alt="Product preview" /> } else { <Icon Name="Package" Size="48" /> }</div><label class="admin-label">Image URL<input maxlength="2048" @bind="_editor.ImageUrl" @bind:event="oninput" placeholder="https://… or /images/product.png" /></label><p class="admin-help">Use a publicly accessible product image. Square images work best.</p></section>
+            </div>
+        </div>
+        <div class="admin-savebar">@if (_error is not null) { <p role="alert" class="admin-error">@_error</p> }<span class="admin-help">Changes appear in the shop after saving.</span><div class="admin-actions"><button type="button" class="admin-btn" disabled="@_saving" @onclick="CloseAsync">Cancel</button><button class="admin-btn admin-btn-primary" disabled="@_saving">@(_saving ? "Saving…" : "Save product")</button></div></div>
+    </form>
+}
+else
+{
+    <div class="admin-section-heading"><div><span class="admin-eyebrow">YOUR CATALOG</span><h2>Products <span class="admin-count">@_products.Count</span></h2><p>Keep your catalog, pricing and stock up to date.</p></div><button class="admin-btn admin-btn-primary" @onclick="New"><Icon Name="Plus" Size="17" /> Add product</button></div>
+    <div class="admin-stat-grid admin-stat-grid-three"><div class="admin-stat"><span>Active products</span><strong>@_products.Count(p => p.Status == "active")</strong><small>Available in your store</small></div><div class="admin-stat"><span>Low stock</span><strong>@_products.Count(p => p.Status == "active" && p.StockQuantity <= 10)</strong><small>10 units or fewer</small></div><div class="admin-stat"><span>Inventory value</span><strong>₹@AdminFmt.Inr(_products.Where(p => p.Status != "archived").Sum(p => p.CostPrice * p.StockQuantity))</strong><small>At cost, excluding archived products</small></div></div>
+    @if (_message is not null) { <div role="status" class="admin-notice">@_message</div> }
+    @if (_error is not null) { <div role="alert" class="admin-error">@_error <button class="admin-btn" @onclick="LoadAsync">Retry</button></div> }
+    <section class="admin-card admin-table-card">
+        <div class="admin-toolbar"><label class="admin-search"><Icon Name="Search" Size="18" /><input aria-label="Search products" placeholder="Search products or SKU…" @bind="_search" @bind:event="oninput" @bind:after="ResetPage" /></label><select aria-label="Filter product status" @bind="_status" @bind:after="ResetPage"><option value="all">All statuses</option><option value="active">Active</option><option value="draft">Draft</option><option value="archived">Archived</option><option value="low">Low stock</option></select><button class="admin-btn" disabled="@_loading" @onclick="LoadAsync"><Icon Name="RefreshCw" Size="16" /> Refresh</button></div>
+        <div class="admin-table-scroll"><table class="admin-table"><thead><tr><th>Product</th><th>Status</th><th>Inventory</th><th>Price</th><th>Category</th><th><span class="admin-sr-only">Actions</span></th></tr></thead><tbody>
+        @if (_loading) { <tr><td colspan="6" class="admin-empty">Loading your catalog…</td></tr> }
+        else if (!Filtered.Any()) { <tr><td colspan="6" class="admin-empty"><Icon Name="Package" Size="32" /><h3>No products found</h3><p>Add your first product or adjust the filters.</p></td></tr> }
+        else { @foreach (var p in Filtered.Skip((_page - 1) * 10).Take(10)) { <tr @key="p.Id"><td><button class="admin-product-cell" @onclick="() => Edit(p)"><div class="admin-thumbnail">@if (!string.IsNullOrWhiteSpace(p.ImageUrl)) { <img src="@p.ImageUrl" alt="" loading="lazy" /> } else { <Icon Name="Package" Size="22" /> }</div><span><strong>@p.Name</strong><small>@p.Sku</small></span></button></td><td><span class="admin-badge @p.Status">@p.Status</span></td><td><strong class="@(p.StockQuantity <= 10 ? "admin-warning-text" : "")">@p.StockQuantity</strong><small class="admin-cell-note">in stock</small></td><td>₹@AdminFmt.Inr(p.Price)</td><td>@(string.IsNullOrWhiteSpace(p.Category) ? "—" : p.Category)</td><td><div class="admin-actions"><button class="admin-btn admin-btn-small" @onclick="() => Edit(p)">Edit</button>@if (p.Status != "archived") { <button class="admin-link-danger" disabled="@_saving" @onclick="() => ArchiveAsync(p)">Archive</button> }</div></td></tr> } }
+        </tbody></table></div><div class="admin-pagination"><span>@Filtered.Count() products · Page @_page of @Pages</span><div class="admin-actions"><button class="admin-btn admin-btn-small" disabled="@(_page <= 1)" @onclick="() => _page--">Previous</button><button class="admin-btn admin-btn-small" disabled="@(_page >= Pages)" @onclick="() => _page++">Next</button></div></div>
+    </section>
+}
+@code {
+    private List<AdminProductDto> _products = new();
+    private AdminProductDto? _editor;
+    private bool _creating, _saving, _loading;
+    private string _search = "", _status = "all";
+    private string? _error, _message;
+    private int _page = 1;
+    private IEnumerable<AdminProductDto> Filtered => _products.Where(p => (AdminFmt.Has(p.Name, _search) || AdminFmt.Has(p.Sku, _search)) && (_status == "all" || (_status == "low" ? p.Status == "active" && p.StockQuantity <= 10 : p.Status == _status)));
+    private int Pages => Math.Max(1, (int)Math.Ceiling(Filtered.Count() / 10d));
+    private void ResetPage() => _page = 1;
+    protected override Task OnInitializedAsync() => LoadAsync();
+    private async Task LoadAsync() { _loading = true; _error = null; var r = await Api.AdminCatalogAsync(); if (r.Success) _products = r.Products; else _error = r.Message; _page = Math.Min(_page, Pages); _loading = false; }
+    private void New() { _creating = true; _error = null; _editor = new() { Status = "draft", WeightKg = 0.38m, LengthCm = 10, BreadthCm = 10, HeightCm = 14 }; }
+    private void Edit(AdminProductDto p) { _creating = false; _error = null; _editor = System.Text.Json.JsonSerializer.Deserialize<AdminProductDto>(System.Text.Json.JsonSerializer.Serialize(p)); }
+    private async Task CloseAsync() { if (await Browser.ConfirmAsync("Discard changes and return to products?")) { _editor = null; _error = null; } }
+    private async Task SaveAsync() { if (_editor is null || _saving) return; _saving = true; _error = null; var r = await Api.AdminSaveProductAsync(_editor, _creating); _saving = false; if (!r.Success) { _error = r.Message; return; } _editor = null; _message = "Product saved successfully."; await LoadAsync(); await Browser.ScrollToTopAsync(); }
+    private async Task ArchiveAsync(AdminProductDto p) { if (!await Browser.ConfirmAsync($"Archive {p.Name}? It will be removed from the shop. Existing orders stay unchanged.")) return; _saving = true; var r = await Api.AdminArchiveProductAsync(p.Id); _saving = false; if (!r.Success) { _error = r.Message; return; } _message = r.Message; await LoadAsync(); await Browser.ScrollToTopAsync(); }
+}
+
+

@@ -1,0 +1,30 @@
+@inject CartState Cart
+@inject NavigationManager Nav
+<HeadContent><link rel="stylesheet" href="_content/Nuraherbex.UI/css/catalog.css" /></HeadContent>
+<div class="store-catalog">
+@if (ProductId is not null)
+{
+    <a href="/shop" class="catalog-back">← All products</a>
+    @if (Selected is { } p) { <div class="catalog-detail"><div class="catalog-detail-image">@if (!string.IsNullOrEmpty(p.ImageUrl)) { <img src="@p.ImageUrl" alt="@p.Name" /> } else { <Icon Name="Package" Size="80" /> }</div><div><span class="catalog-kicker">NURA HERBEX</span><h1>@p.Name</h1><p class="catalog-subtitle">@p.Subtitle</p><div class="catalog-price">@SiteConfig.Money(p.Price) @if (p.CompareAtPrice > p.Price) { <del>@SiteConfig.Money(p.CompareAtPrice.Value)</del> }</div><p class="catalog-description">@p.Description</p><p class="catalog-stock">@(p.StockQuantity > 0 ? "In stock · Ready for your routine" : "Currently out of stock")</p><label class="catalog-quantity">Quantity<input aria-label="Quantity" type="number" min="1" max="@Math.Min(100, p.StockQuantity)" @bind="_quantity" /></label><button class="catalog-button" disabled="@(p.StockQuantity <= 0 || _busy)" @onclick="() => AddAsync(p)"><Icon Name="ShoppingBag" Size="18" /> Add to cart</button><p class="catalog-small">Secure checkout · Prices include applicable taxes</p></div></div> }
+    else { <div class="catalog-empty"><h1>Product unavailable</h1><p>This product is no longer available in the store.</p><a href="/shop">Browse our products →</a></div> }
+}
+else
+{
+    <header class="catalog-heading"><span class="catalog-kicker">NATURAL INGREDIENTS. EVERYDAY CARE.</span><h1>Find your daily ritual.</h1><p>Explore our collection and make a little room for wellbeing.</p></header><div class="catalog-toolbar"><input aria-label="Search the shop" placeholder="Search products…" @bind="_search" @bind:event="oninput" /><select aria-label="Sort products" @bind="_sort"><option value="name">Name: A–Z</option><option value="price">Price: low to high</option><option value="price-desc">Price: high to low</option></select><span>@Filtered.Count() products</span></div>
+    @if (!Filtered.Any()) { <div class="catalog-empty"><Icon Name="Package" Size="40" /><h2>No products found</h2><p>Try another search or check back soon.</p></div> }
+    <div class="catalog-grid">@foreach (var p in Filtered) { <article class="catalog-card" @key="p.Id"><a href="@("/catalog/" + Uri.EscapeDataString(p.Id))" class="catalog-card-image">@if (!string.IsNullOrWhiteSpace(p.ImageUrl)) { <img src="@p.ImageUrl" alt="@p.Name" loading="lazy" /> } else { <Icon Name="Package" Size="55" /> }@if (p.StockQuantity == 0) { <span class="catalog-pill">Sold out</span> } else if (p.CompareAtPrice > p.Price) { <span class="catalog-pill">@Math.Round((1 - p.Price / p.CompareAtPrice.Value) * 100)% off</span> }</a><div class="catalog-card-body"><a href="@("/catalog/" + Uri.EscapeDataString(p.Id))"><h2>@p.Name</h2></a><p>@p.Subtitle</p><div class="catalog-price">@SiteConfig.Money(p.Price) @if (p.CompareAtPrice > p.Price) { <del>@SiteConfig.Money(p.CompareAtPrice.Value)</del> }</div><button class="catalog-button" disabled="@(p.StockQuantity <= 0 || _busy)" @onclick="() => AddAsync(p)">@(p.StockQuantity > 0 ? "Add to cart" : "Out of stock")<Icon Name="ArrowRight" Size="16" /></button></div></article> }</div>
+}
+@if (_error is not null) { <p role="alert" class="catalog-error">@_error</p> }
+</div>
+@code {
+    [Parameter] public List<ProductDto> Products { get; set; } = new();
+    [Parameter] public string? ProductId { get; set; }
+    private string _search = "", _sort = "name";
+    private int _quantity = 1;
+    private bool _busy;
+    private string? _error;
+    private ProductDto? Selected => Products.FirstOrDefault(p => p.Id == ProductId);
+    private IEnumerable<ProductDto> Filtered { get { var p = Products.Where(p => p.Status == "active" && p.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)); return _sort == "price" ? p.OrderBy(p => p.Price) : _sort == "price-desc" ? p.OrderByDescending(p => p.Price) : p.OrderBy(p => p.Name); } }
+    protected override void OnParametersSet() { _quantity = 1; _error = null; }
+    private async Task AddAsync(ProductDto p) { if (_busy) return; var qty = ProductId is null ? 1 : _quantity; var existing = Cart.Items.Where(i => i.Id == p.Id).Sum(i => i.Quantity); if (qty < 1 || qty + existing > p.StockQuantity) { _error = $"Only {p.StockQuantity} units are available, including quantities already in your cart."; return; } _busy = true; _error = null; try { await Cart.AddToCartAsync(new CartItem { Id = p.Id, Name = p.Name, Price = p.Price, Image = p.ImageUrl, ServingsText = p.Subtitle }, qty); } finally { _busy = false; } }
+}

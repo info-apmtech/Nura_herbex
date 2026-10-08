@@ -376,7 +376,7 @@
                     </div>
                     <div class="space-y-1">
                         <label class="text-zinc-300 font-medium block">Email</label>
-                        <input type="email" placeholder="siddharth@@example.com"
+                        <input type="email" required placeholder="siddharth@@example.com"
                                @bind="_new.CustomerEmail" @bind:event="oninput"
                                class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500" />
                     </div>
@@ -403,12 +403,10 @@
 
                 <div class="grid grid-cols-2 gap-3 pt-1">
                     <div class="space-y-1">
-                        <label class="text-zinc-300 font-medium block">Product Tier</label>
+                        <label class="text-zinc-300 font-medium block">Product</label>
                         <select @bind="_new.ProductId"
                                 class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500">
-                            <option value="stamix-single">Single Canister (₹1,899)</option>
-                            <option value="stamix-duo">Duo Optimizer (₹5,499)</option>
-                            <option value="stamix-trio">Master Vitality System (₹7,999)</option>
+                            @foreach (var product in _catalog.Where(p => p.Status == "active" && p.StockQuantity > 0)) { <option value="@product.Id">@product.Name (₹@AdminFmt.Inr(product.Price))</option> }
                         </select>
                     </div>
 
@@ -420,10 +418,14 @@
                     </div>
                 </div>
 
-                <div class="pt-2 flex gap-2.5">
-                    <button type="submit" disabled="@_creating"
+                                <div class="admin-fields">
+                    <label>Coupon code (optional)<input maxlength="64" @bind="_new.CouponCode" placeholder="e.g. WELCOME10" /></label>
+                    <label>Payment method<select @bind="_new.PaymentMethod"><option value="COD">Cash on delivery</option><option value="ONLINE">Online / manual payment</option></select></label>
+                    @if (_new.PaymentMethod == "ONLINE") { <label class="admin-span-2"><span><input type="checkbox" @bind="_new.MarkPaid" /> Payment already collected</span><small>Only select this after confirming receipt. This records payment; it does not charge the customer.</small></label> }
+                </div><div class="pt-2 flex gap-2.5">
+                    <button type="submit" disabled="@(_creating || string.IsNullOrEmpty(_new.ProductId))"
                             class="flex-1 py-2 px-3 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs tracking-tight shadow-sm cursor-pointer transition-colors disabled:opacity-60">
-                        @(_creating ? "Dispatching..." : "Confirm & Dispatch Order")
+                        @(_creating ? "Creating..." : "Create order")
                     </button>
                     <button type="button" @onclick="CloseAddOrder"
                             class="px-4 py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white font-medium text-xs cursor-pointer transition-colors">
@@ -449,6 +451,7 @@
     private string? _actionMessage;
     private bool _actionOk;
 
+    private List<ProductDto> _catalog = new();
     private bool _showAdd;
     private bool _creating;
     private string? _addError;
@@ -458,8 +461,8 @@
     {
         ProductId = "stamix-single",
         Quantity = 1,
-        PaymentMethod = "ONLINE",
-        MarkPaid = true,
+        PaymentMethod = "COD",
+        MarkPaid = false,
         Address = new AddressDto { Country = "India" },
     };
 
@@ -492,16 +495,13 @@
 
     private void CloseOrder() { _selected = null; _actionMessage = null; }
 
-    private void OpenAddOrder() { _new = NewOrderForm(); _addError = null; _showAdd = true; }
+    private async Task OpenAddOrder() { _new = NewOrderForm(); _addError = null; _showAdd = true; var result = await Api.AdminProductsAsync(); _catalog = result.Products; _new.ProductId = _catalog.FirstOrDefault(p => p.Status == "active" && p.StockQuantity > 0)?.Id ?? ""; if (!result.Success || _new.ProductId == "") _addError = result.Message ?? "No active products with stock are available."; }
     private void CloseAddOrder() { _showAdd = false; }
 
     private async Task CreateOrderAsync()
     {
         _addError = null;
         _creating = true;
-        // React: an empty email falls back to <name>@gmail.com
-        if (string.IsNullOrWhiteSpace(_new.CustomerEmail))
-            _new.CustomerEmail = $"{new string(_new.CustomerName.ToLowerInvariant().Where(c => !char.IsWhiteSpace(c)).ToArray())}@gmail.com";
         _new.Address.Country = "India";
         _new.Quantity = Math.Clamp(_new.Quantity, 1, 10);
         var res = await Api.AdminCreateOrderAsync(_new);

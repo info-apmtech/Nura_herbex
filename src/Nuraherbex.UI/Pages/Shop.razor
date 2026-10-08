@@ -1,5 +1,6 @@
 @page "/shop"
 @page "/store"
+@page "/catalog/{ProductId}"
 @page "/products/stamix"
 @page "/product/stamix"
 @page "/products"
@@ -19,14 +20,17 @@
     }
     else
     {
-      <ShopPreviewView Products="_products" />
+      @if (_loading) { <p role="status">Loading products…</p> } else if (_loadError is not null) { <p role="alert">@_loadError <button @onclick="LoadProductsAsync">Try again</button></p> } else { <StoreCatalog Products="_products" ProductId="ProductId" /> }
     }
   </div>
 </div>
 
 @code {
-    private static readonly string[] PdpPaths = { "products/stamix", "product/stamix", "products", "product", "shop/stamix" };
-    private static readonly string[] PreviewPaths = { "shop", "store" };
+    [Parameter] public string? ProductId { get; set; }
+    private bool _loading = true;
+    private string? _loadError;
+    private static readonly string[] PdpPaths = { "products/stamix", "product/stamix", "shop/stamix" };
+    private static readonly string[] PreviewPaths = { "shop", "store", "products", "product" };
 
     private bool IsPdp { get; set; }
     private bool _metaDirty = true;
@@ -38,11 +42,8 @@
         Nav.LocationChanged += OnLocationChanged;
     }
 
-    protected override async Task OnInitializedAsync()
-    {
-        try { _products = await Api.GetProductsAsync() ?? new(); }
-        catch { _products = new(); }
-    }
+    protected override Task OnInitializedAsync() => LoadProductsAsync();
+    private async Task LoadProductsAsync() { _loading = true; var result = await Api.GetCatalogAsync(); _products = result.Products; _loadError = result.Success ? null : result.Message; _loading = false; }
 
     protected override void OnParametersSet() => Sync();
 
@@ -68,7 +69,7 @@
         if (cut >= 0) path = path[..cut];
         path = path.Trim('/').ToLowerInvariant();
 
-        bool? pdp = PdpPaths.Contains(path) ? true : PreviewPaths.Contains(path) ? false : null;
+        bool? pdp = PdpPaths.Contains(path) ? true : (PreviewPaths.Contains(path) || path.StartsWith("catalog/")) ? false : null;
         if (pdp is null || pdp == IsPdp) return false;
         IsPdp = pdp.Value;
         _metaDirty = true;

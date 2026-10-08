@@ -54,7 +54,7 @@ try
         catch (TaskCanceledException) { await Task.Delay(250); }
     }
     Check(ready, "Isolated API starts with an in-memory database");
-    foreach (var path in new[] { "verify", "orders", "customers", "products", "batches", "payments" })
+    foreach (var path in new[] { "verify", "orders", "customers", "products", "batches", "payments", "catalog/products", "catalog/coupons" })
     {
         using var response = await http.GetAsync("/api/admin/" + path);
         Check(response.StatusCode == HttpStatusCode.Unauthorized, "Anonymous access rejected: " + path);
@@ -72,13 +72,84 @@ try
         using var response = await http.GetAsync("/api/admin/" + path);
         Check(response.IsSuccessStatusCode, "Admin access granted: " + path);
     }
+    var draft = new AdminProductDto { Name = "Test botanical mix", Sku = "TEST-MIX", Price = 100, CompareAtPrice = 150, CostPrice = 40, StockQuantity = 5, WeightKg = .2m, LengthCm = 10, BreadthCm = 10, HeightCm = 10, Status = "draft", Category = "Nutrition" };
+    using var createdResponse = await http.PostAsJsonAsync("/api/admin/catalog/products", draft);
+    var created = await createdResponse.Content.ReadFromJsonAsync<AdminProductResponse>();
+    Check(createdResponse.StatusCode == HttpStatusCode.Created && created?.Product is not null, "Admin creates a draft product");
+    var product = created!.Product!;
+    var publicCatalog = await http.GetFromJsonAsync<ProductListResponse>("/api/products");
+    Check(!publicCatalog!.Products.Any(p => p.Id == product.Id), "Draft product is hidden from the shop");
+    using (var duplicate = await http.PostAsJsonAsync("/api/admin/catalog/products", draft)) Check(duplicate.StatusCode == HttpStatusCode.Conflict, "Duplicate product SKU rejected");
+    product.Status = "active";
+    var productUrl = "/api/admin/catalog/products/" + product.Id;
+    using var update = await http.PutAsJsonAsync(productUrl, product);
+    var updated = await update.Content.ReadFromJsonAsync<AdminProductResponse>();
+    Check(update.IsSuccessStatusCode, "Admin publishes a draft product");
+    using (var stale = await http.PutAsJsonAsync(productUrl, product)) Check(stale.StatusCode == HttpStatusCode.Conflict, "Stale product edit rejected");
+    product = updated!.Product!;
+    publicCatalog = await http.GetFromJsonAsync<ProductListResponse>("/api/products");
+    Check(publicCatalog!.Products.Any(p => p.Id == product.Id && p.Price == 100), "Published product appears in the shop with its saved price");
+    var invalidProduct = new AdminProductDto { Name = "Bad", Sku = "INVALID", Price = -1 };
+    using (var bad = await http.PostAsJsonAsync("/api/admin/catalog/products", invalidProduct)) Check(bad.StatusCode == HttpStatusCode.BadRequest, "Invalid product data rejected");
+    var cart = new ValidateCartRequest { Items = new() { new CartLineDto { Id = product.Id, Quantity = 1 } } };
+    using (var pricing = await http.PostAsJsonAsync("/api/orders/validate", cart))
+    {
+        var totals = await pricing.Content.ReadFromJsonAsync<OrderTotalsDto>();
+        Check(pricing.IsSuccessStatusCode && totals!.Subtotal == 100, "Checkout uses the managed product price");
+    }
+    var duplicates = new ValidateCartRequest { Items = new() { new CartLineDto { Id = product.Id, Quantity = 3 }, new CartLineDto { Id = product.Id, Quantity = 3 } } };
+    using (var stock = await http.PostAsJsonAsync("/api/orders/validate", duplicates)) Check(stock.StatusCode == HttpStatusCode.BadRequest, "Duplicate cart lines cannot bypass stock limits");
+    var coupon = new CouponDto { Code = "test25", DiscountType = "PERCENTAGE", DiscountValue = 25, MaxDiscountCap = 10, MinOrderAmount = 50 };
+    using (var c = await http.PostAsJsonAsync("/api/admin/catalog/coupons", coupon)) Check(c.StatusCode == HttpStatusCode.Created, "Admin creates a coupon");
+    using (var c = await http.PostAsJsonAsync("/api/admin/catalog/coupons", coupon)) Check(c.StatusCode == HttpStatusCode.Conflict, "Duplicate coupon code rejected regardless of input case");
+    cart.CouponCode = "test25";
+    using (var pricing = await http.PostAsJsonAsync("/api/orders/validate", cart))
+    {
+        var totals = await pricing.Content.ReadFromJsonAsync<OrderTotalsDto>();
+        Check(pricing.IsSuccessStatusCode && totals!.DiscountAmount == 10 && totals.CouponCode == "TEST25", "Percentage coupon respects its discount cap and normalizes the code");
+    }
+    coupon.Code = "TEST25"; coupon.MinOrderAmount = 200;
+    using (var save = await http.PutAsJsonAsync("/api/admin/catalog/coupons/TEST25", coupon)) Check(save.IsSuccessStatusCode, "Admin updates coupon requirements");
+    using (var pricing = await http.PostAsJsonAsync("/api/orders/validate", cart)) Check(pricing.StatusCode == HttpStatusCode.BadRequest, "Coupon minimum order enforced");
+    coupon.MinOrderAmount = 0; coupon.DiscountType = "FIXED"; coupon.DiscountValue = 500;
+    using (var save = await http.PutAsJsonAsync("/api/admin/catalog/coupons/TEST25", coupon)) Check(save.IsSuccessStatusCode, "Admin changes a coupon to a fixed amount");
+    using (var pricing = await http.PostAsJsonAsync("/api/orders/validate", cart))
+    {
+        var totals = await pricing.Content.ReadFromJsonAsync<OrderTotalsDto>();
+        Check(pricing.IsSuccessStatusCode && totals!.DiscountAmount == 100 && totals.FinalTotal == totals.ShippingFee, "Fixed discount cannot exceed subtotal or consume shipping");
+    }
+    coupon.ExpiresAt = DateTime.UtcNow.AddDays(-1);
+    using (var save = await http.PutAsJsonAsync("/api/admin/catalog/coupons/TEST25", coupon)) Check(save.IsSuccessStatusCode, "Coupon expiry saved");
+    using (var pricing = await http.PostAsJsonAsync("/api/orders/validate", cart)) Check(pricing.StatusCode == HttpStatusCode.BadRequest, "Expired coupon rejected at checkout");
+    coupon.ExpiresAt = null;
+    using (var save = await http.PutAsJsonAsync("/api/admin/catalog/coupons/TEST25", coupon)) Check(save.IsSuccessStatusCode, "Coupon expiry can be removed");
+    using (var disable = await http.DeleteAsync("/api/admin/catalog/coupons/TEST25")) Check(disable.IsSuccessStatusCode, "Admin disables coupon");
+    using (var pricing = await http.PostAsJsonAsync("/api/orders/validate", cart)) Check(pricing.StatusCode == HttpStatusCode.BadRequest, "Disabled coupon rejected at checkout");
+    using (var invalidCoupon = await http.PostAsJsonAsync("/api/admin/catalog/coupons", new CouponDto { Code = "BAD", DiscountValue = 101 })) Check(invalidCoupon.StatusCode == HttpStatusCode.BadRequest, "Percentage discount over 100 rejected");
+    using (var archive = await http.DeleteAsync(productUrl)) Check(archive.IsSuccessStatusCode, "Admin archives product");
+    publicCatalog = await http.GetFromJsonAsync<ProductListResponse>("/api/products");
+    Check(!publicCatalog!.Products.Any(p => p.Id == product.Id), "Archived product removed from the shop");
+    cart.CouponCode = null;
+    using (var pricing = await http.PostAsJsonAsync("/api/orders/validate", cart)) Check(pricing.StatusCode == HttpStatusCode.BadRequest, "Archived product rejected even when already in a cart");
+    var managedProducts = await http.GetFromJsonAsync<AdminProductListResponse>("/api/admin/catalog/products");
+    Check(managedProducts!.Products.Any(p => p.Id == product.Id && p.Status == "archived"), "Archived product remains available in admin history");
+    using (var register = await http.PostAsJsonAsync("/api/auth/register", new RegisterRequest { FullName = "Test Customer", Email = "profile@example.test", Phone = "9999988888", Password = "TestCustomerPassword!" }))
+    {
+        var account = await register.Content.ReadFromJsonAsync<AuthResponse>();
+        Check(register.IsSuccessStatusCode && account?.Customer is not null, "Test customer account created");
+        using var profile = await http.PutAsJsonAsync("/api/admin/customers/" + account!.Customer!.Id, new UpdateProfileRequest { FullName = "Updated Customer", Phone = "9999977777", ShippingAddress = new AddressDto { AddressLine1 = "Test address", City = "Bengaluru", State = "Karnataka", Pincode = "560001" } });
+        var customer = await profile.Content.ReadFromJsonAsync<CustomerResponse>();
+        Check(profile.IsSuccessStatusCode && customer?.Customer?.FullName == "Updated Customer", "Admin updates customer profile and address");
+    }
     var customerToken = new TokenService(Options.Create(jwt)).CreateCustomerToken(new Customer { Id = "test", Email = "customer@example.test", FullName = "Test Customer" });
     http.DefaultRequestHeaders.Authorization = new("Bearer", customerToken);
-    foreach (var path in new[] { "verify", "orders", "customers", "products", "batches", "payments" })
+    foreach (var path in new[] { "verify", "orders", "customers", "products", "batches", "payments", "catalog/products", "catalog/coupons" })
     {
         using var response = await http.GetAsync("/api/admin/" + path);
         Check(response.StatusCode == HttpStatusCode.Forbidden, "Customer access rejected: " + path);
     }
+    using (var forbiddenWrite = await http.PostAsJsonAsync("/api/admin/catalog/products", draft)) Check(forbiddenWrite.StatusCode == HttpStatusCode.Forbidden, "Customer cannot create products");
+    using (var forbiddenCoupon = await http.DeleteAsync("/api/admin/catalog/coupons/TEST25")) Check(forbiddenCoupon.StatusCode == HttpStatusCode.Forbidden, "Customer cannot disable coupons");
     http.DefaultRequestHeaders.Authorization = new("Bearer", "invalid-token");
     using var invalid = await http.GetAsync("/api/admin/verify");
     Check(invalid.StatusCode == HttpStatusCode.Unauthorized, "Invalid token rejected");

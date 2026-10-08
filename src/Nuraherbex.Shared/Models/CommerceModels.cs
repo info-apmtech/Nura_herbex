@@ -372,6 +372,7 @@ public class AdminCreateOrderRequest
     public string CustomerPhone { get; set; } = "";
     public AddressDto Address { get; set; } = new();
     public string ProductId { get; set; } = "stamix-single";
+    public string? CouponCode { get; set; }
     public int Quantity { get; set; } = 1;
     /// <summary>COD | ONLINE</summary>
     public string PaymentMethod { get; set; } = "ONLINE";

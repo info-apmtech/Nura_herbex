@@ -56,7 +56,7 @@ public class ProductService(NuraDbContext db, IOptions<StoreOptions> store)
         }
         else discount = coupon.DiscountValue;
 
-        return new CouponResult { Valid = true, Discount = discount, Code = clean, DiscountPercent = coupon.DiscountValue };
+        return new CouponResult { Valid = true, Discount = Math.Clamp(discount, 0, Math.Max(0, subtotal)), Code = clean, DiscountPercent = coupon.DiscountValue };
     }
 
     /// <summary>Authoritative cart pricing, shipping, tax and parcel dimensions (server-side, never trusts client prices).</summary>
@@ -68,10 +68,12 @@ public class ProductService(NuraDbContext db, IOptions<StoreOptions> store)
         var items = new List<OrderItemDto>();
         decimal subtotal = 0, totalWeight = 0, maxLength = 10, maxBreadth = 10, totalHeight = 0;
 
-        foreach (var line in lines)
+        if (lines.Any(l => l.Quantity <= 0 || l.Quantity > 10000)) throw new InvalidOperationException("Quantity must be between 1 and 10,000.");
+        foreach (var line in lines.GroupBy(l => l.Id).Select(g => new CartLineDto { Id = g.Key, Quantity = checked(g.Sum(l => l.Quantity)) }))
         {
             var qty = Math.Max(1, line.Quantity);
             var product = await GetAsync(line.Id) ?? throw new InvalidOperationException($"Product not found: {line.Id}");
+            if (product.Status != "active") throw new InvalidOperationException($"{product.Name} is no longer available.");
             if (product.StockQuantity < qty)
                 throw new InvalidOperationException($"Insufficient stock for {product.Name}. Available: {product.StockQuantity}");
 
@@ -90,6 +92,7 @@ public class ProductService(NuraDbContext db, IOptions<StoreOptions> store)
         }
 
         var coupon = await ValidateCouponAsync(couponCode, subtotal);
+        if (!string.IsNullOrWhiteSpace(couponCode) && !coupon.Valid) throw new InvalidOperationException(coupon.Message ?? "Invalid coupon code");
         var discount = coupon.Valid ? coupon.Discount : 0;
         var s = store.Value;
         var shipping = subtotal >= s.FreeShippingThreshold ? 0 : s.FlatShippingFee;

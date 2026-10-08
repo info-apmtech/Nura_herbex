@@ -598,7 +598,7 @@
     private ProductDto? ActiveProduct => Products?.FirstOrDefault(p => p.Id == SelectedProtocolId);
     private decimal Price => ActiveProduct is { Price: > 0 } p ? p.Price : FallbackPrice;
     private decimal OriginalPrice => ActiveProduct is { CompareAtPrice: > 0 } p ? p.CompareAtPrice!.Value : FallbackOriginalPrice;
-    private bool InStock => ActiveProduct is null || ActiveProduct.StockQuantity > 0;
+    private bool InStock => ActiveProduct is { Status: "active" } && ActiveProduct.StockQuantity >= _quantity;
 
     private static string Fmt(decimal v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
@@ -664,18 +664,19 @@
     {
         Id = SelectedProtocolId,
         VariantId = SelectedVariantId,
-        Name = "Stamix",
+        Name = ActiveProduct?.Name ?? "Stamix",
         Price = Price,
-        Image = ProductImages[0].Src,
+        Image = ActiveProduct?.ImageUrl ?? ProductImages[0].Src,
         ServingsText = "15-Day Supply · Botanical Vitality Formula",
         Quantity = _quantity,
         IsSubscription = subscription,
     };
 
-    private async Task AddToCart() => await Cart.AddToCartAsync(BuildCartItem(IsSubscription), _quantity);
+    private async Task AddToCart() { if (InStock) await Cart.AddToCartAsync(BuildCartItem(IsSubscription), _quantity); }
 
     private async Task InstantBuy()
     {
+        if (!InStock) return;
         await Cart.AddToCartAsync(BuildCartItem(false), _quantity);
         Nav.NavigateTo("/checkout");
     }
