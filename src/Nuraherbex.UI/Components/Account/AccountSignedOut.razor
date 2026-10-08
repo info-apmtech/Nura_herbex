@@ -3,269 +3,397 @@
 @inject NavigationManager Nav
 @implements IDisposable
 
-<div class="min-h-screen bg-[#07060b] text-slate-100 font-sans antialiased pt-24 pb-20 px-4 sm:px-6 lg:px-8 flex flex-col justify-center text-left">
+<div class="min-h-screen bg-[#07050b] text-slate-100 font-sans antialiased pt-24 pb-16 px-4 sm:px-6 lg:px-8 flex items-center justify-center selection:bg-purple-600 selection:text-white">
 
-    @* Top Return Link *@
-    <div class="max-w-5xl mx-auto w-full mb-6">
-        <button @onclick="@(() => Nav.NavigateTo("/"))"
-                class="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-slate-400 hover:text-white transition-colors cursor-pointer">
-            <span>← RETURN TO STORE</span>
-        </button>
-    </div>
+    <div class="w-full max-w-6xl">
 
-    <div class="max-w-md mx-auto w-full">
-        <div class="bg-[#0e0a1b] border border-white/10 rounded-xl p-6 sm:p-8 shadow-2xl space-y-6">
-            <div class="text-center space-y-1 pb-1">
-                <div class="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-[#9929ea] text-white font-bold text-sm tracking-wide shadow-md mx-auto mb-2">
-                    NH
+        @* Top Utility Bar *@
+        <div class="mb-5 flex items-center justify-between gap-4">
+            <button @onclick="@(() => Nav.NavigateTo("/"))"
+                    class="group inline-flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.2em] text-slate-400 hover:text-white transition-colors cursor-pointer">
+                <Icon Name="ArrowLeft" Size="14" Class="group-hover:-translate-x-1 transition-transform" />
+                <span>Back to store</span>
+            </button>
+            <span class="hidden sm:inline-flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.2em] text-slate-500">
+                <Icon Name="Lock" Size="12" Class="text-emerald-400" />
+                <span>Encrypted session</span>
+            </span>
+        </div>
+
+        @* Shell: brand panel + auth panel *@
+        <div class="relative rounded-3xl border border-white/10 bg-[#0b0817] shadow-2xl shadow-black/60 overflow-hidden grid lg:grid-cols-2">
+
+            @* ============ LEFT · BRAND PANEL ============ *@
+            <div class="relative p-6 sm:p-10 lg:p-12 bg-gradient-to-br from-[#1a0d38] via-[#100a22] to-[#0a0716] overflow-hidden">
+                @* Ambient glows *@
+                <div class="absolute -top-28 -left-24 w-80 h-80 bg-[#9929ea]/25 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="absolute -bottom-32 -right-20 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div class="relative z-10 h-full flex flex-col justify-between gap-9">
+
+                    @* Brand Mark *@
+                    <div class="flex items-center gap-3">
+                        <img src="_content/Nuraherbex.UI/images/logo-mark.png" alt="Nura Herbex logo" class="h-11 w-11 object-contain shrink-0" />
+                        <div class="leading-none">
+                            <div class="font-heading font-black uppercase tracking-tight text-[#fff3bf] text-lg">
+                                Nura Herbex<span class="text-[10px] align-super text-slate-400 ml-1">®</span>
+                            </div>
+                            <div class="mt-1.5 text-[10px] font-mono uppercase tracking-[0.3em] text-purple-300/70">
+                                Vitality Members Portal
+                            </div>
+                        </div>
+                    </div>
+
+                    @* Headline *@
+                    <div class="space-y-4">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#9929ea]/15 border border-[#cc66da]/30 text-[10px] font-black uppercase tracking-[0.2em] text-[#fff3bf]">
+                            <Icon Name="Sparkles" Size="11" Class="text-[#cc66da]" />
+                            Members only
+                        </span>
+                        <h2 class="text-3xl sm:text-[2.5rem] sm:leading-[1.08] font-black text-white font-heading tracking-tight">
+                            Your ritual,<br />your records.
+                        </h2>
+                        <p class="text-sm text-purple-100/60 leading-relaxed max-w-sm">
+                            One secure account for orders, live shipment tracking and everything Stamix.
+                        </p>
+                    </div>
+
+                    @* Value Props *@
+                    <ul class="hidden sm:block space-y-4">
+                        <li class="flex items-start gap-3.5">
+                            <div class="w-9 h-9 shrink-0 rounded-xl bg-white/[0.06] border border-white/10 flex items-center justify-center text-[#cc66da]">
+                                <Icon Name="ShieldCheck" Size="16" />
+                            </div>
+                            <div class="leading-snug">
+                                <div class="text-sm font-bold text-white">Secure member access</div>
+                                <div class="text-xs text-purple-100/50">Encrypted sessions, on any device.</div>
+                            </div>
+                        </li>
+                        <li class="flex items-start gap-3.5">
+                            <div class="w-9 h-9 shrink-0 rounded-xl bg-white/[0.06] border border-white/10 flex items-center justify-center text-[#cc66da]">
+                                <Icon Name="Truck" Size="16" />
+                            </div>
+                            <div class="leading-snug">
+                                <div class="text-sm font-bold text-white">Track every shipment</div>
+                                <div class="text-xs text-purple-100/50">Live dispatch and delivery updates.</div>
+                            </div>
+                        </li>
+                        <li class="flex items-start gap-3.5">
+                            <div class="w-9 h-9 shrink-0 rounded-xl bg-white/[0.06] border border-white/10 flex items-center justify-center text-[#cc66da]">
+                                <Icon Name="Package" Size="16" />
+                            </div>
+                            <div class="leading-snug">
+                                <div class="text-sm font-bold text-white">Manage your ritual</div>
+                                <div class="text-xs text-purple-100/50">Reorder Stamix and review past orders.</div>
+                            </div>
+                        </li>
+                    </ul>
+
+                    @* Trust Strip *@
+                    <div class="hidden sm:flex flex-wrap items-center gap-x-5 gap-y-2 pt-5 border-t border-white/10 text-[10px] font-mono uppercase tracking-[0.18em] text-purple-100/40">
+                        <span class="inline-flex items-center gap-1.5"><Icon Name="Lock" Size="11" /> Encrypted</span>
+                        <span class="inline-flex items-center gap-1.5"><Icon Name="ShieldCheck" Size="11" /> Privacy first</span>
+                        <span class="inline-flex items-center gap-1.5"><Icon Name="HeartPulse" Size="11" /> No spam, ever</span>
+                    </div>
+
                 </div>
-                <h1 class="text-xl font-bold tracking-tight text-[#fff3bf]">
-                    @(_authMode == "login" ? "Vitality Account Portal" : "Create Vitality Account")
-                </h1>
-                <p class="text-xs text-slate-400">
-                    @(_authMode == "login"
-                        ? "Sign in to access your orders and real-time shipment telemetry."
-                        : "Register your account to manage orders and track shipments.")
-                </p>
             </div>
 
-            <div>
-                @* Segmented Auth Mode Switch *@
-                <div class="flex items-center p-1 bg-black/50 border border-white/10 rounded-md mb-6">
-                    <button type="button" @onclick="@(() => SetMode("login"))"
-                            class="@($"flex-1 py-2 rounded text-xs font-bold uppercase tracking-wider transition-all cursor-pointer {(_authMode == "login" ? "bg-[#9929ea] text-white shadow-sm" : "text-slate-400 hover:text-white")}")">
-                        Sign In
-                    </button>
-                    <button type="button" @onclick="@(() => SetMode("register"))"
-                            class="@($"flex-1 py-2 rounded text-xs font-bold uppercase tracking-wider transition-all cursor-pointer {(_authMode == "register" ? "bg-[#9929ea] text-white shadow-sm" : "text-slate-400 hover:text-white")}")">
-                        Create Account
-                    </button>
-                </div>
+            @* ============ RIGHT · AUTH PANEL ============ *@
+            <div class="relative p-6 sm:p-9 lg:p-11 bg-[#0a0813] overflow-hidden">
+                <div class="absolute -top-24 -right-24 w-64 h-64 bg-[#9929ea]/10 rounded-full blur-3xl pointer-events-none"></div>
 
-                @* Status Alerts *@
-                @if (!string.IsNullOrEmpty(_authError))
-                {
-                    <div class="p-3 mb-5 rounded bg-red-950/50 border border-red-500/30 flex items-start gap-2.5 text-xs text-red-200">
-                        <Icon Name="AlertCircle" Size="15" Class="shrink-0 mt-0.5 text-red-400" />
-                        <span>@_authError</span>
-                    </div>
-                }
-                @if (!string.IsNullOrEmpty(_authSuccess))
-                {
-                    <div class="p-3 mb-5 rounded bg-emerald-950/50 border border-emerald-500/30 flex items-start gap-2.5 text-xs text-emerald-200">
-                        <Icon Name="CheckCircle2" Size="15" Class="shrink-0 mt-0.5 text-emerald-400" />
-                        <span>@_authSuccess</span>
-                    </div>
-                }
+                <div class="relative z-10">
 
-                @if (_authMode == "login")
-                {
-                    <div class="space-y-4">
-                        <div class="flex items-center justify-between pb-1 text-xs">
-                            <span class="text-slate-400 font-medium">Sign in using:</span>
-                            <div class="inline-flex rounded-md bg-black/50 p-0.5 border border-white/10 text-[11px]">
+                    @* Segmented Auth Mode Switch *@
+                    <div class="grid grid-cols-2 gap-1.5 p-1.5 rounded-2xl bg-black/40 border border-white/10">
+                        <button type="button" @onclick="@(() => SetMode("login"))"
+                                class="@($"py-3 rounded-xl text-[11px] font-black uppercase tracking-[0.15em] transition-all cursor-pointer {(_authMode == "login" ? "bg-[#9929ea] text-white shadow-lg shadow-[#9929ea]/35" : "text-slate-400 hover:text-white hover:bg-white/5")}")">
+                            Sign In
+                        </button>
+                        <button type="button" @onclick="@(() => SetMode("register"))"
+                                class="@($"py-3 rounded-xl text-[11px] font-black uppercase tracking-[0.15em] transition-all cursor-pointer {(_authMode == "register" ? "bg-[#9929ea] text-white shadow-lg shadow-[#9929ea]/35" : "text-slate-400 hover:text-white hover:bg-white/5")}")">
+                            Create Account
+                        </button>
+                    </div>
+
+                    @* Heading *@
+                    <div class="mt-7 space-y-1.5">
+                        <h1 class="text-2xl sm:text-[1.75rem] font-black text-white font-heading tracking-tight">
+                            @(_authMode == "login" ? "Welcome back" : "Create your account")
+                        </h1>
+                        <p class="text-sm text-slate-400 leading-relaxed">
+                            @(_authMode == "login"
+                                ? "Sign in to view orders, track shipments and manage your membership."
+                                : "Join the Vitality Club in a few seconds — it's free.")
+                        </p>
+                    </div>
+
+                    @* Status Alerts *@
+                    @if (!string.IsNullOrEmpty(_authError))
+                    {
+                        <div class="mt-5 p-3.5 rounded-xl bg-red-950/40 border border-red-500/30 flex items-start gap-2.5 text-xs text-red-200">
+                            <Icon Name="AlertCircle" Size="15" Class="shrink-0 mt-0.5 text-red-400" />
+                            <span>@_authError</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(_authSuccess))
+                    {
+                        <div class="mt-5 p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 flex items-start gap-2.5 text-xs text-emerald-200">
+                            <Icon Name="CheckCircle2" Size="15" Class="shrink-0 mt-0.5 text-emerald-400" />
+                            <span>@_authSuccess</span>
+                        </div>
+                    }
+
+                    @if (_authMode == "login")
+                    {
+                        <div class="mt-6">
+
+                            @* Sign-in Method Switch (underline tabs) *@
+                            <div class="flex items-center gap-6 border-b border-white/10 mb-6">
                                 <button type="button" @onclick="@(() => SetMethod("password"))"
-                                        class="@($"px-2.5 py-1 rounded transition-colors font-semibold cursor-pointer {(_loginMethod == "password" ? "bg-[#9929ea] text-white shadow-xs" : "text-slate-400 hover:text-white")}")">
+                                        class="@($"relative pb-2.5 text-[11px] font-bold uppercase tracking-[0.15em] transition-colors cursor-pointer {(_loginMethod == "password" ? "text-[#fff3bf]" : "text-slate-500 hover:text-slate-300")}")">
                                     Password
+                                    @if (_loginMethod == "password")
+                                    {
+                                        <span class="absolute left-0 bottom-0 w-full h-0.5 bg-[#9929ea] rounded-full"></span>
+                                    }
                                 </button>
                                 <button type="button" @onclick="@(() => SetMethod("otp"))"
-                                        class="@($"px-2.5 py-1 rounded transition-colors font-semibold cursor-pointer {(_loginMethod == "otp" ? "bg-[#9929ea] text-white shadow-xs" : "text-slate-400 hover:text-white")}")">
+                                        class="@($"relative pb-2.5 text-[11px] font-bold uppercase tracking-[0.15em] transition-colors cursor-pointer {(_loginMethod == "otp" ? "text-[#fff3bf]" : "text-slate-500 hover:text-slate-300")}")">
                                     Email OTP
+                                    @if (_loginMethod == "otp")
+                                    {
+                                        <span class="absolute left-0 bottom-0 w-full h-0.5 bg-[#9929ea] rounded-full"></span>
+                                    }
                                 </button>
                             </div>
-                        </div>
 
-                        @if (_loginMethod == "password")
-                        {
-                            <form @onsubmit="HandleLoginSubmit" @onsubmit:preventDefault class="space-y-4 text-xs">
-                                <div class="space-y-1.5">
-                                    <label class="font-semibold text-slate-300 block">Registered Email or Mobile Number</label>
-                                    <input type="text" required placeholder="e.g. client@@example.com or 9876543210"
-                                           @bind="_emailOrPhone" @bind:event="oninput"
-                                           class="w-full px-3 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label class="font-semibold text-slate-300 block">Password</label>
-                                    <div class="relative">
-                                        <input type="@(_showPassword ? "text" : "password")" required placeholder="Enter your account password"
-                                               @bind="_password" @bind:event="oninput"
-                                               class="w-full pl-3 pr-9 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
-                                        <button type="button" @onclick="() => _showPassword = !_showPassword"
-                                                class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors cursor-pointer">
-                                            <Icon Name="@(_showPassword ? "EyeOff" : "Eye")" Size="15" />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <button type="submit" disabled="@_authLoading"
-                                        class="w-full py-2.5 px-4 rounded-md bg-[#9929ea] hover:bg-[#8620cf] text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm mt-3">
-                                    @if (_authLoading)
-                                    {
-                                        <Icon Name="RefreshCw" Size="13" Class="animate-spin" />
-                                        <span>Authenticating Client...</span>
-                                    }
-                                    else
-                                    {
-                                        <span>Sign In to Vitality Portal</span>
-                                        <Icon Name="ArrowRight" Size="13" />
-                                    }
-                                </button>
-                            </form>
-                        }
-                        else
-                        {
-                            <div class="space-y-3.5 text-xs">
-                                @if (!_otpSent)
-                                {
-                                    <form @onsubmit="HandleSendOtp" @onsubmit:preventDefault class="space-y-3">
-                                        <div class="space-y-1.5">
-                                            <label class="font-semibold text-slate-300 block">Registered Email Address</label>
-                                            <input type="email" required placeholder="name@@example.com"
-                                                   value="@OtpEmailDisplay"
-                                                   @oninput="OnOtpEmailInput"
-                                                   class="w-full px-3 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
-                                            <p class="text-[11px] text-slate-400">A 6-digit one-time code will be dispatched to this email.</p>
+                            @if (_loginMethod == "password")
+                            {
+                                <form @onsubmit="HandleLoginSubmit" @onsubmit:preventDefault class="space-y-4 text-xs">
+                                    <div class="space-y-1.5">
+                                        <label class="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 block">Email or mobile</label>
+                                        <div class="relative">
+                                            <Icon Name="User" Size="15" Class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                                            <input type="text" required autocomplete="username"
+                                                   placeholder="name@@example.com or 9876543210"
+                                                   @bind="_emailOrPhone" @bind:event="oninput"
+                                                   class="w-full pl-10 pr-4 py-3 rounded-xl bg-black/40 border border-white/10 text-sm text-white outline-none focus:border-[#9929ea] focus:ring-2 focus:ring-[#9929ea]/25 transition-all placeholder:text-slate-600" />
                                         </div>
+                                    </div>
 
-                                        <button type="submit" disabled="@_authLoading"
-                                                class="w-full py-2.5 px-4 rounded-md bg-[#9929ea] hover:bg-[#8620cf] text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
-                                            @if (_authLoading)
-                                            {
-                                                <Icon Name="RefreshCw" Size="13" Class="animate-spin" />
-                                                <span>Sending Code...</span>
-                                            }
-                                            else
-                                            {
-                                                <Icon Name="Mail" Size="13" />
-                                                <span>Send OTP Code</span>
-                                            }
-                                        </button>
-                                    </form>
-                                }
-                                else
-                                {
-                                    <form @onsubmit="HandleVerifyOtp" @onsubmit:preventDefault class="space-y-3">
-                                        <div class="p-2.5 rounded bg-black/40 border border-white/10 text-[11px] text-slate-300 flex items-center justify-between">
-                                            <span>Code sent to <strong class="font-mono text-[#fff3bf]">@_otpEmail</strong></span>
-                                            <button type="button" @onclick="EditOtpEmail"
-                                                    class="text-purple-400 hover:text-purple-300 underline">
-                                                Edit
+                                    <div class="space-y-1.5">
+                                        <label class="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 block">Password</label>
+                                        <div class="relative">
+                                            <Icon Name="KeyRound" Size="15" Class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                                            <input type="@(_showPassword ? "text" : "password")" required autocomplete="current-password"
+                                                   placeholder="Enter your account password"
+                                                   @bind="_password" @bind:event="oninput"
+                                                   class="w-full pl-10 pr-11 py-3 rounded-xl bg-black/40 border border-white/10 text-sm text-white outline-none focus:border-[#9929ea] focus:ring-2 focus:ring-[#9929ea]/25 transition-all placeholder:text-slate-600" />
+                                            <button type="button" @onclick="() => _showPassword = !_showPassword"
+                                                    aria-label="@(_showPassword ? "Hide password" : "Show password")"
+                                                    class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors cursor-pointer">
+                                                <Icon Name="@(_showPassword ? "EyeOff" : "Eye")" Size="16" />
                                             </button>
                                         </div>
+                                    </div>
 
-                                        <div class="space-y-1.5">
-                                            <label class="font-semibold text-slate-300 block">Enter 6-Digit Code</label>
-                                            <input type="text" required maxlength="6" placeholder="000000"
-                                                   value="@_otpCode"
-                                                   @oninput="OnOtpInput"
-                                                   class="w-full text-center tracking-[0.4em] font-mono text-base px-3 py-2 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all" />
-                                        </div>
-
-                                        <button type="submit" disabled="@_authLoading"
-                                                class="w-full py-2.5 px-4 rounded-md bg-[#9929ea] hover:bg-[#8620cf] text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
-                                            @if (_authLoading)
-                                            {
-                                                <Icon Name="RefreshCw" Size="13" Class="animate-spin" />
-                                                <span>Verifying...</span>
-                                            }
-                                            else
-                                            {
-                                                <Icon Name="CheckCircle2" Size="13" />
-                                                <span>Verify &amp; Sign In</span>
-                                            }
-                                        </button>
-
-                                        <div class="text-center text-[11px]">
-                                            @if (_otpCountdown > 0)
-                                            {
-                                                <span class="text-slate-500 font-mono">Resend code in @(_otpCountdown)s</span>
-                                            }
-                                            else
-                                            {
-                                                <button type="button" @onclick="HandleSendOtp"
-                                                        class="text-[#fff3bf] font-semibold hover:underline cursor-pointer">
-                                                    Resend Code
-                                                </button>
-                                            }
-                                        </div>
-                                    </form>
-                                }
-                            </div>
-                        }
-
-                        <div class="text-center pt-3 text-xs text-slate-400">
-                            Don't have an account yet?
-                            <button type="button" @onclick="@(() => { _authMode = "register"; _authError = ""; })"
-                                    class="text-purple-400 hover:text-purple-300 font-semibold underline cursor-pointer">
-                                Register here
-                            </button>
-                        </div>
-                    </div>
-                }
-                else
-                {
-                    <form @onsubmit="HandleRegisterSubmit" @onsubmit:preventDefault class="space-y-4 text-xs">
-                        <div class="space-y-1.5">
-                            <label class="font-semibold text-slate-300 block">Full Legal Name *</label>
-                            <input type="text" required placeholder="e.g. Siddharth Rao"
-                                   @bind="_regFullName" @bind:event="oninput"
-                                   class="w-full px-3 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
-                        </div>
-
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div class="space-y-1.5">
-                                <label class="font-semibold text-slate-300 block">Email Address *</label>
-                                <input type="email" required placeholder="name@@example.com"
-                                       @bind="_regEmail" @bind:event="oninput"
-                                       class="w-full px-3 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
-                            </div>
-
-                            <div class="space-y-1.5">
-                                <label class="font-semibold text-slate-300 block">Phone Number *</label>
-                                <input type="tel" required placeholder="10-digit number"
-                                       @bind="_regPhone" @bind:event="oninput"
-                                       class="w-full px-3 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
-                            </div>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label class="font-semibold text-slate-300 block">Password (min. 6 characters) *</label>
-                            <div class="relative">
-                                <input type="@(_showPassword ? "text" : "password")" required minlength="6" placeholder="Create a secure password"
-                                       @bind="_regPassword" @bind:event="oninput"
-                                       class="w-full pl-3 pr-9 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
-                                <button type="button" @onclick="() => _showPassword = !_showPassword"
-                                        class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors cursor-pointer">
-                                    <Icon Name="@(_showPassword ? "EyeOff" : "Eye")" Size="15" />
-                                </button>
-                            </div>
-                        </div>
-
-                        <button type="submit" disabled="@_authLoading"
-                                class="w-full py-2.5 px-4 rounded-md bg-[#9929ea] hover:bg-[#8620cf] text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm mt-3">
-                            @if (_authLoading)
-                            {
-                                <Icon Name="RefreshCw" Size="13" Class="animate-spin" />
-                                <span>Registering Account in DB...</span>
+                                    <button type="submit" disabled="@_authLoading"
+                                            class="w-full py-3.5 rounded-xl bg-[#9929ea] hover:bg-[#a83bed] active:bg-[#851ecc] text-white font-black text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-lg shadow-[#9929ea]/30 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer disabled:opacity-50 disabled:pointer-events-none font-heading mt-2">
+                                        @if (_authLoading)
+                                        {
+                                            <Icon Name="RefreshCw" Size="14" Class="animate-spin" />
+                                            <span>Signing you in...</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Sign In</span>
+                                            <Icon Name="ArrowRight" Size="14" />
+                                        }
+                                    </button>
+                                </form>
                             }
                             else
                             {
-                                <span>Activate Vitality Account</span>
-                                <Icon Name="ArrowRight" Size="13" />
-                            }
-                        </button>
+                                <div class="space-y-3.5 text-xs">
+                                    @if (!_otpSent)
+                                    {
+                                        <form @onsubmit="HandleSendOtp" @onsubmit:preventDefault class="space-y-4">
+                                            <div class="space-y-1.5">
+                                                <label class="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 block">Registered email</label>
+                                                <div class="relative">
+                                                    <Icon Name="Mail" Size="15" Class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                                                    <input type="email" required autocomplete="email"
+                                                           placeholder="name@@example.com"
+                                                           value="@OtpEmailDisplay"
+                                                           @oninput="OnOtpEmailInput"
+                                                           class="w-full pl-10 pr-4 py-3 rounded-xl bg-black/40 border border-white/10 text-sm text-white outline-none focus:border-[#9929ea] focus:ring-2 focus:ring-[#9929ea]/25 transition-all placeholder:text-slate-600" />
+                                                </div>
+                                                <p class="text-[11px] text-slate-500 pl-1">We'll email a 6-digit one-time code — no password needed.</p>
+                                            </div>
 
-                        <div class="text-center pt-2 text-xs text-slate-400">
-                            Already registered?
-                            <button type="button" @onclick="@(() => { _authMode = "login"; _authError = ""; })"
-                                    class="text-purple-400 hover:text-purple-300 font-semibold underline cursor-pointer">
-                                Sign in here
-                            </button>
+                                            <button type="submit" disabled="@_authLoading"
+                                                    class="w-full py-3.5 rounded-xl bg-[#9929ea] hover:bg-[#a83bed] active:bg-[#851ecc] text-white font-black text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-lg shadow-[#9929ea]/30 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer disabled:opacity-50 disabled:pointer-events-none font-heading">
+                                                @if (_authLoading)
+                                                {
+                                                    <Icon Name="RefreshCw" Size="14" Class="animate-spin" />
+                                                    <span>Sending code...</span>
+                                                }
+                                                else
+                                                {
+                                                    <Icon Name="Mail" Size="14" />
+                                                    <span>Send me a code</span>
+                                                }
+                                            </button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <form @onsubmit="HandleVerifyOtp" @onsubmit:preventDefault class="space-y-4">
+                                            <div class="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-[11px] text-slate-300">
+                                                <span class="flex items-center gap-2 min-w-0">
+                                                    <Icon Name="Mail" Size="13" Class="shrink-0 text-purple-400" />
+                                                    <span class="truncate">Code sent to <strong class="font-mono text-[#fff3bf]">@_otpEmail</strong></span>
+                                                </span>
+                                                <button type="button" @onclick="EditOtpEmail"
+                                                        class="shrink-0 text-purple-400 hover:text-purple-300 underline cursor-pointer">
+                                                    Edit
+                                                </button>
+                                            </div>
+
+                                            <div class="space-y-1.5">
+                                                <label class="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 block">6-digit code</label>
+                                                <input type="text" required maxlength="6" inputmode="numeric" placeholder="000000"
+                                                       value="@_otpCode"
+                                                       @oninput="OnOtpInput"
+                                                       class="w-full text-center tracking-[0.4em] font-mono text-lg px-3 py-3.5 rounded-xl bg-black/40 border border-white/10 text-white outline-none focus:border-[#9929ea] focus:ring-2 focus:ring-[#9929ea]/25 transition-all placeholder:text-slate-700" />
+                                            </div>
+
+                                            <button type="submit" disabled="@_authLoading"
+                                                    class="w-full py-3.5 rounded-xl bg-[#9929ea] hover:bg-[#a83bed] active:bg-[#851ecc] text-white font-black text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-lg shadow-[#9929ea]/30 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer disabled:opacity-50 disabled:pointer-events-none font-heading">
+                                                @if (_authLoading)
+                                                {
+                                                    <Icon Name="RefreshCw" Size="14" Class="animate-spin" />
+                                                    <span>Verifying...</span>
+                                                }
+                                                else
+                                                {
+                                                    <Icon Name="CheckCircle2" Size="14" />
+                                                    <span>Verify &amp; Sign In</span>
+                                                }
+                                            </button>
+
+                                            <div class="text-center text-[11px]">
+                                                @if (_otpCountdown > 0)
+                                                {
+                                                    <span class="text-slate-500 font-mono">Resend code in @(_otpCountdown)s</span>
+                                                }
+                                                else
+                                                {
+                                                    <button type="button" @onclick="HandleSendOtp"
+                                                            class="text-[#fff3bf] font-semibold hover:underline cursor-pointer">
+                                                        Resend code
+                                                    </button>
+                                                }
+                                            </div>
+                                        </form>
+                                    }
+                                </div>
+                            }
+
+                            <div class="mt-7 pt-5 border-t border-white/10 text-center text-xs text-slate-400">
+                                Don't have an account yet?
+                                <button type="button" @onclick="@(() => { _authMode = "register"; _authError = ""; })"
+                                        class="ml-1 text-[#cc66da] hover:text-[#fff3bf] font-bold transition-colors cursor-pointer">
+                                    Create one
+                                </button>
+                            </div>
                         </div>
-                    </form>
-                }
+                    }
+                    else
+                    {
+                        <form @onsubmit="HandleRegisterSubmit" @onsubmit:preventDefault class="mt-6 space-y-4 text-xs">
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 block">Full name *</label>
+                                <div class="relative">
+                                    <Icon Name="User" Size="15" Class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                                    <input type="text" required autocomplete="name" placeholder="e.g. Siddharth Rao"
+                                           @bind="_regFullName" @bind:event="oninput"
+                                           class="w-full pl-10 pr-4 py-3 rounded-xl bg-black/40 border border-white/10 text-sm text-white outline-none focus:border-[#9929ea] focus:ring-2 focus:ring-[#9929ea]/25 transition-all placeholder:text-slate-600" />
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div class="space-y-1.5">
+                                    <label class="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 block">Email *</label>
+                                    <div class="relative">
+                                        <Icon Name="Mail" Size="15" Class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                                        <input type="email" required autocomplete="email" placeholder="name@@example.com"
+                                               @bind="_regEmail" @bind:event="oninput"
+                                               class="w-full pl-10 pr-4 py-3 rounded-xl bg-black/40 border border-white/10 text-sm text-white outline-none focus:border-[#9929ea] focus:ring-2 focus:ring-[#9929ea]/25 transition-all placeholder:text-slate-600" />
+                                    </div>
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label class="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 block">Phone *</label>
+                                    <div class="relative">
+                                        <Icon Name="Phone" Size="15" Class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                                        <input type="tel" required autocomplete="tel" placeholder="10-digit number"
+                                               @bind="_regPhone" @bind:event="oninput"
+                                               class="w-full pl-10 pr-4 py-3 rounded-xl bg-black/40 border border-white/10 text-sm text-white outline-none focus:border-[#9929ea] focus:ring-2 focus:ring-[#9929ea]/25 transition-all placeholder:text-slate-600" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-1.5">
+                                <label class="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 block">Password *</label>
+                                <div class="relative">
+                                    <Icon Name="KeyRound" Size="15" Class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                                    <input type="@(_showPassword ? "text" : "password")" required minlength="6" autocomplete="new-password"
+                                           placeholder="Create a password (min. 6 characters)"
+                                           @bind="_regPassword" @bind:event="oninput"
+                                           class="w-full pl-10 pr-11 py-3 rounded-xl bg-black/40 border border-white/10 text-sm text-white outline-none focus:border-[#9929ea] focus:ring-2 focus:ring-[#9929ea]/25 transition-all placeholder:text-slate-600" />
+                                    <button type="button" @onclick="() => _showPassword = !_showPassword"
+                                            aria-label="@(_showPassword ? "Hide password" : "Show password")"
+                                            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors cursor-pointer">
+                                        <Icon Name="@(_showPassword ? "EyeOff" : "Eye")" Size="16" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="flex items-start gap-2.5 text-[11px] text-slate-500 leading-relaxed">
+                                <Icon Name="ShieldCheck" Size="14" Class="shrink-0 mt-0.5 text-emerald-400/70" />
+                                <span>Your details are encrypted and never shared with third parties.</span>
+                            </div>
+
+                            <button type="submit" disabled="@_authLoading"
+                                    class="w-full py-3.5 rounded-xl bg-[#9929ea] hover:bg-[#a83bed] active:bg-[#851ecc] text-white font-black text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-lg shadow-[#9929ea]/30 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer disabled:opacity-50 disabled:pointer-events-none font-heading">
+                                @if (_authLoading)
+                                {
+                                    <Icon Name="RefreshCw" Size="14" Class="animate-spin" />
+                                    <span>Creating your account...</span>
+                                }
+                                else
+                                {
+                                    <span>Create My Account</span>
+                                    <Icon Name="ArrowRight" Size="14" />
+                                }
+                            </button>
+
+                            <div class="pt-5 border-t border-white/10 text-center text-xs text-slate-400">
+                                Already registered?
+                                <button type="button" @onclick="@(() => { _authMode = "login"; _authError = ""; })"
+                                        class="ml-1 text-[#cc66da] hover:text-[#fff3bf] font-bold transition-colors cursor-pointer">
+                                    Sign in here
+                                </button>
+                            </div>
+                        </form>
+                    }
+
+                </div>
             </div>
+
         </div>
     </div>
 </div>
