@@ -183,9 +183,9 @@
 
           <button @onclick="GoVerify" @onclick:stopPropagation="true"
                   class="flex-[1.4] py-2.5 px-3 rounded-md bg-white/10 hover:bg-white/20 border border-white/15 hover:border-emerald-500/40 text-white font-bold text-[10px] sm:text-[11px] tracking-tight uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer group/verify whitespace-nowrap"
-                  title="Verify Product & Batch Authenticity">
+                  title="View product quality and batch laboratory reports">
             <Icon Name="ShieldCheck" Size="13" Class="text-emerald-400 shrink-0 group-hover/verify:scale-110 transition-transform" />
-            <span>VERIFY PRODUCT</span>
+            <span>BATCH TEST REPORTS</span>
           </button>
         </div>
       </div>
@@ -225,7 +225,7 @@
         await Browser.ScrollToTopAsync();
     }
 
-    private void GoVerify() => Nav.NavigateTo("/trust-passport");
+    private void GoVerify() => Nav.NavigateTo("/quality-reports");
 
     public void Dispose()
     {

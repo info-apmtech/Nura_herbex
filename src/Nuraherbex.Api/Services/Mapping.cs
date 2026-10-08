@@ -41,7 +41,7 @@ public static class Mapping
 
     public static ReviewDto ToDto(this Review r) => new()
     {
-        Id = r.Id, Name = r.Name, City = r.City, Rating = r.Rating, Title = r.Title, Body = r.Body, Verified = r.Verified, CreatedAt = r.CreatedAt,
+        Id = r.Id, Name = r.Name, City = r.City, Rating = r.Rating, Title = r.Title, Body = r.Body, Verified = r.Verified, Approved = r.Approved, CreatedAt = r.CreatedAt,
     };
 
     public static WhatsAppMessageDto ToDto(this WhatsAppMessage m) => new()

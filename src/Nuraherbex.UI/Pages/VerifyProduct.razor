@@ -1,3 +1,5 @@
+@page "/quality-reports"
+@page "/quality-reports/{BatchNo?}"
 @page "/trust-passport"
 @page "/trust-passport/{BatchNo?}"
 @page "/verify"
@@ -23,7 +25,7 @@
                 <span>Back to Shop</span>
             </button>
             <span class="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800 truncate">
-                @(batch is not null ? $"Batch: {BatchLabel(batch)}" : "Trust Passport · Official Registry")
+                @(batch is not null ? $"Batch: {BatchLabel(batch)}" : "STAMIX · Product Quality & Testing")
             </span>
         </div>
 
@@ -31,17 +33,17 @@
         <div class="text-left space-y-2.5">
             <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] font-mono font-medium uppercase tracking-wider">
                 <Icon Name="ShieldCheck" Size="12" Class="@(batch is not null ? "text-emerald-400" : "text-zinc-400")" />
-                <span>@(batch is not null ? "Trust Passport · Batch Verified" : "Trust Passport · Central Registry")</span>
+                <span>@(batch is not null ? "Batch record confirmed" : "Product quality & batch reports")</span>
             </div>
 
             <h1 class="text-xl sm:text-2xl font-semibold text-zinc-100 tracking-tight font-sans">
-                @(batch is not null ? "Your STAMIX Batch Is Verified" : "Verify Your STAMIX Batch")
+                @(batch is not null ? "STAMIX Batch Quality Report" : "STAMIX Product Quality & Testing")
             </h1>
 
             <p class="text-xs text-zinc-400 leading-relaxed font-normal">
                 @(batch is not null
-                    ? "The batch number matches central manufacturing records. Review authenticated test reports and laboratory certifications below."
-                    : "Enter the batch number printed on the bottom of your STAMIX canister to inspect third-party laboratory COAs, purity assays, and safety certifications.")
+                    ? "The batch number matches Nura Herbex product records. Review the available Certificate of Analysis (COA) and laboratory results below."
+                    : "Enter the batch number printed on your STAMIX pack to view its available Certificate of Analysis (COA), laboratory results, and batch details.")
             </p>
 
             <div class="flex flex-wrap items-center gap-2 pt-0.5 text-[10px] font-mono text-zinc-300">
@@ -149,12 +151,24 @@
                     </div>
                 </div>
 
-                @* Direct official batch certificate image *@
-                <div class="rounded-xl border border-zinc-800 bg-zinc-950 p-2 sm:p-4 shadow-2xl overflow-hidden flex items-center justify-center">
-                    <img src="@(string.IsNullOrEmpty(batch.DocumentUrl) ? VerifyCertificateSvg.Generate(batch) : batch.DocumentUrl)"
-                         alt="@($"Official Certificate for Batch {BatchLabel(batch)}")"
-                         class="w-full max-w-2xl h-auto object-contain rounded-lg border border-zinc-800/80 shadow-2xl" />
-                </div>
+                @* Official batch report: show PDFs in the browser viewer and image reports inline. *@
+                @if (!string.IsNullOrEmpty(batch.DocumentUrl) && IsPdf(batch))
+                {
+                    <div class="rounded-xl border border-zinc-800 bg-zinc-950 p-2 sm:p-4 shadow-2xl space-y-3">
+                        <iframe src="@batch.DocumentUrl" title="@($"Laboratory report for Batch {BatchLabel(batch)}")" class="w-full h-[72vh] rounded bg-white"></iframe>
+                        <a href="@batch.DocumentUrl" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 text-xs text-emerald-300 underline">
+                            <Icon Name="ExternalLink" Size="13" /> Open laboratory report
+                        </a>
+                    </div>
+                }
+                else
+                {
+                    <div class="rounded-xl border border-zinc-800 bg-zinc-950 p-2 sm:p-4 shadow-2xl overflow-hidden flex items-center justify-center">
+                        <img src="@(string.IsNullOrEmpty(batch.DocumentUrl) ? VerifyCertificateSvg.Generate(batch) : batch.DocumentUrl)"
+                             alt="@($"Official Certificate for Batch {BatchLabel(batch)}")"
+                             class="w-full max-w-2xl h-auto object-contain rounded-lg border border-zinc-800/80 shadow-2xl" />
+                    </div>
+                }
 
                 @* Bottom Action: Verify Another Batch *@
                 <div class="pt-2">
@@ -192,6 +206,7 @@
     private int _feedbackToken;
 
     private static string BatchLabel(TrustBatchDto b) => string.IsNullOrEmpty(b.BatchNo) ? b.Id : b.BatchNo;
+    private static bool IsPdf(TrustBatchDto b) => string.Equals(b.DocumentType, "pdf", StringComparison.OrdinalIgnoreCase) || b.DocumentUrl?.StartsWith("data:application/pdf", StringComparison.OrdinalIgnoreCase) == true;
 
     private TrustBatchDto? ActiveBatch => string.IsNullOrEmpty(_activeBatchNo)
         ? null
@@ -283,7 +298,7 @@
         _activeBatchNo = "";
         _searchText = "";
         _lastRequested = null;
-        Nav.NavigateTo("/trust-passport", replace: true);
+        Nav.NavigateTo("/quality-reports", replace: true);
         try { await _searchInput.FocusAsync(); } catch { }
     }
 
@@ -295,6 +310,6 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender) await Browser.SetMetaAsync(RouteMeta.TrustPassport);
+        if (firstRender) await Browser.SetMetaAsync(RouteMeta.QualityReports);
     }
 }

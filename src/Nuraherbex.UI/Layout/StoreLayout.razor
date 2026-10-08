@@ -37,7 +37,7 @@
         get
         {
             var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').ToLowerInvariant();
-            return path is "/account" or "/my-account" or "/profile";
+            return path is "/account" or "/my-account" or "/profile" || path.StartsWith("/account/", StringComparison.Ordinal);
         }
     }
 

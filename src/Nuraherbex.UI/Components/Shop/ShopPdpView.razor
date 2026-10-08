@@ -101,16 +101,27 @@
         </p>
       </div>
 
-      @* Rating Bar *@
+      @* Published customer rating *@
       <div class="flex items-center gap-2 text-xs pb-3 border-b border-white/10">
-        <div class="flex items-center gap-1 text-[#fff3bf]">
-          @for (var i = 0; i < 5; i++)
-          {
-            <Icon Name="Star" Size="14" Fill="currentColor" Class="fill-current text-[#fff3bf]" />
-          }
-        </div>
-        <span class="font-bold text-white text-sm">4.9</span>
-        <span class="text-slate-400">(1,480+ verified reviews)</span>
+        @if (_loadingReviews)
+        {
+          <span class="text-slate-400">Loading customer reviews…</span>
+        }
+        else if (_customerReviews.Count > 0)
+        {
+          <div class="flex items-center gap-1 text-[#fff3bf]" aria-label="@($"{AverageReviewRating:0.0} average from {_customerReviews.Count} published reviews")">
+            @for (var i = 0; i < 5; i++)
+            {
+              <Icon Name="Star" Size="14" Class="@(i < (int)Math.Round(AverageReviewRating, MidpointRounding.AwayFromZero) ? "fill-current text-[#fff3bf]" : "text-slate-500")" />
+            }
+          </div>
+          <span class="font-bold text-white text-sm">@AverageReviewRating.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)</span>
+          <span class="text-slate-400">(@_customerReviews.Count published @(_customerReviews.Count == 1 ? "review" : "reviews"))</span>
+        }
+        else
+        {
+          <span class="text-slate-400">No customer reviews published yet</span>
+        }
       </div>
 
       @* Price Display *@
@@ -248,11 +259,11 @@
             <Icon Name="ExternalLink" Size="14" />
           </button>
 
-          <button @onclick="@(() => Nav.NavigateTo("/trust-passport"))"
+          <button @onclick="@(() => Nav.NavigateTo("/quality-reports"))"
                   class="w-full py-3 px-4 rounded-xl bg-white/5 hover:bg-white/10 active:bg-white/15 border border-purple-500/30 hover:border-purple-500/60 text-purple-200 hover:text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all hover:scale-[1.01] cursor-pointer"
-                  title="Open Stamix Trust Passport">
+                  title="View Stamix product quality and batch lab reports">
             <Icon Name="ShieldCheck" Size="15" Class="text-emerald-400" />
-            <span>VERIFY PRODUCT</span>
+            <span>VIEW QUALITY &amp; BATCH REPORTS</span>
           </button>
         </div>
 
@@ -488,45 +499,64 @@
       <div class="space-y-6">
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h3 class="text-2xl font-bold text-white">Verified Customer Reviews</h3>
-            <p class="text-xs text-slate-400">Based on 1,480+ authentic verified orders</p>
+            <h3 class="text-2xl font-bold text-white">Customer reviews</h3>
+            <p class="text-xs text-slate-400">Reviews are published after our team has reviewed them.</p>
           </div>
-          <div class="flex items-center gap-2 p-3 rounded-xl bg-white/[0.03] border border-white/10">
-            <div class="flex text-yellow-400">
-              @for (var i = 0; i < 5; i++)
-              {
-                <Icon Name="Star" Size="16" Fill="currentColor" Class="fill-current" />
-              }
-            </div>
-            <span class="text-white font-bold text-sm">4.9 out of 5</span>
-          </div>
+          <button type="button" @onclick='() => Nav.NavigateTo("/account/reviews")'
+                  class="px-4 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs tracking-wide">
+            Write a review
+          </button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          @foreach (var rev in Reviews)
+        @if (_loadingReviews)
+        {
+          <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center text-sm text-slate-400">Loading published reviews…</div>
+        }
+        else if (_customerReviews.Count == 0)
+        {
+          <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-8 sm:p-10 text-center">
+            <Icon Name="MessageSquare" Size="26" Class="text-purple-300 mx-auto mb-3" />
+            <h4 class="text-white font-semibold text-base mb-2">Be the first to share your experience</h4>
+            <p class="text-slate-400 text-sm max-w-lg mx-auto mb-5">Sign in to your account to submit a review. Reviews are shown here after approval.</p>
+            <button type="button" @onclick='() => Nav.NavigateTo("/account/reviews")'
+                    class="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs tracking-wide">
+              Go to account reviews
+            </button>
+          </div>
+        }
+        else
+        {
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          @foreach (var rev in _customerReviews)
           {
             <div class="p-5 rounded-2xl bg-white/[0.02] border border-white/10 space-y-2.5">
               <div class="flex justify-between items-start">
                 <div>
-                  <h4 class="font-bold text-sm text-white">@rev.Author</h4>
-                  <span class="text-[10px] text-purple-300 font-mono">@rev.Protocol</span>
+                  <h4 class="font-bold text-sm text-white">@rev.Name</h4>
+                  @if (!string.IsNullOrWhiteSpace(rev.City))
+                  {
+                    <span class="text-[10px] text-purple-300">@rev.City</span>
+                  }
                 </div>
                 <div class="flex text-yellow-400">
-                  @for (var s = 0; s < rev.Stars; s++)
+                  @for (var s = 0; s < Math.Clamp(rev.Rating, 0, 5); s++)
                   {
                     <Icon Name="Star" Size="12" Fill="currentColor" Class="fill-current" />
                   }
                 </div>
               </div>
-              <p class="text-xs text-slate-300 leading-relaxed italic">
-                "@rev.Comment"
-              </p>
+              @if (!string.IsNullOrWhiteSpace(rev.Title))
+              {
+                <h4 class="text-sm font-semibold text-white">@rev.Title</h4>
+              }
+              <p class="text-xs text-slate-300 leading-relaxed">@rev.Body</p>
               <div class="text-[10px] text-slate-500 font-medium">
-                @rev.Date
+                @(rev.CreatedAt != default ? rev.CreatedAt.ToLocalTime().ToString("dd MMM yyyy") : "Published")
               </div>
             </div>
           }
-        </div>
+          </div>
+        }
       </div>
     }
 
@@ -567,7 +597,6 @@
     private record NutritionRow(string Name, string Value, bool Indent = false);
     private record Botanical(string Name, string Role);
     private record Certification(string Title, string Desc, string Badge);
-    private record CustomerReview(string Author, int Stars, string Protocol, string Comment, string Date);
     private record Faq(string Q, string A);
 
     // PDP Image Gallery (Using the 3 authentic canister mockups)
@@ -591,6 +620,8 @@
     private double[]? _zoomRect;
     private int _quantity = 1;
     private string _activeTab = "overview";
+    private List<ReviewDto> _customerReviews = new();
+    private bool _loadingReviews = true;
     private int? _openFaq = 0;
     // React's fetchAllTrustBatches() falls back to this default batch when none exist yet.
     private string _latestBatchNo = "BATCH-2026-01";
@@ -599,6 +630,7 @@
     private decimal Price => ActiveProduct is { Price: > 0 } p ? p.Price : FallbackPrice;
     private decimal OriginalPrice => ActiveProduct is { CompareAtPrice: > 0 } p ? p.CompareAtPrice!.Value : FallbackOriginalPrice;
     private bool InStock => ActiveProduct is { Status: "active" } && ActiveProduct.StockQuantity >= _quantity;
+    private decimal AverageReviewRating => _customerReviews.Count == 0 ? 0m : _customerReviews.Average(r => (decimal)Math.Clamp(r.Rating, 1, 5));
 
     private static string Fmt(decimal v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
@@ -618,6 +650,9 @@
         {
             // batch link simply stays generic
         }
+
+        _customerReviews = await Api.GetReviewsAsync();
+        _loadingReviews = false;
     }
 
     private async Task BackToPreview()
@@ -629,7 +664,7 @@
     private void GoHome() => Nav.NavigateTo("/");
 
     private void GoLatestBatch() =>
-        Nav.NavigateTo(string.IsNullOrEmpty(_latestBatchNo) ? "/trust-passport" : $"/trust-passport/{Uri.EscapeDataString(_latestBatchNo)}");
+        Nav.NavigateTo(string.IsNullOrEmpty(_latestBatchNo) ? "/quality-reports" : $"/quality-reports/{Uri.EscapeDataString(_latestBatchNo)}");
 
     private async Task OnZoomEnter()
     {
@@ -750,22 +785,6 @@
         new("ISO Certified", "ISO 9001 Quality System", "Audited"),
         new("Halal Certified", "Pure plant-based origin", "Certified"),
         new("Make In India", "Formulated in Bengaluru hub", "Authentic"),
-    };
-
-    private static readonly CustomerReview[] Reviews =
-    {
-        new("Vikram S., 38, Bengaluru", 5, "Duo Pack (30-Day)",
-            "After 3 weeks of taking 20g daily with warm almond milk, the 3 PM afternoon slump completely vanished. My workout stamina and focus at work have been at an all-time high.",
-            "Verified Buyer · 3 days ago"),
-        new("Arjun M., 42, Mumbai", 5, "Trio System (45-Day)",
-            "I was skeptical about herbal blends until I saw the lab certificates. Zero stomach upset, clean natural taste, and noticeable endurance gains within 14 days.",
-            "Verified Buyer · 1 week ago"),
-        new("Karan D., 34, Delhi NCR", 5, "Starter Canister (15-Day)",
-            "The packaging and quality are top notch. Dissolves easily in water or milk. Just upgraded to the 3-jar bundle for continuous daily support.",
-            "Verified Buyer · 2 weeks ago"),
-        new("Dr. Rajesh P., 46, Chennai", 5, "Duo Pack (30-Day)",
-            "As someone who reviews botanical formulations, the absence of synthetic maltodextrin and the presence of 17 whole botanicals, herbs, seeds and nuts makes Stamix genuinely superior.",
-            "Verified Buyer · 3 weeks ago"),
     };
 
     private static readonly Faq[] Faqs =

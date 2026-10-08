@@ -8,6 +8,8 @@
 {
     var subtotal = Cart.Subtotal;
     var progress = Cart.FreeShippingProgress;
+    var progressPercent = (int)Math.Round(progress, MidpointRounding.AwayFromZero);
+    var amountToFreeShipping = Math.Max(0m, SiteConfig.FreeShippingThreshold - subtotal);
     <div class="fixed inset-0 z-50 overflow-hidden text-left">
         @* Backdrop *@
         <div @onclick="Close" class="absolute inset-0 bg-black/80 transition-opacity"></div>
@@ -27,28 +29,43 @@
                     </button>
                 </div>
 
-                @* Free Shipping Progress Indicator *@
-                <div class="px-6 py-4 bg-white/[0.02] border-b border-white/5">
-                    <div class="flex justify-between text-xs font-semibold mb-2">
-                        <span class="text-slate-300">
-                            @if (subtotal >= SiteConfig.FreeShippingThreshold)
-                            {
-                                @("🎉 Free Priority Dispatch Unlocked!")
-                            }
-                            else
-                            {
-                                @($"Add {SiteConfig.Currency}{(SiteConfig.FreeShippingThreshold - subtotal).ToString("F2", CultureInfo.InvariantCulture)} more for Free Shipping")
-                            }
-                        </span>
-                        <span class="text-purple-400 font-mono">
-                            @Math.Round(progress, MidpointRounding.AwayFromZero)%
-                        </span>
-                    </div>
-                    <div class="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                        <div class="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-500"
-                             style="width: @(progress.ToString("0.##", CultureInfo.InvariantCulture))%"></div>
-                    </div>
-                </div>
+                @* Show the offer only when there is something in the cart. *@
+                @if (Cart.ItemCount > 0)
+                {
+                    <section class="px-6 py-4 bg-white/[0.02] border-b border-white/5" aria-label="Free shipping offer">
+                        <div class="mb-3 flex items-center justify-between gap-4">
+                            <div class="flex min-w-0 items-center gap-2.5">
+                                @if (subtotal >= SiteConfig.FreeShippingThreshold)
+                                {
+                                    <Icon Name="CheckCircle2" Size="18" Class="shrink-0 text-emerald-400" />
+                                    <div>
+                                        <p class="text-xs font-semibold text-emerald-300">Free shipping unlocked</p>
+                                        <p class="mt-0.5 text-[11px] text-slate-400">Your order qualifies for complimentary shipping.</p>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <Icon Name="Package" Size="18" Class="shrink-0 text-purple-300" />
+                                    <div class="min-w-0">
+                                        <p class="text-xs font-semibold text-slate-200">Complimentary shipping</p>
+                                        <p class="mt-0.5 text-[11px] text-slate-400">
+                                            Add <span class="font-semibold text-white">@SiteConfig.Money(amountToFreeShipping)</span> to qualify.
+                                        </p>
+                                    </div>
+                                }
+                            </div>
+                            <span class="shrink-0 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-slate-300"
+                                  aria-label="@progressPercent percent of the free shipping threshold reached">
+                                @progressPercent%
+                            </span>
+                        </div>
+                        <div class="h-1.5 w-full overflow-hidden rounded-full bg-white/10" role="progressbar"
+                             aria-label="Free shipping progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@progressPercent">
+                            <div class="h-full rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-500"
+                                 style="width: @(progress.ToString("0.##", CultureInfo.InvariantCulture))%"></div>
+                        </div>
+                    </section>
+                }
 
                 @* Items List *@
                 <div class="flex-1 overflow-y-auto p-6 space-y-4">
@@ -110,9 +127,9 @@
                                 </span>
                             </div>
                             <div class="flex justify-between">
-                                <span>Packaging &amp; Cold-Chain Shipping</span>
-                                <span class="text-emerald-400 font-bold">
-                                    @(subtotal >= SiteConfig.FreeShippingThreshold ? "FREE" : $"{SiteConfig.Currency}150")
+                                <span>Shipping</span>
+                                <span class="@(subtotal >= SiteConfig.FreeShippingThreshold ? "text-emerald-400 font-bold" : "text-slate-300 font-medium")">
+                                    @(subtotal >= SiteConfig.FreeShippingThreshold ? "FREE" : "Calculated at checkout")
                                 </span>
                             </div>
                         </div>

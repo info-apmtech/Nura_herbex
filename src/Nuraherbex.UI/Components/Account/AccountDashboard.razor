@@ -6,14 +6,14 @@
 
 @{
     var customer = Auth.Customer!;
-    var customerName = string.IsNullOrEmpty(customer.FullName) ? "Client" : customer.FullName;
+    var customerName = string.IsNullOrWhiteSpace(customer.FullName) ? "Customer" : customer.FullName.Trim();
     var customerInitials = customerName.Substring(0, 1).ToUpperInvariant();
 }
 
-<div class="min-h-screen bg-[#07060b] text-slate-100 font-sans antialiased pt-24 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-left">
+<div class="customer-account min-h-screen bg-[#07060b] text-slate-100 font-sans antialiased pt-24 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-left">
 
     @* 1. Header Profile Banner *@
-    <div class="bg-[#0e0a1b] border border-white/10 rounded-lg p-6 shadow-xl mb-6">
+    <div class="customer-account-header bg-[#0e0a1b] border border-white/10 rounded-lg p-6 shadow-xl mb-6">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
 
             <div class="flex items-center gap-4">
@@ -21,13 +21,10 @@
                     @customerInitials
                 </div>
                 <div>
-                    <div class="flex items-center gap-2.5">
-                        <h1 class="text-xl font-bold tracking-tight text-[#fff3bf]">@customerName</h1>
-                    </div>
+                    <span class="customer-account-eyebrow">MY ACCOUNT</span>
+                    <h1 class="text-xl font-bold tracking-tight text-[#fff3bf]">Welcome back, @customerName</h1>
 
                     <div class="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-1 font-mono">
-                        <span class="text-white font-medium">@customer.Id</span>
-                        <span>·</span>
                         <span>@customer.Email</span>
                         @if (!string.IsNullOrEmpty(customer.Phone))
                         {
@@ -42,7 +39,7 @@
                 <button @onclick="@(() => Nav.NavigateTo("/products/stamix"))"
                         class="px-4 py-2 rounded-md bg-[#9929ea] hover:bg-[#8620cf] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm">
                     <Icon Name="ShoppingBag" Size="13" />
-                    <span>Order Stamix (₹1,899)</span>
+                    <span>Shop Stamix</span>
                 </button>
 
                 <button @onclick="Logout"
@@ -58,60 +55,64 @@
     @* 2. KPI Scorecards *@
     <section class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
 
-        <div class="bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
+        <div class="customer-account-stat bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
             <div class="flex items-center justify-between text-xs text-slate-400">
                 <span class="font-medium">Total Orders</span>
                 <Icon Name="Package" Size="14" Class="text-purple-400" />
             </div>
             <div class="text-2xl font-bold font-mono text-white mt-1.5">@_orders.Count</div>
-            <div class="text-[11px] text-slate-500 mt-0.5 font-mono">Synced from database</div>
+            <div class="text-[11px] text-slate-500 mt-0.5 font-mono">Your order history</div>
         </div>
 
-        <div class="bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
+        <div class="customer-account-stat bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
             <div class="flex items-center justify-between text-xs text-slate-400">
                 <span class="font-medium">Lifetime Spend</span>
                 <Icon Name="CreditCard" Size="14" Class="text-[#fff3bf]" />
             </div>
             <div class="text-2xl font-bold font-mono text-[#fff3bf] mt-1.5">₹@Money(TotalLifetimeSpend)</div>
-            <div class="text-[11px] text-emerald-400 mt-0.5 font-mono">Settled via PayU / COD</div>
+            <div class="text-[11px] text-emerald-400 mt-0.5 font-mono">Across your orders</div>
         </div>
 
-        <div class="bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
+        <div class="customer-account-stat bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
             <div class="flex items-center justify-between text-xs text-slate-400">
                 <span class="font-medium">Active Shipments</span>
                 <Icon Name="Truck" Size="14" Class="text-[#38bdf8]" />
             </div>
             <div class="text-2xl font-bold font-mono text-white mt-1.5">@ActiveDeliveriesCount</div>
-            <div class="text-[11px] text-slate-500 mt-0.5 font-mono">Shiprocket air cargo</div>
+            <div class="text-[11px] text-slate-500 mt-0.5 font-mono">Currently on the way</div>
         </div>
 
-        <div class="bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
+        <a href="/quality-reports" class="customer-account-stat bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
             <div class="flex items-center justify-between text-xs text-slate-400">
-                <span class="font-medium">Lab Certification</span>
-                <Icon Name="ShieldCheck" Size="14" Class="text-[#10b981]" />
+                <span class="font-medium">Product quality</span>
+                <Icon Name="FileText" Size="14" Class="text-[#10b981]" />
             </div>
-            <div class="text-2xl font-bold font-mono text-emerald-400 mt-1.5">100%</div>
-            <div class="text-[11px] text-emerald-500/80 mt-0.5 font-mono">ICP-MS metals passed</div>
-        </div>
+            <div class="text-2xl font-bold font-mono text-emerald-400 mt-1.5">Batch COA</div>
+            <div class="text-[11px] text-emerald-500/80 mt-0.5 font-mono">View available lab reports</div>
+        </a>
 
     </section>
 
     @* 3. Segmented Navigation Bar *@
-    <div class="flex items-center justify-between border-b border-white/10 mb-6">
-        <div class="flex items-center gap-6 text-xs font-bold uppercase tracking-wider">
-            <button @onclick="@(() => _activeTab = "orders")"
-                    class="@($"pb-2.5 transition-colors cursor-pointer border-b-2 flex items-center gap-1.5 {(_activeTab == "orders" ? "border-[#9929ea] text-[#fff3bf]" : "border-transparent text-slate-400 hover:text-white")}")">
+    <nav class="customer-account-tabs" aria-label="Account sections" role="tablist">
+            <button role="tab" aria-selected="@(_activeTab == "orders")" @onclick="@(() => _activeTab = "orders")"
+                    class="customer-account-tab @(_activeTab == "orders" ? "is-active" : "")">
                 <Icon Name="Package" Size="14" />
-                <span>Orders &amp; Telemetry (@_orders.Count)</span>
+                <span>Orders <span class="customer-account-tab-count">@_orders.Count</span></span>
             </button>
 
-            <button @onclick="@(() => _activeTab = "address")"
-                    class="@($"pb-2.5 transition-colors cursor-pointer border-b-2 flex items-center gap-1.5 {(_activeTab == "address" ? "border-[#9929ea] text-[#fff3bf]" : "border-transparent text-slate-400 hover:text-white")}")">
+            <button role="tab" aria-selected="@(_activeTab == "address")" @onclick="@(() => _activeTab = "address")"
+                    class="customer-account-tab @(_activeTab == "address" ? "is-active" : "")">
                 <Icon Name="MapPin" Size="14" />
-                <span>Default Delivery Address</span>
+                <span>Delivery address</span>
             </button>
-        </div>
-    </div>
+
+            <button role="tab" aria-selected="@(_activeTab == "reviews")" @onclick="@(() => _activeTab = "reviews")"
+                    class="customer-account-tab @(_activeTab == "reviews" ? "is-active" : "")">
+                <Icon Name="MessageSquare" Size="14" />
+                <span>Write a review</span>
+            </button>
+    </nav>
 
     @if (_activeTab == "orders")
     {
@@ -121,7 +122,7 @@
             {
                 <div class="bg-[#0e0a1b] border border-white/10 p-12 rounded-lg text-center text-slate-400 space-y-3">
                     <Icon Name="RefreshCw" Size="20" Class="animate-spin mx-auto text-[#9929ea]" />
-                    <div class="text-xs font-mono">Synchronizing order telemetry from Supabase &amp; Shiprocket...</div>
+                    <div class="text-sm">Loading your order history…</div>
                 </div>
             }
             else if (_orders.Count == 0)
@@ -131,14 +132,14 @@
                         <Icon Name="Package" Size="22" />
                     </div>
                     <div>
-                        <h3 class="text-base font-bold text-white">No Orders Placed Yet</h3>
-                        <p class="text-xs text-slate-400 max-w-md mx-auto mt-1 leading-relaxed">
-                            Start your clinical botanical regimen with Stamix. 17 whole botanicals expertly formulated to support vitality.
+                        <h3 class="text-base font-bold text-white">Your order history will appear here</h3>
+                        <p class="text-sm text-slate-400 max-w-md mx-auto mt-1 leading-relaxed">
+                            Explore Nura Herbex products, review product information, and place your first order.
                         </p>
                     </div>
                     <button @onclick="@(() => Nav.NavigateTo("/products/stamix"))"
                             class="px-5 py-2.5 rounded-md bg-[#9929ea] hover:bg-[#8620cf] text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer inline-flex items-center gap-1.5 shadow-sm">
-                        <span>Order Stamix Canister (₹1,899)</span>
+                        <span>Explore Stamix</span>
                         <Icon Name="ArrowRight" Size="13" />
                     </button>
                 </div>
@@ -168,7 +169,7 @@
                             ? order.Items
                             : new List<OrderItemDto> { new() { Id = "stamix-single", Name = "STAMIX™ Botanical Vitality Formula", Quantity = 1, Price = order.TotalAmount > 0 ? order.TotalAmount : 1899, Image = Media.StamixMockup1 } };
 
-                        <div @key="order.Id" class="bg-[#0e0a1b] rounded-lg border border-white/10 shadow-xl overflow-hidden">
+                        <div @key="order.Id" class="customer-account-order bg-[#0e0a1b] rounded-lg border border-white/10 shadow-xl overflow-hidden">
                             @* Header Bar *@
                             <div class="p-4 bg-black/40 border-b border-white/10 flex flex-wrap items-center justify-between gap-4 text-xs font-mono">
                                 <div class="flex items-center gap-4 flex-wrap">
@@ -246,16 +247,16 @@
                                         </div>
                                     }
 
-                                    @* Batch Dossier Link *@
+                                    @* Batch quality report link *@
                                     <div class="pt-1">
-                                        <button @onclick="@(() => Nav.NavigateTo("/trust-passport"))"
+                                        <button @onclick="@(() => Nav.NavigateTo("/quality-reports"))"
                                                 class="w-full py-2 px-3 rounded-md bg-purple-950/30 hover:bg-purple-950/50 border border-purple-500/30 text-purple-200 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer">
                                             <div class="flex items-center gap-2">
                                                 <Icon Name="ShieldCheck" Size="14" Class="text-purple-400" />
-                                                <span>View Verified Laboratory Certificate (COA)</span>
+                                                <span>View batch lab reports (COA)</span>
                                             </div>
                                             <span class="text-[11px] text-purple-400 font-mono flex items-center gap-1">
-                                                Verify Batch <Icon Name="ChevronRight" Size="13" />
+                                                View reports <Icon Name="ChevronRight" Size="13" />
                                             </span>
                                         </button>
                                     </div>
@@ -264,9 +265,9 @@
                                 @* Shiprocket Telemetry (5 cols) *@
                                 <div class="lg:col-span-5 p-4 rounded-md bg-black/40 border border-white/5 space-y-3">
                                     <div class="flex items-center justify-between text-xs">
-                                        <span class="font-bold text-slate-300 font-mono uppercase tracking-wider text-[11px]">Logistics Telemetry</span>
+                                        <span class="font-bold text-slate-300 uppercase tracking-wider text-[11px]">Delivery updates</span>
                                         <span class="text-purple-400 font-mono text-[11px]">
-                                            @(string.IsNullOrEmpty(order.ShiprocketCourier) ? "Shiprocket Priority Air" : order.ShiprocketCourier)
+                                            @(string.IsNullOrEmpty(order.ShiprocketCourier) ? "Courier details pending" : order.ShiprocketCourier)
                                         </span>
                                     </div>
 
@@ -295,7 +296,7 @@
                                                 <span>Shipment In Preparation</span>
                                             </div>
                                             <p class="text-[11px] leading-relaxed text-slate-500">
-                                                Your canister is sealed at our certified GMP facility. AWB courier tracking will activate automatically within 12-24 hours.
+                                                Tracking details will appear here once your order has been handed to the courier.
                                             </p>
                                         </div>
                                     }
@@ -326,14 +327,14 @@
 
     @if (_activeTab == "address")
     {
-        <div class="max-w-2xl bg-[#0e0a1b] border border-white/10 p-6 sm:p-8 rounded-lg shadow-xl space-y-5">
+        <div class="customer-account-panel max-w-2xl bg-[#0e0a1b] border border-white/10 p-6 sm:p-8 rounded-lg shadow-xl space-y-5">
             <div>
                 <h3 class="text-base font-bold text-white flex items-center gap-2">
                     <Icon Name="MapPin" Size="16" Class="text-purple-400" />
-                    <span>Default Delivery Destination</span>
+                    <span>Delivery address</span>
                 </h3>
                 <p class="text-xs text-slate-400 mt-0.5">
-                    This saved address will pre-fill automatically on checkout for instant 1-click orders.
+                    Your saved address will be available at checkout. You can update it at any time.
                 </p>
             </div>
 
@@ -354,14 +355,14 @@
 
             <form @onsubmit="HandleAddressSave" @onsubmit:preventDefault class="space-y-4 text-xs">
                 <div class="space-y-1.5">
-                    <label class="font-semibold text-slate-300 block">Street Address / House / Apartment *</label>
+                    <label class="font-semibold text-slate-300 block">Address line 1 *</label>
                     <input type="text" required placeholder="e.g. Plot No. 79, SV Nagar"
                            @bind="_addr.AddressLine1" @bind:event="oninput"
                            class="w-full px-3 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
                 </div>
 
                 <div class="space-y-1.5">
-                    <label class="font-semibold text-slate-300 block">Landmark / Area (Optional)</label>
+                    <label class="font-semibold text-slate-300 block">Address line 2 (optional)</label>
                     <input type="text" placeholder="e.g. Near Bus Stand, 2nd Floor"
                            @bind="_addr.AddressLine2" @bind:event="oninput"
                            class="w-full px-3 py-2.5 rounded-md border border-white/15 bg-black/40 text-white outline-none focus:border-[#9929ea] focus:ring-1 focus:ring-[#9929ea] transition-all placeholder:text-slate-600" />
@@ -384,7 +385,7 @@
                 </div>
 
                 <div class="space-y-1.5">
-                    <label class="font-semibold text-slate-300 block">Postal Pincode *</label>
+                    <label class="font-semibold text-slate-300 block">PIN code *</label>
                     <input type="text" required maxlength="6" placeholder="6-digit pincode"
                            value="@_addr.Pincode"
                            @oninput="OnPincodeInput"
@@ -394,11 +395,87 @@
                 <div class="pt-2">
                     <button type="submit" disabled="@_savingAddress"
                             class="px-4 py-2.5 rounded-md bg-[#9929ea] hover:bg-[#8620cf] text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 shadow-sm">
-                        @(_savingAddress ? "Saving Destination..." : "Save Default Address")
+                        @(_savingAddress ? "Saving…" : "Save address")
                     </button>
                 </div>
             </form>
         </div>
+    }
+
+    @if (_activeTab == "reviews")
+    {
+        <section class="customer-account-panel customer-account-review max-w-3xl bg-[#0e0a1b] border border-white/10 p-6 sm:p-8 rounded-lg shadow-xl">
+            <div class="customer-account-panel-heading">
+                <span class="customer-account-icon"><Icon Name="MessageSquare" Size="18" /></span>
+                <div>
+                    <h2>Share your experience</h2>
+                    <p>Your feedback is reviewed by our team before it can appear on the product page or home page.</p>
+                </div>
+            </div>
+
+            @if (_reviewSubmitted)
+            {
+                <div class="customer-account-review-success" role="status">
+                    <Icon Name="CheckCircle2" Size="22" />
+                    <div>
+                        <strong>Review submitted</strong>
+                        <p>Thank you for sharing your experience. It is pending review and will only be published if approved.</p>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <form class="customer-account-form" @onsubmit="SubmitReviewAsync" @onsubmit:preventDefault>
+                    <div class="customer-account-form-grid">
+                        <div class="customer-account-review-identity">
+                            <span>Review submitted under your account</span>
+                            <strong>@customer.FullName</strong>
+                            <small>Your account name may be shown with the review if it is approved.</small>
+                        </div>
+                        <label>
+                            City <span>(optional)</span>
+                            <input maxlength="100" @bind="_reviewCity" @bind:event="oninput" autocomplete="address-level2" />
+                        </label>
+                        <label>
+                            Rating
+                            <select @bind="_reviewRating">
+                                <option value="5">5 — Excellent</option>
+                                <option value="4">4 — Very good</option>
+                                <option value="3">3 — Good</option>
+                                <option value="2">2 — Fair</option>
+                                <option value="1">1 — Needs improvement</option>
+                            </select>
+                        </label>
+                        <label>
+                            Review title <span>(optional)</span>
+                            <input maxlength="120" @bind="_reviewTitle" @bind:event="oninput" placeholder="Summarize your experience" />
+                        </label>
+                        <label class="customer-account-form-full">
+                            Your review
+                            <textarea required minlength="10" maxlength="1500" rows="5" @bind="_reviewBody" @bind:event="oninput" placeholder="Tell us about your experience with the product. Please keep your feedback to your personal experience and avoid medical claims or sensitive health information."></textarea>
+                        </label>
+                    </div>
+
+                    <label class="customer-account-consent">
+                        <input type="checkbox" @bind="_reviewConsent" />
+                        <span>I agree that my display name and review may be published if approved by the Nura Herbex team.</span>
+                    </label>
+
+                    @if (!string.IsNullOrWhiteSpace(_reviewError))
+                    {
+                        <p class="customer-account-form-error" role="alert">@_reviewError</p>
+                    }
+
+                    <div class="customer-account-form-footer">
+                        <p>Reviews are not medical advice and do not replace guidance from a qualified professional.</p>
+                        <button type="submit" disabled="@_submittingReview">
+                            <Icon Name="Send" Size="15" />
+                            @(_submittingReview ? "Submitting…" : "Submit for review")
+                        </button>
+                    </div>
+                </form>
+            }
+        </section>
     }
 
 </div>
@@ -416,6 +493,14 @@
     private string _addressSavedMsg = "";
     private string _addressError = "";
     private string? _loadedForCustomerId;
+    private string _reviewCity = "";
+    private string _reviewTitle = "";
+    private string _reviewBody = "";
+    private int _reviewRating = 5;
+    private bool _reviewConsent;
+    private bool _submittingReview;
+    private bool _reviewSubmitted;
+    private string _reviewError = "";
 
     private static readonly CultureInfo Inr = MakeInr();
     private static CultureInfo MakeInr()
@@ -449,6 +534,9 @@
     {
         Auth.Changed += OnAuthChanged;
         SyncAddress();
+        _reviewCity = Auth.Customer?.ShippingAddress?.City?.Trim() ?? "";
+        if (new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').Equals("/account/reviews", StringComparison.OrdinalIgnoreCase))
+            _activeTab = "reviews";
         await LoadOrdersAsync();
     }
 
@@ -503,6 +591,35 @@
             _addressSavedMsg = "";
         }
         else _addressError = res.Message ?? "Failed to save shipping address";
+    }
+
+    private async Task SubmitReviewAsync()
+    {
+        if (_submittingReview) return;
+        if (!Auth.IsAuthenticated)
+        {
+            _reviewError = "Please sign in again before submitting your review.";
+            return;
+        }
+        if (!_reviewConsent)
+        {
+            _reviewError = "Please confirm the review publication consent to continue.";
+            return;
+        }
+
+        _submittingReview = true;
+        _reviewError = "";
+        var response = await Api.SubmitReviewAsync(new ReviewDto
+        {
+            Name = Auth.Customer?.FullName?.Trim() ?? "",
+            City = string.IsNullOrWhiteSpace(_reviewCity) ? null : _reviewCity.Trim(),
+            Rating = Math.Clamp(_reviewRating, 1, 5),
+            Title = string.IsNullOrWhiteSpace(_reviewTitle) ? null : _reviewTitle.Trim(),
+            Body = _reviewBody.Trim(),
+        });
+        _submittingReview = false;
+        if (response.Success) _reviewSubmitted = true;
+        else _reviewError = response.Message ?? "We could not submit your review. Please try again.";
     }
 
     private async Task ReorderAsync(OrderItemDto item)

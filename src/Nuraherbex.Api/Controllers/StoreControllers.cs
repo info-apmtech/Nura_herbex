@@ -238,7 +238,7 @@ public class AuthController(CustomerAuthService auth, OrderService orders, Shipp
 }
 
 // ---------------------------------------------------------------------------
-// Public content: Trust Passport batches, site copy, formulation, reviews
+// Public content: batch quality reports, site copy, formulation, reviews
 // ---------------------------------------------------------------------------
 [ApiController]
 [AllowAnonymous]
@@ -282,11 +282,11 @@ public class ContentController(SettingsService settings) : ControllerBase
 }
 
 [ApiController]
-[AllowAnonymous]
 [Route("api/reviews")]
 public class ReviewsController(NuraDbContext db) : ControllerBase
 {
     [HttpGet]
+    [AllowAnonymous]
     public async Task<ReviewListResponse> List() => new()
     {
         Success = true,
@@ -294,17 +294,26 @@ public class ReviewsController(NuraDbContext db) : ControllerBase
     };
 
     [HttpPost]
+    [Authorize(Roles = "customer")]
     [EnableRateLimiting("orders")]
     public async Task<IActionResult> Create(ReviewDto r)
     {
-        if (string.IsNullOrWhiteSpace(r.Name) || string.IsNullOrWhiteSpace(r.Body))
-            return BadRequest(new ApiResult { Success = false, Message = "Name and review text are required" });
+        if (string.IsNullOrWhiteSpace(r.Body))
+            return BadRequest(new ApiResult { Success = false, Message = "Review text is required" });
+
+        var customerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var customer = string.IsNullOrWhiteSpace(customerId)
+            ? null
+            : await db.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == customerId);
+        if (customer is null)
+            return Unauthorized(new ApiResult { Success = false, Message = "Please sign in again before submitting a review." });
+
         db.Reviews.Add(new Review
         {
-            Name = r.Name.Trim(), City = r.City?.Trim(), Rating = Math.Clamp(r.Rating, 1, 5), Title = r.Title?.Trim(), Body = r.Body.Trim(),
+            Name = customer.FullName.Trim(), City = r.City?.Trim(), Rating = Math.Clamp(r.Rating, 1, 5), Title = r.Title?.Trim(), Body = r.Body.Trim(),
             Approved = false, // moderated before publishing
         });
         await db.SaveChangesAsync();
-        return Ok(new ApiResult { Success = true, Message = "Thank you! Your review has been submitted for verification." });
+        return Ok(new ApiResult { Success = true, Message = "Thank you. Your review has been submitted for moderation." });
     }
 }

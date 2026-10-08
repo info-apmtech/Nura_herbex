@@ -173,7 +173,26 @@ public class AdminController(
         return new AdminCustomerListResponse { Success = true, Count = list.Count, Customers = list };
     }
 
-    // ---- Trust Passport batches ------------------------------------------------------
+    // ---- Customer review moderation ---------------------------------------------------
+
+    [HttpGet("reviews"), Authorize(Roles = "admin")]
+    public async Task<ReviewListResponse> ListReviews() => new()
+    {
+        Success = true,
+        Reviews = (await db.Reviews.AsNoTracking().OrderByDescending(r => r.CreatedAt).ToListAsync()).Select(r => r.ToDto()).ToList(),
+    };
+
+    [HttpPut("reviews/{id}"), Authorize(Roles = "admin")]
+    public async Task<IActionResult> ModerateReview(string id, ReviewModerationRequest request)
+    {
+        var review = await db.Reviews.FirstOrDefaultAsync(r => r.Id == id);
+        if (review is null) return NotFound(new ApiResult { Success = false, Message = "Review not found." });
+        review.Approved = request.Approved;
+        await db.SaveChangesAsync();
+        return Ok(new ApiResult { Success = true, Message = request.Approved ? "Review approved and published on the storefront." : "Review hidden from the storefront." });
+    }
+
+    // ---- Product quality and batch reports ------------------------------------------
 
     [HttpGet("batches"), Authorize(Roles = "admin")]
     public async Task<TrustBatchListResponse> ListBatches() => new()

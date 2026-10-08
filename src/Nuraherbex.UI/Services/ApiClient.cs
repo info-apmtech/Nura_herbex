@@ -125,7 +125,7 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public async Task<List<TrustBatchDto>> GetBatchesAsync() => (await GetRaw<TrustBatchListResponse>("api/trust-batches"))?.Batches ?? new();
     public Task<TrustBatchResponse> GetBatchAsync(string batchNo) => Call<TrustBatchResponse>(HttpMethod.Get, $"api/trust-batches/{Uri.EscapeDataString(batchNo)}");
     public async Task<List<ReviewDto>> GetReviewsAsync() => (await GetRaw<ReviewListResponse>("api/reviews"))?.Reviews ?? new();
-    public Task<ApiResult> SubmitReviewAsync(ReviewDto r) => Call<ApiResult>(HttpMethod.Post, "api/reviews", r);
+    public Task<ApiResult> SubmitReviewAsync(ReviewDto r) => Call<ApiResult>(HttpMethod.Post, "api/reviews", r, Who.Customer);
 
     // ------------------------------------------------------------------ admin
     public Task<AdminLoginResponse> AdminLoginAsync(string email, string password) => Call<AdminLoginResponse>(HttpMethod.Post, "api/admin/login", new AdminLoginRequest { Email = email, Password = password });
@@ -139,6 +139,8 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<ApiResult> AdminSendEmailAsync(string orderId, string type) => Call<ApiResult>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/send-email", new AdminEmailRequest { Type = type }, Who.Admin);
     public Task<PaymentAttemptListResponse> AdminPaymentsAsync() => Call<PaymentAttemptListResponse>(HttpMethod.Get, "api/admin/payments", null, Who.Admin);
     public Task<AdminCustomerListResponse> AdminCustomersAsync() => Call<AdminCustomerListResponse>(HttpMethod.Get, "api/admin/customers", null, Who.Admin);
+    public Task<ReviewListResponse> AdminReviewsAsync() => Call<ReviewListResponse>(HttpMethod.Get, "api/admin/reviews", null, Who.Admin);
+    public Task<ApiResult> AdminModerateReviewAsync(string id, bool approved) => Call<ApiResult>(HttpMethod.Put, $"api/admin/reviews/{Uri.EscapeDataString(id)}", new ReviewModerationRequest { Approved = approved }, Who.Admin);
 
     public Task<TrustBatchListResponse> AdminBatchesAsync() => Call<TrustBatchListResponse>(HttpMethod.Get, "api/admin/batches", null, Who.Admin);
     public Task<TrustBatchResponse> AdminSaveBatchAsync(TrustBatchDto b) => Call<TrustBatchResponse>(HttpMethod.Put, "api/admin/batches", b, Who.Admin);

@@ -198,7 +198,7 @@
         new("OUR STORY", () => GoSection("our-story")),
         new("FORMULATION", () => GoPage("/formulation"), PathIs("/formulation", "/ingredients", "/the-formula")),
         new("SHOP STAMIX", () => GoPage("/shop"), PathIs("/shop", "/store", "/products/stamix", "/product/stamix", "/products", "/product", "/shop/stamix")),
-        new("TRUST PASSPORT", () => GoPage("/trust-passport"), new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').ToLowerInvariant() is var p && (p.StartsWith("/trust-passport") || p is "/verify" or "/verify-product" or "/verify-batch")),
+        new("QUALITY & TESTING", () => GoPage("/quality-reports"), new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').ToLowerInvariant() is var p && (p.StartsWith("/quality-reports") || p.StartsWith("/trust-passport") || p is "/verify" or "/verify-product" or "/verify-batch")),
         new("TRACK ORDER", () => GoPage("/track"), PathIs("/track", "/track-order")),
         new(Auth.IsAuthenticated ? "MY ACCOUNT" : "SIGN IN / ACCOUNT", () => GoPage("/account"), IsAccount),
     };

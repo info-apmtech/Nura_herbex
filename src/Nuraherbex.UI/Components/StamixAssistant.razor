@@ -1,0 +1,184 @@
+<div class="sa-widget">
+  @if (_isOpen)
+  {
+    <section class="sa-panel" id="sa-panel" role="dialog" aria-modal="false" aria-labelledby="sa-title" @onkeydown="HandleKeyDown">
+      <header class="sa-header">
+        <div class="sa-brand-mark" aria-hidden="true"><Icon Name="Sparkles" Size="18" /></div>
+        <div class="sa-heading">
+          <h2 id="sa-title">Stamix Assistant</h2>
+          <span><i></i> Product guide</span>
+        </div>
+        <button type="button" class="sa-close" aria-label="Close Stamix Assistant" @onclick="() => _isOpen = false">
+          <Icon Name="X" Size="18" />
+        </button>
+      </header>
+
+      <div class="sa-conversation" aria-live="polite" aria-relevant="additions">
+        @foreach (var message in _messages)
+        {
+          <div class="sa-message-row @(message.FromUser ? "sa-user-row" : "sa-guide-row")">
+            @if (!message.FromUser)
+            {
+              <span class="sa-avatar" aria-hidden="true"><Icon Name="Sparkles" Size="13" /></span>
+            }
+            <div class="sa-message-content">
+              <div class="sa-bubble @(message.FromUser ? "sa-user-bubble" : "sa-guide-bubble")">@message.Text</div>
+              @if (!string.IsNullOrWhiteSpace(message.ActionUrl) && !string.IsNullOrWhiteSpace(message.ActionLabel))
+              {
+                <a class="sa-action" href="@message.ActionUrl">@message.ActionLabel <span aria-hidden="true">→</span></a>
+              }
+            </div>
+          </div>
+        }
+
+        @if (!_hasAsked)
+        {
+          <div class="sa-prompts" aria-label="Suggested questions">
+            <button type="button" @onclick='() => Ask("How should I use Stamix?")'>How to use</button>
+            <button type="button" @onclick='() => Ask("What are the ingredients?")'>Ingredients</button>
+            <button type="button" @onclick='() => Ask("Where can I see batch reports?")'>Batch reports</button>
+            <button type="button" @onclick='() => Ask("How can I track my order?")'>Track an order</button>
+          </div>
+        }
+      </div>
+
+      <div class="sa-footer">
+        <form class="sa-composer" @onsubmit="Submit" @onsubmit:preventDefault>
+          <input @bind="_draft" @bind:event="oninput" maxlength="320" placeholder="Ask about Stamix…" aria-label="Ask the Stamix Assistant" autocomplete="off" />
+          <button type="submit" aria-label="Send message" disabled="@string.IsNullOrWhiteSpace(_draft)">
+            <Icon Name="Send" Size="16" />
+          </button>
+        </form>
+        <p class="sa-disclaimer">General product information only. Follow your pack label; consult a healthcare professional for personal advice.</p>
+      </div>
+    </section>
+  }
+  else
+  {
+    <button type="button" class="sa-launcher" aria-label="Open Stamix Assistant" aria-haspopup="dialog" aria-controls="sa-panel" aria-expanded="false" @onclick="() => _isOpen = true">
+      <span class="sa-launcher-icon"><Icon Name="MessageCircle" Size="21" /></span>
+      <span>Ask Stamix</span>
+      <span class="sa-launcher-sparkle" aria-hidden="true"><Icon Name="Sparkles" Size="14" /></span>
+    </button>
+  }
+</div>
+
+@code {
+    private bool _isOpen;
+    private bool _hasAsked;
+    private string _draft = string.Empty;
+
+    private readonly List<AssistantMessage> _messages =
+    [
+        new(false, "Hi, I’m the Stamix product guide. Ask me about the formula, suggested use, batch reports, or your order.")
+    ];
+
+    private void Ask(string question)
+    {
+        var text = question.Trim();
+        if (text.Length == 0)
+            return;
+
+        _messages.Add(new(true, text));
+        _messages.Add(GetAnswer(text));
+        _hasAsked = true;
+        _draft = string.Empty;
+
+        if (_messages.Count > 25)
+            _messages.RemoveRange(1, _messages.Count - 25);
+    }
+
+    private void Submit() => Ask(_draft);
+
+    private void HandleKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape")
+            _isOpen = false;
+    }
+
+    private static AssistantMessage GetAnswer(string question)
+    {
+        var text = question.ToLowerInvariant();
+
+        if (ContainsAny(text, "pregnan", "medication", "medicine", "drug", "condition", "diabetes", "blood pressure", "allerg", "side effect", "diagnos", "treat", "cure", "safe for me", "doctor"))
+        {
+            return new(false,
+                "I can share general product information, but I can’t assess personal health risks or advise on treatment. Please check the full ingredient list with a qualified healthcare professional before using a supplement, especially if you have a health condition, take medication, or have an allergy.",
+                "View ingredients", "/formulation");
+        }
+
+        if (ContainsAny(text, "ingredient", "formula", "what is in", "botanical", "herb", "composition"))
+        {
+            return new(false,
+                "Stamix is a herbal health supplement for adult men, made with 17 botanicals, herbs, seeds, and nuts. The formulation page lists the ingredients and their amounts per daily serving.",
+                "Explore the formulation", "/formulation");
+        }
+
+        if (ContainsAny(text, "batch", "certificate", "lab report", "quality report", "test report", "verify", "tested", "coa"))
+        {
+            return new(false,
+                "You can review the available batch quality documents and enter a batch number on the quality reports page.",
+                "View batch reports", "/quality-reports");
+        }
+
+        if (ContainsAny(text, "dosage", "serving", "how to use", "how do i use", "how should i use", "mix", "take stamix", "drink stamix", "directions"))
+        {
+            return new(false,
+                "The product page lists the pack directions as one 10 g scoop mixed with 200–250 ml warm milk or water, twice daily (20 g total per day). Follow the directions on your current pack. This is general product information, not personalised medical advice.",
+                "See product details", "/shop");
+        }
+
+        if (ContainsAny(text, "track", "order status", "where is my order", "my order", "delivery status", "dispatch"))
+        {
+            return new(false,
+                "For an existing order, open order tracking and use the details from your confirmation. You can also sign in to view your account orders.",
+                "Track an order", "/track");
+        }
+
+        if (ContainsAny(text, "shipping", "delivery", "ship", "free shipping", "delivery fee"))
+        {
+            return new(false,
+                "Shipping cost, eligibility, and the available delivery estimate are shown during checkout for your address. For an order that has already been placed, use the tracking page.",
+                "Go to checkout", "/shop");
+        }
+
+        if (ContainsAny(text, "coupon", "promo", "discount", "offer", "code"))
+        {
+            return new(false,
+                "Enter your coupon code during checkout before payment. Current offers and their eligibility are shown there.",
+                "Shop Stamix", "/shop");
+        }
+
+        if (ContainsAny(text, "review", "rating", "feedback"))
+        {
+            return new(false,
+                "Sign in to your customer account to submit a product review. Reviews are checked by the team before they appear publicly.",
+                "Go to reviews", "/account/reviews");
+        }
+
+        if (ContainsAny(text, "buy", "purchase", "price", "shop", "product", "stamix"))
+        {
+            return new(false,
+                "Stamix is Nura Herbex’s botanical vitality formula for adult men. Visit the product page for current product details, price, and availability.",
+                "View Stamix", "/shop");
+        }
+
+        if (ContainsAny(text, "human", "contact", "support", "help", "talk to"))
+        {
+            return new(false,
+                "For help from the Nura Herbex care team, email care@nuraherbex.com or call 08888003430.",
+                "Email customer care", "mailto:care@nuraherbex.com");
+        }
+
+        return new(false,
+            "I can help with Stamix product details, suggested use, ingredients, batch reports, orders, coupons, and reviews. For anything that needs a person, contact the Nura Herbex care team.",
+            "Contact customer care", "mailto:care@nuraherbex.com");
+    }
+
+    private static bool ContainsAny(string text, params string[] terms) =>
+        terms.Any(term => text.Contains(term, StringComparison.Ordinal));
+
+    private sealed record AssistantMessage(bool FromUser, string Text, string? ActionLabel = null, string? ActionUrl = null);
+}
+
+

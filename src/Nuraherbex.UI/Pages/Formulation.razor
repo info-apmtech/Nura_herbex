@@ -263,7 +263,7 @@
       </div>
     </div>
 
-    @* 6. Bottom Quality & Trust Passport Bridge *@
+    @* 6. Batch quality and testing link *@
     <div class="rounded-2xl border border-zinc-800 bg-gradient-to-r from-zinc-900 via-purple-950/20 to-zinc-900 p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
       <div class="space-y-2 text-left">
         <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300 text-[10px] font-mono uppercase tracking-wider">
@@ -271,10 +271,10 @@
           <span>Independent Lab Verification</span>
         </div>
         <h3 class="text-lg sm:text-xl font-bold text-white tracking-tight">
-          Verify Lab Certificates for Every Batch
+          View Available Batch Lab Reports
         </h3>
         <p class="text-xs text-zinc-400 max-w-xl leading-relaxed">
-          Every production batch is tested by ISO/IEC 17025 accredited laboratories for heavy metals (lead, arsenic, mercury), microbial pathogens, and active compound assays.
+          Review the available Certificate of Analysis (COA) and laboratory results associated with a Stamix batch.
         </p>
       </div>
 
@@ -282,7 +282,7 @@
         <button @onclick="HandleVerify"
                 class="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-zinc-700 hover:border-zinc-500 bg-zinc-800/80 hover:bg-zinc-800 text-xs font-semibold text-zinc-200 transition-all cursor-pointer flex items-center justify-center gap-2">
           <Icon Name="ShieldCheck" Size="14" Class="text-purple-400" />
-          <span>Verify Batch COA</span>
+          <span>View batch lab reports (COA)</span>
         </button>
 
         <button @onclick="HandleShop"
@@ -403,7 +403,7 @@
 
     private async Task HandleBack() { Nav.NavigateTo("/"); await Browser.ScrollToTopAsync(); }
     private async Task HandleShop() { Nav.NavigateTo("/shop"); await Browser.ScrollToTopAsync(); }
-    private async Task HandleVerify() { Nav.NavigateTo("/trust-passport"); await Browser.ScrollToTopAsync(); }
+    private async Task HandleVerify() { Nav.NavigateTo("/quality-reports"); await Browser.ScrollToTopAsync(); }
 
     private static FormulationIngredientDto I(string id, string name, string botanical, string amount, string category, string benefit) =>
         new() { Id = id, Name = name, BotanicalName = botanical, Amount = amount, Category = category, Benefit = benefit };

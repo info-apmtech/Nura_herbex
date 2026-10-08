@@ -397,7 +397,7 @@ public class ShipmentResponse : ApiResult
 }
 
 // ---------------------------------------------------------------------------
-// Trust Passport (batch verification)
+// Product quality and batch laboratory reports
 // ---------------------------------------------------------------------------
 public class QualityCheckDto
 {
@@ -490,7 +490,13 @@ public class ReviewDto
     public string? Title { get; set; }
     public string Body { get; set; } = "";
     public bool Verified { get; set; }
+    public bool Approved { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+public class ReviewModerationRequest
+{
+    public bool Approved { get; set; }
 }
 
 public class ReviewListResponse : ApiResult
