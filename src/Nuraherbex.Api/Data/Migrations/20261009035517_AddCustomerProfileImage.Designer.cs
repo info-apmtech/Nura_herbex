@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Nuraherbex.Api.Data;
 
@@ -11,9 +12,11 @@ using Nuraherbex.Api.Data;
 namespace Nuraherbex.Api.Data.Migrations
 {
     [DbContext(typeof(NuraDbContext))]
-    partial class NuraDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261009035517_AddCustomerProfileImage")]
+    partial class AddCustomerProfileImage
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -461,10 +464,6 @@ namespace Nuraherbex.Api.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("CustomerId")
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -479,8 +478,6 @@ namespace Nuraherbex.Api.Data.Migrations
                         .HasColumnType("bit");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("CustomerId");
 
                     b.ToTable("reviews", (string)null);
                 });
@@ -629,14 +626,6 @@ namespace Nuraherbex.Api.Data.Migrations
                     b.HasIndex("WaMessageId");
 
                     b.ToTable("whatsapp_messages", (string)null);
-                });
-
-            modelBuilder.Entity("Nuraherbex.Api.Data.Review", b =>
-                {
-                    b.HasOne("Nuraherbex.Api.Data.Customer", null)
-                        .WithMany()
-                        .HasForeignKey("CustomerId")
-                        .OnDelete(DeleteBehavior.SetNull);
                 });
 #pragma warning restore 612, 618
         }

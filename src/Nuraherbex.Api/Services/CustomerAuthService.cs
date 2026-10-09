@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Nuraherbex.Api.Data;
@@ -66,11 +67,17 @@ public class CustomerAuthService(NuraDbContext db, TokenService tokens, EmailSer
             throw new InvalidOperationException("Please enter a valid email address");
 
         var otp = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
-        cache.Set(OtpKey(mail), otp, TimeSpan.FromMinutes(10));
-
         var existing = await FindAsync(mail);
-        await email.SendOtpAsync(mail, otp, existing?.FullName ?? "Valued Patron");
-        return new AuthResponse { Success = true, Message = $"A 6-digit login code has been sent to {mail}", Email = mail };
+
+        // A previous code must not remain usable when a resend fails. Only activate
+        // this code after the email provider has accepted the message.
+        cache.Remove(OtpKey(mail));
+        var sent = await email.SendOtpAsync(mail, otp, existing?.FullName ?? "Valued Patron");
+        if (!sent)
+            throw new InvalidOperationException("We couldn't send a login code to that email right now. Please try again shortly. If the problem continues, contact Nura Herbex support.");
+
+        cache.Set(OtpKey(mail), otp, TimeSpan.FromMinutes(10));
+        return new AuthResponse { Success = true, Message = $"A 6-digit login code was sent to {mail}. Check your inbox and spam folder.", Email = mail };
     }
 
     public async Task<AuthResponse> VerifyOtpAsync(string? emailAddress, string? otp)
@@ -102,8 +109,22 @@ public class CustomerAuthService(NuraDbContext db, TokenService tokens, EmailSer
     public async Task<CustomerDto> UpdateProfileAsync(string id, UpdateProfileRequest r)
     {
         var c = await GetAsync(id) ?? throw new InvalidOperationException("Customer not found");
-        if (!string.IsNullOrWhiteSpace(r.FullName)) c.FullName = r.FullName.Trim();
-        if (!string.IsNullOrWhiteSpace(r.Phone)) c.Phone = Digits(r.Phone);
+        if (r.FullName is not null)
+        {
+            if (string.IsNullOrWhiteSpace(r.FullName) || r.FullName.Trim().Length > 200)
+                throw new InvalidOperationException("Full name is required (maximum 200 characters).");
+            c.FullName = r.FullName.Trim();
+        }
+        if (!string.IsNullOrWhiteSpace(r.Phone))
+        {
+            var phone = Digits(r.Phone);
+            if (phone.Length is < 10 or > 15) throw new InvalidOperationException("Enter a phone number with 10–15 digits.");
+            if (await db.Customers.AnyAsync(other => other.Id != id && other.Phone == phone))
+                throw new InvalidOperationException("This phone number is already used by another account.");
+            c.Phone = phone;
+        }
+        if (r.ProfileImageData is not null)
+            c.ProfileImageData = string.IsNullOrEmpty(r.ProfileImageData) ? null : ValidateProfileImageData(r.ProfileImageData);
         if (r.ShippingAddress is { } a)
         {
             var cur = c.ShippingAddress;
@@ -122,6 +143,60 @@ public class CustomerAuthService(NuraDbContext db, TokenService tokens, EmailSer
         return c.ToDto();
     }
 
+    public async Task ChangePasswordAsync(string id, ChangePasswordRequest request)
+    {
+        if (string.IsNullOrEmpty(request.CurrentPassword))
+            throw new InvalidOperationException("Enter your current password.");
+        if (string.IsNullOrEmpty(request.NewPassword) || request.NewPassword.Length < 8)
+            throw new InvalidOperationException("Your new password must contain at least 8 characters.");
+        if (Encoding.UTF8.GetByteCount(request.NewPassword) > 72)
+            throw new InvalidOperationException("Your new password is too long. Use no more than 72 UTF-8 bytes.");
+
+        var customer = await GetAsync(id) ?? throw new InvalidOperationException("Customer account not found.");
+        if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, customer.PasswordHash))
+            throw new InvalidOperationException("Your current password is incorrect.");
+        if (BCrypt.Net.BCrypt.Verify(request.NewPassword, customer.PasswordHash))
+            throw new InvalidOperationException("Choose a new password that differs from your current password.");
+
+        customer.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        customer.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+    }
+
+    private static string ValidateProfileImageData(string dataUrl)
+    {
+        const int maxBytes = 512 * 1024;
+        var separator = dataUrl.IndexOf(',');
+        if (separator < 0)
+            throw new InvalidOperationException("The profile photo format is invalid.");
+
+        var mime = dataUrl[..separator].ToLowerInvariant() switch
+        {
+            "data:image/jpeg;base64" => "image/jpeg",
+            "data:image/png;base64" => "image/png",
+            "data:image/webp;base64" => "image/webp",
+            _ => throw new InvalidOperationException("Upload a JPG, PNG, or WebP profile photo."),
+        };
+        var encoded = dataUrl[(separator + 1)..];
+        if (encoded.Length > ((maxBytes + 2) / 3 * 4))
+            throw new InvalidOperationException("The compressed profile photo must be 512 KB or smaller.");
+
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(encoded); }
+        catch (FormatException) { throw new InvalidOperationException("The profile photo data is invalid."); }
+        if (bytes.Length == 0 || bytes.Length > maxBytes)
+            throw new InvalidOperationException("The compressed profile photo must be 512 KB or smaller.");
+
+        var valid = mime switch
+        {
+            "image/jpeg" => bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF,
+            "image/png" => bytes.AsSpan().StartsWith(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }),
+            "image/webp" => bytes.Length >= 12 && Encoding.ASCII.GetString(bytes, 0, 4) == "RIFF" && Encoding.ASCII.GetString(bytes, 8, 4) == "WEBP",
+            _ => false,
+        };
+        if (!valid) throw new InvalidOperationException("The uploaded file is not a valid supported image.");
+        return dataUrl;
+    }
     public async Task<List<AdminCustomerDto>> ListForAdminAsync()
     {
         var customers = await db.Customers.AsNoTracking().OrderByDescending(c => c.CreatedAt).ToListAsync();

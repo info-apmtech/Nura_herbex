@@ -115,6 +115,7 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public async Task<CheckUserResponse> CheckUserAsync(string query) => await GetRaw<CheckUserResponse>($"api/auth/check-user?query={Uri.EscapeDataString(query)}") ?? new();
     public Task<CustomerResponse> GetMeAsync() => Call<CustomerResponse>(HttpMethod.Get, "api/auth/me", null, Who.Customer);
     public Task<CustomerResponse> UpdateMeAsync(UpdateProfileRequest r) => Call<CustomerResponse>(HttpMethod.Put, "api/auth/me", r, Who.Customer);
+    public Task<ApiResult> ChangePasswordAsync(ChangePasswordRequest r) => Call<ApiResult>(HttpMethod.Put, "api/auth/me/password", r, Who.Customer);
     public Task<OrderListResponse> MyOrdersAsync() => Call<OrderListResponse>(HttpMethod.Get, "api/auth/my-orders", null, Who.Customer);
 
     // ------------------------------------------------------------------ public content

@@ -27,7 +27,7 @@ public static class Mapping
 
     public static CustomerDto ToDto(this Customer c) => new()
     {
-        Id = c.Id, FullName = c.FullName, Email = c.Email, Phone = c.Phone,
+        Id = c.Id, FullName = c.FullName, Email = c.Email, Phone = c.Phone, ProfileImageData = c.ProfileImageData,
         ShippingAddress = c.ShippingAddress, CreatedAt = c.CreatedAt, UpdatedAt = c.UpdatedAt,
     };
 
@@ -39,9 +39,18 @@ public static class Mapping
         CreatedAt = b.CreatedAt, UpdatedAt = b.UpdatedAt,
     };
 
-    public static ReviewDto ToDto(this Review r) => new()
+    public static ReviewDto ToDto(this Review r, Customer? currentCustomer = null) => new()
     {
-        Id = r.Id, Name = r.Name, City = r.City, Rating = r.Rating, Title = r.Title, Body = r.Body, Verified = r.Verified, Approved = r.Approved, CreatedAt = r.CreatedAt,
+        Id = r.Id,
+        Name = string.IsNullOrWhiteSpace(currentCustomer?.FullName) ? r.Name : currentCustomer.FullName,
+        City = r.City,
+        Rating = r.Rating,
+        Title = r.Title,
+        Body = r.Body,
+        Verified = r.Verified,
+        Approved = r.Approved,
+        ProfileImageData = currentCustomer?.ProfileImageData,
+        CreatedAt = r.CreatedAt,
     };
 
     public static WhatsAppMessageDto ToDto(this WhatsAppMessage m) => new()

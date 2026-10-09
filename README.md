@@ -28,7 +28,24 @@ dotnet run --project src/Nuraherbex.Web
 ```
 
 * Admin portal: `/admin`. Configure the administrator with `pwsh -File tools/Set-AdminCredentials.ps1`; this prompts for a password and stores a salted PBKDF2 hash in git-ignored `src/Nuraherbex.Api/appsettings.Local.json`. Restart the API after changing credentials. Development defaults apply only when no local credentials are configured.
-* Payments run in **simulation mode** until `PayU:MerchantKey/MerchantSalt` are set; Shiprocket simulates until credentials are set; emails are skipped until `Email:ResendApiKey` is set.
+* Payments run in **simulation mode** until PayU merchant credentials are set; Shiprocket simulates until its credentials are set.
+
+#### Email and login-code delivery
+
+Transactional email (login codes, order and delivery notices) is sent over **SMTP** when `Email:Smtp:Host` is configured, and falls back to the **Resend** HTTP API otherwise. The sender is `Email:From` (default `Nura Herbex <care@nuraherbex.com>`).
+
+For local development keep credentials in .NET User Secrets — never in `appsettings.json`:
+
+    dotnet user-secrets set "Email:Smtp:Host" "smtp.gmail.com" --project src/Nuraherbex.Api
+    dotnet user-secrets set "Email:Smtp:Username" "care@nuraherbex.com" --project src/Nuraherbex.Api
+    dotnet user-secrets set "Email:Smtp:Password" "<app-password>" --project src/Nuraherbex.Api
+
+Resend alternative (used only when no SMTP host is set):
+
+    dotnet user-secrets set "Email:ResendApiKey" "<your-resend-api-key>" --project src/Nuraherbex.Api
+    dotnet user-secrets set "Email:From" "Nura Herbex <verified-sender@yourdomain.com>" --project src/Nuraherbex.Api
+
+For deployment set the equivalent environment variables (`Email__Smtp__Host`, `Email__Smtp__Username`, `Email__Smtp__Password`, or `Email__ResendApiKey`, `Email__From`) and restart the API. Gmail/Google Workspace require an [app password](https://support.google.com/accounts/answer/185833) when 2-Step Verification is on. The login screen reports an error when the send is rejected; accepted email can still land in Spam/Junk.
 
 ### CSS (Tailwind)
 The UI uses the same Tailwind classes as the React app. After changing markup, rebuild the stylesheet (uses the Tailwind CLI already in `../node_modules`):

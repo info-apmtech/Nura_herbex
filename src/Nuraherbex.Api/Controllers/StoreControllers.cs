@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -224,6 +224,19 @@ public class AuthController(CustomerAuthService auth, OrderService orders, Shipp
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
+    [HttpPut("me/password"), Authorize(Roles = "customer")]
+    public async Task<IActionResult> ChangePassword(ChangePasswordRequest request)
+    {
+        try
+        {
+            await auth.ChangePasswordAsync(CurrentId ?? "", request);
+            return Ok(new ApiResult { Success = true, Message = "Your password has been updated." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ApiResult { Success = false, Message = ex.Message });
+        }
+    }
     [HttpGet("my-orders"), Authorize(Roles = "customer")]
     public async Task<IActionResult> MyOrders()
     {
@@ -287,11 +300,65 @@ public class ReviewsController(NuraDbContext db) : ControllerBase
 {
     [HttpGet]
     [AllowAnonymous]
-    public async Task<ReviewListResponse> List() => new()
+    public async Task<ReviewListResponse> List()
     {
-        Success = true,
-        Reviews = (await db.Reviews.AsNoTracking().Where(r => r.Approved).OrderByDescending(r => r.CreatedAt).Take(50).ToListAsync()).Select(r => r.ToDto()).ToList(),
-    };
+        var reviews = await db.Reviews.AsNoTracking()
+            .Where(r => r.Approved)
+            .OrderByDescending(r => r.CreatedAt)
+            .Take(50)
+            .ToListAsync();
+
+        var customerIds = reviews
+            .Where(review => !string.IsNullOrWhiteSpace(review.CustomerId))
+            .Select(review => review.CustomerId!)
+            .Distinct()
+            .ToList();
+
+        var customers = customerIds.Count == 0
+            ? new Dictionary<string, Customer>()
+            : await db.Customers.AsNoTracking()
+                .Where(customer => customerIds.Contains(customer.Id))
+                .ToDictionaryAsync(customer => customer.Id);
+
+        // Older reviews predate the customer link. Associate them only when the
+        // saved reviewer name matches exactly one customer account.
+        var unlinkedNames = reviews
+            .Where(review => string.IsNullOrWhiteSpace(review.CustomerId))
+            .Select(review => review.Name.Trim())
+            .Where(name => name.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (unlinkedNames.Count > 0)
+        {
+            var possibleMatches = await db.Customers.AsNoTracking()
+                .Where(customer => unlinkedNames.Contains(customer.FullName.Trim()))
+                .ToListAsync();
+
+            var uniqueMatches = possibleMatches
+                .GroupBy(customer => customer.FullName.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() == 1)
+                .ToDictionary(group => group.Key, group => group.Single(), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var review in reviews.Where(review => string.IsNullOrWhiteSpace(review.CustomerId)))
+            {
+                if (uniqueMatches.TryGetValue(review.Name.Trim(), out var customer))
+                {
+                    review.CustomerId = customer.Id;
+                    customers[customer.Id] = customer;
+                }
+            }
+        }
+
+        return new ReviewListResponse
+        {
+            Success = true,
+            Reviews = reviews.Select(review =>
+                customers.TryGetValue(review.CustomerId ?? "", out var customer)
+                    ? review.ToDto(customer)
+                    : review.ToDto()).ToList(),
+        };
+    }
 
     [HttpPost]
     [Authorize(Roles = "customer")]
@@ -310,6 +377,7 @@ public class ReviewsController(NuraDbContext db) : ControllerBase
 
         db.Reviews.Add(new Review
         {
+            CustomerId = customer.Id,
             Name = customer.FullName.Trim(), City = r.City?.Trim(), Rating = Math.Clamp(r.Rating, 1, 5), Title = r.Title?.Trim(), Body = r.Body.Trim(),
             Approved = false, // moderated before publishing
         });

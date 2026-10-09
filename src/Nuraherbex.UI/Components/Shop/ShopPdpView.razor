@@ -531,12 +531,26 @@
           {
             <div class="p-5 rounded-2xl bg-white/[0.02] border border-white/10 space-y-2.5">
               <div class="flex justify-between items-start">
-                <div>
-                  <h4 class="font-bold text-sm text-white">@rev.Name</h4>
-                  @if (!string.IsNullOrWhiteSpace(rev.City))
+                <div class="flex items-center gap-2.5 min-w-0">
+                  @if (!string.IsNullOrWhiteSpace(rev.ProfileImageData))
                   {
-                    <span class="text-[10px] text-purple-300">@rev.City</span>
+                    <img src="@rev.ProfileImageData" alt="@($"{rev.Name} profile photo")"
+                         class="w-9 h-9 rounded-full object-cover border border-purple-300/30 shrink-0"
+                         loading="lazy" decoding="async" />
                   }
+                  else
+                  {
+                    <div class="w-9 h-9 rounded-full bg-purple-500/15 border border-purple-300/20 text-purple-200 text-xs font-bold flex items-center justify-center shrink-0">
+                      @(string.IsNullOrWhiteSpace(rev.Name) ? "?" : rev.Name.Trim()[..1].ToUpperInvariant())
+                    </div>
+                  }
+                  <div class="min-w-0">
+                    <h4 class="font-bold text-sm text-white truncate">@rev.Name</h4>
+                    @if (!string.IsNullOrWhiteSpace(rev.City))
+                    {
+                      <span class="text-[10px] text-purple-300">@rev.City</span>
+                    }
+                  </div>
                 </div>
                 <div class="flex text-yellow-400">
                   @for (var s = 0; s < Math.Clamp(rev.Rating, 0, 5); s++)

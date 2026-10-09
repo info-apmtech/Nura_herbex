@@ -257,6 +257,7 @@ public class CustomerDto
     public string FullName { get; set; } = "";
     public string Email { get; set; } = "";
     public string Phone { get; set; } = "";
+    public string? ProfileImageData { get; set; }
     public AddressDto ShippingAddress { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -307,7 +308,14 @@ public class UpdateProfileRequest
 {
     public string? FullName { get; set; }
     public string? Phone { get; set; }
+    public string? ProfileImageData { get; set; }
     public AddressDto? ShippingAddress { get; set; }
+}
+
+public class ChangePasswordRequest
+{
+    public string CurrentPassword { get; set; } = "";
+    public string NewPassword { get; set; } = "";
 }
 
 public class AuthResponse : ApiResult
@@ -491,6 +499,7 @@ public class ReviewDto
     public string Body { get; set; } = "";
     public bool Verified { get; set; }
     public bool Approved { get; set; }
+    public string? ProfileImageData { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

@@ -35,8 +35,12 @@
             <div class="sa-prompt-list" aria-label="Suggested questions">
               <button type="button" @onclick='() => Ask("What are the ingredients?")'>Ingredients</button>
               <button type="button" @onclick='() => Ask("How should I use Stamix?")'>Directions</button>
+              <button type="button" @onclick='() => Ask("How many servings are in a canister?")'>Servings per canister</button>
+              <button type="button" @onclick='() => Ask("How is Stamix tested for purity?")'>Purity testing</button>
+              <button type="button" @onclick='() => Ask("Does Stamix contain fillers or artificial sweeteners?")'>Fillers &amp; sweeteners</button>
               <button type="button" @onclick='() => Ask("Where can I see batch reports?")'>Batch reports</button>
               <button type="button" @onclick='() => Ask("How can I track my order?")'>Track an order</button>
+              <button type="button" @onclick='() => Ask("Where can I read customer reviews?")'>Customer reviews</button>
             </div>
           </div>
         }
@@ -140,6 +144,19 @@
                 "View ingredients", "/formulation");
         }
 
+        if (ContainsAny(text, "how many servings", "servings in a canister", "servings per canister", "canister last", "pack size"))
+        {
+            return new(false,
+                "One Stamix canister contains 300 g and is listed as a 15-serving, 15-day supply. The product directions describe a total daily serving of 20 g. Follow the directions on your current pack.",
+                "View Stamix product details", "/shop");
+        }
+
+        if (ContainsAny(text, "filler", "maltodextrin", "artificial sweetener", "sweetener"))
+        {
+            return new(false,
+                "The product information states that Stamix has zero synthetic fillers, no maltodextrin, and no artificial sweeteners. See the product page for the full formulation details.",
+                "Explore the formulation", "/formulation");
+        }
         if (ContainsAny(text, "ingredient", "formula", "what is in", "botanical", "herb", "composition"))
         {
             return new(false,
@@ -147,10 +164,10 @@
                 "Explore the formulation", "/formulation");
         }
 
-        if (ContainsAny(text, "batch", "certificate", "lab report", "quality report", "test report", "verify", "tested", "coa"))
+        if (ContainsAny(text, "batch", "certificate", "lab report", "quality report", "quality test", "test report", "purity", "heavy metal", "verify", "tested", "coa"))
         {
             return new(false,
-                "You can review the available batch quality documents and enter a batch number on the quality reports page.",
+                "Stamix product information describes raw-batch ICP-MS testing for lead, arsenic, cadmium, and mercury. You can review available documents and look up a batch on the quality reports page.",
                 "View batch reports", "/quality-reports");
         }
 

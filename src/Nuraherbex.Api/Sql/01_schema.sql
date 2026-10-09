@@ -17,6 +17,7 @@ CREATE TABLE [customers] (
     [FullName] nvarchar(max) NOT NULL,
     [Email] nvarchar(256) NOT NULL,
     [Phone] nvarchar(32) NOT NULL,
+    [ProfileImageData] nvarchar(max) NULL,
     [PasswordHash] nvarchar(max) NOT NULL,
     [ShippingAddress] nvarchar(max) NOT NULL,
     [CreatedAt] datetime2 NOT NULL,
@@ -104,6 +105,7 @@ GO
 
 CREATE TABLE [reviews] (
     [Id] nvarchar(32) NOT NULL,
+    [CustomerId] nvarchar(32) NULL,
     [Name] nvarchar(max) NOT NULL,
     [City] nvarchar(max) NULL,
     [Rating] int NOT NULL,
@@ -112,8 +114,11 @@ CREATE TABLE [reviews] (
     [Verified] bit NOT NULL,
     [Approved] bit NOT NULL,
     [CreatedAt] datetime2 NOT NULL,
-    CONSTRAINT [PK_reviews] PRIMARY KEY ([Id])
+    CONSTRAINT [PK_reviews] PRIMARY KEY ([Id]),
+    CONSTRAINT [FK_reviews_customers_CustomerId] FOREIGN KEY ([CustomerId]) REFERENCES [customers] ([Id]) ON DELETE SET NULL
 );
+GO
+CREATE INDEX [IX_reviews_CustomerId] ON [reviews] ([CustomerId]);
 GO
 
 

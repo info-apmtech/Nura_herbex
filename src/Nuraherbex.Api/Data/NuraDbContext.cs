@@ -157,6 +157,9 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.ToTable("reviews");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasMaxLength(32);
+            e.Property(x => x.CustomerId).HasMaxLength(32);
+            e.HasIndex(x => x.CustomerId);
+            e.HasOne<Customer>().WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<WhatsAppMessage>(e =>

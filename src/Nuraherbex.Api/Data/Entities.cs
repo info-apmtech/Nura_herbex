@@ -44,6 +44,7 @@ public class Customer
     public string FullName { get; set; } = "";
     public string Email { get; set; } = "";
     public string Phone { get; set; } = "";
+    public string? ProfileImageData { get; set; }
     public string PasswordHash { get; set; } = "";
     public AddressDto ShippingAddress { get; set; } = new();
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -155,6 +156,7 @@ public class SiteSetting
 public class Review
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string? CustomerId { get; set; }
     public string Name { get; set; } = "";
     public string? City { get; set; }
     public int Rating { get; set; } = 5;

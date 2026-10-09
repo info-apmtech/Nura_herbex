@@ -3,7 +3,8 @@
 
 @if (_editor is not null)
 {
-    <div class="admin-section-heading"><div><span class="admin-eyebrow">CATALOG / PRODUCTS</span><h2>@(_creating ? "Add a product" : "Edit product")</h2><p>Details, pricing and availability for your storefront.</p></div><button class="admin-btn" disabled="@_saving" @onclick="CloseAsync">Back to products</button></div>
+    <div class="admin-section-heading"><div><span class="admin-eyebrow">CATALOG / PRODUCTS</span><h2>@(_creating ? (_duplicating ? "Duplicate product" : "Add a product") : "Edit product")</h2><p>Details, pricing and availability for your storefront.</p></div><button class="admin-btn" disabled="@_saving" @onclick="CloseAsync">Back to products</button></div>
+    @if (_duplicating) { <div role="status" class="admin-notice">Product details have been copied. This draft has a new SKU and no stock; complete the details and save it as a new product.</div> }
     <form @onsubmit="SaveAsync" @onsubmit:preventDefault>
         <div class="admin-editor-grid">
             <div class="admin-stack">
@@ -34,7 +35,7 @@
                 <section class="admin-card"><h3>Product image</h3><div class="admin-image-preview">@if (!string.IsNullOrWhiteSpace(_editor.ImageUrl)) { <img src="@_editor.ImageUrl" alt="Product preview" /> } else { <Icon Name="Package" Size="48" /> }</div><label class="admin-label">Image URL<input maxlength="2048" @bind="_editor.ImageUrl" @bind:event="oninput" placeholder="https://… or /images/product.png" /></label><p class="admin-help">Use a publicly accessible product image. Square images work best.</p></section>
             </div>
         </div>
-        <div class="admin-savebar">@if (_error is not null) { <p role="alert" class="admin-error">@_error</p> }<span class="admin-help">Changes appear in the shop after saving.</span><div class="admin-actions"><button type="button" class="admin-btn" disabled="@_saving" @onclick="CloseAsync">Cancel</button><button class="admin-btn admin-btn-primary" disabled="@_saving">@(_saving ? "Saving…" : "Save product")</button></div></div>
+        <div class="admin-savebar">@if (_error is not null) { <p role="alert" class="admin-error">@_error</p> }<span class="admin-help">Changes appear in the shop after saving.</span><div class="admin-actions"><button type="button" class="admin-btn" disabled="@_saving" @onclick="CloseAsync">Cancel</button><button class="admin-btn admin-btn-primary" disabled="@_saving">@(_saving ? "Saving…" : _duplicating ? "Save duplicate" : "Save product")</button></div></div>
     </form>
 }
 else
@@ -48,14 +49,14 @@ else
         <div class="admin-table-scroll"><table class="admin-table"><thead><tr><th>Product</th><th>Status</th><th>Inventory</th><th>Price</th><th>Category</th><th><span class="admin-sr-only">Actions</span></th></tr></thead><tbody>
         @if (_loading) { <tr><td colspan="6" class="admin-empty">Loading your catalog…</td></tr> }
         else if (!Filtered.Any()) { <tr><td colspan="6" class="admin-empty"><Icon Name="Package" Size="32" /><h3>No products found</h3><p>Add your first product or adjust the filters.</p></td></tr> }
-        else { @foreach (var p in Filtered.Skip((_page - 1) * 10).Take(10)) { <tr @key="p.Id"><td><button class="admin-product-cell" @onclick="() => Edit(p)"><div class="admin-thumbnail">@if (!string.IsNullOrWhiteSpace(p.ImageUrl)) { <img src="@p.ImageUrl" alt="" loading="lazy" /> } else { <Icon Name="Package" Size="22" /> }</div><span><strong>@p.Name</strong><small>@p.Sku</small></span></button></td><td><span class="admin-badge @p.Status">@p.Status</span></td><td><strong class="@(p.StockQuantity <= 10 ? "admin-warning-text" : "")">@p.StockQuantity</strong><small class="admin-cell-note">in stock</small></td><td>₹@AdminFmt.Inr(p.Price)</td><td>@(string.IsNullOrWhiteSpace(p.Category) ? "—" : p.Category)</td><td><div class="admin-actions"><button class="admin-btn admin-btn-small" @onclick="() => Edit(p)">Edit</button>@if (p.Status != "archived") { <button class="admin-link-danger" disabled="@_saving" @onclick="() => ArchiveAsync(p)">Archive</button> }</div></td></tr> } }
+        else { @foreach (var p in Filtered.Skip((_page - 1) * 10).Take(10)) { <tr @key="p.Id"><td><button class="admin-product-cell" @onclick="() => Edit(p)"><div class="admin-thumbnail">@if (!string.IsNullOrWhiteSpace(p.ImageUrl)) { <img src="@p.ImageUrl" alt="" loading="lazy" /> } else { <Icon Name="Package" Size="22" /> }</div><span><strong>@p.Name</strong><small>@p.Sku</small></span></button></td><td><span class="admin-badge @p.Status">@p.Status</span></td><td><strong class="@(p.StockQuantity <= 10 ? "admin-warning-text" : "")">@p.StockQuantity</strong><small class="admin-cell-note">in stock</small></td><td>₹@AdminFmt.Inr(p.Price)</td><td>@(string.IsNullOrWhiteSpace(p.Category) ? "—" : p.Category)</td><td><div class="admin-actions"><button class="admin-btn admin-btn-small" @onclick="() => Edit(p)">Edit</button><button class="admin-btn admin-btn-small" disabled="@_saving" @onclick="() => Duplicate(p)">Duplicate</button>@if (p.Status != "archived") { <button class="admin-link-danger" disabled="@_saving" @onclick="() => ArchiveAsync(p)">Archive</button> }</div></td></tr> } }
         </tbody></table></div><div class="admin-pagination"><span>@Filtered.Count() products · Page @_page of @Pages</span><div class="admin-actions"><button class="admin-btn admin-btn-small" disabled="@(_page <= 1)" @onclick="() => _page--">Previous</button><button class="admin-btn admin-btn-small" disabled="@(_page >= Pages)" @onclick="() => _page++">Next</button></div></div>
     </section>
 }
 @code {
     private List<AdminProductDto> _products = new();
     private AdminProductDto? _editor;
-    private bool _creating, _saving, _loading;
+    private bool _creating, _duplicating, _saving, _loading;
     private string _search = "", _status = "all";
     private string? _error, _message;
     private int _page = 1;
@@ -64,10 +65,49 @@ else
     private void ResetPage() => _page = 1;
     protected override Task OnInitializedAsync() => LoadAsync();
     private async Task LoadAsync() { _loading = true; _error = null; var r = await Api.AdminCatalogAsync(); if (r.Success) _products = r.Products; else _error = r.Message; _page = Math.Min(_page, Pages); _loading = false; }
-    private void New() { _creating = true; _error = null; _editor = new() { Status = "draft", WeightKg = 0.38m, LengthCm = 10, BreadthCm = 10, HeightCm = 14 }; }
-    private void Edit(AdminProductDto p) { _creating = false; _error = null; _editor = System.Text.Json.JsonSerializer.Deserialize<AdminProductDto>(System.Text.Json.JsonSerializer.Serialize(p)); }
-    private async Task CloseAsync() { if (await Browser.ConfirmAsync("Discard changes and return to products?")) { _editor = null; _error = null; } }
-    private async Task SaveAsync() { if (_editor is null || _saving) return; _saving = true; _error = null; var r = await Api.AdminSaveProductAsync(_editor, _creating); _saving = false; if (!r.Success) { _error = r.Message; return; } _editor = null; _message = "Product saved successfully."; await LoadAsync(); await Browser.ScrollToTopAsync(); }
+    private void New() { _creating = true; _duplicating = false; _error = null; _editor = new() { Status = "draft", WeightKg = 0.38m, LengthCm = 10, BreadthCm = 10, HeightCm = 14 }; }
+    private void Edit(AdminProductDto p) { _creating = false; _duplicating = false; _error = null; _editor = System.Text.Json.JsonSerializer.Deserialize<AdminProductDto>(System.Text.Json.JsonSerializer.Serialize(p)); }
+    private void Duplicate(AdminProductDto product)
+    {
+        var copy = System.Text.Json.JsonSerializer.Deserialize<AdminProductDto>(
+            System.Text.Json.JsonSerializer.Serialize(product)) ?? new AdminProductDto();
+
+        copy.Id = string.Empty;
+        copy.UpdatedAt = default;
+        copy.Name = $"{product.Name.Trim()} (Copy)";
+        if (copy.Name.Length > 300)
+            copy.Name = copy.Name[..300];
+        copy.Sku = CreateCopySku(product.Sku);
+        copy.Status = "draft";
+        copy.StockQuantity = 0;
+
+        _creating = true;
+        _duplicating = true;
+        _error = null;
+        _message = null;
+        _editor = copy;
+    }
+
+    private string CreateCopySku(string? sourceSku)
+    {
+        var stem = string.IsNullOrWhiteSpace(sourceSku) ? "PRODUCT" : sourceSku.Trim().ToUpperInvariant();
+        const string suffix = "-COPY";
+        stem = stem[..Math.Min(stem.Length, 64 - suffix.Length)];
+        var candidate = stem + suffix;
+        var sequence = 2;
+
+        while (_products.Any(p => string.Equals(p.Sku, candidate, StringComparison.OrdinalIgnoreCase)))
+        {
+            var sequenceSuffix = $"-COPY-{sequence++}";
+            var candidateStem = string.IsNullOrWhiteSpace(sourceSku) ? "PRODUCT" : sourceSku.Trim().ToUpperInvariant();
+            candidateStem = candidateStem[..Math.Min(candidateStem.Length, 64 - sequenceSuffix.Length)];
+            candidate = candidateStem + sequenceSuffix;
+        }
+
+        return candidate;
+    }
+    private async Task CloseAsync() { if (await Browser.ConfirmAsync("Discard changes and return to products?")) { _editor = null; _error = null; _duplicating = false; } }
+    private async Task SaveAsync() { if (_editor is null || _saving) return; _saving = true; _error = null; var r = await Api.AdminSaveProductAsync(_editor, _creating); _saving = false; if (!r.Success) { _error = r.Message; return; } _editor = null; _message = _duplicating ? "Duplicate product saved successfully." : "Product saved successfully."; _duplicating = false; await LoadAsync(); await Browser.ScrollToTopAsync(); }
     private async Task ArchiveAsync(AdminProductDto p) { if (!await Browser.ConfirmAsync($"Archive {p.Name}? It will be removed from the shop. Existing orders stay unchanged.")) return; _saving = true; var r = await Api.AdminArchiveProductAsync(p.Id); _saving = false; if (!r.Success) { _error = r.Message; return; } _message = r.Message; await LoadAsync(); await Browser.ScrollToTopAsync(); }
 }
 

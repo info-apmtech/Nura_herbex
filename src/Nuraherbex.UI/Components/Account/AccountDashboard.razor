@@ -1,6 +1,7 @@
 @using System.Globalization
 @implements IDisposable
 @inject AuthState Auth
+@inject BrowserInterop Browser
 @inject CartState Cart
 @inject NavigationManager Nav
 
@@ -97,6 +98,11 @@
 
     @* 3. Segmented Navigation Bar *@
     <nav class="customer-account-tabs" aria-label="Account sections" role="tablist">
+            <button role="tab" aria-selected="@(_activeTab == "profile")" @onclick="@(() => _activeTab = "profile")"
+                    class="customer-account-tab @(_activeTab == "profile" ? "is-active" : "")">
+                <Icon Name="UserRound" Size="14" />
+                <span>My profile</span>
+            </button>
             <button role="tab" aria-selected="@(_activeTab == "orders")" @onclick="@(() => _activeTab = "orders")"
                     class="customer-account-tab @(_activeTab == "orders" ? "is-active" : "")">
                 <Icon Name="Package" Size="14" />
@@ -116,6 +122,131 @@
             </button>
     </nav>
 
+    @if (_activeTab == "profile")
+    {
+        <div class="customer-account-profile-stack">
+            <section class="customer-account-panel max-w-3xl bg-[#0e0a1b] border border-white/10 p-6 sm:p-8 rounded-lg shadow-xl">
+                <div class="customer-account-panel-heading">
+                    <span class="customer-account-icon"><Icon Name="UserRound" Size="18" /></span>
+                    <div>
+                        <h2>Your profile</h2>
+                        <p>Keep your account details current for a smoother shopping and delivery experience.</p>
+                    </div>
+                </div>
+
+                <div class="customer-account-photo-row">
+                    <div class="customer-account-photo-avatar" aria-label="Profile photo preview">
+                        @if (!string.IsNullOrWhiteSpace(customer.ProfileImageData))
+                        {
+                            <img src="@customer.ProfileImageData" alt="@($"{customerName} profile photo")" />
+                        }
+                        else
+                        {
+                            <span>@ProfileInitial(customerName)</span>
+                        }
+                    </div>
+                    <div class="customer-account-photo-controls">
+                        <strong>Profile photo</strong>
+                        <p>Choose a JPG, PNG, or WebP image. Photos are resized before they are saved. Your current photo may appear beside an approved review.</p>
+                        <div class="customer-account-photo-actions">
+                            <label class="customer-account-photo-upload">
+                                <Icon Name="Upload" Size="14" />
+                                <span>@(_savingPhoto ? "Uploading…" : "Choose photo")</span>
+                                <InputFile @key="_photoInputVersion" id="customer-profile-photo" accept="image/jpeg,image/png,image/webp" aria-label="Upload profile photo" OnChange="HandleProfilePhotoSelected" disabled="@_savingPhoto" class="customer-account-photo-input" />
+                            </label>
+                            @if (!string.IsNullOrWhiteSpace(customer.ProfileImageData))
+                            {
+                                <button type="button" class="customer-account-photo-remove" disabled="@_savingPhoto" @onclick="RemoveProfilePhotoAsync">Remove photo</button>
+                            }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_profilePhotoMessage))
+                        {
+                            <p class="customer-account-profile-success" role="status">@_profilePhotoMessage</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_profilePhotoError))
+                        {
+                            <p class="customer-account-form-error" role="alert">@_profilePhotoError</p>
+                        }
+                    </div>
+                </div>
+
+                <form class="customer-account-form" @onsubmit="SaveProfileAsync" @onsubmit:preventDefault>
+                    <div class="customer-account-form-grid">
+                        <label>
+                            Full name
+                            <input required maxlength="200" autocomplete="name" @bind="_profileFullName" @bind:event="oninput" />
+                        </label>
+                        <div class="customer-account-profile-readonly">
+                            <span>Email address</span>
+                            <strong>@customer.Email</strong>
+                            <small>Email is used to sign in. Contact customer care if it needs to be changed.</small>
+                        </div>
+                        <label>
+                            Phone number <span>(optional)</span>
+                            <input type="tel" maxlength="24" autocomplete="tel" @bind="_profilePhone" @bind:event="oninput" placeholder="Your contact number" />
+                        </label>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(_profileSavedMessage))
+                    {
+                        <p class="customer-account-profile-success" role="status">@_profileSavedMessage</p>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_profileError))
+                    {
+                        <p class="customer-account-form-error" role="alert">@_profileError</p>
+                    }
+                    <div class="customer-account-form-footer">
+                        <p>Your name and phone number are kept with your customer account.</p>
+                        <button type="submit" disabled="@_savingProfile">
+                            <Icon Name="Save" Size="15" />
+                            @(_savingProfile ? "Saving…" : "Save profile")
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="customer-account-panel max-w-3xl bg-[#0e0a1b] border border-white/10 p-6 sm:p-8 rounded-lg shadow-xl">
+                <div class="customer-account-panel-heading">
+                    <span class="customer-account-icon"><Icon Name="LockKeyhole" Size="18" /></span>
+                    <div>
+                        <h2>Change password</h2>
+                        <p>Confirm your current password, then choose a new password with at least 8 characters.</p>
+                    </div>
+                </div>
+
+                <form class="customer-account-form" @onsubmit="ChangePasswordAsync" @onsubmit:preventDefault>
+                    <div class="customer-account-form-grid">
+                        <label>
+                            Current password
+                            <input type="password" required autocomplete="current-password" @bind="_currentPassword" @bind:event="oninput" />
+                        </label>
+                        <label>
+                            New password
+                            <input type="password" required minlength="8" maxlength="72" autocomplete="new-password" @bind="_newPassword" @bind:event="oninput" />
+                        </label>
+                        <label>
+                            Confirm new password
+                            <input type="password" required minlength="8" maxlength="72" autocomplete="new-password" @bind="_confirmPassword" @bind:event="oninput" />
+                        </label>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(_passwordSavedMessage))
+                    {
+                        <p class="customer-account-profile-success" role="status">@_passwordSavedMessage</p>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_passwordError))
+                    {
+                        <p class="customer-account-form-error" role="alert">@_passwordError</p>
+                    }
+                    <div class="customer-account-form-footer">
+                        <p>For your security, your current password is required to make this change.</p>
+                        <button type="submit" disabled="@_savingPassword">
+                            <Icon Name="KeyRound" Size="15" />
+                            @(_savingPassword ? "Updating…" : "Update password")
+                        </button>
+                    </div>
+                </form>
+            </section>
+        </div>
+    }
     @if (_activeTab == "orders")
     {
         <div class="space-y-6">
@@ -283,7 +414,7 @@
 
                                             <a href="@(string.IsNullOrEmpty(order.ShiprocketTrackUrl) ? (order.Courier == "Shadowfax" ? "#" : $"https://shiprocket.co/tracking/{order.ShiprocketAwb}") : order.ShiprocketTrackUrl)"
                                                target="_blank" rel="noreferrer"
-                                               class="w-full py-2 rounded-md bg-[#9929ea] hover:bg-[#8620cf] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors shadow-sm">
+                                               class="customer-account-track-shipment w-full py-2 rounded-md text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors shadow-sm">
                                                 <Icon Name="Truck" Size="13" />
                                                 <span>Track Shipment</span>
                                                 <Icon Name="ExternalLink" Size="11" />
@@ -460,7 +591,7 @@
 
                     <label class="customer-account-consent">
                         <input type="checkbox" @bind="_reviewConsent" />
-                        <span>I agree that my display name and review may be published if approved by the Nura Herbex team.</span>
+                        <span>I agree that my display name, review, and current profile photo (if set) may be published if approved by the Nura Herbex team.</span>
                     </label>
 
                     @if (!string.IsNullOrWhiteSpace(_reviewError))
@@ -496,6 +627,14 @@ else
     private bool _loadingOrders;
     private string _orderFilter = "ALL";
 
+    private string _profileFullName = "";
+    private string _profilePhone = "";
+    private string? _profileError, _profileSavedMessage;
+    private string? _profilePhotoError, _profilePhotoMessage;
+    private string _currentPassword = "", _newPassword = "", _confirmPassword = "";
+    private string? _passwordError, _passwordSavedMessage;
+    private bool _savingProfile, _savingPhoto, _savingPassword;
+    private int _photoInputVersion;
     private AddressDto _addr = new();
     private bool _savingAddress;
     private string _addressSavedMsg = "";
@@ -541,6 +680,8 @@ else
     protected override async Task OnInitializedAsync()
     {
         Auth.Changed += OnAuthChanged;
+        _profileFullName = Auth.Customer?.FullName ?? "";
+        _profilePhone = Auth.Customer?.Phone ?? "";
         SyncAddress();
         _reviewCity = Auth.Customer?.ShippingAddress?.City?.Trim() ?? "";
         if (new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').Equals("/account/reviews", StringComparison.OrdinalIgnoreCase))
@@ -579,6 +720,113 @@ else
     private void OnPincodeInput(ChangeEventArgs e) =>
         _addr.Pincode = new string((e.Value?.ToString() ?? "").Where(char.IsDigit).ToArray());
 
+    private static string ProfileInitial(string name) =>
+        string.IsNullOrWhiteSpace(name) ? "N" : char.ToUpperInvariant(name.Trim()[0]).ToString();
+
+    private async Task SaveProfileAsync()
+    {
+        if (_savingProfile) return;
+        _savingProfile = true;
+        _profileError = null;
+        _profileSavedMessage = null;
+        var response = await Auth.UpdateProfileAsync(new UpdateProfileRequest
+        {
+            FullName = _profileFullName,
+            Phone = _profilePhone,
+        });
+        _savingProfile = false;
+        if (response.Success)
+            _profileSavedMessage = response.Message ?? "Your profile has been updated.";
+        else
+            _profileError = response.Message ?? "We could not update your profile. Please try again.";
+    }
+
+    private async Task HandleProfilePhotoSelected(InputFileChangeEventArgs args)
+    {
+        _profilePhotoError = null;
+        _profilePhotoMessage = null;
+        if (args.File.Size > 8 * 1024 * 1024)
+        {
+            _profilePhotoError = "Choose an image smaller than 8 MB.";
+            return;
+        }
+        if (args.File.ContentType is not ("image/jpeg" or "image/png" or "image/webp"))
+        {
+            _profilePhotoError = "Upload a JPG, PNG, or WebP image.";
+            return;
+        }
+
+        _savingPhoto = true;
+        var photo = await Browser.CompressProfilePhotoAsync("customer-profile-photo");
+        if (photo is null || string.IsNullOrWhiteSpace(photo.DataUrl))
+        {
+            _savingPhoto = false;
+            _profilePhotoError = "We could not process that photo. Choose another JPG, PNG, or WebP image.";
+            return;
+        }
+
+        var response = await Auth.UpdateProfileAsync(new UpdateProfileRequest { ProfileImageData = photo.DataUrl });
+        _savingPhoto = false;
+        if (response.Success)
+        {
+            _photoInputVersion++;
+            _profilePhotoMessage = "Profile photo updated.";
+        }
+        else
+        {
+            _profilePhotoError = response.Message ?? "We could not save your profile photo.";
+        }
+    }
+
+    private async Task RemoveProfilePhotoAsync()
+    {
+        if (_savingPhoto) return;
+        _savingPhoto = true;
+        _profilePhotoError = null;
+        _profilePhotoMessage = null;
+        var response = await Auth.UpdateProfileAsync(new UpdateProfileRequest { ProfileImageData = "" });
+        _savingPhoto = false;
+        if (response.Success)
+        {
+            _photoInputVersion++;
+            _profilePhotoMessage = "Profile photo removed.";
+        }
+        else
+        {
+            _profilePhotoError = response.Message ?? "We could not remove your profile photo.";
+        }
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        if (_savingPassword) return;
+        _passwordError = null;
+        _passwordSavedMessage = null;
+        if (_newPassword != _confirmPassword)
+        {
+            _passwordError = "The new password and confirmation do not match.";
+            return;
+        }
+
+        _savingPassword = true;
+        var response = await Api.ChangePasswordAsync(new ChangePasswordRequest
+        {
+            CurrentPassword = _currentPassword,
+            NewPassword = _newPassword,
+        });
+        _savingPassword = false;
+        if (response.Success)
+        {
+            _currentPassword = "";
+            _newPassword = "";
+            _confirmPassword = "";
+            _passwordSavedMessage = response.Message ?? "Your password has been updated.";
+        }
+        else
+        {
+            _passwordError = response.Message ?? "We could not update your password. Please try again.";
+        }
+    }
     private async Task HandleAddressSave()
     {
         _savingAddress = true;

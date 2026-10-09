@@ -106,7 +106,23 @@ public class EmailOptions
     public const string Section = "Email";
     public string ResendApiKey { get; set; } = "";
     public string From { get; set; } = "Nura Herbex <care@nuraherbex.com>";
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(ResendApiKey);
+    public SmtpSettings Smtp { get; set; } = new();
+
+    /// <summary>SMTP is used when Email:Smtp:Host is set; otherwise the Resend HTTP API.</summary>
+    public bool IsConfigured => Smtp.IsConfigured || !string.IsNullOrWhiteSpace(ResendApiKey);
+}
+
+/// <summary>Direct SMTP submission — Gmail app password, Google Workspace, or any mail server.</summary>
+public class SmtpSettings
+{
+    public string Host { get; set; } = "";
+    public int Port { get; set; } = 587;
+    public string Username { get; set; } = "";
+    public string Password { get; set; } = "";
+    public bool EnableSsl { get; set; } = true;
+
+    /// <summary>Host alone is enough: a trusted relay may not need credentials.</summary>
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(Host) && Port > 0;
 }
 
 public class WhatsAppOptions

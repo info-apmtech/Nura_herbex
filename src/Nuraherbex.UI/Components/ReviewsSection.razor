@@ -115,7 +115,7 @@
         var list = await Api.GetReviewsAsync();
         _live = list
             .Where(r => !string.IsNullOrWhiteSpace(r.Body))
-            .Select(r => new ReviewCard("api-" + r.Id, r.Name, string.IsNullOrWhiteSpace(r.City) ? "India" : r.City!, null,
+            .Select(r => new ReviewCard("api-" + r.Id, r.Name, string.IsNullOrWhiteSpace(r.City) ? "India" : r.City!, r.ProfileImageData,
                 Math.Clamp(r.Rating, 1, 5), "General", r.Title, r.Body))
             .ToList();
     }
