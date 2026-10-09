@@ -4,11 +4,9 @@
 @inject CartState Cart
 @inject NavigationManager Nav
 
-@{
-    var customer = Auth.Customer!;
+@if (Auth.Customer is { } customer)
+{
     var customerName = string.IsNullOrWhiteSpace(customer.FullName) ? "Customer" : customer.FullName.Trim();
-    var customerInitials = customerName.Substring(0, 1).ToUpperInvariant();
-}
 
 <div class="customer-account min-h-screen bg-[#07060b] text-slate-100 font-sans antialiased pt-24 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-left">
 
@@ -17,11 +15,15 @@
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
 
             <div class="flex items-center gap-4">
-                <div class="w-14 h-14 rounded-lg bg-[#9929ea] text-white flex items-center justify-center font-bold text-xl tracking-tight shrink-0 shadow-sm">
-                    @customerInitials
+                <div class="customer-account-logo-frame">
+                    <img src="_content/Nuraherbex.UI/images/logo-mark.png" alt="Nura Herbex logo" />
                 </div>
                 <div>
-                    <span class="customer-account-eyebrow">MY ACCOUNT</span>
+                    <div class="customer-account-brandline">
+                        <span class="customer-account-brand-name">Nura Herbex<span>®</span></span>
+                        <span class="customer-account-brand-divider" aria-hidden="true"></span>
+                        <span class="customer-account-eyebrow">VITALITY MEMBER PORTAL</span>
+                    </div>
                     <h1 class="text-xl font-bold tracking-tight text-[#fff3bf]">Welcome back, @customerName</h1>
 
                     <div class="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-1 font-mono">
@@ -479,6 +481,12 @@
     }
 
 </div>
+}
+else
+{
+    <div class="customer-account-loading min-h-screen px-4 py-16 text-center text-slate-500" role="status">Signing out…</div>
+}
+
 
 @code {
     private static readonly string[] _filters = { "ALL", "IN_TRANSIT", "DELIVERED", "PENDING" };

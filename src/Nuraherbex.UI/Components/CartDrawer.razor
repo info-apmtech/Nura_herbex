@@ -74,7 +74,7 @@
                         <div class="text-center py-16 text-slate-500">
                             <Icon Name="ShoppingBag" Size="48" Class="mx-auto mb-4 opacity-20" />
                             <p class="text-sm font-medium">Your cart is currently empty.</p>
-                            <button @onclick="Close"
+                            <button @onclick="BrowseProducts"
                                     class="mt-4 px-6 py-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold uppercase tracking-wider transition-all cursor-pointer">
                                 Browse Stamix Protocols
                             </button>
@@ -158,6 +158,12 @@
     private void OnChanged() => _ = InvokeAsync(StateHasChanged);
 
     private void Close() => Cart.SetOpen(false);
+
+    private void BrowseProducts()
+    {
+        Cart.SetOpen(false);
+        Nav.NavigateTo("/shop");
+    }
 
     private void Checkout()
     {

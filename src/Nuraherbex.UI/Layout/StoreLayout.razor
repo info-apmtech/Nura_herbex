@@ -7,14 +7,17 @@
 @inject ContentState Content
 
 @* Port of App.jsx AppContent shell (storefront variant): ambient orbs, sticky header, routed main, footer, cart drawer, modals. *@
-<div class="min-h-screen bg-[#07050b] text-slate-100 flex flex-col selection:bg-purple-600 selection:text-white relative">
+<div class="min-h-screen @(IsLightAccountPage ? "account-page-shell" : "bg-[#07050b] text-slate-100") flex flex-col selection:bg-purple-600 selection:text-white relative">
     <div class="scroll-progress-bar"></div>
 
-    <div class="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[1400px] h-full pointer-events-none z-0 opacity-40 overflow-hidden">
-        <div class="floating-orb w-[650px] h-[650px] bg-purple-700/20 top-[10%] -left-[10%]" style="transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.08), 0)"></div>
-        <div class="floating-orb w-[750px] h-[750px] bg-indigo-700/15 top-[40%] -right-[15%]" style="transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.12), 0)"></div>
-        <div class="floating-orb w-[600px] h-[600px] bg-purple-900/20 top-[75%] -left-[5%]" style="transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.06), 0)"></div>
-    </div>
+    @if (!IsLightAccountPage)
+    {
+        <div class="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[1400px] h-full pointer-events-none z-0 opacity-40 overflow-hidden">
+            <div class="floating-orb w-[650px] h-[650px] bg-purple-700/20 top-[10%] -left-[10%]" style="transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.08), 0)"></div>
+            <div class="floating-orb w-[750px] h-[750px] bg-indigo-700/15 top-[40%] -right-[15%]" style="transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.12), 0)"></div>
+            <div class="floating-orb w-[600px] h-[600px] bg-purple-900/20 top-[75%] -left-[5%]" style="transform: translate3d(0, calc(var(--scroll-y, 0px) * -0.06), 0)"></div>
+        </div>
+    }
 
     <Header />
 
@@ -40,6 +43,8 @@
             return path is "/account" or "/my-account" or "/profile" || path.StartsWith("/account/", StringComparison.Ordinal);
         }
     }
+
+    private bool IsLightAccountPage => IsAccountPage && Auth.IsAuthenticated;
 
     protected override async Task OnInitializedAsync()
     {
