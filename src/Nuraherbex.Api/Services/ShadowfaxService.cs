@@ -44,6 +44,18 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
         if (!int.TryParse(ship.Pincode, out var deliveryPincode) || deliveryPincode is < 100000 or > 999999)
             throw new InvalidOperationException("Shadowfax: customer delivery pincode must be a valid 6-digit Indian pincode.");
 
+        if (parcel.WeightKg <= 0 || parcel.LengthCm <= 0 || parcel.BreadthCm <= 0 || parcel.HeightCm <= 0)
+            throw new InvalidOperationException("Positive parcel weight and dimensions are required.");
+        if (productValue >= 50000)
+            throw new InvalidOperationException("Orders at or above INR 50,000 require e-way bill and seller GST details; arrange these before booking with Shadowfax.");
+        var orderService = _o.ServiceTier;
+        await RequireServiceAsync(ship.Pincode, "customer_delivery", orderService);
+        var supplyTier = warehouse
+            ? (orderService == "Surface" ? "surface_dc_pickup" : "dc_pickup")
+            : (orderService == "Surface" ? "Surface_Mkt" : "Marketplace");
+        await RequireServiceAsync(_o.Pickup.Pincode, warehouse ? "warehouse_pickup" : "seller_pickup", supplyTier);
+        var returnTier = warehouse ? (orderService == "Surface" ? "surface_RTO" : "RTO") : (orderService == "Surface" ? "Surface_RTS" : "RTS");
+        await RequireServiceAsync(ret.Pincode, warehouse ? "warehouse_return" : "seller_delivery", returnTier);
         var requestedClientOrderId = string.IsNullOrWhiteSpace(clientOrderId) ? order.Id : clientOrderId.Trim();
         var body = new Dictionary<string, object?>
         {
@@ -57,14 +69,14 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
                 payment_mode = isCod ? "cod" : "prepaid",
                 cod_amount = isCod ? order.TotalAmount : 0m,
                 total_amount = order.TotalAmount,
-                order_service = _o.ServiceTier,
+                order_service = orderService,
             },
             ["customer_details"] = new
             {
                 name = order.CustomerName,
                 contact = Phone10(order.CustomerPhone),
                 address_line_1 = ship.AddressLine1,
-                address_line_2 = ship.AddressLine2 ?? "",
+                address2 = ship.AddressLine2 ?? "",
                 city = ship.City,
                 state = ship.State,
                 pincode = deliveryPincode,
@@ -80,7 +92,7 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
                 additional_details = new { quantity = i.Quantity },
             }).ToArray(),
         };
-        body[warehouse ? "rto_details" : "rts_details"] = ReturnAddress(ret, warehouse ? "origin" : "seller");
+        body["return_details"] = ReturnAddress(ret, warehouse ? "origin" : "seller");
 
         var res = await SendAsync(HttpMethod.Post, "/v3/clients/orders/", body);
         var data = res?["data"];
@@ -138,7 +150,7 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
         if (string.IsNullOrWhiteSpace(awb) || !_o.IsConfigured) return null;
         try
         {
-            var res = await SendAsync(HttpMethod.Get, $"/v4/clients/orders/{Uri.EscapeDataString(awb)}/track/", null);
+            var res = await TrackRawAsync(awb);
             var scans = (res?["tracking_details"] as JsonArray)?.OfType<JsonObject>()
                 .OrderByDescending(s => s["created"]?.ToString())
                 .Select(s => new
@@ -166,27 +178,56 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
     {
         if (!_o.IsConfigured) throw new InvalidOperationException("Shadowfax token is not configured.");
         var res = await SendAsync(HttpMethod.Post, "/v3/clients/orders/cancel/", new { request_id = awb, cancel_remarks = reason });
-        var code = res?["responseCode"]?.GetValue<int>() ?? 200;
+        var code = res?["responseCode"]?.GetValue<int>() ?? throw new InvalidOperationException("Shadowfax cancellation response is missing responseCode.");
         var msg = res?["responseMsg"]?.ToString() ?? "Cancelled";
         // Shadowfax reports failures inside a 200 body (responseCode 400/500); 304 means queued, which is fine.
-        if (code >= 400) throw new InvalidOperationException(msg);
-        return msg;
+        if (code != 200 && code != 304) throw new InvalidOperationException(msg);
+        return code == 304 ? $"Cancellation queued: {msg}" : msg;
     }
 
     /// <summary>True when Shadowfax delivers to this pincode. Fails open (null) when the API cannot be reached.</summary>
     public async Task<bool?> IsServiceableAsync(string pincode)
     {
         if (!_o.IsConfigured || pincode.Length != 6 || !pincode.All(char.IsDigit)) return null;
+        var services = await DeliveryServicesAsync(pincode);
+        return services is null ? null : services.Contains(_o.ServiceTier, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Delivery services Shadowfax offers for a pincode, or null when the lookup failed.</summary>
+    private async Task<List<string>?> DeliveryServicesAsync(string pincode, string service = "customer_delivery")
+    {
         try
         {
-            var res = await SendAsync(HttpMethod.Get, $"/v1/clients/serviceability/?service=customer_delivery&page=1&count=10&pincodes={pincode}", null);
-            return HasServiceForPincode(res, pincode, _o.ServiceTier);
+            var res = await SendAsync(HttpMethod.Get, $"/v1/clients/serviceability/?service={Uri.EscapeDataString(service)}&page=1&count=10&pincodes={Uri.EscapeDataString(pincode)}", null);
+            if (res is not JsonArray rows) throw new InvalidOperationException("Invalid serviceability response.");
+            return rows.OfType<JsonObject>()
+                .Where(row => row["code"]?.ToString() == pincode)
+                .SelectMany(row => (row["services"] as JsonArray)?.OfType<JsonNode>() ?? Enumerable.Empty<JsonNode>())
+                .Select(service => service?.ToString() ?? "")
+                .Where(service => service.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
         catch (Exception ex)
         {
-            log.LogWarning("[Shadowfax] Serviceability check failed for {Pin}: {Msg}", pincode, ex.Message);
+            log.LogWarning("[Shadowfax] Serviceability lookup failed for {Pin}: {Msg}", pincode, ex.Message);
             return null;
         }
+    }
+
+    private async Task RequireServiceAsync(string pincode, string service, string tier)
+    {
+        var available = await DeliveryServicesAsync(pincode, service)
+            ?? throw new InvalidOperationException("Shadowfax serviceability is unavailable. Retry booking later.");
+        if (!available.Contains(tier, StringComparer.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Shadowfax {service} at {pincode} does not support {tier}.");
+    }
+
+    public async Task<JsonNode> TrackRawAsync(string awb)
+    {
+        var result = await SendAsync(HttpMethod.Get, $"/v4/clients/orders/{Uri.EscapeDataString(awb)}/track/", null);
+        if (NodeText(result, "message") != "Success") throw new InvalidOperationException("Shadowfax tracking is unavailable.");
+        return result!;
     }
 
     private static string? NodeText(JsonNode? node, params string[] names)
@@ -197,12 +238,6 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
                 return pair.Value?.ToString();
         return null;
     }
-
-    private static bool HasServiceForPincode(JsonNode? node, string pincode, string tier) => node is JsonArray rows
-        && rows.OfType<JsonObject>().Any(row =>
-            row["code"]?.ToString() == pincode
-            && row["services"] is JsonArray services
-            && services.Any(service => string.Equals(service?.ToString(), tier, StringComparison.OrdinalIgnoreCase)));
 
     private static void ValidateAddress(ShadowfaxAddress address, string label, bool requireContact)
     {
@@ -261,6 +296,15 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
 
     private async Task<JsonNode?> SendAsync(HttpMethod method, string path, object? body)
     {
+        try { return await SendCoreAsync(method, path, body); }
+        catch (HttpRequestException) { throw new InvalidOperationException("Shadowfax is unreachable. Retry with the same order reference."); }
+        catch (TaskCanceledException) { throw new InvalidOperationException("Shadowfax request timed out. The outcome may be pending; retry the same booking reference."); }
+        catch (JsonException) { throw new InvalidOperationException("Shadowfax returned an invalid response. Retry with the same order reference."); }
+    }
+
+    private async Task<JsonNode?> SendCoreAsync(HttpMethod method, string path, object? body)
+    {
+        if (!_o.IsConfigured) throw new InvalidOperationException("Shadowfax token is not configured.");
         using var req = new HttpRequestMessage(method, _o.ApiUrl + path);
         req.Headers.Authorization = new AuthenticationHeaderValue("Token", _o.ActiveToken);
         if (body is not null) req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
@@ -269,7 +313,7 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
         var text = await res.Content.ReadAsStringAsync();
         if (!res.IsSuccessStatusCode)
         {
-            log.LogError("[Shadowfax] {Method} {Path} -> {Status}: {Body}", method, path, (int)res.StatusCode, text);
+            log.LogError("[Shadowfax] {Method} request failed with HTTP {Status}", method, (int)res.StatusCode);
             string? msg = null;
             try
             {

@@ -15,13 +15,23 @@ var cfg = builder.Configuration;
 // Machine-local settings (PayU keys etc.), git-ignored. Loaded last so it always applies, however the API is launched.
 cfg.AddJsonFile(Path.Combine(builder.Environment.ContentRootPath, "appsettings.Local.json"), optional: true, reloadOnChange: true);
 
+cfg.AddEnvironmentVariables();
+cfg.AddCommandLine(args);
+
 // ---- Options ---------------------------------------------------------------------------
 builder.Services.Configure<StoreOptions>(cfg.GetSection(StoreOptions.Section));
 builder.Services.Configure<JwtOptions>(cfg.GetSection(JwtOptions.Section));
 builder.Services.Configure<AdminOptions>(cfg.GetSection(AdminOptions.Section));
-builder.Services.Configure<PayUOptions>(cfg.GetSection(PayUOptions.Section));
+builder.Services.AddOptions<PayUOptions>().Bind(cfg.GetSection(PayUOptions.Section))
+    .Validate(o => builder.Environment.IsDevelopment() || !o.AllowSimulation, "PayU simulation is permitted only in Development.").ValidateOnStart();
 builder.Services.Configure<ShiprocketOptions>(cfg.GetSection(ShiprocketOptions.Section));
-builder.Services.Configure<ShadowfaxOptions>(cfg.GetSection(ShadowfaxOptions.Section));
+builder.Services.AddOptions<ShadowfaxOptions>().Bind(cfg.GetSection(ShadowfaxOptions.Section))
+    .Validate(o => o.Env is "staging" or "production", "Shadowfax:Env must be staging or production.")
+    .Validate(o => o.OrderType is "marketplace" or "warehouse", "Unsupported Shadowfax order type.")
+    .Validate(o => o.ServiceTier is "Regular" or "Surface", "Unsupported Shadowfax service tier.")
+    .Validate(o => !o.IsProduction || (o.IsConfigured && o.Pickup.IsComplete && o.WebhookToken.Length >= 32),
+        "Production Shadowfax requires a token, pickup address, and webhook token of at least 32 characters.")
+    .ValidateOnStart();
 builder.Services.Configure<ShippingOptions>(cfg.GetSection(ShippingOptions.Section));
 builder.Services.Configure<EmailOptions>(cfg.GetSection(EmailOptions.Section));
 builder.Services.Configure<WhatsAppOptions>(cfg.GetSection(WhatsAppOptions.Section));
@@ -40,13 +50,16 @@ builder.Services.AddDbContext<NuraDbContext>(o =>
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ProductService>();
 builder.Services.AddScoped<OrderService>();
+builder.Services.AddScoped<OrderOperationLock>();
+builder.Services.AddScoped<ShadowfaxTrackingProcessor>();
+builder.Services.AddHostedService<ShadowfaxReconciliationWorker>();
 builder.Services.AddScoped<PayUService>();
 builder.Services.AddScoped<CustomerAuthService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddHttpClient<EmailService>();
 builder.Services.AddHttpClient<ShiprocketService>();
-builder.Services.AddHttpClient<ShadowfaxService>();
+builder.Services.AddHttpClient<ShadowfaxService>(http => http.Timeout = TimeSpan.FromSeconds(25));
 builder.Services.AddScoped<ShippingGateway>();
 builder.Services.AddHttpClient<WhatsAppService>();
 

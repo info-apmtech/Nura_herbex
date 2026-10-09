@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -107,7 +107,8 @@ public class ShiprocketWebhookController(
     {
         var expected = options.Value.WebhookToken;
         var supplied = Request.Headers["x-api-key"].FirstOrDefault() ?? Request.Headers.Authorization.FirstOrDefault();
-        if (!string.IsNullOrEmpty(expected) && supplied != expected)
+        if (string.IsNullOrWhiteSpace(expected)) return StatusCode(503);
+        if (supplied != expected)
             return Unauthorized(new ApiResult { Success = false, Message = "Unauthorized webhook request" });
 
         string? Str(string name) => payload.TryGetProperty(name, out var v) ? v.ToString() : null;
@@ -119,7 +120,7 @@ public class ShiprocketWebhookController(
             return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
 
         var order = await db.Orders.FirstOrDefaultAsync(o => (orderId != null && o.Id == orderId) || (awb != null && o.ShiprocketAwb == awb));
-        if (order is null) return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
+        if (order is null || ShippingGateway.IsShadowfax(order.Courier)) return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
 
         string? location = null;
         if (payload.TryGetProperty("scans", out var scans) && scans.ValueKind == System.Text.Json.JsonValueKind.Array && scans.GetArrayLength() > 0
@@ -159,139 +160,25 @@ public class ShiprocketWebhookController(
     }
 }
 
-/// <summary>
-/// Shadowfax push-callback receiver (Client Portal → Webhook tab → URL <c>{ApiPublicUrl}/api/webhooks/shadowfax</c>).
-/// Maps Shadowfax <c>status_id</c> values to order fulfillment status. Events with no fulfillment meaning (not contactable, on hold, NDR…) are
-/// recorded on the tracking timeline only.
-/// </summary>
+/// <summary>Register the exact callback template and Authorization token with Shadowfax.</summary>
 [ApiController]
 [AllowAnonymous]
 [Route("api/webhooks/shadowfax")]
-public class ShadowfaxWebhookController(
-    NuraDbContext db,
-    IOptions<ShadowfaxOptions> options,
-    IServiceScopeFactory scopes,
-    ILogger<ShadowfaxWebhookController> log) : ControllerBase
+public class ShadowfaxWebhookController(IOptions<ShadowfaxOptions> options, ShadowfaxTrackingProcessor processor) : ControllerBase
 {
-    private static readonly Dictionary<string, (string? Status, string Text)> EventMap = new()
-    {
-        ["assigned_for_pickup"] = (null, "Pickup Assigned"),
-        ["assigned_for_seller_pickup"] = (null, "Pickup Assigned"),
-        ["ofp"] = (null, "Courier Out for Pickup"),
-        ["picked"] = ("PICKED_UP", "Picked Up by Courier"),
-        ["qc_failed"] = (null, "Pickup Quality Check Failed"),
-        ["recd_at_rev_hub"] = ("PICKED_UP", "Received at Pickup Hub"),
-        ["received_from_client_warehouse"] = ("PICKED_UP", "Received from Warehouse"),
-        ["item_manifested"] = ("IN_TRANSIT", "Packed for Transit"),
-        ["bag_in_transit"] = ("IN_TRANSIT", "In Transit between Hubs"),
-        ["bag_received_at_via"] = ("IN_TRANSIT", "In Transit between Hubs"),
-        ["bag_received"] = ("IN_TRANSIT", "Arrived at Destination Facility"),
-        ["recd_at_fwd_dc"] = ("IN_TRANSIT", "Arrived at Delivery City"),
-        ["recd_at_fwd_hub"] = ("IN_TRANSIT", "Arrived at Delivery Hub"),
-        ["assigned_for_delivery"] = ("IN_TRANSIT", "Assigned for Delivery"),
-        ["ofd"] = ("OUT_FOR_DELIVERY", "Out for Delivery"),
-        ["delivered"] = ("DELIVERED", "Delivered to Recipient"),
-        ["partially_delivered"] = (null, "Partially Delivered"),
-        ["rts"] = ("RTO", "Return Initiated"),
-        ["rts_in_process"] = ("RTO", "Return in Progress"),
-        ["rts_ofd"] = ("RTO", "Return Out for Delivery"),
-        ["rts_d"] = ("RTO", "Returned to Seller"),
-        ["rts_nd"] = ("RTO", "Return Delivery Attempt Failed"),
-        ["rto"] = ("RTO", "Return Initiated"),
-        ["rto_in_process"] = ("RTO", "Return in Progress"),
-        ["rto_nd"] = ("RTO", "Return Delivery Attempt Failed"),
-        ["rto_d"] = ("RTO", "Returned to Origin"),
-        ["cancelled"] = ("CANCELLED", "Shipment Cancelled"),
-        ["cancelled_by_client"] = ("CANCELLED", "Shipment Cancelled"),
-        ["cancelled_by_seller"] = ("CANCELLED", "Shipment Cancelled"),
-        ["cancelled_by_customer"] = ("CANCELLED", "Shipment Cancelled"),
-        ["nc"] = (null, "Delivery Attempted: Customer Not Reachable"),
-        ["na"] = (null, "Delivery Not Attempted"),
-        ["cid"] = (null, "Delivery Rescheduled at Customer Request"),
-        ["on_hold"] = (null, "Shipment On Hold"),
-        ["reopen_ndr"] = (null, "Delivery Will Be Re-attempted"),
-        ["lost"] = (null, "Shipment Reported Lost"),
-    };
-
-    // Terminal states are never overwritten by a late or out-of-order scan.
-    private static readonly HashSet<string> Terminal = ["DELIVERED", "CANCELLED", "RTO"];
-
     [HttpPost]
+    [RequestSizeLimit(65536)]
     public async Task<IActionResult> Receive([FromBody] System.Text.Json.JsonElement payload)
     {
         var expected = options.Value.WebhookToken;
-        if (!string.IsNullOrEmpty(expected))
-        {
-            var supplied = Request.Headers.Authorization.FirstOrDefault()?.Trim();
-            if (supplied != expected && supplied != $"Token {expected}")
-                return Unauthorized(new ApiResult { Success = false, Message = "Unauthorized webhook request" });
-        }
-
-        string? Str(string name) => payload.TryGetProperty(name, out var v) && v.ValueKind != System.Text.Json.JsonValueKind.Null ? v.ToString() : null;
-        var awb = Str("awb_number");
-        var clientOrderId = Str("client_order_id");
-        var orderId = clientOrderId ?? Str("order_id");
-        var baseOrderId = ShippingGateway.ShadowfaxBaseOrderId(orderId);
-        var ev = (Str("status_id") ?? Str("event") ?? "").ToLowerInvariant();
-        const string ok = "Webhook processed successfully";
-
-        if (awb is null && orderId is null)
-            return Ok(new ApiResult { Success = true, Message = ok });
-
-        var knownEvent = EventMap.TryGetValue(ev, out var mapped);
-        if (!knownEvent)
-        {
-            var statusText = Str("status");
-            if (string.IsNullOrWhiteSpace(statusText))
-                return Ok(new ApiResult { Success = true, Message = ok });
-            mapped = (null, statusText);
-        }
-
-        var order = await db.Orders.FirstOrDefaultAsync(o =>
-            (baseOrderId != null && o.Id == baseOrderId) || (awb != null && o.ShiprocketAwb == awb));
-        if (order is null) return Ok(new ApiResult { Success = true, Message = ok });
-
-        // Ignore delayed callbacks from a cancelled booking after a replacement shipment is active.
-        // AWB-only callbacks still resolve through the current order AWB above.
-        var isClientReference = clientOrderId is not null
-            || (orderId is not null && (orderId == order.Id || orderId.StartsWith($"{order.Id}-R", StringComparison.OrdinalIgnoreCase)));
-        if (isClientReference && !string.Equals(orderId, ShippingGateway.ShadowfaxClientOrderId(order), StringComparison.OrdinalIgnoreCase))
-            return Ok(new ApiResult { Success = true, Message = ok });
-
-        var previous = order.FulfillmentStatus;
-        var location = Str("current_location");
-        var detail = Str("remarks");
-
-        var eventText = knownEvent ? mapped.Text : Str("status") ?? mapped.Text;
-        order.DeliveryStatus = eventText;
-        order.UpdatedAt = DateTime.UtcNow;
-        if (mapped.Status is not null && !Terminal.Contains(previous)) order.FulfillmentStatus = mapped.Status;
-        order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto
-            { Status = eventText, Location = location ?? detail ?? "Shadowfax Facility", Time = Mapping.TimelineStamp(), Done = true, Active = true }];
-        if (mapped.Status == "DELIVERED" && order.PaymentMethod == "COD") order.PaymentStatus = "COD_COLLECTED";
-        await db.SaveChangesAsync();
-        log.LogInformation("[Shadowfax] Order {Order} {Event} → {Status}", order.Id, ev, order.FulfillmentStatus);
-
-        // Email every genuine status transition; repeated scans of the same status never spam the customer.
-        var notify = EmailService.TransitionEmail(mapped.Status, previous);
-        if (notify is null) return Ok(new ApiResult { Success = true, Message = ok });
-
-        var snapshot = order;
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                using var scope = scopes.CreateScope();
-                var wa = scope.ServiceProvider.GetRequiredService<WhatsAppService>();
-                var mail = scope.ServiceProvider.GetRequiredService<EmailService>();
-                try { await mail.SendStatusUpdateAsync(snapshot, notify); }
-                catch (Exception ex) { log.LogWarning(ex, "Order {Order} {Notify} email failed", snapshot.Id, notify); }
-                if (notify == "DELIVERED") await wa.NotifyDeliveredAsync(snapshot);
-                else if (notify == "SHIPPED") await wa.NotifyShippedAsync(snapshot);
-            }
-            catch (Exception ex) { log.LogWarning(ex, "Shadowfax webhook notification failed"); }
-        });
-
-        return Ok(new ApiResult { Success = true, Message = ok });
+        if (string.IsNullOrWhiteSpace(expected)) return StatusCode(503);
+        var supplied = Request.Headers.Authorization.ToString();
+        if (supplied.StartsWith("Token ", StringComparison.Ordinal)) supplied = supplied[6..];
+        if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(supplied)),
+                System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(expected)))) return Unauthorized();
+        try { await processor.ProcessAsync(payload); }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
+        return Ok(new ApiResult { Success = true });
     }
 }

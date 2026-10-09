@@ -276,14 +276,24 @@
                 }
 
                 <div class="flex flex-wrap gap-2">
-                    @if (string.IsNullOrEmpty(o.ShiprocketAwb) || o.FulfillmentStatus == "CANCELLED")
+                    @if (string.IsNullOrEmpty(o.ShiprocketAwb) && o.FulfillmentStatus == "PENDING")
                     {
                         @if (o.PaymentMethod == "COD" || o.PaymentStatus == "PAID")
                         {
-                            <button type="button" disabled="@_busy" @onclick="RetryShipmentAsync"
+                            @if (o.FulfillmentReadyAt is null)
+                            {
+                                <div class="w-full grid grid-cols-2 gap-2 text-xs text-zinc-300">
+                                    <label>Weight (kg)<input type="number" min="0.001" step="0.001" @bind="_parcelWeight" class="w-full bg-zinc-800 rounded p-2" /></label>
+                                    <label>Length (cm)<input type="number" min="0.01" step="0.01" @bind="_parcelLength" class="w-full bg-zinc-800 rounded p-2" /></label>
+                                    <label>Width (cm)<input type="number" min="0.01" step="0.01" @bind="_parcelBreadth" class="w-full bg-zinc-800 rounded p-2" /></label>
+                                    <label>Height (cm)<input type="number" min="0.01" step="0.01" @bind="_parcelHeight" class="w-full bg-zinc-800 rounded p-2" /></label>
+                                </div>
+                                <button type="button" disabled="@_busy" @onclick="MarkReadyAsync" class="px-2.5 py-1.5 rounded-md bg-zinc-800 text-zinc-200 text-xs">Mark packed</button>
+                            }
+                            <button type="button" disabled="@(_busy || o.FulfillmentReadyAt is null)" @onclick="RetryShipmentAsync"
                                     class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
                                 <Icon Name="Truck" Size="12" />
-                                <span>Retry Shipment</span>
+                                <span>Book / Retry Pickup</span>
                             </button>
                         }
                         else
@@ -471,6 +481,7 @@
 
     private OrderDto? _selected;
     private bool _busy;
+    private decimal _parcelWeight, _parcelLength, _parcelBreadth, _parcelHeight;
     private string? _shippingLabelUrl;
     private string? _actionMessage;
     private bool _actionOk;
@@ -514,6 +525,8 @@
     private void OpenOrder(OrderDto order)
     {
         _selected = order;
+        _parcelWeight = order.ParcelWeightKg; _parcelLength = order.ParcelLengthCm;
+        _parcelBreadth = order.ParcelBreadthCm; _parcelHeight = order.ParcelHeightCm;
         _shippingLabelUrl = order.ShippingLabelUrl;
         _actionMessage = null;
     }
@@ -543,6 +556,17 @@
     private void ApplyUpdated(OrderDto? updated)
     {
         if (updated is not null) _selected = updated;
+    }
+
+    private async Task MarkReadyAsync()
+    {
+        if (_selected is null) return;
+        _busy = true;
+        var result = await Api.AdminMarkReadyAsync(_selected.Id, _parcelWeight, _parcelLength, _parcelBreadth, _parcelHeight);
+        _actionOk = result.Success;
+        _actionMessage = result.Success ? "Parcel marked packed. You can now book pickup." : result.Message;
+        _busy = false;
+        await ReloadSelectedAsync();
     }
 
     private async Task RetryShipmentAsync()

@@ -95,6 +95,13 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.Property(x => x.FulfillmentStatus).HasMaxLength(32);
             e.Property(x => x.ShiprocketAwb).HasMaxLength(64);
             e.Property(x => x.Courier).HasMaxLength(16);
+            e.Property(x => x.ParcelWeightKg).HasPrecision(9, 3);
+            e.Property(x => x.ParcelLengthCm).HasPrecision(9, 2);
+            e.Property(x => x.ParcelBreadthCm).HasPrecision(9, 2);
+            e.Property(x => x.ParcelHeightCm).HasPrecision(9, 2);
+            e.Property(x => x.ShipmentClientOrderId).HasMaxLength(100);
+            e.HasIndex(x => x.ShipmentClientOrderId).IsUnique().HasFilter("[ShipmentClientOrderId] IS NOT NULL");
+            e.HasIndex(x => new { x.Courier, x.ShiprocketAwb }).IsUnique().HasFilter("[Courier] = 'Shadowfax' AND [ShiprocketAwb] IS NOT NULL");
             e.HasIndex(x => x.CreatedAt);
             e.HasIndex(x => x.CustomerPhone);
             e.HasIndex(x => x.ShiprocketAwb);

@@ -47,6 +47,7 @@ public class OrdersController(OrderService orders, ProductService products, Cust
     }
 
     [HttpPost]
+    [HttpPost("place")]
     public async Task<IActionResult> Create(CreateOrderRequest req)
     {
         try
@@ -76,7 +77,7 @@ public class OrdersController(OrderService orders, ProductService products, Cust
                             customerAuth = await auth.LoginAsync(new LoginRequest { EmailOrPhone = req.Customer.Email, Password = req.Customer.Password });
                             customerId = customerAuth.Customer!.Id;
                         }
-                        catch { customerId = existing.Id; }
+                        catch { customerId = null; }
                     }
                 }
                 catch { /* account creation must never block the order */ }
@@ -156,6 +157,14 @@ public class PaymentsController(PayUService payu, IOptions<StoreOptions> store, 
             log.LogWarning("[PayU] Callback failed: {Msg}", ex.Message);
             return Redirect($"{front}/checkout?status=failed&message={Uri.EscapeDataString(ex.Message)}");
         }
+    }
+
+    [HttpPost("/api/orders/{id}/confirm")]
+    public async Task<IActionResult> Confirm(string id, Dictionary<string, string> body)
+    {
+        // The order reference must be part of the signed PayU response, never synthesized.
+        if (body.GetValueOrDefault("udf1") != id) return BadRequest(new ApiResult { Message = "Signed payment order reference does not match." });
+        return await Verify(body);
     }
 
     [HttpPost("verify")]

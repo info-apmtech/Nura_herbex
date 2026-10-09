@@ -20,7 +20,9 @@ public static class Mapping
         ShippingAddress = o.ShippingAddress, Items = o.Items,
         Subtotal = o.Subtotal, DiscountAmount = o.DiscountAmount, ShippingFee = o.ShippingFee, TaxAmount = o.TaxAmount, TotalAmount = o.TotalAmount,
         CouponCode = o.CouponCode, PaymentMethod = o.PaymentMethod, PaymentStatus = o.PaymentStatus, PaymentRef = o.PaymentRef, PayuTxnId = o.PayuTxnId,
-        FulfillmentStatus = o.FulfillmentStatus, Courier = o.Courier, ShiprocketOrderId = o.ShiprocketOrderId, ShiprocketShipmentId = o.ShiprocketShipmentId,
+        ParcelWeightKg = o.ParcelWeightKg, ParcelLengthCm = o.ParcelLengthCm, ParcelBreadthCm = o.ParcelBreadthCm, ParcelHeightCm = o.ParcelHeightCm,
+        FulfillmentReadyAt = o.FulfillmentReadyAt, ShipmentBookedAt = o.ShipmentBookedAt, PickedUpAt = o.PickedUpAt, DeliveredAt = o.DeliveredAt,
+        LastShippingEventAt = o.LastShippingEventAt, FulfillmentStatus = o.FulfillmentStatus, Courier = o.Courier, ShiprocketOrderId = o.ShiprocketOrderId, ShiprocketShipmentId = o.ShiprocketShipmentId,
         ShiprocketAwb = o.ShiprocketAwb, ShiprocketCourier = o.ShiprocketCourier,
         DeliveryStatus = o.DeliveryStatus, DeliveryTrackingEvents = o.DeliveryTrackingEvents, Notes = o.Notes,
     };

@@ -53,6 +53,17 @@ public class Customer
 
 public class Order
 {
+    public decimal ParcelWeightKg { get; set; }
+    public decimal ParcelLengthCm { get; set; }
+    public decimal ParcelBreadthCm { get; set; }
+    public decimal ParcelHeightCm { get; set; }
+    public DateTime? FulfillmentReadyAt { get; set; }
+    public string? ShipmentClientOrderId { get; set; }
+    public DateTime? ShipmentBookedAt { get; set; }
+    public DateTime? PickedUpAt { get; set; }
+    public DateTime? DeliveredAt { get; set; }
+    public DateTime? LastShippingEventAt { get; set; }
+    public DateTime? LastTrackingCheckedAt { get; set; }
     public string Id { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

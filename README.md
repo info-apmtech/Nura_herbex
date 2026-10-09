@@ -134,3 +134,8 @@ The admin workspace includes products, coupons, orders, customers, payments, bat
 - Verification: `dotnet run --project tools/AdminAuthChecks -c Release` exercises role restrictions, catalog publication, price and stock validation, coupon rules, customer updates and archival with an isolated in-memory database. Use `pwsh -File build-ui.ps1 -Project src/Nuraherbex.Web/Nuraherbex.Web.csproj -Configuration Release` when Visual Studio holds Debug assemblies open.
 
 No database migration is required for these management screens: they use the existing products, coupons, customers and orders tables. Product images are provided by URL; binary image uploading and payment refunds are not implemented by this change. Production payment/courier credentials and live transaction verification are separate deployment requirements.
+
+
+## Shadowfax integration
+
+See [SHADOWFAX_DEPLOYMENT.md](SHADOWFAX_DEPLOYMENT.md) for the current packing-before-booking flow, API routes, callback configuration, migrations, and offline checks. Orders are now saved before online payment confirmation; shipment booking requires an explicit admin packing action.

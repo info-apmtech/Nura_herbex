@@ -107,6 +107,7 @@ public class AdminController(
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
+    [HttpPost("/api/shipping/{id}/book"), Authorize(Roles = "admin")]
     [HttpPost("orders/{id}/retry-shipment"), Authorize(Roles = "admin")]
     [HttpPost("orders/{id}/retry-shiprocket"), Authorize(Roles = "admin")]
     public async Task<IActionResult> RetryShipment(string id)
@@ -128,6 +129,7 @@ public class AdminController(
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
+    [HttpPost("/api/shipping/{id}/label"), Authorize(Roles = "admin")]
     [HttpPost("orders/{id}/shipping-label"), Authorize(Roles = "admin")]
     public async Task<IActionResult> GenerateShipmentLabel(string id)
     {
@@ -144,12 +146,21 @@ public class AdminController(
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
+    [HttpPost("/api/shipping/{id}/cancel"), Authorize(Roles = "admin")]
     [HttpPost("orders/{id}/cancel-shipment"), Authorize(Roles = "admin")]
     public async Task<IActionResult> CancelShipment(string id, [FromQuery] string? reason)
     {
         try { return Ok(new ApiResult { Success = true, Message = await orders.CancelShipmentAsync(id, reason) }); }
         catch (KeyNotFoundException ex) { return NotFound(new ApiResult { Success = false, Message = ex.Message }); }
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
+    }
+
+    [HttpPost("/api/shipping/{id}/ready"), Authorize(Roles = "admin")]
+    public async Task<IActionResult> MarkReady(string id, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ParcelSpecs? parcel = null)
+    {
+        try { return Ok(new OrderResponse { Success = true, Order = (await orders.MarkReadyAsync(id, parcel)).ToDto() }); }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResult { Message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Message = ex.Message }); }
     }
 
     [HttpPost("orders/{id}/deliver"), Authorize(Roles = "admin")]

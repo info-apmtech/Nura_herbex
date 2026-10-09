@@ -63,6 +63,18 @@ try
         Check(bad.StatusCode == HttpStatusCode.Unauthorized, "Incorrect login rejected");
     using (var badEmail = await http.PostAsJsonAsync("/api/admin/login", new { Email = "other@example.test", Password = password }))
         Check(badEmail.StatusCode == HttpStatusCode.Unauthorized, "Incorrect email rejected");
+    foreach (var action in new[] { "ready", "book", "label", "cancel" })
+    {
+        using var denied = await http.PostAsJsonAsync($"/api/shipping/unknown/{action}", new { });
+        Check(denied.StatusCode == HttpStatusCode.Unauthorized, "Anonymous shipping action rejected: " + action);
+    }
+    using (var denied = await http.GetAsync("/api/shipping/unknown/track"))
+        Check(denied.StatusCode == HttpStatusCode.Unauthorized, "Anonymous shipping tracking rejected");
+    using (var closed = await http.PostAsJsonAsync("/api/webhooks/shadowfax", new { awb_number = "unknown", status_id = "delivered" }))
+        Check(closed.StatusCode == HttpStatusCode.ServiceUnavailable, "Unconfigured webhook fails closed over HTTP");
+    using (var forged = await http.PostAsJsonAsync("/api/orders/unknown/confirm", new { udf1 = "different" }))
+        Check(forged.StatusCode == HttpStatusCode.BadRequest, "Order confirmation rejects mismatched signed reference");
+
     using var login = await http.PostAsJsonAsync("/api/admin/login", new { Email = " ADMIN@example.test ", Password = password });
     var result = await login.Content.ReadFromJsonAsync<AdminLoginResponse>();
     Check(login.IsSuccessStatusCode && result?.User?.Role == "admin" && !string.IsNullOrEmpty(result.Token), "Admin login returns an admin token and normalizes email");

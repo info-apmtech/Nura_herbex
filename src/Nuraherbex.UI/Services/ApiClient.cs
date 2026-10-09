@@ -134,6 +134,7 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
 
     public Task<OrderListResponse> AdminOrdersAsync() => Call<OrderListResponse>(HttpMethod.Get, "api/admin/orders", null, Who.Admin);
     public Task<OrderResponse> AdminCreateOrderAsync(AdminCreateOrderRequest r) => Call<OrderResponse>(HttpMethod.Post, "api/admin/orders", r, Who.Admin);
+    public Task<OrderResponse> AdminMarkReadyAsync(string orderId, decimal weightKg, decimal lengthCm, decimal breadthCm, decimal heightCm) => Call<OrderResponse>(HttpMethod.Post, $"api/shipping/{Uri.EscapeDataString(orderId)}/ready", new { weightKg, lengthCm, breadthCm, heightCm }, Who.Admin);
     public Task<ShipmentResponse> AdminRetryShipmentAsync(string orderId) => Call<ShipmentResponse>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/retry-shipment", null, Who.Admin);
     public Task<ShipmentResponse> AdminGenerateShipmentLabelAsync(string orderId) => Call<ShipmentResponse>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/shipping-label", null, Who.Admin);
     public Task<ApiResult> AdminCancelShipmentAsync(string orderId) => Call<ApiResult>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/cancel-shipment", null, Who.Admin);
