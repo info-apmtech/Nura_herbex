@@ -176,11 +176,10 @@
                             Full name
                             <input required maxlength="200" autocomplete="name" @bind="_profileFullName" @bind:event="oninput" />
                         </label>
-                        <div class="customer-account-profile-readonly">
-                            <span>Email address</span>
-                            <strong>@customer.Email</strong>
-                            <small>Email is used to sign in. Contact customer care if it needs to be changed.</small>
-                        </div>
+                        <label>
+                            Email address <span>(used to sign in)</span>
+                            <input type="email" required maxlength="256" autocomplete="email" @bind="_profileEmail" @bind:event="oninput" />
+                        </label>
                         <label>
                             Phone number <span>(optional)</span>
                             <input type="tel" maxlength="24" autocomplete="tel" @bind="_profilePhone" @bind:event="oninput" placeholder="Your contact number" />
@@ -195,7 +194,7 @@
                         <p class="customer-account-form-error" role="alert">@_profileError</p>
                     }
                     <div class="customer-account-form-footer">
-                        <p>Your name and phone number are kept with your customer account.</p>
+                        <p>Your name, email address and phone number are kept with your customer account.</p>
                         <button type="submit" disabled="@_savingProfile">
                             <Icon Name="Save" Size="15" />
                             @(_savingProfile ? "Saving…" : "Save profile")
@@ -628,6 +627,7 @@ else
     private string _orderFilter = "ALL";
 
     private string _profileFullName = "";
+    private string _profileEmail = "";
     private string _profilePhone = "";
     private string? _profileError, _profileSavedMessage;
     private string? _profilePhotoError, _profilePhotoMessage;
@@ -681,6 +681,7 @@ else
     {
         Auth.Changed += OnAuthChanged;
         _profileFullName = Auth.Customer?.FullName ?? "";
+        _profileEmail = Auth.Customer?.Email ?? "";
         _profilePhone = Auth.Customer?.Phone ?? "";
         SyncAddress();
         _reviewCity = Auth.Customer?.ShippingAddress?.City?.Trim() ?? "";
@@ -732,6 +733,7 @@ else
         var response = await Auth.UpdateProfileAsync(new UpdateProfileRequest
         {
             FullName = _profileFullName,
+            Email = _profileEmail,
             Phone = _profilePhone,
         });
         _savingProfile = false;

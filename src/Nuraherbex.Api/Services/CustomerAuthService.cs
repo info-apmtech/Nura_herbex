@@ -115,6 +115,7 @@ public class CustomerAuthService(NuraDbContext db, TokenService tokens, EmailSer
                 throw new InvalidOperationException("Full name is required (maximum 200 characters).");
             c.FullName = r.FullName.Trim();
         }
+        await SetEmailAsync(c, r.Email);
         if (!string.IsNullOrWhiteSpace(r.Phone))
         {
             var phone = Digits(r.Phone);
@@ -141,6 +142,32 @@ public class CustomerAuthService(NuraDbContext db, TokenService tokens, EmailSer
         c.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return c.ToDto();
+    }
+
+    /// <summary>
+    /// Validates and applies a new sign-in email (no-op when empty or unchanged). Orders belong to their
+    /// customer by email address, so the new address is carried over to the customer's existing orders —
+    /// order history stays visible and status emails keep reaching the customer. The caller saves changes.
+    /// </summary>
+    public async Task<bool> SetEmailAsync(Customer customer, string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return false;
+        var mail = email.Trim().ToLowerInvariant();
+        if (mail.Length > 256) throw new InvalidOperationException("Email address is too long (maximum 256 characters).");
+        if (!System.Text.RegularExpressions.Regex.IsMatch(mail, @"^[^\s@]+@[^\s@]+\.[^\s@]+$"))
+            throw new InvalidOperationException("Please enter a valid email address.");
+        if (await db.Customers.AnyAsync(other => other.Id != customer.Id && other.Email == mail))
+            throw new InvalidOperationException("This email address is already used by another account.");
+        if (string.Equals(customer.Email, mail, StringComparison.Ordinal)) return false;
+
+        var previous = customer.Email;
+        customer.Email = mail;
+        if (!string.IsNullOrWhiteSpace(previous))
+        {
+            foreach (var order in await db.Orders.Where(o => o.CustomerEmail == previous).ToListAsync())
+                order.CustomerEmail = mail;
+        }
+        return true;
     }
 
     public async Task ChangePasswordAsync(string id, ChangePasswordRequest request)

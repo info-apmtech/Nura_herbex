@@ -48,7 +48,7 @@
                     @if (!string.IsNullOrEmpty(_confirmed.Awb))
                     {
                         <div class="flex justify-between items-center pb-3 border-b border-white/10">
-                            <span class="text-slate-400">Shiprocket Waybill (AWB):</span>
+                            <span class="text-slate-400">Courier Waybill (AWB):</span>
                             <span class="font-mono font-bold text-purple-300">
                                 @_confirmed.Awb (@(string.IsNullOrEmpty(_confirmed.Courier) ? "Express Air" : _confirmed.Courier))
                             </span>
@@ -78,7 +78,7 @@
                             @(_confirmed.AccountCreated ? "Vitality Account Activated!" : "Order Linked to Your Vitality Account!")
                         </div>
                         <div class="text-purple-300 text-[11px] mt-0.5 leading-relaxed">
-                            You can now monitor real-time Shiprocket dispatch milestones, review your batch laboratory test certificate (COA), and manage saved shipping addresses directly in your account.
+                            You can now monitor real-time courier dispatch milestones, review your batch laboratory test certificate (COA), and manage saved shipping addresses directly in your account.
                         </div>
                     </div>
                 </div>

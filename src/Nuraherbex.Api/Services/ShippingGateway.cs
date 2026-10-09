@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.Extensions.Options;
 using Nuraherbex.Api.Data;
 using Nuraherbex.Shared.Models;
 using Nuraherbex.Api.Options;
@@ -7,15 +6,27 @@ using Nuraherbex.Api.Options;
 namespace Nuraherbex.Api.Services;
 
 /// <summary>
-/// Routes shipping work to the right courier platform. New orders default to Shadowfax and can be set with <c>Shipping:Provider</c>;
-/// tracking and cancellation follow the courier recorded on the order (null = Shiprocket, for orders booked before multi-courier).
+/// Routes new confirmed orders through Shadowfax while preserving Shiprocket for orders already booked there.
+/// Tracking and cancellation follow the courier recorded on each order.
 /// </summary>
-public class ShippingGateway(ShiprocketService shiprocket, ShadowfaxService shadowfax, IOptions<ShippingOptions> options)
+public class ShippingGateway(ShiprocketService shiprocket, ShadowfaxService shadowfax)
 {
     public const string Shiprocket = "Shiprocket";
     public const string Shadowfax = "Shadowfax";
 
-    public string ActiveProvider => string.Equals(options.Value.Provider, Shiprocket, StringComparison.OrdinalIgnoreCase) ? Shiprocket : Shadowfax;
+    public string ActiveProvider => Shadowfax;
+
+    public string ProviderFor(Order order)
+    {
+        if (IsShadowfax(order.Courier)) return Shadowfax;
+        if (string.Equals(order.Courier, Shiprocket, StringComparison.OrdinalIgnoreCase)) return Shiprocket;
+        if (!string.IsNullOrWhiteSpace(order.ShiprocketAwb)
+            || !string.IsNullOrWhiteSpace(order.ShiprocketOrderId)
+            || !string.IsNullOrWhiteSpace(order.ShiprocketShipmentId)
+            || !string.IsNullOrWhiteSpace(order.ShiprocketCourier))
+            return Shiprocket;
+        return Shadowfax;
+    }
 
     public static bool IsShadowfax(string? courier) => Shadowfax.Equals(courier, StringComparison.OrdinalIgnoreCase);
 
@@ -38,7 +49,7 @@ public class ShippingGateway(ShiprocketService shiprocket, ShadowfaxService shad
     }
 
     public async Task<(ShiprocketResult Result, string Courier)> CreateOrderAsync(Order order, ParcelSpecs parcel, string? clientOrderId = null) =>
-        ActiveProvider == Shadowfax
+        ProviderFor(order) == Shadowfax
             ? (await shadowfax.CreateOrderAsync(order, parcel, clientOrderId), Shadowfax)
             : (await shiprocket.CreateOrderAsync(order, parcel), Shiprocket);
 
@@ -78,6 +89,5 @@ public class ShippingGateway(ShiprocketService shiprocket, ShadowfaxService shad
             dto.ShiprocketTrackUrl = u.GetString();
     }
 
-    public Task<bool?> IsServiceableAsync(string pincode) =>
-        ActiveProvider == Shadowfax ? shadowfax.IsServiceableAsync(pincode) : Task.FromResult<bool?>(null);
+    public Task<bool?> IsServiceableAsync(string pincode) => shadowfax.IsServiceableAsync(pincode);
 }

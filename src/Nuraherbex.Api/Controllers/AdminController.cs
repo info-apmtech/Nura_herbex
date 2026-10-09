@@ -312,9 +312,11 @@ public class AdminController(
         var customer = await db.Customers.FindAsync(id);
         if (customer is null) return NotFound(new ApiResult { Message = "Customer not found." });
         if (await db.Customers.AnyAsync(c => c.Id != id && c.Phone == phone)) return Conflict(new ApiResult { Message = "This phone number is already used by another customer." });
+        try { await customers.SetEmailAsync(customer, r.Email); }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Message = ex.Message }); }
         customer.FullName = r.FullName.Trim(); customer.Phone = phone; customer.ShippingAddress = address; customer.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
-        return Ok(new CustomerResponse { Success = true, Customer = customer.ToDto(), Message = "Customer profile updated. Existing order addresses are unchanged." });
+        return Ok(new CustomerResponse { Success = true, Customer = customer.ToDto(), Message = "Customer profile updated. A changed email is applied to their existing orders; order addresses are unchanged." });
     }
     // ---- WhatsApp --------------------------------------------------------------------
 

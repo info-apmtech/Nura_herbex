@@ -49,10 +49,10 @@
                 @* Official Logistics Node Badge *@
                 <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0e0b18] border border-white/10">
                     <div class="w-6 h-6 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-[10px] font-bold text-white shadow-sm">
-                        SR
+                        SF
                     </div>
                     <div class="text-left text-[11px] leading-tight">
-                        <span class="font-bold text-white block">Shiprocket Gateway</span>
+                        <span class="font-bold text-white block">Shadowfax Logistics</span>
                         <span class="text-emerald-400 text-[9px] font-mono">Live Sync</span>
                     </div>
                 </div>
@@ -73,7 +73,7 @@
                         Track Your Shipment
                     </h1>
                     <p class="text-slate-400 text-sm font-light leading-relaxed">
-                        Enter your <span class="text-purple-300 font-medium">Order ID</span> (e.g. NH-457503) or the <span class="text-purple-300 font-medium">10-digit mobile number</span> used during checkout to monitor live Shiprocket dispatch updates and delivery progress.
+                        Enter your <span class="text-purple-300 font-medium">Order ID</span> (e.g. NH-457503) or the <span class="text-purple-300 font-medium">10-digit mobile number</span> used during checkout to monitor live courier dispatch updates and delivery progress.
                     </p>
                 </div>
 
@@ -97,9 +97,9 @@
                     <div class="p-4 rounded-2xl bg-[#0c0916] border border-white/5 space-y-1">
                         <div class="flex items-center gap-2 text-purple-400 font-bold text-xs">
                             <Icon Name="ShieldCheck" Size="16" />
-                            <span>Shiprocket Auto-Dispatch</span>
+                            <span>Shadowfax Auto-Dispatch</span>
                         </div>
-                        <p class="text-[11px] text-slate-400 font-light">Direct warehouse integration with real-time courier telemetry.</p>
+                        <p class="text-[11px] text-slate-400 font-light">Direct Shadowfax integration with live shipment updates.</p>
                     </div>
 
                     <div class="p-4 rounded-2xl bg-[#0c0916] border border-white/5 space-y-1">
@@ -174,7 +174,7 @@
                             </span>
                         </h1>
                         <p class="text-slate-400 text-xs sm:text-sm mt-1.5 font-light">
-                            Direct Shiprocket logistics telemetry, courier tracking (AWB), and doorstep delivery milestones.
+                            Live courier tracking (AWB) and doorstep delivery milestones.
                         </p>
                     </div>
 
@@ -185,7 +185,7 @@
                             <a href="@order.TrackUrl" target="_blank" rel="noopener noreferrer"
                                class="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-purple-900/40 hover:bg-purple-900/70 border border-purple-500/40 text-xs font-bold text-purple-200 hover:text-white transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm">
                                 <Icon Name="ExternalLink" Size="14" Class="text-purple-300" />
-                                <span>Shiprocket Tracker</span>
+                                <span>Courier Tracker</span>
                             </a>
                         }
 
@@ -539,7 +539,7 @@
                                 <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]"></span>
                             </div>
 
-                            @* Shiprocket Official Tracker Link Card *@
+                            @* Courier tracking link card *@
                             @if (!string.IsNullOrEmpty(order.TrackUrl))
                             {
                                 <a href="@order.TrackUrl" target="_blank" rel="noopener noreferrer"
@@ -729,7 +729,7 @@
         var events = new List<TrackEvent>();
         var now = Stamp(DateTime.Now);
 
-        // Live Shiprocket scans
+        // Live courier scans
         if (o.ShiprocketTracking is { ValueKind: JsonValueKind.Object } sr
             && sr.TryGetProperty("shipment_track_activities", out var acts) && acts.ValueKind == JsonValueKind.Array)
         {
@@ -772,13 +772,13 @@
                 true, true));
         }
 
-        // Shiprocket official web tracking link
+        // Courier tracking link
         var awb = o.ShiprocketAwb;
         var awbReal = !string.IsNullOrEmpty(awb) && !awb!.StartsWith("SR-PENDING-");
         var trackUrl = o.ShiprocketTrackUrl;
         if (string.IsNullOrEmpty(trackUrl))
         {
-            if (o.Courier == "Shadowfax") { /* Shadowfax supplies its own link with live tracking */ }
+            if (string.Equals(o.Courier, "Shadowfax", StringComparison.OrdinalIgnoreCase)) { /* Shadowfax supplies its own link with live tracking */ }
             else if (awbReal) trackUrl = $"https://shiprocket.co/tracking/{awb}";
             else if (!string.IsNullOrEmpty(o.ShiprocketOrderId)) trackUrl = $"https://shiprocket.co/tracking?order_id={o.ShiprocketOrderId}";
         }
@@ -793,7 +793,7 @@
                 ? o.DeliveryStatus
                 : stage == 3 ? "Delivered to Recipient" : stage >= 2 ? "In Transit with Courier Partner" : "Order Confirmed & Packing in Progress",
             CurrentStage = stage,
-            Courier = string.IsNullOrEmpty(o.ShiprocketCourier) ? "Shiprocket Express Logistics" : o.ShiprocketCourier!,
+            Courier = !string.IsNullOrWhiteSpace(o.ShiprocketCourier) ? o.ShiprocketCourier! : !string.IsNullOrWhiteSpace(o.Courier) ? o.Courier! : "Courier details pending",
             TrackUrl = trackUrl,
             BuyerName = string.IsNullOrEmpty(o.CustomerName) ? "Customer" : o.CustomerName,
             BuyerPhone = o.CustomerPhone ?? "",

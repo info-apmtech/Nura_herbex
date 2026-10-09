@@ -308,6 +308,8 @@ public class VerifyOtpRequest
 public class UpdateProfileRequest
 {
     public string? FullName { get; set; }
+    /// <summary>Optional. When present and different it replaces the sign-in email and is carried over to the customer's existing orders.</summary>
+    public string? Email { get; set; }
     public string? Phone { get; set; }
     public string? ProfileImageData { get; set; }
     public AddressDto? ShippingAddress { get; set; }

@@ -31,6 +31,8 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
         var ret = _o.Return.IsComplete ? _o.Return : _o.Pickup;
         ValidateAddress(_o.Pickup, "pickup", requireContact: !warehouse);
         ValidateAddress(ret, "return", requireContact: !warehouse);
+        if (!warehouse && string.IsNullOrWhiteSpace(_o.Pickup.UniqueCode))
+            throw new InvalidOperationException("Shadowfax marketplace bookings require the seller pickup unique code registered in Shadowfax. Set Shadowfax:Pickup:UniqueCode in appsettings.Local.json.");
         if (string.IsNullOrWhiteSpace(order.CustomerName) || Phone10(order.CustomerPhone).Length != 10
             || string.IsNullOrWhiteSpace(ship.AddressLine1) || string.IsNullOrWhiteSpace(ship.City) || string.IsNullOrWhiteSpace(ship.State))
             throw new InvalidOperationException("Shadowfax: customer name, 10-digit phone, address, city, and state are required.");
@@ -42,32 +44,32 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
         if (!int.TryParse(ship.Pincode, out var deliveryPincode) || deliveryPincode is < 100000 or > 999999)
             throw new InvalidOperationException("Shadowfax: customer delivery pincode must be a valid 6-digit Indian pincode.");
 
+        var requestedClientOrderId = string.IsNullOrWhiteSpace(clientOrderId) ? order.Id : clientOrderId.Trim();
         var body = new Dictionary<string, object?>
         {
             ["order_type"] = warehouse ? "warehouse" : "marketplace",
             ["order_details"] = new
             {
-                client_order_id = string.IsNullOrWhiteSpace(clientOrderId) ? order.Id : clientOrderId.Trim(),
+                client_order_id = requestedClientOrderId,
                 actual_weight = parcel.WeightKg,
                 volumetric_weight = volumetricWeightKg,
                 product_value = productValue,
                 payment_mode = isCod ? "cod" : "prepaid",
                 cod_amount = isCod ? order.TotalAmount : 0m,
                 total_amount = order.TotalAmount,
-                order_service = "Regular",
+                order_service = _o.ServiceTier,
             },
             ["customer_details"] = new
             {
                 name = order.CustomerName,
                 contact = Phone10(order.CustomerPhone),
                 address_line_1 = ship.AddressLine1,
-                address2 = ship.AddressLine2 ?? "",
+                address_line_2 = ship.AddressLine2 ?? "",
                 city = ship.City,
                 state = ship.State,
                 pincode = deliveryPincode,
             },
             ["pickup_details"] = PickupAddress(_o.Pickup, warehouse ? "warehouse" : "seller"),
-            ["return_details"] = ReturnAddress(ret, warehouse ? "origin" : "seller"),
             ["product_details"] = order.Items.Select(i => new
             {
                 sku_name = i.Name,
@@ -78,17 +80,26 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
                 additional_details = new { quantity = i.Quantity },
             }).ToArray(),
         };
+        body[warehouse ? "rto_details" : "rts_details"] = ReturnAddress(ret, warehouse ? "origin" : "seller");
 
         var res = await SendAsync(HttpMethod.Post, "/v3/clients/orders/", body);
-        // Forward order validation failures can be HTTP 200 with { message: "Failure" }.
-        if (!string.Equals(res?["message"]?.ToString(), "Success", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"Shadowfax: {res?["errors"]?.ToString() ?? res?["message"]?.ToString() ?? "order creation was rejected"}");
         var data = res?["data"];
-        var awb = data?["awb_number"]?.ToString();
-        if (string.IsNullOrWhiteSpace(awb))
-            throw new InvalidOperationException($"Shadowfax: {res?["errors"]?.ToString() ?? res?["message"]?.ToString() ?? "no AWB number returned"}");
+        var responseMessage = NodeText(res, "message");
+        var responseText = res?.ToJsonString() ?? "";
+        var responseCoid = NodeText(res, "COID", "client_order_id") ?? NodeText(data, "COID", "client_order_id");
+        var duplicateAwb = NodeText(res, "AWB", "awb_number", "awb") ?? NodeText(data, "AWB", "awb_number", "awb");
+        var isDuplicateBooking = string.Equals(responseMessage, "Failure", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(responseCoid, requestedClientOrderId, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(duplicateAwb)
+            && responseText.Contains("already created", StringComparison.OrdinalIgnoreCase);
+        if (!string.Equals(responseMessage, "Success", StringComparison.OrdinalIgnoreCase) && !isDuplicateBooking)
+            throw new InvalidOperationException($"Shadowfax: {NodeText(res, "errors") ?? responseMessage ?? "order creation was rejected"}");
 
-        var id = data?["id"]?.ToString() ?? "";
+        var awb = isDuplicateBooking ? duplicateAwb : NodeText(data, "awb_number", "AWB", "awb") ?? NodeText(res, "awb_number", "AWB", "awb");
+        if (string.IsNullOrWhiteSpace(awb))
+            throw new InvalidOperationException($"Shadowfax: {NodeText(res, "errors") ?? responseMessage ?? "no AWB number returned"}");
+
+        var id = NodeText(data, "id", "order_id") ?? NodeText(res, "id", "order_id", "COID") ?? "";
         return new ShiprocketResult
         {
             Success = true,
@@ -176,6 +187,15 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
             log.LogWarning("[Shadowfax] Serviceability check failed for {Pin}: {Msg}", pincode, ex.Message);
             return null;
         }
+    }
+
+    private static string? NodeText(JsonNode? node, params string[] names)
+    {
+        if (node is not JsonObject obj) return null;
+        foreach (var pair in obj)
+            if (names.Any(name => string.Equals(name, pair.Key, StringComparison.OrdinalIgnoreCase)))
+                return pair.Value?.ToString();
+        return null;
     }
 
     private static bool HasServiceForPincode(JsonNode? node, string pincode, string tier) => node is JsonArray rows

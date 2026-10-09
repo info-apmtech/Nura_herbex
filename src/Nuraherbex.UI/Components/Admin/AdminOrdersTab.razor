@@ -39,7 +39,7 @@
                         <th class="px-4 py-3">Customer Details</th>
                         <th class="px-4 py-3">Items Ordered</th>
                         <th class="px-4 py-3">Amount &amp; Payment</th>
-                        <th class="px-4 py-3">Shiprocket AWB</th>
+                        <th class="px-4 py-3">Courier AWB</th>
                         <th class="px-4 py-3">Delivery Status</th>
                         <th class="px-4 py-3 text-right">Actions</th>
                     </tr>
@@ -144,7 +144,7 @@
                                         }
                                     </div>
                                     <div class="text-[10px] text-zinc-500 mt-0.5">
-                                        @order.ShiprocketCourier
+                                        @(string.IsNullOrWhiteSpace(order.ShiprocketCourier) ? order.Courier : order.ShiprocketCourier)
                                     </div>
                                 </td>
 
@@ -188,7 +188,7 @@
 
             <div class="space-y-1">
                 <div class="text-[10px] font-mono text-zinc-400 uppercase font-medium">
-                    Shiprocket AWB Telemetry
+                    Courier AWB Telemetry
                 </div>
                 <h3 class="text-base font-semibold text-zinc-100">
                     Order @o.Id
@@ -212,7 +212,7 @@
                 </div>
                 <div class="flex justify-between">
                     <span class="text-zinc-500">Courier Partner</span>
-                    <span class="text-zinc-200 font-medium">@(string.IsNullOrEmpty(o.ShiprocketCourier) ? "Pending Assignment" : o.ShiprocketCourier)</span>
+                    <span class="text-zinc-200 font-medium">@(string.IsNullOrEmpty(o.ShiprocketCourier) ? (o.Courier ?? "Pending Assignment") : o.ShiprocketCourier)</span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-zinc-500">AWB Tracking Code</span>
@@ -261,7 +261,7 @@
                 </div>
             </div>
 
-            @* Order actions (Blazor admin additions: Shiprocket retry, delivery, e-mail, WhatsApp) *@
+            @* Order actions (Blazor admin additions: courier retry, delivery, e-mail, WhatsApp) *@
             <div class="space-y-2 pt-1 border-t border-zinc-800/80">
                 <span class="text-xs font-semibold text-zinc-200 block uppercase tracking-wider pt-3">
                     Order Actions
@@ -370,7 +370,7 @@
                     Create Test Order
                 </h3>
                 <p class="text-xs text-zinc-500">
-                    Simulate an order to verify database records &amp; Shiprocket tracking.
+                    Simulate an order to verify database records &amp; courier tracking.
                 </p>
             </div>
 

@@ -65,10 +65,7 @@ public partial class OrderService(
         };
 
         if (isCod)
-        {
-            await TryDispatchAsync(order, calc.Parcel);
             await products.DecrementStockAsync(order);
-        }
 
         if (!isCod && holdUntilPaid)
         {
@@ -85,7 +82,13 @@ public partial class OrderService(
         db.Orders.Add(order);
         await db.SaveChangesAsync();
 
-        if (isCod) NotifyConfirmed(order);
+        if (isCod)
+        {
+            order.Courier = shipping.ProviderFor(order);
+            await TryDispatchAsync(order, calc.Parcel);
+            await db.SaveChangesAsync();
+            NotifyConfirmed(order);
+        }
         return order;
     }
 
@@ -94,7 +97,7 @@ public partial class OrderService(
         db.PaymentAttempts.Where(a => a.OrderId == orderId && a.Status != "SUCCESS")
             .OrderByDescending(a => a.CreatedAt).FirstOrDefaultAsync();
 
-    /// <summary>PayU confirmed payment: create the real order from the held snapshot, then settle it (stock, Shiprocket, notifications).</summary>
+    /// <summary>PayU confirmed payment: persist settlement and inventory, then book the confirmed order with Shadowfax.</summary>
     public async Task<Order> ConfirmHeldOrderAsync(PaymentAttempt attempt, string? paymentRef, string? txnId, string rawGatewayJson)
     {
         var order = await GetAsync(attempt.OrderId);
@@ -135,11 +138,22 @@ public partial class OrderService(
             .OrderByDescending(o => o.CreatedAt).ToListAsync();
     }
 
-    /// <summary>Marks an online order PAID (idempotent), decrements stock, dispatches to Shiprocket, notifies the customer.</summary>
+    /// <summary>Marks an online order PAID (idempotent), persists settlement, then books it with Shadowfax.</summary>
     public async Task<Order> MarkPaidAsync(string orderId, string? paymentRef, string? txnId, string rawGatewayJson)
     {
         var order = await GetAsync(orderId) ?? throw new InvalidOperationException($"Order {orderId} not found");
-        if (order.PaymentStatus == "PAID") return order;
+        var parcel = new ParcelSpecs { WeightKg = order.Items.Sum(i => (i.WeightKg > 0 ? i.WeightKg : 0.38m) * i.Quantity) };
+        if (order.PaymentStatus == "PAID")
+        {
+            var hasActiveAwb = !string.IsNullOrWhiteSpace(order.ShiprocketAwb)
+                && !order.ShiprocketAwb.StartsWith("SR-PENDING-", StringComparison.OrdinalIgnoreCase);
+            if (hasActiveAwb || order.FulfillmentStatus == "CANCELLED") return order;
+
+            order.Courier = shipping.ProviderFor(order);
+            await TryDispatchAsync(order, parcel);
+            await db.SaveChangesAsync();
+            return order;
+        }
 
         order.PaymentStatus = "PAID";
         order.DeliveryStatus = "Order Confirmed";
@@ -148,15 +162,16 @@ public partial class OrderService(
         order.UpdatedAt = DateTime.UtcNow;
         order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto { Status = $"Payment Verified ({paymentRef})", Time = Mapping.TimelineStamp(), Done = true }];
 
-        var parcel = new ParcelSpecs { WeightKg = order.Items.Sum(i => (i.WeightKg > 0 ? i.WeightKg : 0.38m) * i.Quantity) };
-        await TryDispatchAsync(order, parcel);
-
         db.Payments.Add(new Payment
         {
             OrderId = order.Id, Provider = "PAYU", GatewayOrderId = txnId, GatewayPaymentId = paymentRef,
             Amount = order.TotalAmount, Status = "CAPTURED", GatewayResponse = rawGatewayJson,
         });
         await products.DecrementStockAsync(order);
+        await db.SaveChangesAsync();
+
+        order.Courier = shipping.ProviderFor(order);
+        await TryDispatchAsync(order, parcel);
         await db.SaveChangesAsync();
 
         NotifyConfirmed(order);
@@ -193,10 +208,24 @@ public partial class OrderService(
         var parcel = new ParcelSpecs { WeightKg = order.Items.Sum(i => (i.WeightKg > 0 ? i.WeightKg : 0.38m) * i.Quantity) };
         // Reuse the same idempotency key after a timeout, then advance after a confirmed cancellation.
         var clientOrderId = ShippingGateway.ShadowfaxClientOrderId(order);
-        var (res, courier) = await shipping.CreateOrderAsync(order, parcel, clientOrderId);
-        Apply(order, res, courier);
+        order.Courier = shipping.ProviderFor(order);
         await db.SaveChangesAsync();
-        return res;
+        try
+        {
+            var (res, courier) = await shipping.CreateOrderAsync(order, parcel, clientOrderId);
+            Apply(order, res, courier);
+            await db.SaveChangesAsync();
+            return res;
+        }
+        catch (Exception ex)
+        {
+            order.Notes = string.IsNullOrWhiteSpace(order.Notes)
+                ? $"{order.Courier} retry failed: {ex.Message}"
+                : $"{order.Notes} | {order.Courier} retry failed: {ex.Message}";
+            order.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            throw;
+        }
     }
 
     /// <summary>Creates and stores a Shadowfax PDF shipping label for an active, not-yet-picked shipment.</summary>
@@ -237,15 +266,18 @@ public partial class OrderService(
 
     private async Task TryDispatchAsync(Order order, ParcelSpecs parcel)
     {
+        order.Courier = shipping.ProviderFor(order);
+        var courier = order.Courier;
         try
         {
-            var (res, courier) = await shipping.CreateOrderAsync(order, parcel);
-            if (res.Success) Apply(order, res, courier);
+            var (res, selectedCourier) = await shipping.CreateOrderAsync(order, parcel);
+            if (res.Success) Apply(order, res, selectedCourier);
         }
         catch (Exception ex)
         {
-            log.LogError(ex, "[{Courier}] Dispatch deferred for {Order}", shipping.ActiveProvider, order.Id);
-            order.Notes += $" | {shipping.ActiveProvider} auto-dispatch deferred: {ex.Message}";
+            log.LogError(ex, "[{Courier}] Dispatch deferred for {Order}", courier, order.Id);
+            var note = $"{courier} auto-dispatch deferred: {ex.Message}";
+            order.Notes = string.IsNullOrWhiteSpace(order.Notes) ? note : $"{order.Notes} | {note}";
         }
     }
 

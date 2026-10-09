@@ -58,7 +58,7 @@ public class ShiprocketOptions
 public class ShippingOptions
 {
     public const string Section = "Shipping";
-    /// <summary>Courier platform used for NEW orders: Shadowfax | Shiprocket. Existing orders keep the courier they were booked with.</summary>
+    /// <summary>Legacy configuration only. New confirmed orders are booked through Shadowfax; existing bookings retain their recorded courier.</summary>
     public string Provider { get; set; } = "Shadowfax";
 }
 
@@ -72,7 +72,7 @@ public class ShadowfaxAddress
     public string State { get; set; } = "";
     public string Pincode { get; set; } = "";
     public string Email { get; set; } = "";
-    /// <summary>Warehouse code registered with Shadowfax (optional).</summary>
+    /// <summary>Seller pickup code registered with Shadowfax; required for marketplace orders.</summary>
     public string UniqueCode { get; set; } = "";
     public bool IsComplete => !string.IsNullOrWhiteSpace(AddressLine1)
         && !string.IsNullOrWhiteSpace(City) && !string.IsNullOrWhiteSpace(Pincode)
