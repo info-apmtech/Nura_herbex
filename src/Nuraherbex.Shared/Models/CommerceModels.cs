@@ -160,6 +160,7 @@ public class OrderDto
     public string? ShiprocketShipmentId { get; set; }
     public string? ShiprocketAwb { get; set; }
     public string? ShiprocketCourier { get; set; }
+    /// <summary>Admin-only printable label URL; customer DTO mappings deliberately leave this empty.</summary>
     public string? ShippingLabelUrl { get; set; }
     public string DeliveryStatus { get; set; } = "Order Placed";
     public List<TrackingEventDto> DeliveryTrackingEvents { get; set; } = new();
@@ -397,6 +398,7 @@ public class ShipmentResultDto
     public string? ShiprocketAwb { get; set; }
     public string? ShiprocketCourier { get; set; }
     public string? DeliveryStatus { get; set; }
+    public string? ShippingLabelUrl { get; set; }
 }
 
 public class ShipmentResponse : ApiResult

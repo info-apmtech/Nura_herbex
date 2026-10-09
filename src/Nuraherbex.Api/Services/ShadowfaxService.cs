@@ -19,10 +19,11 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
 
     public bool IsConfigured => _o.IsConfigured;
 
-    public async Task<ShiprocketResult> CreateOrderAsync(Order order, ParcelSpecs parcel)
+    public async Task<ShiprocketResult> CreateOrderAsync(Order order, ParcelSpecs parcel, string? clientOrderId = null)
     {
         if (!_o.IsConfigured) throw new InvalidOperationException("Shadowfax token is not configured.");
-        if (!_o.Pickup.IsComplete) throw new InvalidOperationException("Shadowfax:Pickup address is not configured.");
+        if (!_o.Pickup.IsComplete)
+            throw new InvalidOperationException("Shadowfax live shipping is selected, but the pickup address is missing. Configure Shadowfax:Pickup with Name, Contact, AddressLine1, City, and Pincode in appsettings.Local.json.");
 
         var warehouse = _o.OrderType.Equals("warehouse", StringComparison.OrdinalIgnoreCase);
         var isCod = order.PaymentMethod == "COD";
@@ -46,7 +47,7 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
             ["order_type"] = warehouse ? "warehouse" : "marketplace",
             ["order_details"] = new
             {
-                client_order_id = order.Id,
+                client_order_id = string.IsNullOrWhiteSpace(clientOrderId) ? order.Id : clientOrderId.Trim(),
                 actual_weight = parcel.WeightKg,
                 volumetric_weight = volumetricWeightKg,
                 product_value = productValue,
@@ -98,6 +99,23 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
             DeliveryStatus = "AWB Assigned",
             TrackingEvents = [new() { Status = "Shipment Created with Shadowfax", Time = Mapping.TimelineStamp(), Done = true, Active = true }],
         };
+    }
+
+    /// <summary>Generates a printable PDF label for a booked shipment that has not been picked up.</summary>
+    public async Task<string> GenerateLabelAsync(string awb)
+    {
+        if (!_o.IsConfigured) throw new InvalidOperationException("Shadowfax token is not configured.");
+        if (string.IsNullOrWhiteSpace(awb)) throw new InvalidOperationException("A Shadowfax AWB is required to generate a label.");
+
+        var res = await SendAsync(HttpMethod.Post, "/client/generate_label/", new { awb_number = awb.Trim(), file_type = "pdf" });
+        if (!string.Equals(res?["message"]?.ToString(), "Success", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Shadowfax: {res?["errors"]?.ToString() ?? res?["message"]?.ToString() ?? "label generation was rejected"}");
+
+        var labelUrl = res?["data"]?["label_url"]?.ToString();
+        if (!Uri.TryCreate(labelUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+            throw new InvalidOperationException("Shadowfax did not return a valid HTTPS shipping label URL.");
+
+        return uri.ToString();
     }
 
     /// <summary>

@@ -72,7 +72,12 @@ public class AdminController(
     [HttpGet("orders"), Authorize(Roles = "admin")]
     public async Task<OrderListResponse> ListOrders()
     {
-        var list = (await orders.ListAllAsync()).Select(o => o.ToDto()).ToList();
+        var list = (await orders.ListAllAsync()).Select(o =>
+        {
+            var dto = o.ToDto();
+            dto.ShippingLabelUrl = o.ShippingLabelUrl;
+            return dto;
+        }).ToList();
         return new OrderListResponse { Success = true, Count = list.Count, Orders = list };
     }
 
@@ -117,6 +122,22 @@ public class AdminController(
                     Success = res.Success, Simulated = res.Simulated, Courier = (await orders.GetAsync(id))?.Courier, ShiprocketOrderId = res.ShiprocketOrderId, ShiprocketShipmentId = res.ShiprocketShipmentId,
                     ShiprocketAwb = res.ShiprocketAwb, ShiprocketCourier = res.ShiprocketCourier, DeliveryStatus = res.DeliveryStatus,
                 },
+            });
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResult { Success = false, Message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
+    }
+
+    [HttpPost("orders/{id}/shipping-label"), Authorize(Roles = "admin")]
+    public async Task<IActionResult> GenerateShipmentLabel(string id)
+    {
+        try
+        {
+            var labelUrl = await orders.GenerateShipmentLabelAsync(id);
+            return Ok(new ShipmentResponse
+            {
+                Success = true,
+                Result = new ShipmentResultDto { Success = true, Courier = "Shadowfax", ShippingLabelUrl = labelUrl },
             });
         }
         catch (KeyNotFoundException ex) { return NotFound(new ApiResult { Success = false, Message = ex.Message }); }

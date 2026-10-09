@@ -257,7 +257,7 @@ body:has(.customer-account) { background: #f5f7f3 !important; color: #233a35 !im
 .customer-account a.customer-account-track-shipment {
   background: var(--account-green);
   border: 1px solid var(--account-green);
-  color: #fff;
+  color: #fff3bf;
 }
 .customer-account a.customer-account-track-shipment:hover {
   background: #1d4d35;

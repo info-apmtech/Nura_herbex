@@ -278,19 +278,42 @@
                 <div class="flex flex-wrap gap-2">
                     @if (string.IsNullOrEmpty(o.ShiprocketAwb) || o.FulfillmentStatus == "CANCELLED")
                     {
-                        <button type="button" disabled="@_busy" @onclick="RetryShipmentAsync"
-                                class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
-                            <Icon Name="Truck" Size="12" />
-                            <span>Retry Shipment</span>
-                        </button>
+                        @if (o.PaymentMethod == "COD" || o.PaymentStatus == "PAID")
+                        {
+                            <button type="button" disabled="@_busy" @onclick="RetryShipmentAsync"
+                                    class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
+                                <Icon Name="Truck" Size="12" />
+                                <span>Retry Shipment</span>
+                            </button>
+                        }
+                        else
+                        {
+                            <span class="px-2.5 py-1.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">Verify online payment before shipping.</span>
+                        }
                     }
                     @if (o.Courier == "Shadowfax" && !string.IsNullOrEmpty(o.ShiprocketAwb) && o.FulfillmentStatus is not ("CANCELLED" or "DELIVERED" or "RTO"))
                     {
+                        @if (o.FulfillmentStatus is not ("PICKED_UP" or "IN_TRANSIT" or "OUT_FOR_DELIVERY"))
+                        {
+                            <button type="button" disabled="@_busy" @onclick="GenerateShipmentLabelAsync"
+                                    class="px-2.5 py-1.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
+                                <Icon Name="FileText" Size="12" />
+                                <span>Generate PDF label</span>
+                            </button>
+                        }
                         <button type="button" disabled="@_busy" @onclick="CancelShipmentAsync"
                                 class="px-2.5 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
                             <Icon Name="AlertCircle" Size="12" />
                             <span>Cancel Shipment</span>
                         </button>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_shippingLabelUrl))
+                    {
+                        <a href="@_shippingLabelUrl" target="_blank" rel="noopener noreferrer"
+                           class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors">
+                            <Icon Name="ExternalLink" Size="12" />
+                            <span>Open / print label</span>
+                        </a>
                     }
                     @if (o.DeliveryStatus != "Delivered")
                     {
@@ -448,6 +471,7 @@
 
     private OrderDto? _selected;
     private bool _busy;
+    private string? _shippingLabelUrl;
     private string? _actionMessage;
     private bool _actionOk;
 
@@ -490,10 +514,11 @@
     private void OpenOrder(OrderDto order)
     {
         _selected = order;
+        _shippingLabelUrl = order.ShippingLabelUrl;
         _actionMessage = null;
     }
 
-    private void CloseOrder() { _selected = null; _actionMessage = null; }
+    private void CloseOrder() { _selected = null; _shippingLabelUrl = null; _actionMessage = null; }
 
     private async Task OpenAddOrder() { _new = NewOrderForm(); _addError = null; _showAdd = true; var result = await Api.AdminProductsAsync(); _catalog = result.Products; _new.ProductId = _catalog.FirstOrDefault(p => p.Status == "active" && p.StockQuantity > 0)?.Id ?? ""; if (!result.Success || _new.ProductId == "") _addError = result.Message ?? "No active products with stock are available."; }
     private void CloseAddOrder() { _showAdd = false; }
@@ -530,6 +555,25 @@
         _actionMessage = res.Success
             ? (res.Result?.ShiprocketAwb is { Length: > 0 } awb ? $"{courier} shipment created. AWB: {awb}" : $"{courier} shipment created.")
             : (res.Message ?? "Shipment retry failed.");
+        if (res.Success) _shippingLabelUrl = null;
+        _busy = false;
+        await ReloadSelectedAsync();
+    }
+
+    private async Task GenerateShipmentLabelAsync()
+    {
+        if (_selected is null) return;
+        _busy = true; _actionMessage = null;
+        var res = await Api.AdminGenerateShipmentLabelAsync(_selected.Id);
+        _actionOk = res.Success;
+        _actionMessage = res.Success
+            ? "Shadowfax PDF label is ready. Open it to print and attach it to the parcel."
+            : (res.Message ?? "Could not generate the Shadowfax label.");
+        if (res.Result?.ShippingLabelUrl is { Length: > 0 } labelUrl)
+        {
+            _shippingLabelUrl = labelUrl;
+            _selected.ShippingLabelUrl = labelUrl;
+        }
         _busy = false;
         await ReloadSelectedAsync();
     }
@@ -541,6 +585,8 @@
         var res = await Api.AdminCancelShipmentAsync(_selected.Id);
         _actionOk = res.Success;
         _actionMessage = res.Message ?? (res.Success ? "Shipment cancelled." : "Could not cancel the shipment.");
+        if (res.Success && res.Message?.Contains("queued", StringComparison.OrdinalIgnoreCase) != true)
+            _shippingLabelUrl = null;
         _busy = false;
         await ReloadSelectedAsync();
     }

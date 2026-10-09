@@ -19,10 +19,30 @@ public class ShippingGateway(ShiprocketService shiprocket, ShadowfaxService shad
 
     public static bool IsShadowfax(string? courier) => Shadowfax.Equals(courier, StringComparison.OrdinalIgnoreCase);
 
-    public async Task<(ShiprocketResult Result, string Courier)> CreateOrderAsync(Order order, ParcelSpecs parcel) =>
+    /// <summary>Stable Shadowfax idempotency key for the current shipment attempt.</summary>
+    public static string ShadowfaxClientOrderId(Order order)
+    {
+        var cancelledShipments = order.DeliveryTrackingEvents?.Count(e =>
+            e.Status.Contains("Shipment Cancelled", StringComparison.OrdinalIgnoreCase)) ?? 0;
+        return cancelledShipments == 0 ? order.Id : $"{order.Id}-R{cancelledShipments}";
+    }
+
+    /// <summary>Maps a Shadowfax retry reference such as NH-123456-R2 back to the store order id.</summary>
+    public static string? ShadowfaxBaseOrderId(string? clientOrderId)
+    {
+        if (string.IsNullOrWhiteSpace(clientOrderId)) return null;
+        var separator = clientOrderId.LastIndexOf("-R", StringComparison.OrdinalIgnoreCase);
+        return separator > 0 && int.TryParse(clientOrderId[(separator + 2)..], out _)
+            ? clientOrderId[..separator]
+            : clientOrderId;
+    }
+
+    public async Task<(ShiprocketResult Result, string Courier)> CreateOrderAsync(Order order, ParcelSpecs parcel, string? clientOrderId = null) =>
         ActiveProvider == Shadowfax
-            ? (await shadowfax.CreateOrderAsync(order, parcel), Shadowfax)
+            ? (await shadowfax.CreateOrderAsync(order, parcel, clientOrderId), Shadowfax)
             : (await shiprocket.CreateOrderAsync(order, parcel), Shiprocket);
+
+    public Task<string> GenerateLabelAsync(string awb) => shadowfax.GenerateLabelAsync(awb);
 
     public Task<JsonElement?> FetchLiveTrackingAsync(string? courier, string? awb) =>
         IsShadowfax(courier) ? shadowfax.FetchLiveTrackingAsync(awb) : shiprocket.FetchLiveTrackingAsync(awb);

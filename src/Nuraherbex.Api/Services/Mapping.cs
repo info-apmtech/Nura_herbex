@@ -21,7 +21,7 @@ public static class Mapping
         Subtotal = o.Subtotal, DiscountAmount = o.DiscountAmount, ShippingFee = o.ShippingFee, TaxAmount = o.TaxAmount, TotalAmount = o.TotalAmount,
         CouponCode = o.CouponCode, PaymentMethod = o.PaymentMethod, PaymentStatus = o.PaymentStatus, PaymentRef = o.PaymentRef, PayuTxnId = o.PayuTxnId,
         FulfillmentStatus = o.FulfillmentStatus, Courier = o.Courier, ShiprocketOrderId = o.ShiprocketOrderId, ShiprocketShipmentId = o.ShiprocketShipmentId,
-        ShiprocketAwb = o.ShiprocketAwb, ShiprocketCourier = o.ShiprocketCourier, ShippingLabelUrl = o.ShippingLabelUrl,
+        ShiprocketAwb = o.ShiprocketAwb, ShiprocketCourier = o.ShiprocketCourier,
         DeliveryStatus = o.DeliveryStatus, DeliveryTrackingEvents = o.DeliveryTrackingEvents, Notes = o.Notes,
     };
 

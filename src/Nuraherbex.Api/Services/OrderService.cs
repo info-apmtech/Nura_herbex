@@ -191,10 +191,29 @@ public partial class OrderService(
             throw new InvalidOperationException("This order already has a shipment. Cancel it first to re-book.");
 
         var parcel = new ParcelSpecs { WeightKg = order.Items.Sum(i => (i.WeightKg > 0 ? i.WeightKg : 0.38m) * i.Quantity) };
-        var (res, courier) = await shipping.CreateOrderAsync(order, parcel);
+        // Reuse the same idempotency key after a timeout, then advance after a confirmed cancellation.
+        var clientOrderId = ShippingGateway.ShadowfaxClientOrderId(order);
+        var (res, courier) = await shipping.CreateOrderAsync(order, parcel, clientOrderId);
         Apply(order, res, courier);
         await db.SaveChangesAsync();
         return res;
+    }
+
+    /// <summary>Creates and stores a Shadowfax PDF shipping label for an active, not-yet-picked shipment.</summary>
+    public async Task<string> GenerateShipmentLabelAsync(string orderId)
+    {
+        var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
+        if (!ShippingGateway.IsShadowfax(order.Courier))
+            throw new InvalidOperationException("Shipping labels are available here for Shadowfax shipments only.");
+        if (string.IsNullOrWhiteSpace(order.ShiprocketAwb) || order.ShiprocketAwb.StartsWith("SR-PENDING-", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("This order does not have a Shadowfax AWB yet. Book the shipment first.");
+        if (order.FulfillmentStatus is "CANCELLED" or "PICKED_UP" or "IN_TRANSIT" or "OUT_FOR_DELIVERY" or "DELIVERED" or "RTO")
+            throw new InvalidOperationException("Shadowfax labels can only be generated before courier pickup and before cancellation.");
+
+        order.ShippingLabelUrl = await shipping.GenerateLabelAsync(order.ShiprocketAwb);
+        order.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return order.ShippingLabelUrl;
     }
 
     /// <summary>Cancels the booked Shadowfax shipment (admin). Order stays; fulfillment returns to a re-shippable state once Shadowfax confirms.</summary>
@@ -207,6 +226,7 @@ public partial class OrderService(
         {
             order.FulfillmentStatus = "CANCELLED";
             order.DeliveryStatus = "Shipment Cancelled";
+            order.ShippingLabelUrl = null;
         }
         order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto { Status = queued ? "Shipment cancellation queued" : "Shipment Cancelled", Time = Mapping.TimelineStamp(), Done = true, Active = true }];
         order.UpdatedAt = DateTime.UtcNow;
@@ -236,6 +256,7 @@ public partial class OrderService(
         order.ShiprocketShipmentId = res.ShiprocketShipmentId;
         order.ShiprocketAwb = res.ShiprocketAwb;
         order.ShiprocketCourier = res.ShiprocketCourier;
+        order.ShippingLabelUrl = null;
         order.FulfillmentStatus = res.ShiprocketAwb.StartsWith("SR-PENDING-") ? "SHIPMENT_CREATED" : "AWB_ASSIGNED";
         order.DeliveryStatus = res.DeliveryStatus;
         order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, .. res.TrackingEvents];

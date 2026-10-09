@@ -19,7 +19,7 @@ else
 {
     <div class="admin-shell">
         <aside class="admin-sidebar @(_mobileMenu ? "is-open" : "")" aria-label="Admin navigation">
-            <a class="admin-brand" href="/admin"><span class="admin-brand-symbol">N</span><span>Nura Herbex<small>STORE ADMINISTRATION</small></span></a>
+            <a class="admin-brand" href="/admin"><img class="admin-brand-logo" src="/_content/Nuraherbex.UI/images/logo-mark.png" alt="" /><span>Nura Herbex<small>STORE ADMINISTRATION</small></span></a>
             <div class="admin-store-label"><span class="admin-store-dot"></span> Your store workspace</div>
             <nav>@foreach (var item in Navigation) { @if (item.Id == "overview") { <span class="admin-nav-label">MANAGE</span> } @if (item.Id == "batches") { <span class="admin-nav-label">STOREFRONT &amp; SUPPORT</span> }<button class="admin-nav-item @(_activeTab == item.Id ? "is-active" : "")" aria-current="@(_activeTab == item.Id ? "page" : null)" @onclick="() => Navigate(item.Id)"><Icon Name="@item.Icon" Size="19" /><span>@item.Label</span>@if (item.Id == "orders" && _orders.Any(o => o.FulfillmentStatus == "PENDING")) { <small>@_orders.Count(o => o.FulfillmentStatus == "PENDING")</small> }</button> }</nav>
             <div class="admin-sidebar-bottom"><a class="admin-nav-item" href="/shop"><Icon Name="ExternalLink" Size="18" /> View storefront</a><div class="admin-user"><span class="admin-avatar">A</span><span><strong>Administrator</strong><small>@AdminAuth.Email</small></span><button class="admin-icon-btn" title="Sign out" aria-label="Sign out" @onclick="LogoutAsync"><Icon Name="LogOut" Size="18" /></button></div></div>

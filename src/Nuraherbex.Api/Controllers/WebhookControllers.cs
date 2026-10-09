@@ -229,7 +229,9 @@ public class ShadowfaxWebhookController(
 
         string? Str(string name) => payload.TryGetProperty(name, out var v) && v.ValueKind != System.Text.Json.JsonValueKind.Null ? v.ToString() : null;
         var awb = Str("awb_number");
-        var orderId = Str("client_order_id") ?? Str("order_id");
+        var clientOrderId = Str("client_order_id");
+        var orderId = clientOrderId ?? Str("order_id");
+        var baseOrderId = ShippingGateway.ShadowfaxBaseOrderId(orderId);
         var ev = (Str("status_id") ?? Str("event") ?? "").ToLowerInvariant();
         const string ok = "Webhook processed successfully";
 
@@ -246,8 +248,15 @@ public class ShadowfaxWebhookController(
         }
 
         var order = await db.Orders.FirstOrDefaultAsync(o =>
-            (orderId != null && o.Id == orderId) || (awb != null && o.ShiprocketAwb == awb));
+            (baseOrderId != null && o.Id == baseOrderId) || (awb != null && o.ShiprocketAwb == awb));
         if (order is null) return Ok(new ApiResult { Success = true, Message = ok });
+
+        // Ignore delayed callbacks from a cancelled booking after a replacement shipment is active.
+        // AWB-only callbacks still resolve through the current order AWB above.
+        var isClientReference = clientOrderId is not null
+            || (orderId is not null && (orderId == order.Id || orderId.StartsWith($"{order.Id}-R", StringComparison.OrdinalIgnoreCase)));
+        if (isClientReference && !string.Equals(orderId, ShippingGateway.ShadowfaxClientOrderId(order), StringComparison.OrdinalIgnoreCase))
+            return Ok(new ApiResult { Success = true, Message = ok });
 
         var previous = order.FulfillmentStatus;
         var location = Str("current_location");
