@@ -56,6 +56,98 @@ public class EmailService(HttpClient http, IOptions<EmailOptions> email, IOption
         return await SendAsync(to, $"{otp} is your Nura Herbex Vitality Login Code", Wrap(body), "login code");
     }
 
+    // ---- Order status notifications --------------------------------------------------------
+
+    /// <summary>
+    /// Maps a courier status transition to the notification to send, or null when nothing new happened.
+    /// Guards repeated scans of the same status and late out-of-order events so a customer is never emailed twice.
+    /// </summary>
+    public static string? TransitionEmail(string? status, string? previous)
+    {
+        if (string.IsNullOrWhiteSpace(status) || string.Equals(status, previous, StringComparison.Ordinal)) return null;
+        var firstMove = previous is null or "" or "PENDING" or "SHIPMENT_CREATED" or "AWB_ASSIGNED";
+        return status switch
+        {
+            "PICKED_UP" or "IN_TRANSIT" when firstMove => "SHIPPED",
+            "OUT_FOR_DELIVERY" => "OUT_FOR_DELIVERY",
+            "DELIVERED" => "DELIVERED",
+            "CANCELLED" => "CANCELLED",
+            "RTO" => "RTO",
+            _ => null,
+        };
+    }
+
+    /// <summary>Sends the customer email for a notification key produced by <see cref="TransitionEmail"/>.</summary>
+    public Task<bool> SendStatusUpdateAsync(Order o, string notification) => notification switch
+    {
+        "SHIPPED" => SendOrderShippedAsync(o),
+        "OUT_FOR_DELIVERY" => SendOutForDeliveryAsync(o),
+        "DELIVERED" => SendOrderDeliveredAsync(o),
+        "CANCELLED" => SendOrderCancelledAsync(o),
+        "RTO" => SendOrderReturnedAsync(o),
+        _ => Task.FromResult(true),
+    };
+
+    /// <summary>First movement: handed to the courier, with AWB and a tracking link.</summary>
+    public async Task<bool> SendOrderShippedAsync(Order o)
+    {
+        var courier = string.IsNullOrWhiteSpace(o.ShiprocketCourier) ? o.Courier : o.ShiprocketCourier;
+        var tracking = string.IsNullOrWhiteSpace(courier) ? "our courier partner" : courier;
+        var awbRow = string.IsNullOrWhiteSpace(o.ShiprocketAwb) ? "" :
+            $"<p style=\"color:#9d90bd;margin:14px 0 0;font-size:13px\">Tracking number <b style=\"color:#fff3bf\">{H(o.ShiprocketAwb)}</b></p>";
+        var body = $"""
+            <h1 style="font-family:Georgia,serif;color:#fff3bf;font-size:22px;margin:0 0 8px">Your order is on the way.</h1>
+            <p style="color:#c9bfe0;margin:0 0 6px">Order <b style="color:#fff3bf">{H(o.Id)}</b> has been handed to {H(tracking)} and is moving through the network.</p>
+            {awbRow}
+            <p style="color:#9d90bd;margin:16px 0 0;font-size:13px">Delivering to {H(o.ShippingAddress.City)}, {H(o.ShippingAddress.State)} – {H(o.ShippingAddress.Pincode)}</p>
+            <p style="margin:24px 0 0"><a href="{store.Value.FrontendUrl}/track" style="background:#9929ea;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:bold">Track your order</a></p>
+            """;
+        return await SendAsync(o.CustomerEmail, $"Order {o.Id} has shipped | STAMIX™ Botanical Vitality Formula", Wrap(body), "shipping notification");
+    }
+
+    /// <summary>The parcel is on the delivery vehicle.</summary>
+    public async Task<bool> SendOutForDeliveryAsync(Order o)
+    {
+        var body = $"""
+            <h1 style="font-family:Georgia,serif;color:#fff3bf;font-size:22px;margin:0 0 8px">Out for delivery.</h1>
+            <p style="color:#c9bfe0;margin:0 0 6px">Great news — order <b style="color:#fff3bf">{H(o.Id)}</b> is on the delivery vehicle for {H(o.ShippingAddress.City)} and should reach you shortly.</p>
+            <p style="color:#9d90bd;margin:16px 0 0;font-size:13px">Please keep your phone handy; the courier may call before arriving. Delivering to {H(o.ShippingAddress.AddressLine1)}, {H(o.ShippingAddress.City)} – {H(o.ShippingAddress.Pincode)}.</p>
+            <p style="margin:24px 0 0"><a href="{store.Value.FrontendUrl}/track" style="background:#9929ea;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:bold">Track your order</a></p>
+            """;
+        return await SendAsync(o.CustomerEmail, $"Out for delivery: order {o.Id} | STAMIX™", Wrap(body), "out-for-delivery notification");
+    }
+
+    /// <summary>Order or shipment cancelled (admin, courier or customer).</summary>
+    public async Task<bool> SendOrderCancelledAsync(Order o, string? reason = null)
+    {
+        var charged = o.PaymentStatus is "PAID" or "COD_COLLECTED";
+        var paymentLine = charged
+            ? "You have already paid for this order — our support team will process the refund against this order number."
+            : "No payment has been taken for this order.";
+        var reasonRow = string.IsNullOrWhiteSpace(reason) ? "" :
+            $"<p style=\"color:#9d90bd;margin:0 0 14px;font-size:13px\">Reason: {H(reason)}</p>";
+        var body = $"""
+            <h1 style="font-family:Georgia,serif;color:#fff3bf;font-size:22px;margin:0 0 8px">Your order was cancelled.</h1>
+            <p style="color:#c9bfe0;margin:0 0 6px">Order <b style="color:#fff3bf">{H(o.Id)}</b> — ₹{o.TotalAmount:N0} — has been cancelled.</p>
+            {reasonRow}
+            <p style="color:#c9bfe0;margin:14px 0 0">{paymentLine}</p>
+            <p style="color:#9d90bd;margin:16px 0 0;font-size:13px">If this was not intended, reply to this email or contact support and we will gladly help.</p>
+            """;
+        return await SendAsync(o.CustomerEmail, $"Order {o.Id} has been cancelled | STAMIX™", Wrap(body), "cancellation notice");
+    }
+
+    /// <summary>Return to origin — the courier could not deliver.</summary>
+    public async Task<bool> SendOrderReturnedAsync(Order o)
+    {
+        var body = $"""
+            <h1 style="font-family:Georgia,serif;color:#fff3bf;font-size:22px;margin:0 0 8px">Your order is returning to us.</h1>
+            <p style="color:#c9bfe0;margin:0 0 6px">Our courier could not complete delivery of order <b style="color:#fff3bf">{H(o.Id)}</b>, and the parcel is on its way back to our facility.</p>
+            <p style="color:#c9bfe0;margin:14px 0 0">Contact support and we will arrange a re-shipment or a refund for you — order value ₹{o.TotalAmount:N0}.</p>
+            <p style="margin:24px 0 0"><a href="{store.Value.FrontendUrl}/track" style="background:#9929ea;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:bold">View order status</a></p>
+            """;
+        return await SendAsync(o.CustomerEmail, $"Order {o.Id} is returning to us | STAMIX™", Wrap(body), "return notice");
+    }
+
     private string Wrap(string inner) => $"""
         <!doctype html><html><body style="margin:0;background:#07050b;padding:24px;font-family:Georgia,'EB Garamond',serif">
         <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">

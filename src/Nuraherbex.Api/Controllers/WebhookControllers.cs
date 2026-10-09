@@ -135,10 +135,9 @@ public class ShiprocketWebhookController(
         await db.SaveChangesAsync();
         log.LogInformation("[Shiprocket] Order {Order} â†’ {Status}", order.Id, mapped.Status);
 
-        // Notify only on a genuine transition so repeated courier scans never spam the customer.
-        var notifyDelivered = mapped.Status == "DELIVERED" && previous != "DELIVERED";
-        var notifyShipped = mapped.Status is "PICKED_UP" or "IN_TRANSIT" && previous is "PENDING" or "SHIPMENT_CREATED" or "AWB_ASSIGNED";
-        if (!notifyDelivered && !notifyShipped) return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
+        // Email every genuine status transition; repeated scans of the same status never spam the customer.
+        var notify = EmailService.TransitionEmail(mapped.Status, previous);
+        if (notify is null) return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
 
         var snapshot = order;
         _ = Task.Run(async () =>
@@ -148,8 +147,10 @@ public class ShiprocketWebhookController(
                 using var scope = scopes.CreateScope();
                 var wa = scope.ServiceProvider.GetRequiredService<WhatsAppService>();
                 var mail = scope.ServiceProvider.GetRequiredService<EmailService>();
-                if (notifyDelivered) { await mail.SendOrderDeliveredAsync(snapshot); await wa.NotifyDeliveredAsync(snapshot); }
-                else await wa.NotifyShippedAsync(snapshot);
+                try { await mail.SendStatusUpdateAsync(snapshot, notify); }
+                catch (Exception ex) { log.LogWarning(ex, "Order {Order} {Notify} email failed", snapshot.Id, notify); }
+                if (notify == "DELIVERED") await wa.NotifyDeliveredAsync(snapshot);
+                else if (notify == "SHIPPED") await wa.NotifyShippedAsync(snapshot);
             }
             catch (Exception ex) { log.LogWarning(ex, "Shiprocket webhook notification failed"); }
         });
@@ -262,10 +263,9 @@ public class ShadowfaxWebhookController(
         await db.SaveChangesAsync();
         log.LogInformation("[Shadowfax] Order {Order} {Event} → {Status}", order.Id, ev, order.FulfillmentStatus);
 
-        // Notify only on a genuine transition so repeated scans never spam the customer.
-        var notifyDelivered = mapped.Status == "DELIVERED" && previous != "DELIVERED";
-        var notifyShipped = mapped.Status is "PICKED_UP" or "IN_TRANSIT" && previous is "PENDING" or "SHIPMENT_CREATED" or "AWB_ASSIGNED";
-        if (!notifyDelivered && !notifyShipped) return Ok(new ApiResult { Success = true, Message = ok });
+        // Email every genuine status transition; repeated scans of the same status never spam the customer.
+        var notify = EmailService.TransitionEmail(mapped.Status, previous);
+        if (notify is null) return Ok(new ApiResult { Success = true, Message = ok });
 
         var snapshot = order;
         _ = Task.Run(async () =>
@@ -275,8 +275,10 @@ public class ShadowfaxWebhookController(
                 using var scope = scopes.CreateScope();
                 var wa = scope.ServiceProvider.GetRequiredService<WhatsAppService>();
                 var mail = scope.ServiceProvider.GetRequiredService<EmailService>();
-                if (notifyDelivered) { await mail.SendOrderDeliveredAsync(snapshot); await wa.NotifyDeliveredAsync(snapshot); }
-                else await wa.NotifyShippedAsync(snapshot);
+                try { await mail.SendStatusUpdateAsync(snapshot, notify); }
+                catch (Exception ex) { log.LogWarning(ex, "Order {Order} {Notify} email failed", snapshot.Id, notify); }
+                if (notify == "DELIVERED") await wa.NotifyDeliveredAsync(snapshot);
+                else if (notify == "SHIPPED") await wa.NotifyShippedAsync(snapshot);
             }
             catch (Exception ex) { log.LogWarning(ex, "Shadowfax webhook notification failed"); }
         });

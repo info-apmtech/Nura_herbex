@@ -368,7 +368,7 @@ public class AdminLoginResponse : ApiResult
 
 public class AdminEmailRequest
 {
-    /// <summary>confirmation | delivered</summary>
+    /// <summary>confirmation | delivered | shipped | out-for-delivery | cancelled | returned</summary>
     public string Type { get; set; } = "confirmation";
 }
 

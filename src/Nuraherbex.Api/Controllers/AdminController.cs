@@ -147,8 +147,17 @@ public class AdminController(
     {
         var o = await orders.GetAsync(id);
         if (o is null) return NotFound(new ApiResult { Success = false, Message = "Order not found" });
-        var sent = req.Type == "delivered" ? await email.SendOrderDeliveredAsync(o) : await email.SendOrderConfirmationAsync(o);
-        return Ok(new ApiResult { Success = sent, Message = sent ? $"Email sent to {o.CustomerEmail}" : "Email not sent (Resend not configured or rejected the request)." });
+        var type = req.Type?.Trim().ToLowerInvariant() ?? "";
+        var sent = type switch
+        {
+            "delivered" => await email.SendOrderDeliveredAsync(o),
+            "shipped" => await email.SendOrderShippedAsync(o),
+            "out-for-delivery" or "out_for_delivery" or "outfordelivery" => await email.SendOutForDeliveryAsync(o),
+            "cancelled" or "canceled" => await email.SendOrderCancelledAsync(o),
+            "returned" or "rto" => await email.SendOrderReturnedAsync(o),
+            _ => await email.SendOrderConfirmationAsync(o),
+        };
+        return Ok(new ApiResult { Success = sent, Message = sent ? $"Email sent to {o.CustomerEmail}" : "Email not sent (SMTP/Resend is not configured or the mail server rejected it)." });
     }
 
     /// <summary>PayU attempts: SUCCESS rows have an order; FAILED / CANCELLED rows are the stored failure records.</summary>

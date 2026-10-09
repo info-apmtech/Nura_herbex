@@ -211,6 +211,7 @@ public partial class OrderService(
         order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto { Status = queued ? "Shipment cancellation queued" : "Shipment Cancelled", Time = Mapping.TimelineStamp(), Done = true, Active = true }];
         order.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
+        if (!queued) NotifyStatus(order, "CANCELLED");
         return msg;
     }
 
@@ -245,6 +246,12 @@ public partial class OrderService(
     {
         try { await email.SendOrderConfirmationAsync(order); } catch (Exception ex) { log.LogWarning(ex, "Confirmation email failed"); }
         try { await whatsapp.NotifyOrderConfirmedAsync(order); } catch (Exception ex) { log.LogWarning(ex, "Confirmation WhatsApp failed"); }
+    });
+
+    /// <summary>Sends a customer status email (cancel/return/etc.) from its own DI scope. Email only — WhatsApp hooks come later.</summary>
+    private void NotifyStatus(Order order, string status) => InBackground(async (email, _) =>
+    {
+        try { await email.SendStatusUpdateAsync(order, status); } catch (Exception ex) { log.LogWarning(ex, "{Status} email failed", status); }
     });
 
     /// <summary>Runs notification work in its own DI scope so it outlives the HTTP request's DbContext.</summary>
