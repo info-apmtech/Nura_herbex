@@ -93,8 +93,22 @@ public class AdminSession(ApiClient api, SessionTokens tokens, BrowserInterop br
 
     public bool IsAuthenticated => !string.IsNullOrEmpty(tokens.AdminToken);
     public string? Email { get; private set; }
+    public string Name { get; private set; } = "";
+    /// <summary>admin | sales. Sales users only see (and reply to) the leads assigned to them.</summary>
+    public string Role { get; private set; } = "admin";
+    public bool IsAdmin => Role == "admin";
+    /// <summary>Set for employee logins (null for the configured super administrator).</summary>
+    public long? EmployeeId { get; private set; }
     public event Action? Changed;
     private bool _initialised;
+
+    private void Adopt(AdminUserDto? u)
+    {
+        Email = u?.Email;
+        Name = string.IsNullOrWhiteSpace(u?.Name) ? u?.Email ?? "" : u!.Name;
+        Role = u?.Role == "sales" ? "sales" : "admin";
+        EmployeeId = u?.EmployeeId;
+    }
 
     /// <summary>Restores and server-validates a stored admin token.</summary>
     public async Task InitAsync()
@@ -106,7 +120,7 @@ public class AdminSession(ApiClient api, SessionTokens tokens, BrowserInterop br
 
         tokens.AdminToken = token;
         var v = await api.AdminVerifyAsync();
-        if (v.Success && v.Valid) Email = v.User?.Email;
+        if (v.Success && v.Valid) Adopt(v.User);
         else await SignOutAsync();
         Changed?.Invoke();
     }
@@ -117,7 +131,7 @@ public class AdminSession(ApiClient api, SessionTokens tokens, BrowserInterop br
         if (res.Success && !string.IsNullOrEmpty(res.Token))
         {
             tokens.AdminToken = res.Token;
-            Email = res.User?.Email;
+            Adopt(res.User);
             await browser.SetSessionAsync(TokenKey, res.Token);
             Changed?.Invoke();
         }
@@ -127,6 +141,7 @@ public class AdminSession(ApiClient api, SessionTokens tokens, BrowserInterop br
     public async Task SignOutAsync()
     {
         tokens.AdminToken = null;
+        Adopt(null);
         Email = null;
         await browser.RemoveSessionAsync(TokenKey);
         Changed?.Invoke();

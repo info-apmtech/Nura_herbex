@@ -148,3 +148,65 @@
 .ld .ld-status-select{width:auto!important;flex:0 0 auto;min-height:0!important;height:auto!important;background-color:#ffffff1f!important;color:#fff!important;border:1px solid #ffffff40!important;box-shadow:none!important}
 .ld .ld-composer input{width:auto!important;flex:1;min-height:0!important;height:42px!important;border-radius:22px!important;background:#fff!important}
 .ld .ld-search input{width:auto!important;border:0!important;background:transparent!important;box-shadow:none!important;min-height:0!important;padding:0!important}
+
+/* ───────── Employees tab ───────── */
+.em-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.em-head h3{margin:0 0 4px;font-size:17px;font-weight:700}
+.em-head p{margin:0;max-width:640px;font-size:13px;color:var(--ld-muted);line-height:1.55}
+.em-head-actions{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.em-switch{display:inline-flex;gap:10px;align-items:center;cursor:pointer;font-size:13px;font-weight:600;color:#3e5246}
+.em-switch input{position:absolute;opacity:0;width:0;height:0}
+.em-track{width:38px;height:22px;border-radius:999px;background:#c9d3cc;position:relative;transition:background .15s;flex:0 0 auto}
+.em-knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px #0003;transition:transform .15s}
+.em-switch input:checked + .em-track{background:var(--ld-green)}
+.em-switch input:checked + .em-track .em-knob{transform:translateX(16px)}
+.em-switch input:focus-visible + .em-track{outline:2px solid var(--ld-green);outline-offset:2px}
+.em-note{display:flex;gap:9px;align-items:center;padding:10px 14px;border-radius:10px;font-size:13px;border:1px solid}
+.em-note.ok{background:#e8f2ea;color:#1f5a3d;border-color:#d3e5d8}
+.em-note.bad{background:#fdecea;color:#a93428;border-color:#f6d2cd}
+.em-x{margin-left:auto;border:0;background:transparent;color:inherit;display:grid;place-items:center;width:24px;height:24px;border-radius:6px}
+.em-x:hover{background:#0000000d}
+.em-form h4{margin-bottom:14px}
+.em-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.em-grid label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:650;color:#4b5f53}
+.em-grid input[type=text],.em-grid input[type=email],.em-grid input[type=tel],.em-grid input[type=password],.em-grid select{width:100%!important;height:40px;border:1px solid var(--ld-line)!important;border-radius:9px!important;padding:0 12px!important;font-size:13px;font-weight:400;color:var(--ld-ink);background:#fff!important;outline:0;min-height:0!important}
+.em-grid input:focus,.em-grid select:focus{border-color:var(--ld-green)!important}
+.em-grid .em-check{flex-direction:row;align-items:center;gap:9px;align-self:end;height:40px;font-weight:600}
+.em-table-card{padding:0;overflow:hidden}
+.em-scroll{overflow-x:auto}
+.em-table{width:100%;border-collapse:collapse;font-size:13px}
+.em-table th{text-align:left;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--ld-muted);padding:12px 16px;background:#f8faf7;border-bottom:1px solid var(--ld-line);white-space:nowrap}
+.em-table td{padding:12px 16px;border-bottom:1px solid #eef2ee;vertical-align:middle}
+.em-table tr:last-child td{border-bottom:0}
+.em-table .num{text-align:right;font-variant-numeric:tabular-nums}
+.em-table tr.is-off td{opacity:.55}
+.em-table tr.is-off td:last-child{opacity:1}
+.em-person{display:flex;gap:12px;align-items:center}
+.em-person strong{display:block;font-size:13.5px}
+.em-person small{display:block;color:var(--ld-muted);font-size:12px}
+.em-actions{white-space:nowrap;text-align:right}
+.em-actions .ld-btn{margin-left:6px}
+.em-confirm{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;font-size:12px;font-weight:600}
+.em-empty{text-align:center;color:var(--ld-muted);padding:34px 16px!important}
+.em-empty strong{display:block;color:var(--ld-ink);margin-bottom:3px}
+.ld-btn.danger{background:#b3382c;border-color:#b3382c;color:#fff}
+.ld-btn.danger-outline{color:#b3382c;border-color:#f0cfca}
+.ld-btn.danger-outline:hover:not(:disabled){background:#fdf3f2}
+@media(max-width:700px){.em-grid{grid-template-columns:1fr}}
+
+/* Lead owner bar + owner filter */
+.ld-assignee{width:100%!important;height:36px;border:1px solid var(--ld-line)!important;border-radius:9px!important;padding:0 10px!important;font-size:12.5px;font-weight:600;color:#3e5246;background:#fff!important;min-height:0!important;outline:0}
+.ld-assignee:focus{border-color:var(--ld-green)!important}
+.ld-owner{display:flex;gap:10px;align-items:center;padding:8px 16px;background:#fff;border-bottom:1px solid var(--ld-line);font-size:12px;color:var(--ld-muted)}
+.ld-owner span{font-weight:700;letter-spacing:.4px;text-transform:uppercase;font-size:11px}
+.ld-owner select{height:32px!important;min-height:0!important;width:auto!important;border:1px solid var(--ld-line)!important;border-radius:8px!important;padding:0 10px!important;font-size:12.5px;font-weight:600;color:var(--ld-ink);background:#fff!important;outline:0}
+.ld-owner select:focus{border-color:var(--ld-green)!important}
+.ld-owner small{color:var(--ld-muted)}
+.ld-unowned{background:#fcf3dd;color:#98681a;border-color:#f1e2b9}
+.ld-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+
+/* Keep both panes inside the fixed workspace height so the chat scrolls internally and the composer stays visible
+   (grid items default to min-height:auto and would otherwise grow to fit the whole conversation). */
+.ld-work{grid-template-rows:minmax(0,1fr)}
+.ld-list,.ld-detail{min-height:0;overflow:hidden}
+@media(max-width:900px){.ld-work{grid-template-rows:none}}

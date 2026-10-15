@@ -1,0 +1,186 @@
+@inject ApiClient Api
+@inject AdminSession AdminAuth
+
+<div class="ld em">
+
+    <div class="em-head">
+        <div>
+            <h3>Sales team</h3>
+            <p>Each employee signs in at <strong>/admin</strong> with their own email and password. Sales executives only see the leads assigned to them; administrators see everything.</p>
+        </div>
+        <div class="em-head-actions">
+            <label class="em-switch" title="When on, every new lead goes to the next active sales executive in turn.">
+                <input type="checkbox" checked="@_autoAssign" disabled="@_busy" @onchange="OnAutoAssignChanged" />
+                <span class="em-track"><span class="em-knob"></span></span>
+                <span class="em-switch-label">Auto-assign new leads</span>
+            </label>
+            <button type="button" class="ld-btn primary" @onclick="StartCreate"><Icon Name="Plus" Size="14" /> Add employee</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="@($"em-note {(_messageOk ? "ok" : "bad")}")" role="status">
+            <Icon Name="@(_messageOk ? "CheckCircle2" : "AlertCircle")" Size="15" /><span>@_message</span>
+            <button type="button" class="em-x" aria-label="Dismiss" @onclick="() => _message = null"><Icon Name="X" Size="14" /></button>
+        </div>
+    }
+
+    @if (_form is not null)
+    {
+        <form class="ld-card em-form" @onsubmit="SaveAsync" @onsubmit:preventDefault>
+            <h4>@(_editingId is null ? "New employee" : "Edit employee")</h4>
+            <div class="em-grid">
+                <label>Full name<input type="text" required maxlength="200" @bind="_form.Name" @bind:event="oninput" placeholder="e.g. Priya Raman" /></label>
+                <label>Work email (login)<input type="email" required maxlength="200" @bind="_form.Email" @bind:event="oninput" placeholder="name@nuraherbex.com" autocomplete="off" /></label>
+                <label>Phone<input type="tel" maxlength="32" @bind="_form.Phone" @bind:event="oninput" placeholder="+91 98765 43210" /></label>
+                <label>Role
+                    <select @bind="_form.Role">
+                        <option value="sales">Sales executive — own leads only</option>
+                        <option value="admin">Administrator — full access</option>
+                    </select>
+                </label>
+                <label>@(_editingId is null ? "Password" : "New password")
+                    <input type="password" minlength="8" required="@(_editingId is null)" @bind="_form.Password" @bind:event="oninput" autocomplete="new-password"
+                           placeholder="@(_editingId is null ? "At least 8 characters" : "Leave empty to keep the current one")" />
+                </label>
+                <label class="em-check">
+                    <input type="checkbox" @bind="_form.IsActive" /> <span>Active (can sign in and receive leads)</span>
+                </label>
+            </div>
+            <div class="ld-actions">
+                <button type="button" class="ld-btn" @onclick="Cancel">Cancel</button>
+                <button type="submit" class="ld-btn primary" disabled="@_busy">@(_busy ? "Saving…" : _editingId is null ? "Create employee" : "Save changes")</button>
+            </div>
+        </form>
+    }
+
+    <div class="ld-card em-table-card">
+        <div class="em-scroll">
+            <table class="em-table">
+                <thead>
+                    <tr><th>Employee</th><th>Role</th><th>Status</th><th class="num">Open leads</th><th class="num">All leads</th><th>Last sign-in</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @if (_loading)
+                    {
+                        <tr><td colspan="7" class="em-empty">Loading team…</td></tr>
+                    }
+                    else if (_employees.Count == 0)
+                    {
+                        <tr><td colspan="7" class="em-empty"><strong>No employees yet</strong>Add your first sales executive so new leads can be assigned and followed up.</td></tr>
+                    }
+                    @foreach (var e in _employees)
+                    {
+                        var emp = e;
+                        <tr @key="emp.Id" class="@(emp.IsActive ? "" : "is-off")">
+                            <td>
+                                <div class="em-person">
+                                    <span class="ld-avatar" style="background:@Palette[(int)(emp.Id % Palette.Length)]">@emp.Name[..1].ToUpperInvariant()</span>
+                                    <span><strong>@emp.Name</strong><small>@emp.Email@(string.IsNullOrEmpty(emp.Phone) ? "" : " · " + emp.Phone)</small></span>
+                                </div>
+                            </td>
+                            <td><span class="@($"ld-pill {(emp.Role == "admin" ? "interested" : "new")}")">@(emp.Role == "admin" ? "Administrator" : "Sales executive")</span></td>
+                            <td><span class="@($"ld-pill {(emp.IsActive ? "converted" : "not-interested")}")">@(emp.IsActive ? "Active" : "Inactive")</span></td>
+                            <td class="num">@emp.OpenLeads</td>
+                            <td class="num">@emp.TotalLeads</td>
+                            <td>@(emp.LastLoginAt is { } t ? AdminFmt.DateTimeShort(t) : "Never")</td>
+                            <td class="em-actions">
+                                @if (_removingId == emp.Id)
+                                {
+                                    <span class="em-confirm">
+                                        Remove @emp.Name?
+                                        @if (emp.OpenLeads > 0)
+                                        {
+                                            <button type="button" class="ld-btn" disabled="@_busy" @onclick="() => RemoveAsync(emp, true)">Spread @emp.OpenLeads lead(s) across team</button>
+                                            <button type="button" class="ld-btn" disabled="@_busy" @onclick="() => RemoveAsync(emp, false)">Move to admin queue</button>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="ld-btn danger" disabled="@_busy" @onclick="() => RemoveAsync(emp, true)">Yes, remove</button>
+                                        }
+                                        <button type="button" class="ld-btn" @onclick="() => _removingId = null">Keep</button>
+                                    </span>
+                                }
+                                else
+                                {
+                                    <button type="button" class="ld-btn" @onclick="() => StartEdit(emp)">Edit</button>
+                                    @if (emp.IsActive)
+                                    {
+                                        <button type="button" class="ld-btn danger-outline" title="Deactivate this login and move their open leads" @onclick="() => _removingId = emp.Id">Remove</button>
+                                    }
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly string[] Palette = ["#235b40", "#2f6f8f", "#7a5aa6", "#b5792a", "#a24b5a", "#3f7d7a", "#5b6f2c"];
+
+    private List<EmployeeDto> _employees = new();
+    private EmployeeSaveRequest? _form;
+    private long? _editingId;
+    private long? _removingId;
+    private bool _autoAssign = true;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _message;
+    private bool _messageOk;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var res = await Api.AdminEmployeesAsync();
+        if (res.Success) { _employees = res.Employees; _autoAssign = res.AutoAssign; }
+        else Say(res.Message ?? "Could not load the team.", false);
+        _loading = false;
+    }
+
+    private void Say(string? text, bool ok) { _message = text; _messageOk = ok; }
+
+    private void StartCreate() { _editingId = null; _removingId = null; _form = new EmployeeSaveRequest { Role = EmployeeRoles.Sales, IsActive = true }; }
+
+    private void StartEdit(EmployeeDto e)
+    {
+        _editingId = e.Id; _removingId = null;
+        _form = new EmployeeSaveRequest { Name = e.Name, Email = e.Email, Phone = e.Phone, Role = e.Role, IsActive = e.IsActive };
+    }
+
+    private void Cancel() { _form = null; _editingId = null; }
+
+    private async Task SaveAsync()
+    {
+        if (_form is null) return;
+        _busy = true;
+        var res = _editingId is { } id ? await Api.AdminUpdateEmployeeAsync(id, _form) : await Api.AdminCreateEmployeeAsync(_form);
+        Say(res.Message, res.Success);
+        if (res.Success) { _form = null; _editingId = null; await LoadAsync(); }
+        _busy = false;
+    }
+
+    private async Task RemoveAsync(EmployeeDto e, bool spread)
+    {
+        _busy = true;
+        var res = await Api.AdminRemoveEmployeeAsync(e.Id, spread);
+        Say(res.Message, res.Success);
+        _removingId = null;
+        if (res.Success) await LoadAsync();
+        _busy = false;
+    }
+
+    private async Task OnAutoAssignChanged(ChangeEventArgs e)
+    {
+        var on = e.Value is true;
+        _busy = true;
+        var res = await Api.AdminLeadSettingsAsync(on);
+        if (res.Success) _autoAssign = on;
+        Say(res.Message, res.Success);
+        _busy = false;
+    }
+}

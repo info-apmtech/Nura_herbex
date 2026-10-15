@@ -372,6 +372,9 @@ public class AdminUserDto
 {
     public string Email { get; set; } = "";
     public string Role { get; set; } = "admin";
+    public string Name { get; set; } = "";
+    /// <summary>Set for employee logins; null for the configured super administrator.</summary>
+    public long? EmployeeId { get; set; }
 }
 
 public class AdminLoginResponse : ApiResult

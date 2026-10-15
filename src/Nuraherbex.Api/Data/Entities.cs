@@ -219,6 +219,9 @@ public class Lead
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public DateTime LastContactAt { get; set; } = DateTime.UtcNow;
     public DateTime? ConvertedAt { get; set; }
+    /// <summary>Owning sales employee (null = unassigned).</summary>
+    public long? AssignedToEmployeeId { get; set; }
+    public DateTime? AssignedAt { get; set; }
 }
 
 /// <summary>Chat state for a lead: unread count and the 24h WhatsApp customer-service window.</summary>
@@ -252,5 +255,36 @@ public class LeadStatusHistory
     public string ToStatus { get; set; } = "";
     public string? Note { get; set; }
     public string ChangedBy { get; set; } = "system";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A CRM user with their own login. Role "admin" sees everything, "sales" sees only the leads assigned to them.</summary>
+public class Employee
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = "";
+    /// <summary>Lower-case, unique; used to sign in.</summary>
+    public string Email { get; set; } = "";
+    public string Phone { get; set; } = "";
+    /// <summary>pbkdf2-sha512:iterations:salt:hash</summary>
+    public string PasswordHash { get; set; } = "";
+    /// <summary>admin | sales</summary>
+    public string Role { get; set; } = "sales";
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? LastLoginAt { get; set; }
+    /// <summary>Round-robin cursor: the employee who was assigned a lead longest ago gets the next one.</summary>
+    public DateTime? LastAssignedAt { get; set; }
+}
+
+public class LeadAssignmentHistory
+{
+    public long Id { get; set; }
+    public long LeadId { get; set; }
+    public long? FromEmployeeId { get; set; }
+    public long? ToEmployeeId { get; set; }
+    public string? Reason { get; set; }
+    /// <summary>auto | admin name/email of whoever made the change.</summary>
+    public string ChangedBy { get; set; } = "auto";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

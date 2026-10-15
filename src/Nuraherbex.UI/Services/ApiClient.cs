@@ -159,8 +159,16 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<WhatsAppMessageListResponse> AdminWhatsAppMessagesAsync(int take = 100) => Call<WhatsAppMessageListResponse>(HttpMethod.Get, $"api/admin/whatsapp/messages?take={take}", null, Who.Admin);
     public Task<ApiResult> AdminWhatsAppSendAsync(WhatsAppSendRequest r) => Call<ApiResult>(HttpMethod.Post, "api/admin/whatsapp/send", r, Who.Admin);
 
-    public Task<LeadListResponse> AdminLeadsAsync(string? status = null, string? source = null, string? q = null, int take = 100) =>
-        Call<LeadListResponse>(HttpMethod.Get, $"api/admin/leads?take={take}&status={Uri.EscapeDataString(status ?? "")}&source={Uri.EscapeDataString(source ?? "")}&q={Uri.EscapeDataString(q ?? "")}", null, Who.Admin);
+    public Task<LeadListResponse> AdminLeadsAsync(string? status = null, string? source = null, string? q = null, string? assignee = null, int take = 100) =>
+        Call<LeadListResponse>(HttpMethod.Get, $"api/admin/leads?take={take}&status={Uri.EscapeDataString(status ?? "")}&source={Uri.EscapeDataString(source ?? "")}&q={Uri.EscapeDataString(q ?? "")}&assignee={Uri.EscapeDataString(assignee ?? "")}", null, Who.Admin);
+    public Task<ApiResult> AdminLeadAssignAsync(long id, LeadAssignRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/assign", r, Who.Admin);
+    public Task<ApiResult> AdminLeadReplyAsync(long id, string text) => Call<ApiResult>(HttpMethod.Post, $"api/admin/leads/{id}/reply", new LeadReplyRequest { Text = text }, Who.Admin);
+    public Task<EmployeeListResponse> AdminTeamAsync() => Call<EmployeeListResponse>(HttpMethod.Get, "api/admin/team", null, Who.Admin);
+    public Task<EmployeeListResponse> AdminEmployeesAsync() => Call<EmployeeListResponse>(HttpMethod.Get, "api/admin/employees", null, Who.Admin);
+    public Task<EmployeeResponse> AdminCreateEmployeeAsync(EmployeeSaveRequest r) => Call<EmployeeResponse>(HttpMethod.Post, "api/admin/employees", r, Who.Admin);
+    public Task<EmployeeResponse> AdminUpdateEmployeeAsync(long id, EmployeeSaveRequest r) => Call<EmployeeResponse>(HttpMethod.Put, $"api/admin/employees/{id}", r, Who.Admin);
+    public Task<ApiResult> AdminRemoveEmployeeAsync(long id, bool spreadLeads) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/employees/{id}?reassign={(spreadLeads ? "auto" : "unassigned")}", null, Who.Admin);
+    public Task<ApiResult> AdminLeadSettingsAsync(bool autoAssign) => Call<ApiResult>(HttpMethod.Put, "api/admin/leads/settings", new LeadSettingsRequest { AutoAssign = autoAssign }, Who.Admin);
     public Task<LeadDetailResponse> AdminLeadDetailAsync(long id) => Call<LeadDetailResponse>(HttpMethod.Get, $"api/admin/leads/{id}", null, Who.Admin);
     public Task<ApiResult> AdminLeadStatusAsync(long id, LeadStatusRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/status", r, Who.Admin);
     public Task<ApiResult> AdminLeadNotesAsync(long id, LeadNotesRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/notes", r, Who.Admin);

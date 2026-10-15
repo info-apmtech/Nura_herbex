@@ -37,36 +37,54 @@ public class AdminController(
 
     // ---- Auth ------------------------------------------------------------------------
 
+    private static readonly string DummyHash = AdminPassword.Hash("not-a-real-password");
+
     [HttpPost("login"), AllowAnonymous, EnableRateLimiting("admin-login")]
-    public IActionResult Login(AdminLoginRequest req)
+    public async Task<IActionResult> Login(AdminLoginRequest req)
     {
         if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrEmpty(req.Password))
             return BadRequest(new AdminLoginResponse { Success = false, Message = "Email and password are required" });
 
+        var email = req.Email.Trim().ToLowerInvariant();
+
         // JSON configuration reloads must also refresh the credentials used by login.
         var o = admin.CurrentValue;
-        if (string.IsNullOrWhiteSpace(o.Email) || (string.IsNullOrEmpty(o.PasswordHash) && string.IsNullOrEmpty(o.Password)))
-            return StatusCode(503, new AdminLoginResponse { Success = false, Message = "Admin credentials are not configured on the server." });
+        var configured = !string.IsNullOrWhiteSpace(o.Email) && !(string.IsNullOrEmpty(o.PasswordHash) && string.IsNullOrEmpty(o.Password));
 
-        var emailOk = SafeEquals(req.Email.Trim().ToLowerInvariant(), o.Email.Trim().ToLowerInvariant());
-        var passOk = !string.IsNullOrEmpty(o.PasswordHash)
-            ? AdminPassword.Verify(req.Password, o.PasswordHash)
-            : SafeEquals(req.Password, o.Password); // Compatibility for existing environment-based credentials.
-        if (!(emailOk & passOk))
+        // 1) The server-configured super administrator.
+        if (configured && SafeEquals(email, o.Email.Trim().ToLowerInvariant()))
         {
-            log.LogWarning("[Security] Failed admin login attempt for {Email}", req.Email);
-            return Unauthorized(new AdminLoginResponse { Success = false, Message = "Invalid administrator credentials. Access denied." });
+            var passOk = !string.IsNullOrEmpty(o.PasswordHash)
+                ? AdminPassword.Verify(req.Password, o.PasswordHash)
+                : SafeEquals(req.Password, o.Password); // Compatibility for existing environment-based credentials.
+            if (!passOk) return DeniedLogin(req.Email);
+            return Ok(new AdminLoginResponse { Success = true, Valid = true, Message = "Authenticated successfully", Token = tokens.CreateAdminToken(email), User = new AdminUserDto { Email = email, Role = "admin", Name = "Administrator" } });
         }
 
-        var e = o.Email.Trim().ToLowerInvariant();
-        return Ok(new AdminLoginResponse { Success = true, Valid = true, Message = "Authenticated successfully", Token = tokens.CreateAdminToken(e), User = new AdminUserDto { Email = e, Role = "admin" } });
+        // 2) CRM employees (role admin or sales) created in the Employees tab.
+        var emp = await db.Employees.FirstOrDefaultAsync(e => e.Email == email);
+        var hashOk = AdminPassword.Verify(req.Password, emp?.PasswordHash ?? DummyHash); // always hash, so unknown emails cost the same time
+        if (emp is null || !hashOk)
+        {
+            if (emp is null && !configured) return StatusCode(503, new AdminLoginResponse { Success = false, Message = "Admin credentials are not configured on the server." });
+            return DeniedLogin(req.Email);
+        }
+        if (!emp.IsActive) return Unauthorized(new AdminLoginResponse { Success = false, Message = "This account has been deactivated. Contact your administrator." });
+
+        emp.LastLoginAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return Ok(new AdminLoginResponse
+        {
+            Success = true, Valid = true, Message = "Authenticated successfully", Token = tokens.CreateStaffToken(emp),
+            User = new AdminUserDto { Email = emp.Email, Role = emp.Role, Name = emp.Name, EmployeeId = emp.Id },
+        });
     }
 
-    [HttpGet("verify"), Authorize(Roles = "admin")]
-    public IActionResult Verify() => Ok(new AdminLoginResponse
+    private IActionResult DeniedLogin(string email)
     {
-        Success = true, Valid = true, User = new AdminUserDto { Email = User.FindFirstValue(ClaimTypes.Email) ?? "", Role = "admin" },
-    });
+        log.LogWarning("[Security] Failed admin login attempt for {Email}", email);
+        return Unauthorized(new AdminLoginResponse { Success = false, Message = "Invalid administrator credentials. Access denied." });
+    }
 
     // ---- Orders ----------------------------------------------------------------------
 
@@ -348,90 +366,6 @@ public class AdminController(
         Success = true,
         Messages = (await db.WhatsAppMessages.AsNoTracking().OrderByDescending(m => m.CreatedAt).Take(Math.Clamp(take, 1, 500)).ToListAsync()).Select(m => m.ToDto()).ToList(),
     };
-
-    // ---- Leads (CRM) -----------------------------------------------------------------
-
-    [HttpGet("leads"), Authorize(Roles = "admin")]
-    public async Task<LeadListResponse> Leads([FromQuery] string? status, [FromQuery] string? source, [FromQuery] string? q, [FromQuery] int take = 100)
-    {
-        var baseQuery = db.Leads.AsNoTracking().AsQueryable();
-        if (!string.IsNullOrWhiteSpace(source)) baseQuery = baseQuery.Where(l => l.Source == source);
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            var term = q.Trim();
-            var digits = new string(term.Where(char.IsDigit).ToArray());
-            baseQuery = baseQuery.Where(l => l.Name.Contains(term) || (digits.Length > 0 && l.Phone.Contains(digits)) || (l.Email != null && l.Email.Contains(term)));
-        }
-
-        var counts = await baseQuery.GroupBy(l => l.Status).Select(g => new { g.Key, N = g.Count() }).ToListAsync();
-        var filtered = string.IsNullOrWhiteSpace(status) ? baseQuery : baseQuery.Where(l => l.Status == status);
-        var rows = await filtered.OrderByDescending(l => l.LastContactAt).Take(Math.Clamp(take, 1, 500))
-            .GroupJoin(db.Conversations.AsNoTracking(), l => l.Id, c => c.LeadId, (l, cs) => new { l, cs })
-            .SelectMany(x => x.cs.DefaultIfEmpty(), (x, c) => new { x.l, c })
-            .ToListAsync();
-
-        var ids = rows.Select(r => r.l.Id).ToList();
-        var last = await db.WhatsAppMessages.AsNoTracking()
-            .Where(m => m.LeadId != null && ids.Contains(m.LeadId.Value)
-                && m.Id == db.WhatsAppMessages.Where(x => x.LeadId == m.LeadId).Max(x => x.Id))
-            .ToListAsync();
-        var lastByLead = last.GroupBy(m => m.LeadId!.Value).ToDictionary(g => g.Key, g => g.First());
-
-        return new LeadListResponse
-        {
-            Success = true,
-            Leads = rows.Select(r =>
-            {
-                var dto = r.l.ToDto(r.c);
-                if (lastByLead.TryGetValue(r.l.Id, out var m))
-                {
-                    dto.LastMessage = string.IsNullOrEmpty(m.Body) ? $"[{m.Type}]" : m.Body.Length > 90 ? m.Body[..(char.IsHighSurrogate(m.Body[89]) ? 89 : 90)] + "…" : m.Body;
-                    dto.LastMessageDirection = m.Direction;
-                }
-                return dto;
-            }).ToList(),
-            Total = await filtered.CountAsync(),
-            StatusCounts = counts.ToDictionary(c => c.Key, c => c.N),
-        };
-    }
-
-    [HttpGet("leads/{id:long}"), Authorize(Roles = "admin")]
-    public async Task<IActionResult> LeadDetail(long id)
-    {
-        var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == id);
-        if (lead is null) return NotFound(new ApiResult { Success = false, Message = "Lead not found" });
-        var convo = await db.Conversations.FirstOrDefaultAsync(c => c.LeadId == id);
-        var dto = lead.ToDto(convo);
-        if (convo is { UnreadCount: > 0 }) { convo.UnreadCount = 0; await db.SaveChangesAsync(); }
-
-        var messages = await db.WhatsAppMessages.AsNoTracking().Where(m => m.LeadId == id).OrderByDescending(m => m.CreatedAt).Take(200).ToListAsync();
-        var history = await db.LeadStatusHistory.AsNoTracking().Where(h => h.LeadId == id).OrderByDescending(h => h.CreatedAt).ToListAsync();
-        return Ok(new LeadDetailResponse
-        {
-            Success = true, Lead = dto,
-            Messages = messages.OrderBy(m => m.CreatedAt).Select(m => m.ToDto()).ToList(),
-            History = history.Select(h => new LeadStatusHistoryDto { FromStatus = h.FromStatus, ToStatus = h.ToStatus, Note = h.Note, ChangedBy = h.ChangedBy, CreatedAt = h.CreatedAt }).ToList(),
-        });
-    }
-
-    [HttpPut("leads/{id:long}/status"), Authorize(Roles = "admin")]
-    public async Task<IActionResult> LeadStatus(long id, LeadStatusRequest r, [FromServices] LeadService leads)
-    {
-        if (!LeadStatuses.All.Contains(r.Status)) return BadRequest(new ApiResult { Success = false, Message = "Unknown status" });
-        var ok = await leads.ChangeStatusAsync(id, r.Status, r.Note, "admin");
-        return ok ? Ok(new ApiResult { Success = true, Message = "Status updated" }) : NotFound(new ApiResult { Success = false, Message = "Lead not found" });
-    }
-
-    [HttpPut("leads/{id:long}/notes"), Authorize(Roles = "admin")]
-    public async Task<IActionResult> LeadNotes(long id, LeadNotesRequest r)
-    {
-        var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == id);
-        if (lead is null) return NotFound(new ApiResult { Success = false, Message = "Lead not found" });
-        lead.Notes = string.IsNullOrWhiteSpace(r.Notes) ? null : r.Notes.Trim()[..Math.Min(r.Notes.Trim().Length, 4000)];
-        lead.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
-        return Ok(new ApiResult { Success = true, Message = "Notes saved" });
-    }
 
     [HttpPost("whatsapp/send"), Authorize(Roles = "admin")]
     public async Task<IActionResult> WhatsAppSend(WhatsAppSendRequest r)

@@ -81,6 +81,9 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         if (IsStopKeyword(body)) SetConsent(lead, "opted_out", now);
         else if (IsStartKeyword(body) && lead.ConsentStatus != "opted_in") SetConsent(lead, "opted_in", now);
 
+        // New leads (and older ones nobody owns) go to the next sales employee in the rotation.
+        await AutoAssignAsync(lead);
+
         var convo = await db.Conversations.FirstOrDefaultAsync(c => c.LeadId == lead.Id);
         if (convo is null) { convo = new Conversation { LeadId = lead.Id }; db.Conversations.Add(convo); }
         convo.LastInboundAt = now;
@@ -91,6 +94,73 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         return new InboundResult(lead, created);
     }
 
+
+    // ---------------------------------------------------------------------
+    // Assignment
+    // ---------------------------------------------------------------------
+
+    public const string AutoAssignKey = "leads.autoAssign";
+
+    /// <summary>Round-robin is on unless an admin switched it off.</summary>
+    public async Task<bool> IsAutoAssignEnabledAsync() =>
+        !string.Equals((await db.SiteSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == AutoAssignKey))?.Value, "false", StringComparison.OrdinalIgnoreCase);
+
+    public async Task SetAutoAssignAsync(bool enabled)
+    {
+        var row = await db.SiteSettings.FirstOrDefaultAsync(s => s.Key == AutoAssignKey);
+        if (row is null) db.SiteSettings.Add(new SiteSetting { Key = AutoAssignKey, Value = enabled ? "true" : "false" });
+        else { row.Value = enabled ? "true" : "false"; row.UpdatedAt = DateTime.UtcNow; }
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>The active sales employee who was given a lead the longest ago (never-assigned first), excluding <paramref name="excludeId"/>.</summary>
+    public Task<Employee?> PickNextEmployeeAsync(long? excludeId = null) =>
+        db.Employees.Where(e => e.IsActive && e.Role == EmployeeRoles.Sales && e.Id != excludeId)
+            .OrderBy(e => e.LastAssignedAt == null ? 0 : 1).ThenBy(e => e.LastAssignedAt).ThenBy(e => e.Id)
+            .FirstOrDefaultAsync();
+
+    /// <summary>Assigns the lead (null = unassign) and records history. Caller saves.</summary>
+    public async Task AssignAsync(Lead lead, long? employeeId, string? reason, string changedBy)
+    {
+        if (lead.AssignedToEmployeeId == employeeId) return;
+        var now = DateTime.UtcNow;
+        db.LeadAssignmentHistory.Add(new LeadAssignmentHistory
+        {
+            LeadId = lead.Id, FromEmployeeId = lead.AssignedToEmployeeId, ToEmployeeId = employeeId,
+            Reason = Truncate(reason, 500), ChangedBy = changedBy, CreatedAt = now,
+        });
+        lead.AssignedToEmployeeId = employeeId;
+        lead.AssignedAt = employeeId is null ? null : now;
+        lead.UpdatedAt = now;
+        if (employeeId is { } id)
+        {
+            var emp = await db.Employees.FirstOrDefaultAsync(e => e.Id == id);
+            if (emp is not null) emp.LastAssignedAt = now;
+        }
+    }
+
+    /// <summary>Gives an unassigned lead to the next employee in the rotation when auto-assign is on. Caller saves.</summary>
+    public async Task AutoAssignAsync(Lead lead)
+    {
+        if (lead.AssignedToEmployeeId is not null || !await IsAutoAssignEnabledAsync()) return;
+        var next = await PickNextEmployeeAsync();
+        if (next is null) return;
+        await AssignAsync(lead, next.Id, "Auto-assigned (round-robin)", "auto");
+    }
+
+    /// <summary>Moves every open lead of a leaving employee: spread across the remaining team, or back to the admin queue.</summary>
+    public async Task<int> ReassignOpenLeadsAsync(long fromEmployeeId, bool spreadAcrossTeam, string changedBy)
+    {
+        var open = await db.Leads.Where(l => l.AssignedToEmployeeId == fromEmployeeId
+            && l.Status != LeadStatuses.Converted && l.Status != LeadStatuses.NotInterested).ToListAsync();
+        foreach (var lead in open)
+        {
+            var target = spreadAcrossTeam ? await PickNextEmployeeAsync(fromEmployeeId) : null;
+            await AssignAsync(lead, target?.Id, $"Employee removed ({(target is null ? "returned to admin queue" : "redistributed")})", changedBy);
+            await db.SaveChangesAsync(); // persists LastAssignedAt so the rotation advances per lead
+        }
+        return open.Count;
+    }
     /// <summary>Links an outbound message to an existing lead and stamps the conversation (caller saves). Never creates a lead.</summary>
     public async Task<long?> RecordOutboundAsync(string phone)
     {

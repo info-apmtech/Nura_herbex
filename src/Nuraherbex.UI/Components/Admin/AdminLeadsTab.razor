@@ -1,5 +1,6 @@
 @implements IDisposable
 @inject ApiClient Api
+@inject AdminSession AdminAuth
 
 <div class="ld">
 
@@ -34,6 +35,14 @@
                         <Icon Name="RefreshCw" Size="14" Class="@(_loading ? "animate-spin" : "")" />
                     </button>
                 </div>
+                @if (AdminAuth.IsAdmin)
+                {
+                    <select class="ld-assignee" aria-label="Filter by owner" value="@_assignee" @onchange="OnAssigneeFilterChanged">
+                        <option value="">All owners</option>
+                        <option value="unassigned">Unassigned (@_unassigned)</option>
+                        @foreach (var t in _team) { <option value="@t.Id">@t.Name</option> }
+                    </select>
+                }
                 <div class="ld-tabs" role="tablist">
                     <button type="button" role="tab" class="@TabClass("")" @onclick='() => SetStatusAsync("")'>All <b>@Total</b></button>
                     @foreach (var s in LeadStatuses.All)
@@ -76,6 +85,8 @@
                                 <span class="ld-row-meta">
                                     <span class="@($"ld-pill {lead.Status}")">@Label(lead.Status)</span>
                                     <span class="ld-src"><Icon Name="MessageCircle" Size="11" />@SourceLabel(lead.Source)@(string.IsNullOrEmpty(lead.SourceDetail) ? "" : " · " + lead.SourceDetail)</span>
+                                    @if (lead.AssignedToEmployeeId is null && AdminAuth.IsAdmin) { <span class="ld-pill ld-unowned">Unassigned</span> }
+                                    else if (AdminAuth.IsAdmin) { <span class="ld-src">· @lead.AssignedToName</span> }
                                     @if (lead.ConsentStatus == "opted_out") { <span class="ld-pill ld-stop">Opted out</span> }
                                 </span>
                             </span>
@@ -111,6 +122,23 @@
                         @foreach (var s in LeadStatuses.All) { <option value="@s" selected="@(s == lead.Status)">@Label(s)</option> }
                     </select>
                 </header>
+
+                <div class="ld-owner">
+                    <span>@(AdminAuth.IsAdmin ? "Owner" : "Transfer to")</span>
+                    <select aria-label="Lead owner" disabled="@_busy" @onchange="OnOwnerChanged">
+                        @if (AdminAuth.IsAdmin)
+                        {
+                            <option value="" selected="@(lead.AssignedToEmployeeId is null)">Unassigned</option>
+                            @foreach (var t in _team) { <option value="@t.Id" selected="@(lead.AssignedToEmployeeId == t.Id)">@t.Name</option> }
+                        }
+                        else
+                        {
+                            <option value="" selected disabled>@(lead.AssignedToName ?? "Me") (you)</option>
+                            @foreach (var t in _team.Where(t => t.Id != AdminAuth.EmployeeId)) { <option value="@t.Id">@t.Name</option> }
+                        }
+                    </select>
+                    @if (lead.AssignedAt is { } at) { <small>since @AdminFmt.DateTimeShort(at)</small> }
+                </div>
 
                 <nav class="ld-dtabs" role="tablist">
                     <button type="button" role="tab" class="@($"ld-dtab {(_tab == "chat" ? "is-active" : "")}")" @onclick='() => _tab = "chat"'>Conversation</button>
@@ -223,6 +251,23 @@
                                 <button type="button" class="ld-btn primary" disabled="@_busy" @onclick="SaveNotesAsync">Save notes</button>
                             </div>
                         </div>
+                        <div class="ld-card">
+                            <h4>Assignment</h4>
+                            <dl class="ld-dl">
+                                <dt>Owner</dt><dd>@(lead.AssignedToName ?? "Unassigned")</dd>
+                                <dt>Assigned</dt><dd>@(lead.AssignedAt is { } aa ? AdminFmt.DateTimeShort(aa) : "—")</dd>
+                            </dl>
+                            @if (_selected.Assignments.Count > 0)
+                            {
+                                <ul class="ld-tl" style="margin-top:14px">
+                                    @foreach (var a in _selected.Assignments)
+                                    {
+                                        <li>@(a.FromName is null ? "Assigned" : a.FromName + " →") <strong>@(a.ToName ?? "Unassigned")</strong>
+                                            <small>@AdminFmt.DateTimeShort(a.CreatedAt) · @a.ChangedBy@(string.IsNullOrEmpty(a.Reason) ? "" : " · " + a.Reason)</small></li>
+                                    }
+                                </ul>
+                            }
+                        </div>
                         <div class="ld-card wide">
                             <h4>Status history</h4>
                             <ul class="ld-tl">
@@ -255,6 +300,9 @@
     private string _reply = "";
     private string _notes = "";
     private string _tab = "chat";
+    private string _assignee = "";
+    private int _unassigned;
+    private List<EmployeeDto> _team = new();
     private string? _error;
     private string? _toast;
     private bool _loading = true;
@@ -265,7 +313,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadAsync(true);
+        await Task.WhenAll(LoadAsync(true), LoadTeamAsync());
         _ = PollAsync();
     }
 
@@ -289,12 +337,37 @@
     private async Task LoadAsync(bool spinner)
     {
         if (spinner) { _loading = true; StateHasChanged(); }
-        var res = await Api.AdminLeadsAsync(_statusFilter, null, _query);
+        var res = await Api.AdminLeadsAsync(_statusFilter, null, _query, _assignee);
         if (_cts.IsCancellationRequested) return;
-        if (res.Success) { _leads = res.Leads; _counts = res.StatusCounts; _error = null; }
+        if (res.Success) { _leads = res.Leads; _counts = res.StatusCounts; _unassigned = res.UnassignedCount; _error = null; }
         else _error = res.Message ?? "Could not load leads.";
         _loading = false;
         StateHasChanged();
+    }
+
+    private async Task LoadTeamAsync()
+    {
+        var res = await Api.AdminTeamAsync();
+        if (res.Success) _team = res.Employees;
+    }
+
+    private Task OnAssigneeFilterChanged(ChangeEventArgs e) { _assignee = e.Value?.ToString() ?? ""; return LoadAsync(true); }
+
+    /// <summary>Admin: assign / unassign. Sales: hand the lead to a colleague (it then leaves their list).</summary>
+    private async Task OnOwnerChanged(ChangeEventArgs e)
+    {
+        if (_selected?.Lead is not { } lead) return;
+        var raw = e.Value?.ToString() ?? "";
+        long? target = long.TryParse(raw, out var id) ? id : null;
+        if (target is null && !AdminAuth.IsAdmin) return; // placeholder option
+        if (target == lead.AssignedToEmployeeId) return;
+        _busy = true;
+        var res = await Api.AdminLeadAssignAsync(lead.Id, new LeadAssignRequest { EmployeeId = target });
+        _toast = res.Message;
+        if (res.Success && !AdminAuth.IsAdmin) { _selected = null; } // no longer theirs
+        else await RefreshDetailAsync(lead.Id, keepNotes: true);
+        await LoadAsync(false);
+        _busy = false;
     }
 
     private Task SetStatusAsync(string status) { _statusFilter = status; return LoadAsync(true); }
@@ -345,7 +418,7 @@
     {
         if (_selected?.Lead is not { } lead || string.IsNullOrWhiteSpace(_reply) || !CanReply(lead)) return;
         _busy = true;
-        var res = await Api.AdminWhatsAppSendAsync(new WhatsAppSendRequest { Phone = lead.Phone, Text = _reply.Trim() });
+        var res = await Api.AdminLeadReplyAsync(lead.Id, _reply.Trim());
         _toast = res.Success ? null : res.Message;
         if (res.Success) _reply = "";
         await RefreshDetailAsync(lead.Id, keepNotes: true);

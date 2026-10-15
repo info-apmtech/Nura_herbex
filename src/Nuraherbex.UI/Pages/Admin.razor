@@ -21,8 +21,8 @@ else
         <aside class="admin-sidebar @(_mobileMenu ? "is-open" : "")" aria-label="Admin navigation">
             <a class="admin-brand" href="/admin"><img class="admin-brand-logo" src="/_content/Nuraherbex.UI/images/logo-mark.png" alt="" /><span>Nura Herbex<small>STORE ADMINISTRATION</small></span></a>
             <div class="admin-store-label"><span class="admin-store-dot"></span> Your store workspace</div>
-            <nav>@foreach (var item in Navigation) { @if (item.Id == "overview") { <span class="admin-nav-label">MANAGE</span> } @if (item.Id == "batches") { <span class="admin-nav-label">STOREFRONT &amp; SUPPORT</span> }<button class="admin-nav-item @(_activeTab == item.Id ? "is-active" : "")" aria-current="@(_activeTab == item.Id ? "page" : null)" @onclick="() => Navigate(item.Id)"><Icon Name="@item.Icon" Size="19" /><span>@item.Label</span>@if (item.Id == "orders" && _orders.Any(o => o.FulfillmentStatus == "PENDING")) { <small>@_orders.Count(o => o.FulfillmentStatus == "PENDING")</small> }</button> }</nav>
-            <div class="admin-sidebar-bottom"><a class="admin-nav-item" href="/shop"><Icon Name="ExternalLink" Size="18" /> View storefront</a><div class="admin-user"><span class="admin-avatar">A</span><span><strong>Administrator</strong><small>@AdminAuth.Email</small></span><button class="admin-icon-btn" title="Sign out" aria-label="Sign out" @onclick="LogoutAsync"><Icon Name="LogOut" Size="18" /></button></div></div>
+            <nav>@foreach (var item in Navigation) { @if (item.Id == "overview") { <span class="admin-nav-label">MANAGE</span> } @if (item.Id == "leads" && !AdminAuth.IsAdmin) { <span class="admin-nav-label">MY WORK</span> } @if (item.Id == "batches") { <span class="admin-nav-label">STOREFRONT &amp; SUPPORT</span> }<button class="admin-nav-item @(_activeTab == item.Id ? "is-active" : "")" aria-current="@(_activeTab == item.Id ? "page" : null)" @onclick="() => Navigate(item.Id)"><Icon Name="@item.Icon" Size="19" /><span>@item.Label</span>@if (item.Id == "orders" && _orders.Any(o => o.FulfillmentStatus == "PENDING")) { <small>@_orders.Count(o => o.FulfillmentStatus == "PENDING")</small> }</button> }</nav>
+            <div class="admin-sidebar-bottom"><a class="admin-nav-item" href="/shop"><Icon Name="ExternalLink" Size="18" /> View storefront</a><div class="admin-user"><span class="admin-avatar">@(string.IsNullOrEmpty(AdminAuth.Name) ? "A" : AdminAuth.Name[..1].ToUpperInvariant())</span><span><strong>@(string.IsNullOrEmpty(AdminAuth.Name) ? "Administrator" : AdminAuth.Name)</strong><small>@AdminAuth.Email</small></span><button class="admin-icon-btn" title="Sign out" aria-label="Sign out" @onclick="LogoutAsync"><Icon Name="LogOut" Size="18" /></button></div></div>
         </aside>
         @if (_mobileMenu) { <button class="admin-mobile-backdrop" aria-label="Close navigation" @onclick="() => _mobileMenu = false"></button> }
         <div class="admin-main"><header class="admin-topbar"><div class="admin-actions"><button class="admin-icon-btn admin-menu-toggle" aria-label="Toggle navigation" aria-expanded="@_mobileMenu" @onclick="() => _mobileMenu = !_mobileMenu"><Icon Name="Menu" Size="22" /></button><span class="admin-breadcrumb">Workspace <span>/</span> <strong>@PageName</strong></span></div><div class="admin-actions"><span class="admin-today">@DateTime.Now.ToString("ddd, dd MMM yyyy")</span><a class="admin-btn admin-btn-small" href="/shop"><Icon Name="ExternalLink" Size="15" /> Open store</a></div></header>
@@ -44,6 +44,7 @@ else
             else if (_activeTab == "content") { <AdminContentTab /> }
             else if (_activeTab == "leads") { <AdminLeadsTab /> }
             else if (_activeTab == "whatsapp") { <AdminWhatsAppTab /> }
+            else if (_activeTab == "employees") { <AdminEmployeesTab /> }
             </div>
         }
         <footer class="admin-footer"><span>Nura Herbex · Store administration</span><span>Made for your everyday operations</span></footer>
@@ -54,9 +55,13 @@ else
     [Parameter] public string? Section { get; set; }
     private readonly Dictionary<string, string> _loadErrors = new();
     private bool _mobileMenu;
-    private static readonly (string Id, string Label, string Icon)[] Navigation = { ("overview", "Overview", "TrendingUp"), ("products", "Products", "Package"), ("orders", "Orders", "ShoppingBag"), ("coupons", "Coupons", "Tag"), ("customers", "Customers", "Users"), ("reviews", "Reviews", "MessageSquare"), ("payments", "Payments", "CreditCard"), ("batches", "Batch reports", "ShieldCheck"), ("formulation", "Formulation", "FlaskConical"), ("content", "Store content", "FileText"), ("leads", "Leads", "Users"), ("whatsapp", "WhatsApp", "MessageCircle") };
+    private static readonly (string Id, string Label, string Icon)[] AdminNavigation = { ("overview", "Overview", "TrendingUp"), ("products", "Products", "Package"), ("orders", "Orders", "ShoppingBag"), ("coupons", "Coupons", "Tag"), ("customers", "Customers", "Users"), ("reviews", "Reviews", "MessageSquare"), ("payments", "Payments", "CreditCard"), ("batches", "Batch reports", "ShieldCheck"), ("formulation", "Formulation", "FlaskConical"), ("content", "Store content", "FileText"), ("leads", "Leads", "Phone"), ("whatsapp", "WhatsApp", "MessageCircle"), ("employees", "Employees", "KeyRound") };
+    private static readonly (string Id, string Label, string Icon)[] SalesNavigation = { ("leads", "Leads", "Phone") };
+    private (string Id, string Label, string Icon)[] Navigation => AdminAuth.IsAdmin ? AdminNavigation : SalesNavigation;
     private string PageName => Navigation.FirstOrDefault(n => n.Id == _activeTab).Label ?? "Overview";
-    protected override void OnParametersSet() => _activeTab = Navigation.Any(n => n.Id == Section) ? Section! : "overview";
+    protected override void OnParametersSet() => _activeTab = Navigation.Any(n => n.Id == Section) ? Section! : (AdminAuth.IsAdmin ? "overview" : "leads");
+    /// <summary>Sales users only get the leads workspace: send them there once their role is known.</summary>
+    private void EnsureRoleView() { if (AdminAuth.IsAuthenticated && !AdminAuth.IsAdmin && _activeTab != "leads") { _activeTab = "leads"; Nav.NavigateTo("/admin/leads", replace: true); } }
     private void Navigate(string id) { _mobileMenu = false; Nav.NavigateTo("/admin/" + id); }
     private void RecordError(string key, ApiResult result) { if (result.Success) _loadErrors.Remove(key); else _loadErrors[key] = result.Message ?? "Could not load data."; }
     private async Task RefreshAsync() { _dataLoaded = false; await LoadAllAsync(); }
@@ -83,6 +88,7 @@ else
         await Browser.SetMetaAsync(RouteMeta.Admin);
         await AdminAuth.InitAsync(); // validates a stored token with the server
         _initDone = true;
+        EnsureRoleView();
         if (AdminAuth.IsAuthenticated) await LoadAllAsync();
         StateHasChanged();
     }
@@ -95,6 +101,7 @@ else
     private async Task OnLoggedInAsync()
     {
         _initDone = true;
+        EnsureRoleView();
         StateHasChanged();
         await LoadAllAsync();
     }
@@ -109,7 +116,7 @@ else
 
     private async Task LoadAllAsync()
     {
-        if (_dataLoaded) return;
+        if (_dataLoaded || !AdminAuth.IsAdmin) return;
         _dataLoaded = true;
         await Task.WhenAll(LoadOrdersAsync(), LoadPaymentsAsync(), LoadBatchesAsync(), LoadCustomersAsync(), LoadIngredientsAsync(), LoadMetricsAsync());
     }

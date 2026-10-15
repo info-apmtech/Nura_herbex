@@ -5,6 +5,15 @@ namespace Nuraherbex.Api.Services;
 /// <summary>Versioned PBKDF2 hashes for the server-configured administrator.</summary>
 public static class AdminPassword
 {
+    /// <summary>Creates a hash in the same versioned format that <see cref="Verify"/> accepts.</summary>
+    public static string Hash(string password)
+    {
+        const int iterations = 210000;
+        var salt = RandomNumberGenerator.GetBytes(32);
+        var hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA512, 64);
+        return $"pbkdf2-sha512:{iterations}:{Convert.ToBase64String(salt)}:{Convert.ToBase64String(hash)}";
+    }
+
     public static bool Verify(string password, string encoded)
     {
         try

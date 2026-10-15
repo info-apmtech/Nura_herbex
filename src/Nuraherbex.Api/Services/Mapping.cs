@@ -61,12 +61,19 @@ public static class Mapping
         Type = m.Type, Body = m.Body, Status = m.Status, OrderId = m.OrderId, CreatedAt = m.CreatedAt,
     };
 
+    public static EmployeeDto ToDto(this Employee e) => new()
+    {
+        Id = e.Id, Name = e.Name, Email = e.Email, Phone = e.Phone, Role = e.Role, IsActive = e.IsActive,
+        CreatedAt = e.CreatedAt, LastLoginAt = e.LastLoginAt,
+    };
+
     public static LeadDto ToDto(this Lead l, Conversation? c = null) => new()
     {
         Id = l.Id, Name = l.Name, Phone = l.Phone, Email = l.Email, Source = l.Source, SourceDetail = l.SourceDetail,
         Status = l.Status, ConsentStatus = l.ConsentStatus, FirstMessage = l.FirstMessage, Notes = l.Notes, CustomerId = l.CustomerId,
         UnreadCount = c?.UnreadCount ?? 0, ServiceWindowExpiresAt = c?.ServiceWindowExpiresAt,
         CreatedAt = l.CreatedAt, LastContactAt = l.LastContactAt, ConvertedAt = l.ConvertedAt,
+        AssignedToEmployeeId = l.AssignedToEmployeeId, AssignedAt = l.AssignedAt,
     };
 
     /// <summary>Indian-style timestamp used in tracking timelines ("5/10/2026, 3:42:10 pm").</summary>
