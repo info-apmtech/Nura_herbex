@@ -28,6 +28,9 @@ public class LeadDto
     public string? Notes { get; set; }
     public string? CustomerId { get; set; }
     public int UnreadCount { get; set; }
+    /// <summary>Preview of the most recent message in the conversation (list view).</summary>
+    public string? LastMessage { get; set; }
+    public string? LastMessageDirection { get; set; }
     public DateTime? ServiceWindowExpiresAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime LastContactAt { get; set; }

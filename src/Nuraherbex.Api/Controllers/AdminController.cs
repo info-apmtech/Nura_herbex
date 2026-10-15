@@ -370,10 +370,26 @@ public class AdminController(
             .SelectMany(x => x.cs.DefaultIfEmpty(), (x, c) => new { x.l, c })
             .ToListAsync();
 
+        var ids = rows.Select(r => r.l.Id).ToList();
+        var last = await db.WhatsAppMessages.AsNoTracking()
+            .Where(m => m.LeadId != null && ids.Contains(m.LeadId.Value)
+                && m.Id == db.WhatsAppMessages.Where(x => x.LeadId == m.LeadId).Max(x => x.Id))
+            .ToListAsync();
+        var lastByLead = last.GroupBy(m => m.LeadId!.Value).ToDictionary(g => g.Key, g => g.First());
+
         return new LeadListResponse
         {
             Success = true,
-            Leads = rows.Select(r => r.l.ToDto(r.c)).ToList(),
+            Leads = rows.Select(r =>
+            {
+                var dto = r.l.ToDto(r.c);
+                if (lastByLead.TryGetValue(r.l.Id, out var m))
+                {
+                    dto.LastMessage = string.IsNullOrEmpty(m.Body) ? $"[{m.Type}]" : m.Body.Length > 90 ? m.Body[..(char.IsHighSurrogate(m.Body[89]) ? 89 : 90)] + "…" : m.Body;
+                    dto.LastMessageDirection = m.Direction;
+                }
+                return dto;
+            }).ToList(),
             Total = await filtered.CountAsync(),
             StatusCounts = counts.ToDictionary(c => c.Key, c => c.N),
         };
