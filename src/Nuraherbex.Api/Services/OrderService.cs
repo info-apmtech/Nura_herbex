@@ -10,6 +10,7 @@ public partial class OrderService(
     ProductService products,
     ShippingGateway shipping,
     OrderOperationLock operationLock,
+    Microsoft.Extensions.Options.IOptions<Nuraherbex.Api.Options.ShadowfaxOptions> shadowfaxOptions,
     IServiceScopeFactory scopes,
     ILogger<OrderService> log)
 {
@@ -88,9 +89,9 @@ public partial class OrderService(
         if (isCod)
         {
             order.Courier = shipping.ProviderFor(order);
-            // Booking requires an explicit fulfillment-ready action by an administrator.
             await db.SaveChangesAsync();
             NotifyConfirmed(order);
+            AutoBookInBackground(order.Id);
         }
         return order;
     }
@@ -163,10 +164,10 @@ public partial class OrderService(
         await db.SaveChangesAsync();
 
         order.Courier = shipping.ProviderFor(order);
-        // Payment settlement does not request pickup until the parcel is packed.
         await db.SaveChangesAsync();
 
         NotifyConfirmed(order);
+        AutoBookInBackground(order.Id);
         return order;
     }
 
@@ -298,6 +299,40 @@ public partial class OrderService(
         order.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return order;
+    }
+
+    /// <summary>
+    /// Creates the Shadowfax order right after an order is confirmed (COD placed, or online payment verified): marks it packed with the
+    /// catalog parcel estimate, then books. Runs in its own DI scope so it outlives the HTTP request. On failure the order stays
+    /// packed and the reason is saved in its notes, so an admin can fix the cause and press Book again.
+    /// </summary>
+    private void AutoBookInBackground(string orderId)
+    {
+        if (!shadowfaxOptions.Value.AutoBook) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = scopes.CreateScope();
+                var svc = scope.ServiceProvider.GetRequiredService<OrderService>();
+                await svc.AutoBookAsync(orderId);
+            }
+            catch (Exception ex) { log.LogWarning(ex, "[Shadowfax] Auto-booking failed for {OrderId}", orderId); }
+        });
+    }
+
+    public async Task AutoBookAsync(string orderId)
+    {
+        var order = await GetAsync(orderId);
+        if (order is null || shipping.ProviderFor(order) != ShippingGateway.Shadowfax) return;
+        if (!shadowfaxOptions.Value.IsConfigured)
+        {
+            log.LogWarning("[Shadowfax] Auto-book skipped for {OrderId}: Shadowfax token is not configured", orderId);
+            return;
+        }
+        if (order.FulfillmentStatus == "PENDING") await MarkReadyAsync(orderId);
+        var res = await RetryShipmentAsync(orderId);
+        log.LogInformation("[Shadowfax] Auto-booked {OrderId} → AWB {Awb}", orderId, res.ShiprocketAwb);
     }
 
     private static void Apply(Order order, ShiprocketResult res, string courier)

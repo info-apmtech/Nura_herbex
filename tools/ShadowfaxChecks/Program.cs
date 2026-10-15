@@ -50,7 +50,7 @@ var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 await using var db = new NuraDbContext(new DbContextOptionsBuilder<NuraDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 var gate = new OrderOperationLock(db);
 var shipping = new ShippingGateway(new ShiprocketService(http, Options.Create(new ShiprocketOptions()), NullLogger<ShiprocketService>.Instance), sf);
-var orders = new OrderService(db, new ProductService(db, Options.Create(new StoreOptions())), shipping, gate, scopeFactory, NullLogger<OrderService>.Instance);
+var orders = new OrderService(db, new ProductService(db, Options.Create(new StoreOptions())), shipping, gate, Options.Create(new ShadowfaxOptions { AutoBook = false }), scopeFactory, NullLogger<OrderService>.Instance);
 db.Orders.Add(NewOrder()); await db.SaveChangesAsync();
 await Reject(() => orders.RetryShipmentAsync("NH-TEST"), "Packing gate blocks paid but unpacked order");
 await orders.MarkReadyAsync("NH-TEST");

@@ -1,0 +1,336 @@
+@implements IDisposable
+@inject ApiClient Api
+
+<div class="space-y-4">
+
+    @* Header *@
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-lg bg-zinc-900/40 border border-zinc-800">
+        <div class="space-y-0.5">
+            <h3 class="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+                <Icon Name="Users" Size="16" Class="text-emerald-400" />
+                <span>Leads</span>
+            </h3>
+            <p class="text-xs text-zinc-400">Every new WhatsApp enquiry becomes one lead (duplicates are merged by phone number). Refreshes every 15 seconds.</p>
+        </div>
+        <button type="button" @onclick="() => LoadAsync(true)" disabled="@_loading"
+                class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shrink-0">
+            <Icon Name="RefreshCw" Size="12" Class="@(_loading ? "animate-spin" : "")" />
+            <span>Refresh</span>
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 flex items-center gap-2">
+            <Icon Name="AlertCircle" Size="14" Class="shrink-0" />
+            <span>@_error</span>
+        </div>
+    }
+
+    @* Status filter chips + search *@
+    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div class="flex flex-wrap gap-2">
+            <button type="button" @onclick='() => SetStatusAsync("")' class="@ChipClass("")">All <span class="font-mono opacity-70">@_counts.Values.Sum()</span></button>
+            @foreach (var s in LeadStatuses.All)
+            {
+                var status = s;
+                <button type="button" @onclick="() => SetStatusAsync(status)" class="@ChipClass(status)">@Label(status) <span class="font-mono opacity-70">@_counts.GetValueOrDefault(status)</span></button>
+            }
+        </div>
+        <input type="search" placeholder="Search name, phone or email" @bind="_query" @bind:event="oninput" @bind:after="SearchAsync"
+               class="w-full lg:w-72 px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs outline-none focus:border-zinc-500 transition-colors" />
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-5 gap-4">
+
+        @* Lead list *@
+        <div class="xl:col-span-3 rounded-lg border border-zinc-800 bg-zinc-900/30 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead>
+                        <tr class="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono text-[11px] font-medium tracking-wider uppercase">
+                            <th class="px-4 py-3">Lead</th>
+                            <th class="px-4 py-3">Source</th>
+                            <th class="px-4 py-3">Status</th>
+                            <th class="px-4 py-3">Last contact</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-zinc-800/60">
+                        @if (_loading && _leads.Count == 0)
+                        {
+                            <tr><td colspan="4" class="p-8 text-center text-zinc-500">Loading leads...</td></tr>
+                        }
+                        else if (_leads.Count == 0)
+                        {
+                            <tr><td colspan="4" class="p-8 text-center text-zinc-500">No leads yet. They appear here as soon as someone messages your WhatsApp number.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var l in _leads)
+                            {
+                                var lead = l;
+                                <tr @key="lead.Id" @onclick="() => OpenAsync(lead.Id)"
+                                    class="@($"cursor-pointer hover:bg-zinc-800/40 transition-colors {(_selected?.Lead?.Id == lead.Id ? "bg-zinc-800/50" : "")}")">
+                                    <td class="px-4 py-3">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-zinc-100 font-medium">@lead.Name</span>
+                                            @if (lead.UnreadCount > 0)
+                                            {
+                                                <span class="px-1.5 rounded-full bg-emerald-500 text-zinc-950 text-[10px] font-semibold">@lead.UnreadCount</span>
+                                            }
+                                            @if (lead.ConsentStatus == "opted_out")
+                                            {
+                                                <span class="px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-mono">STOP</span>
+                                            }
+                                        </div>
+                                        <div class="font-mono text-[11px] text-zinc-400">+@lead.Phone</div>
+                                    </td>
+                                    <td class="px-4 py-3 text-zinc-300">
+                                        <div class="capitalize">@lead.Source</div>
+                                        @if (!string.IsNullOrEmpty(lead.SourceDetail))
+                                        {
+                                            <div class="text-[11px] text-zinc-500 line-clamp-1 max-w-[12rem]">@lead.SourceDetail</div>
+                                        }
+                                    </td>
+                                    <td class="px-4 py-3 whitespace-nowrap"><span class="@($"inline-flex px-2 py-0.5 rounded text-[10px] font-mono font-medium {StatusClass(lead.Status)}")">@Label(lead.Status)</span></td>
+                                    <td class="px-4 py-3 font-mono text-[11px] text-zinc-500 whitespace-nowrap">@AdminFmt.DateTimeShort(lead.LastContactAt)</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @* Lead detail *@
+        <div class="xl:col-span-2 rounded-lg border border-zinc-800 bg-zinc-900/40 p-5 space-y-4 self-start">
+            @if (_selected?.Lead is null)
+            {
+                <p class="text-xs text-zinc-500 text-center py-10">Select a lead to see the conversation, change its status and add notes.</p>
+            }
+            else
+            {
+                var lead = _selected.Lead;
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h4 class="text-sm font-semibold text-zinc-100">@lead.Name</h4>
+                        <div class="font-mono text-[11px] text-zinc-400">+@lead.Phone · @lead.Source · created @AdminFmt.DateTimeShort(lead.CreatedAt)</div>
+                    </div>
+                    <span class="@($"px-2 py-0.5 rounded text-[10px] font-mono font-medium {StatusClass(lead.Status)}")">@Label(lead.Status)</span>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_detailMessage))
+                {
+                    <div class="p-2 rounded-lg bg-zinc-950/70 border border-zinc-800 text-[11px] text-zinc-300">@_detailMessage</div>
+                }
+
+                <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <span class="text-zinc-400">Status:</span>
+                    @foreach (var s in LeadStatuses.All)
+                    {
+                        var status = s;
+                        <button type="button" disabled="@(_busy || lead.Status == status)" @onclick="() => ChangeStatusAsync(status)"
+                                class="@($"px-2 py-1 rounded border transition-colors cursor-pointer disabled:cursor-default {(lead.Status == status ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" : "border-zinc-800 text-zinc-300 hover:bg-zinc-800")}")">@Label(status)</button>
+                    }
+                </div>
+
+                <div class="text-[11px] text-zinc-400 space-y-0.5">
+                    <div>Consent: <span class="@(lead.ConsentStatus == "opted_in" ? "text-emerald-400" : lead.ConsentStatus == "opted_out" ? "text-red-400" : "text-amber-400")">@lead.ConsentStatus.Replace('_', ' ')</span></div>
+                    <div>
+                        24h reply window:
+                        @if (lead.ServiceWindowExpiresAt is { } exp && exp > DateTime.UtcNow)
+                        {
+                            <span class="text-emerald-400">open until @AdminFmt.DateTimeShort(exp)</span>
+                        }
+                        else
+                        {
+                            <span class="text-amber-400">closed — approved template needed</span>
+                        }
+                    </div>
+                </div>
+
+                @* Conversation *@
+                <div class="rounded-lg bg-zinc-950/60 border border-zinc-800 p-3 max-h-80 overflow-y-auto space-y-2">
+                    @if (_selected.Messages.Count == 0)
+                    {
+                        <p class="text-[11px] text-zinc-500 text-center">No messages.</p>
+                    }
+                    @foreach (var m in _selected.Messages)
+                    {
+                        var inbound = m.Direction == "inbound";
+                        <div @key="m.Id" class="@($"flex {(inbound ? "justify-start" : "justify-end")}")">
+                            <div class="@($"max-w-[85%] px-3 py-1.5 rounded-lg text-xs break-words {(inbound ? "bg-zinc-800 text-zinc-100" : "bg-emerald-900/50 text-emerald-50 border border-emerald-800/50")}")">
+                                <div>@(string.IsNullOrEmpty(m.Body) ? $"[{m.Type}]" : m.Body)</div>
+                                <div class="text-[10px] text-zinc-400 mt-0.5 font-mono">@AdminFmt.DateTimeShort(m.CreatedAt)@(inbound ? "" : " · " + m.Status)</div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                @* Reply (uses existing send endpoint; free text only works inside the 24h window) *@
+                <form @onsubmit="ReplyAsync" @onsubmit:preventDefault class="flex gap-2">
+                    <input type="text" placeholder="Reply on WhatsApp..." @bind="_reply" @bind:event="oninput"
+                           class="flex-1 px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs outline-none focus:border-zinc-500" />
+                    <button type="submit" disabled="@(_busy || string.IsNullOrWhiteSpace(_reply))"
+                            class="px-3 py-1.5 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-60">
+                        <Icon Name="Send" Size="13" /><span>Send</span>
+                    </button>
+                </form>
+
+                @* Notes *@
+                <div class="space-y-1.5">
+                    <label class="text-[11px] font-medium text-zinc-400 block">Notes</label>
+                    <textarea rows="3" @bind="_notes" @bind:event="oninput" placeholder="Interest, objections, preferred call time..."
+                              class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs outline-none focus:border-zinc-500"></textarea>
+                    <div class="flex justify-end">
+                        <button type="button" disabled="@_busy" @onclick="SaveNotesAsync"
+                                class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-200 cursor-pointer disabled:opacity-60">Save notes</button>
+                    </div>
+                </div>
+
+                @* Status history *@
+                @if (_selected.History.Count > 0)
+                {
+                    <div class="space-y-1">
+                        <span class="text-[11px] font-semibold text-zinc-300 uppercase tracking-wider font-mono">History</span>
+                        @foreach (var h in _selected.History)
+                        {
+                            <div class="text-[11px] text-zinc-400 font-mono">
+                                @AdminFmt.DateTimeShort(h.CreatedAt) · @(h.FromStatus is null ? "" : Label(h.FromStatus) + " → ")@Label(h.ToStatus) · @h.ChangedBy@(string.IsNullOrEmpty(h.Note) ? "" : " · " + h.Note)
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly CancellationTokenSource _cts = new();
+    private List<LeadDto> _leads = new();
+    private Dictionary<string, int> _counts = new();
+    private LeadDetailResponse? _selected;
+    private string _statusFilter = "";
+    private string _query = "";
+    private string _reply = "";
+    private string _notes = "";
+    private string? _error;
+    private string? _detailMessage;
+    private bool _loading = true;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(true);
+        _ = PollAsync();
+    }
+
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_cts.Token))
+                await InvokeAsync(async () =>
+                {
+                    await LoadAsync(false);
+                    if (_selected?.Lead is { } l && !_busy) await RefreshDetailAsync(l.Id, keepNotes: true);
+                });
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+
+    private async Task LoadAsync(bool spinner)
+    {
+        if (spinner) { _loading = true; StateHasChanged(); }
+        var res = await Api.AdminLeadsAsync(_statusFilter, null, _query);
+        if (_cts.IsCancellationRequested) return;
+        if (res.Success) { _leads = res.Leads; _counts = res.StatusCounts; _error = null; }
+        else _error = res.Message ?? "Could not load leads.";
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private Task SetStatusAsync(string status) { _statusFilter = status; return LoadAsync(true); }
+    private Task SearchAsync() => LoadAsync(false);
+
+    private async Task OpenAsync(long id)
+    {
+        _detailMessage = null;
+        await RefreshDetailAsync(id, keepNotes: false);
+        await LoadAsync(false); // unread badge clears once the detail is opened
+    }
+
+    private async Task RefreshDetailAsync(long id, bool keepNotes)
+    {
+        var res = await Api.AdminLeadDetailAsync(id);
+        if (_cts.IsCancellationRequested) return;
+        if (!res.Success || res.Lead is null) { _detailMessage = res.Message ?? "Could not load lead."; return; }
+        var prevNotes = _notes;
+        var sameLead = _selected?.Lead?.Id == id;
+        _selected = res;
+        _notes = keepNotes && sameLead ? prevNotes : res.Lead.Notes ?? "";
+        StateHasChanged();
+    }
+
+    private async Task ChangeStatusAsync(string status)
+    {
+        if (_selected?.Lead is not { } lead) return;
+        _busy = true;
+        var res = await Api.AdminLeadStatusAsync(lead.Id, new LeadStatusRequest { Status = status });
+        _detailMessage = res.Message;
+        await RefreshDetailAsync(lead.Id, keepNotes: true);
+        await LoadAsync(false);
+        _busy = false;
+    }
+
+    private async Task SaveNotesAsync()
+    {
+        if (_selected?.Lead is not { } lead) return;
+        _busy = true;
+        var res = await Api.AdminLeadNotesAsync(lead.Id, new LeadNotesRequest { Notes = _notes });
+        _detailMessage = res.Message;
+        _busy = false;
+    }
+
+    private async Task ReplyAsync()
+    {
+        if (_selected?.Lead is not { } lead || string.IsNullOrWhiteSpace(_reply)) return;
+        _busy = true;
+        var res = await Api.AdminWhatsAppSendAsync(new WhatsAppSendRequest { Phone = lead.Phone, Text = _reply.Trim() });
+        _detailMessage = res.Message;
+        if (res.Success) _reply = "";
+        await RefreshDetailAsync(lead.Id, keepNotes: true);
+        _busy = false;
+    }
+
+    private string ChipClass(string status) =>
+        $"px-2.5 py-1 rounded-md text-xs border transition-colors cursor-pointer {(_statusFilter == status ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800")}";
+
+    private static string Label(string status) => status switch
+    {
+        LeadStatuses.New => "New",
+        LeadStatuses.Interested => "Interested",
+        LeadStatuses.FollowUp => "Follow-up",
+        LeadStatuses.Converted => "Converted",
+        LeadStatuses.NotInterested => "Not interested",
+        _ => status,
+    };
+
+    private static string StatusClass(string status) => status switch
+    {
+        LeadStatuses.New => "bg-sky-500/10 text-sky-400 border border-sky-500/20",
+        LeadStatuses.Interested => "bg-purple-500/10 text-purple-300 border border-purple-500/20",
+        LeadStatuses.FollowUp => "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+        LeadStatuses.Converted => "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+        _ => "bg-zinc-800 text-zinc-400 border border-zinc-700/60",
+    };
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

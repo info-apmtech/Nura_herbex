@@ -18,6 +18,10 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
     public DbSet<SiteSetting> SiteSettings => Set<SiteSetting>();
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
+    public DbSet<Lead> Leads => Set<Lead>();
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<LeadSourceEvent> LeadSourceEvents => Set<LeadSourceEvent>();
+    public DbSet<LeadStatusHistory> LeadStatusHistory => Set<LeadStatusHistory>();
 
     private static JsonSerializerOptions J => NuraJson.Options;
 
@@ -177,6 +181,49 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.Property(x => x.Phone).HasMaxLength(32);
             e.HasIndex(x => x.WaMessageId);
             e.HasIndex(x => x.CreatedAt);
+            e.HasIndex(x => x.LeadId);
+        });
+
+        b.Entity<Lead>(e =>
+        {
+            e.ToTable("leads");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Phone).HasMaxLength(32);
+            e.Property(x => x.Email).HasMaxLength(200);
+            e.Property(x => x.Source).HasMaxLength(32);
+            e.Property(x => x.SourceDetail).HasMaxLength(500);
+            e.Property(x => x.Status).HasMaxLength(32);
+            e.Property(x => x.ConsentStatus).HasMaxLength(32);
+            e.Property(x => x.ConsentSource).HasMaxLength(64);
+            e.Property(x => x.CustomerId).HasMaxLength(64);
+            e.HasIndex(x => x.Phone).IsUnique();
+            e.HasIndex(x => new { x.Status, x.LastContactAt });
+        });
+
+        b.Entity<Conversation>(e =>
+        {
+            e.ToTable("conversations");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.LeadId).IsUnique();
+        });
+
+        b.Entity<LeadSourceEvent>(e =>
+        {
+            e.ToTable("lead_source_events");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Source).HasMaxLength(32);
+            e.HasIndex(x => x.LeadId);
+        });
+
+        b.Entity<LeadStatusHistory>(e =>
+        {
+            e.ToTable("lead_status_history");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.FromStatus).HasMaxLength(32);
+            e.Property(x => x.ToStatus).HasMaxLength(32);
+            e.Property(x => x.ChangedBy).HasMaxLength(200);
+            e.HasIndex(x => x.LeadId);
         });
     }
 }

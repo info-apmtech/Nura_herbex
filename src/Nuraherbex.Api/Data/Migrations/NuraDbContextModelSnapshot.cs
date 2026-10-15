@@ -22,6 +22,37 @@ namespace Nuraherbex.Api.Data.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Nuraherbex.Api.Data.Conversation", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime?>("LastInboundAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("LastOutboundAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("LeadId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("ServiceWindowExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UnreadCount")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LeadId")
+                        .IsUnique();
+
+                    b.ToTable("conversations", (string)null);
+                });
+
             modelBuilder.Entity("Nuraherbex.Api.Data.Coupon", b =>
                 {
                     b.Property<string>("Code")
@@ -102,6 +133,156 @@ namespace Nuraherbex.Api.Data.Migrations
                     b.HasIndex("Phone");
 
                     b.ToTable("customers", (string)null);
+                });
+
+            modelBuilder.Entity("Nuraherbex.Api.Data.Lead", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime?>("ConsentAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ConsentSource")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("ConsentStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTime?>("ConvertedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CustomerId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("FirstMessage")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("LastContactAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("SourceDetail")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Phone")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "LastContactAt");
+
+                    b.ToTable("leads", (string)null);
+                });
+
+            modelBuilder.Entity("Nuraherbex.Api.Data.LeadSourceEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Detail")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("LeadId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ReferralJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LeadId");
+
+                    b.ToTable("lead_source_events", (string)null);
+                });
+
+            modelBuilder.Entity("Nuraherbex.Api.Data.LeadStatusHistory", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ChangedBy")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("FromStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<long>("LeadId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ToStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LeadId");
+
+                    b.ToTable("lead_status_history", (string)null);
                 });
 
             modelBuilder.Entity("Nuraherbex.Api.Data.Order", b =>
@@ -641,6 +822,9 @@ namespace Nuraherbex.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<long?>("LeadId")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("OrderId")
                         .HasColumnType("nvarchar(max)");
 
@@ -671,6 +855,8 @@ namespace Nuraherbex.Api.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAt");
+
+                    b.HasIndex("LeadId");
 
                     b.HasIndex("WaMessageId");
 

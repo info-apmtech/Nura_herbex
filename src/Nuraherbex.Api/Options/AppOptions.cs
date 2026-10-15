@@ -3,8 +3,8 @@ namespace Nuraherbex.Api.Options;
 public class StoreOptions
 {
     public const string Section = "Store";
-    public string FrontendUrl { get; set; } = "http://localhost:5200";
-    public string ApiPublicUrl { get; set; } = "http://localhost:5118";
+    public string FrontendUrl { get; set; } = "https://nura.apmiot.com";
+    public string ApiPublicUrl { get; set; } = "https://nuraapi.apmiot.com";
     public string SupportEmail { get; set; } = "care@nuraherbex.com";
     public string SupportPhone { get; set; } = "08888003430";
     public decimal FreeShippingThreshold { get; set; } = 999;
@@ -92,6 +92,8 @@ public class ShadowfaxOptions
     public string ServiceTier { get; set; } = "Regular";
     /// <summary>Value Shadowfax sends in the callback Authorization header (set in the Shadowfax client portal, Webhook tab).</summary>
     public string WebhookToken { get; set; } = "";
+    /// <summary>Book the Shadowfax pickup automatically once an order is confirmed (COD placed / online payment verified), using the catalog parcel estimate. Set false to require the admin Packed + Book steps.</summary>
+    public bool AutoBook { get; set; } = true;
     public ShadowfaxAddress Pickup { get; set; } = new();
     /// <summary>Return-to-seller / return-to-origin address. Falls back to <see cref="Pickup"/> when empty.</summary>
     public ShadowfaxAddress Return { get; set; } = new();

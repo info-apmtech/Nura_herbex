@@ -42,6 +42,7 @@ else
             else if (_activeTab == "batches") { <AdminBatchesTab Batches="_batches" Loading="_batchesLoading" OnReload="LoadBatchesAsync" /> }
             else if (_activeTab == "formulation") { <AdminFormulationTab Ingredients="_ingredients" Metrics="_metrics" IngredientsChanged="OnIngredientsChanged" MetricsChanged="OnMetricsChanged" /> }
             else if (_activeTab == "content") { <AdminContentTab /> }
+            else if (_activeTab == "leads") { <AdminLeadsTab /> }
             else if (_activeTab == "whatsapp") { <AdminWhatsAppTab /> }
             </div>
         }
@@ -53,7 +54,7 @@ else
     [Parameter] public string? Section { get; set; }
     private readonly Dictionary<string, string> _loadErrors = new();
     private bool _mobileMenu;
-    private static readonly (string Id, string Label, string Icon)[] Navigation = { ("overview", "Overview", "TrendingUp"), ("products", "Products", "Package"), ("orders", "Orders", "ShoppingBag"), ("coupons", "Coupons", "Tag"), ("customers", "Customers", "Users"), ("reviews", "Reviews", "MessageSquare"), ("payments", "Payments", "CreditCard"), ("batches", "Batch reports", "ShieldCheck"), ("formulation", "Formulation", "FlaskConical"), ("content", "Store content", "FileText"), ("whatsapp", "WhatsApp", "MessageCircle") };
+    private static readonly (string Id, string Label, string Icon)[] Navigation = { ("overview", "Overview", "TrendingUp"), ("products", "Products", "Package"), ("orders", "Orders", "ShoppingBag"), ("coupons", "Coupons", "Tag"), ("customers", "Customers", "Users"), ("reviews", "Reviews", "MessageSquare"), ("payments", "Payments", "CreditCard"), ("batches", "Batch reports", "ShieldCheck"), ("formulation", "Formulation", "FlaskConical"), ("content", "Store content", "FileText"), ("leads", "Leads", "Users"), ("whatsapp", "WhatsApp", "MessageCircle") };
     private string PageName => Navigation.FirstOrDefault(n => n.Id == _activeTab).Label ?? "Overview";
     protected override void OnParametersSet() => _activeTab = Navigation.Any(n => n.Id == Section) ? Section! : "overview";
     private void Navigate(string id) { _mobileMenu = false; Nav.NavigateTo("/admin/" + id); }

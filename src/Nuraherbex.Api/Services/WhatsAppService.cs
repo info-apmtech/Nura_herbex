@@ -19,6 +19,7 @@ namespace Nuraherbex.Api.Services;
 public partial class WhatsAppService(
     NuraDbContext db,
     HttpClient http,
+    LeadService leads,
     IOptions<WhatsAppOptions> options,
     ILogger<WhatsAppService> log)
 {
@@ -120,12 +121,30 @@ public partial class WhatsAppService(
             _ => $"[{type}]",
         };
 
+        // Click-to-WhatsApp ads attach a "referral" object (ad headline, source url/id) to the first message.
+        string? referralJson = null, referralDetail = null;
+        if (m.TryGetProperty("referral", out var referral) && referral.ValueKind == JsonValueKind.Object)
+        {
+            referralJson = referral.GetRawText();
+            referralDetail = referral.TryGetProperty("headline", out var h) && !string.IsNullOrWhiteSpace(h.GetString()) ? h.GetString()
+                : referral.TryGetProperty("source_url", out var u) ? u.GetString() : null;
+        }
+
+        var profileName = names.GetValueOrDefault(from);
+        var lead = (await leads.UpsertFromWhatsAppAsync(from, profileName, body, referralJson, referralDetail)).Lead;
+
         db.WhatsAppMessages.Add(new WhatsAppMessage
         {
-            Direction = "inbound", WaMessageId = id, Phone = from, ProfileName = names.GetValueOrDefault(from),
-            Type = type, Body = body, Status = "received", RawPayload = m.GetRawText(),
+            Direction = "inbound", WaMessageId = id, Phone = from, ProfileName = profileName,
+            Type = type, Body = body, Status = "received", RawPayload = m.GetRawText(), LeadId = lead.Id,
         });
         await db.SaveChangesAsync();
+
+        if (LeadService.IsStopKeyword(body))
+        {
+            if (_o.CanSend) await SendTextAsync(from, "You've been unsubscribed from Nura Herbex messages. Reply START any time to opt back in. 🌿");
+            return;
+        }
 
         if (_o.AutoReplyEnabled && _o.CanSend && type is "text" or "button" or "interactive")
         {
@@ -254,10 +273,11 @@ public partial class WhatsAppService(
             }
             else log.LogWarning("[WhatsApp] Send failed {Status}: {Body}", (int)res.StatusCode, text);
 
+            var leadId = await leads.RecordOutboundAsync(phone);
             db.WhatsAppMessages.Add(new WhatsAppMessage
             {
                 Direction = "outbound", WaMessageId = waId ?? $"failed-{Guid.NewGuid():N}", Phone = NormalizePhone(phone),
-                Type = type, Body = logBody, Status = res.IsSuccessStatusCode ? "sent" : "failed", OrderId = orderId,
+                Type = type, Body = logBody, Status = res.IsSuccessStatusCode ? "sent" : "failed", OrderId = orderId, LeadId = leadId,
             });
             await db.SaveChangesAsync();
             return res.IsSuccessStatusCode;

@@ -7,8 +7,8 @@ namespace Nuraherbex.UI.Services;
 
 public class ApiOptions
 {
-    /// <summary>Base address of Nuraherbex.Api, e.g. http://localhost:5118/</summary>
-    public string BaseUrl { get; set; } = "http://localhost:5118/";
+    /// <summary>Base address of Nuraherbex.Api, e.g. https://nuraapi.apmiot.com/</summary>
+    public string BaseUrl { get; set; } = "https://nuraapi.apmiot.com/";
 }
 
 /// <summary>Holds the bearer tokens the ApiClient attaches. Persistence is handled by AuthState / AdminSession.</summary>
@@ -158,6 +158,12 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<WhatsAppStatusDto> AdminWhatsAppStatusAsync() => Call<WhatsAppStatusDto>(HttpMethod.Get, "api/admin/whatsapp/status", null, Who.Admin);
     public Task<WhatsAppMessageListResponse> AdminWhatsAppMessagesAsync(int take = 100) => Call<WhatsAppMessageListResponse>(HttpMethod.Get, $"api/admin/whatsapp/messages?take={take}", null, Who.Admin);
     public Task<ApiResult> AdminWhatsAppSendAsync(WhatsAppSendRequest r) => Call<ApiResult>(HttpMethod.Post, "api/admin/whatsapp/send", r, Who.Admin);
+
+    public Task<LeadListResponse> AdminLeadsAsync(string? status = null, string? source = null, string? q = null, int take = 100) =>
+        Call<LeadListResponse>(HttpMethod.Get, $"api/admin/leads?take={take}&status={Uri.EscapeDataString(status ?? "")}&source={Uri.EscapeDataString(source ?? "")}&q={Uri.EscapeDataString(q ?? "")}", null, Who.Admin);
+    public Task<LeadDetailResponse> AdminLeadDetailAsync(long id) => Call<LeadDetailResponse>(HttpMethod.Get, $"api/admin/leads/{id}", null, Who.Admin);
+    public Task<ApiResult> AdminLeadStatusAsync(long id, LeadStatusRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/status", r, Who.Admin);
+    public Task<ApiResult> AdminLeadNotesAsync(long id, LeadNotesRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/notes", r, Who.Admin);
     public Task<AdminProductListResponse> AdminCatalogAsync() => Call<AdminProductListResponse>(HttpMethod.Get, "api/admin/catalog/products", null, Who.Admin);
     public Task<AdminProductResponse> AdminSaveProductAsync(AdminProductDto p, bool create) => Call<AdminProductResponse>(create ? HttpMethod.Post : HttpMethod.Put, "api/admin/catalog/products" + (create ? "" : "/" + Uri.EscapeDataString(p.Id)), p, Who.Admin);
     public Task<ApiResult> AdminArchiveProductAsync(string id) => Call<ApiResult>(HttpMethod.Delete, "api/admin/catalog/products/" + Uri.EscapeDataString(id), null, Who.Admin);

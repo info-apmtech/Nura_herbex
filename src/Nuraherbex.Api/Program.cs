@@ -61,6 +61,7 @@ builder.Services.AddHttpClient<EmailService>();
 builder.Services.AddHttpClient<ShiprocketService>();
 builder.Services.AddHttpClient<ShadowfaxService>(http => http.Timeout = TimeSpan.FromSeconds(25));
 builder.Services.AddScoped<ShippingGateway>();
+builder.Services.AddScoped<LeadService>();
 builder.Services.AddHttpClient<WhatsAppService>();
 
 // ---- Auth (JWT for customers and admins) ----------------------------------------------

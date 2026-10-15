@@ -105,7 +105,12 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
             && !string.IsNullOrWhiteSpace(duplicateAwb)
             && responseText.Contains("already created", StringComparison.OrdinalIgnoreCase);
         if (!string.Equals(responseMessage, "Success", StringComparison.OrdinalIgnoreCase) && !isDuplicateBooking)
-            throw new InvalidOperationException($"Shadowfax: {NodeText(res, "errors") ?? responseMessage ?? "order creation was rejected"}");
+        {
+            // Shadowfax often answers 200 with only "Failure"; keep the whole body so the real reason (field / address / account setup) is visible.
+            log.LogWarning("[Shadowfax] Order {Coid} rejected: {Body}", requestedClientOrderId, responseText);
+            var detail = responseText.Length > 600 ? responseText[..600] + "…" : responseText;
+            throw new InvalidOperationException($"Shadowfax: {NodeText(res, "errors") ?? responseMessage ?? "order creation was rejected"} — response: {detail}");
+        }
 
         var awb = isDuplicateBooking ? duplicateAwb : NodeText(data, "awb_number", "AWB", "awb") ?? NodeText(res, "awb_number", "AWB", "awb");
         if (string.IsNullOrWhiteSpace(awb))
@@ -313,15 +318,17 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
         var text = await res.Content.ReadAsStringAsync();
         if (!res.IsSuccessStatusCode)
         {
-            log.LogError("[Shadowfax] {Method} request failed with HTTP {Status}", method, (int)res.StatusCode);
+            var detail = text.Length > 600 ? text[..600] + "…" : text;
+            log.LogError("[Shadowfax] {Method} {Path} failed with HTTP {Status}: {Body}", method, path, (int)res.StatusCode, detail);
             string? msg = null;
             try
             {
+                // Prefer the specific "errors" payload over the generic "message": "Failure".
                 var j = JsonNode.Parse(text);
-                msg = j?["message"]?.ToString() ?? j?["responseMsg"]?.ToString() ?? j?["errors"]?.ToString() ?? j?["detail"]?.ToString();
+                msg = j?["errors"]?.ToJsonString() ?? j?["message"]?.ToString() ?? j?["responseMsg"]?.ToString() ?? j?["detail"]?.ToString();
             }
             catch (JsonException) { }
-            throw new InvalidOperationException($"Shadowfax: {msg ?? $"request failed ({(int)res.StatusCode})"}");
+            throw new InvalidOperationException($"Shadowfax: {msg ?? $"request failed ({(int)res.StatusCode})"} (HTTP {(int)res.StatusCode}) {detail}");
         }
         return string.IsNullOrWhiteSpace(text) ? null : JsonNode.Parse(text);
     }

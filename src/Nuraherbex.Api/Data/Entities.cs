@@ -190,5 +190,67 @@ public class WhatsAppMessage
     public string Status { get; set; } = "received";
     public string? OrderId { get; set; }
     public string? RawPayload { get; set; }
+    public long? LeadId { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A sales enquiry captured from WhatsApp (and, in later phases, Instagram / Facebook / website). One lead per normalised phone number.</summary>
+public class Lead
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = "";
+    /// <summary>E.164 digits without '+', e.g. 919876543210. Unique.</summary>
+    public string Phone { get; set; } = "";
+    public string? Email { get; set; }
+    /// <summary>whatsapp | instagram | facebook | website | manual</summary>
+    public string Source { get; set; } = "whatsapp";
+    /// <summary>Campaign / ad headline / form name that brought the lead in.</summary>
+    public string? SourceDetail { get; set; }
+    /// <summary>new | interested | follow-up | converted | not-interested</summary>
+    public string Status { get; set; } = "new";
+    /// <summary>unknown | opted_in | opted_out</summary>
+    public string ConsentStatus { get; set; } = "unknown";
+    public DateTime? ConsentAt { get; set; }
+    public string? ConsentSource { get; set; }
+    public string? FirstMessage { get; set; }
+    public string? Notes { get; set; }
+    public string? CustomerId { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime LastContactAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ConvertedAt { get; set; }
+}
+
+/// <summary>Chat state for a lead: unread count and the 24h WhatsApp customer-service window.</summary>
+public class Conversation
+{
+    public long Id { get; set; }
+    public long LeadId { get; set; }
+    public DateTime? LastInboundAt { get; set; }
+    public DateTime? LastOutboundAt { get; set; }
+    public int UnreadCount { get; set; }
+    /// <summary>Last inbound + 24h: free-form replies are allowed only until then; afterwards approved templates only.</summary>
+    public DateTime? ServiceWindowExpiresAt { get; set; }
+}
+
+/// <summary>Every time a known lead reaches out again through a source (keeps attribution without duplicating the lead).</summary>
+public class LeadSourceEvent
+{
+    public long Id { get; set; }
+    public long LeadId { get; set; }
+    public string Source { get; set; } = "whatsapp";
+    public string? Detail { get; set; }
+    public string? ReferralJson { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class LeadStatusHistory
+{
+    public long Id { get; set; }
+    public long LeadId { get; set; }
+    public string? FromStatus { get; set; }
+    public string ToStatus { get; set; } = "";
+    public string? Note { get; set; }
+    public string ChangedBy { get; set; } = "system";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
