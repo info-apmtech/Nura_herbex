@@ -29,8 +29,6 @@ builder.Services.AddOptions<ShadowfaxOptions>().Bind(cfg.GetSection(ShadowfaxOpt
     .Validate(o => o.Env is "staging" or "production", "Shadowfax:Env must be staging or production.")
     .Validate(o => o.OrderType is "marketplace" or "warehouse", "Unsupported Shadowfax order type.")
     .Validate(o => o.ServiceTier is "Regular" or "Surface", "Unsupported Shadowfax service tier.")
-    .Validate(o => !o.IsProduction || (o.IsConfigured && o.Pickup.IsComplete && o.WebhookToken.Length >= 32),
-        "Production Shadowfax requires a token, pickup address, and webhook token of at least 32 characters.")
     .ValidateOnStart();
 builder.Services.Configure<ShippingOptions>(cfg.GetSection(ShippingOptions.Section));
 builder.Services.Configure<EmailOptions>(cfg.GetSection(EmailOptions.Section));
@@ -152,6 +150,17 @@ if (genIdx >= 0)
 
 // Startup summary so it is obvious which database / PayU mode this process really uses (no secrets printed).
 {
+// Shadowfax settings problems must not stop the whole API (store, payments, WhatsApp): report them, and booking fails with a clear message instead.
+{
+    var sf = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<ShadowfaxOptions>>().Value;
+    var missing = new List<string>();
+    if (!sf.IsConfigured) missing.Add(sf.IsProduction ? "Shadowfax:Token" : "Shadowfax:StagingToken");
+    if (!sf.Pickup.IsComplete) missing.Add("Shadowfax:Pickup (AddressLine1, City, Pincode)");
+    if (sf.WebhookToken.Length < 32) missing.Add("Shadowfax:WebhookToken (32+ characters)");
+    if (missing.Count > 0)
+        app.Logger.LogWarning("[Startup] Shadowfax ({Env}) is not fully configured - missing: {Missing}. Shipment booking and callbacks will fail until set (env vars such as Shadowfax__Token, or appsettings.Local.json).", sf.Env, string.Join(", ", missing));
+}
+
     var csb = provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase) ? null : new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(cfg.GetConnectionString("Default"));
     var payuKey = cfg["PayU:MerchantKey"];
     app.Logger.LogInformation("[Startup] Environment={Env} | Database={Provider} {Server}/{Db} | PayU={Payu} ({PayuEnv}) | UserSecrets={Secrets}",
