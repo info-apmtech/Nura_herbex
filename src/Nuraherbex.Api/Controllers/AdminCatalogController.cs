@@ -6,7 +6,7 @@ using Nuraherbex.Shared.Models;
 
 namespace Nuraherbex.Api.Controllers;
 
-[ApiController, Authorize(Roles = "admin"), Route("api/admin/catalog")]
+[ApiController, Authorize(Roles = "admin,sales"), Route("api/admin/catalog")]
 public class AdminCatalogController(NuraDbContext db) : ControllerBase
 {
     private static AdminProductDto ProductDto(Product p) => new()

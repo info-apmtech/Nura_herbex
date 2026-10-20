@@ -1,6 +1,7 @@
 @implements IDisposable
 @inject ApiClient Api
 @inject AdminSession AdminAuth
+@inject NavigationManager Nav
 
 <div class="ld">
 
@@ -35,7 +36,7 @@
                         <Icon Name="RefreshCw" Size="14" Class="@(_loading ? "animate-spin" : "")" />
                     </button>
                 </div>
-                @if (AdminAuth.IsAdmin)
+                @if (AdminAuth.CanAll("leads"))
                 {
                     <select class="ld-assignee" aria-label="Filter by owner" value="@_assignee" @onchange="OnAssigneeFilterChanged">
                         <option value="">All owners</option>
@@ -85,8 +86,10 @@
                                 <span class="ld-row-meta">
                                     <span class="@($"ld-pill {lead.Status}")">@Label(lead.Status)</span>
                                     <span class="ld-src"><Icon Name="MessageCircle" Size="11" />@SourceLabel(lead.Source)@(string.IsNullOrEmpty(lead.SourceDetail) ? "" : " · " + lead.SourceDetail)</span>
-                                    @if (lead.AssignedToEmployeeId is null && AdminAuth.IsAdmin) { <span class="ld-pill ld-unowned">Unassigned</span> }
-                                    else if (AdminAuth.IsAdmin) { <span class="ld-src">· @lead.AssignedToName</span> }
+                                    @if (lead.AssignedToEmployeeId is null && AdminAuth.CanAll("leads")) { <span class="ld-pill ld-unowned">Unassigned</span> }
+                                    else if (AdminAuth.CanAll("leads")) { <span class="ld-src">· @lead.AssignedToName</span> }
+                                    @if (lead.OrderCount > 0) { <span class="ld-pill ld-cust" title="Lifetime value"><Icon Name="Package" Size="10" />@lead.OrderCount order@(lead.OrderCount == 1 ? "" : "s") · ₹@AdminFmt.Inr(lead.LifetimeValue)</span> }
+                                    @if (lead.NextFollowUpAt is { } nf) { <span class="@($"ld-pill ld-fu {(nf < DateTime.UtcNow ? "late" : "")}")" title="Next follow-up"><Icon Name="Clock" Size="10" />@FuFmt.Due(nf)</span> }
                                     @if (lead.ConsentStatus == "opted_out") { <span class="ld-pill ld-stop">Opted out</span> }
                                 </span>
                             </span>
@@ -124,9 +127,9 @@
                 </header>
 
                 <div class="ld-owner">
-                    <span>@(AdminAuth.IsAdmin ? "Owner" : "Transfer to")</span>
+                    <span>@(AdminAuth.CanAll("leads") ? "Owner" : "Transfer to")</span>
                     <select aria-label="Lead owner" disabled="@_busy" @onchange="OnOwnerChanged">
-                        @if (AdminAuth.IsAdmin)
+                        @if (AdminAuth.CanAll("leads"))
                         {
                             <option value="" selected="@(lead.AssignedToEmployeeId is null)">Unassigned</option>
                             @foreach (var t in _team) { <option value="@t.Id" selected="@(lead.AssignedToEmployeeId == t.Id)">@t.Name</option> }
@@ -138,6 +141,11 @@
                         }
                     </select>
                     @if (lead.AssignedAt is { } at) { <small>since @AdminFmt.DateTimeShort(at)</small> }
+                    <span class="ld-owner-gap"></span>
+                    @if (lead.NextFollowUpAt is { } nfu) { <span class="@($"ld-pill ld-fu {(nfu < DateTime.UtcNow ? "late" : "")}")"><Icon Name="Clock" Size="11" />Next: @FuFmt.Due(nfu)</span> }
+                    <button type="button" class="ld-btn" @onclick="() => _orderDialog = true"><Icon Name="Package" Size="13" /> Order</button>
+                    <button type="button" class="ld-btn" @onclick="() => _composer = true"><Icon Name="Plus" Size="13" /> Follow-up</button>
+                    @if (AdminAuth.Can("tasks")) { <button type="button" class="ld-btn" title="Create a task about this lead" @onclick="() => NewTaskFor(lead.Id)"><Icon Name="Check" Size="13" /> Task</button> }
                 </div>
 
                 <nav class="ld-dtabs" role="tablist">
@@ -178,21 +186,32 @@
                                         <div class="ld-day">@DayLabel(local.Date)</div>
                                     }
                                     var isTemplate = m.Type == "template" && (m.Body ?? "").StartsWith("[template:");
-                                    <div @key="m.Id" class="@($"ld-bub {(inbound ? "in" : "out")} {(first ? "first gap" : "")}")">
+                                    var isMedia = m.Type is "image" or "sticker" or "video" or "audio" or "document";
+                                    <div @key="m.Id" class="@($"ld-bub {(inbound ? "in" : "out")} {(first ? "first gap" : "")} {(m.Type == "sticker" ? "is-sticker" : "")} {(m.Reaction is not null ? "has-reaction" : "")}")">
+                                        @if (!inbound && !string.IsNullOrEmpty(m.SentBy)) { <span class="ld-by">@m.SentBy</span> }
+                                        @if (isMedia)
+                                        {
+                                            @MediaView(m)
+                                        }
                                         @if (isTemplate)
                                         {
                                             <span class="ld-tpl">Template message</span>
                                             <span class="ld-tpl-body">@m.Body</span>
                                         }
-                                        else
+                                        else if (!string.IsNullOrEmpty(m.Body))
                                         {
-                                            @(string.IsNullOrEmpty(m.Body) ? $"[{m.Type}]" : m.Body)
+                                            @LinkedText(m.Body)
+                                        }
+                                        else if (!isMedia)
+                                        {
+                                            @($"[{m.Type}]")
                                         }
                                         <span class="@($"ld-meta {(m.Status == "failed" ? "failed" : "")}")">
                                             @if (m.Status == "failed") { <span>Not delivered</span> }
                                             @local.ToString("hh:mm tt")
                                             @if (!inbound && m.Status != "failed") { @Ticks(m.Status) }
                                         </span>
+                                        @if (!string.IsNullOrEmpty(m.Reaction)) { <span class="ld-react" title="Customer reacted">@m.Reaction</span> }
                                     </div>
                                     prevDay = local.Date; prevDir = m.Direction;
                                 }
@@ -200,11 +219,37 @@
                         </div>
 
                         @if (!string.IsNullOrEmpty(_toast)) { <div class="ld-toast">@_toast</div> }
+
+                        @if (CanReply(lead) && _assistantOn)
+                        {
+                            <div class="ra">
+                                <div class="ra-top">
+                                    <span class="ra-title"><Icon Name="Zap" Size="13" /> @(_drafting ? "Writing a reply…" : _draft is null ? "Reply assistant" : _draft.Source == "ai" ? "AI draft" : "Standard reply")</span>
+                                    @if (!_drafting && _draft is not null && !string.IsNullOrEmpty(_draft.Intent)) { <span class="ld-pill new">@_draft.Intent</span> }
+                                    <span class="ra-gap"></span>
+                                    <button type="button" class="ra-chip strong" disabled="@(_busy || _drafting)" @onclick="() => SuggestAsync(null, true)">@(_draft is null ? "Suggest a reply" : "New draft")</button>
+                                    @foreach (var t in Tweaks)
+                                    {
+                                        var tweak = t;
+                                        <button type="button" class="ra-chip" disabled="@(_busy || _drafting || string.IsNullOrWhiteSpace(_reply))" @onclick="() => SuggestAsync(tweak.Instruction, false)">@tweak.Label</button>
+                                    }
+                                </div>
+                                @if (_draft is { NeedsReview: true } && !string.IsNullOrWhiteSpace(_reply))
+                                {
+                                    <div class="ra-warn"><Icon Name="AlertCircle" Size="13" /><span><strong>Check before sending.</strong> @(_draft.ReviewNote ?? "This reply needs a careful read.")</span></div>
+                                }
+                                @if (_draft?.RespondingTo is { Length: > 0 } q && !_drafting)
+                                {
+                                    <div class="ra-q">Replying to: “@q”</div>
+                                }
+                            </div>
+                        }
+
                         <form class="ld-composer" @onsubmit="ReplyAsync" @onsubmit:preventDefault>
-                            <input type="text" autocomplete="off" aria-label="Type a message" disabled="@(_busy || !CanReply(lead))"
-                                   placeholder="@(lead.ConsentStatus == "opted_out" ? "Customer opted out" : WindowOpen(lead) ? "Type a message" : "24-hour window closed")"
-                                   @bind="_reply" @bind:event="oninput" />
-                            <button type="submit" class="ld-send" aria-label="Send message" disabled="@(_busy || !CanReply(lead) || string.IsNullOrWhiteSpace(_reply))"><Icon Name="Send" Size="18" /></button>
+                            <textarea rows="@ReplyRows" aria-label="Type a message" disabled="@(_busy || !CanReply(lead))" maxlength="1500"
+                                      placeholder="@(lead.ConsentStatus == "opted_out" ? "Customer opted out" : WindowOpen(lead) ? "Type a message, or use the suggested reply" : "24-hour window closed")"
+                                      @bind="_reply" @bind:event="oninput" @onkeydown="OnReplyKey"></textarea>
+                            <button type="submit" class="ld-send" aria-label="Send message" title="Send (Ctrl+Enter)" disabled="@(_busy || _drafting || !CanReply(lead) || string.IsNullOrWhiteSpace(_reply))"><Icon Name="Send" Size="18" /></button>
                         </form>
                     </div>
                 }
@@ -238,6 +283,66 @@
                                 <dt>Reply window</dt>
                                 <dd class="@(WindowOpen(lead) ? "ld-ok" : "ld-warn")">@(WindowOpen(lead) ? "Open · " + WindowLeft(lead) + " left" : "Closed — templates only")</dd>
                             </dl>
+                            @if (lead.ConsentStatus != "opted_out")
+                            {
+                                <div class="ld-actions">
+                                    <small>Opt-in lets follow-up messages be sent automatically. Only record it after the customer agreed.</small>
+                                    @if (lead.ConsentStatus == "opted_in")
+                                    {
+                                        <button type="button" class="ld-btn" disabled="@_busy" @onclick='() => SetConsentAsync("unknown")'>Clear</button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="ld-btn" disabled="@_busy" @onclick='() => SetConsentAsync("opted_in")'>Customer agreed</button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <div class="ld-card wide">
+                            <h4>Customer &amp; orders</h4>
+                            <div class="lo-stats">
+                                <div><span>Orders</span><strong>@lead.OrderCount</strong></div>
+                                <div><span>Lifetime value</span><strong>₹@AdminFmt.Inr(lead.LifetimeValue)</strong></div>
+                                <div><span>Last order</span><strong>@(lead.LastOrderAt is { } lo ? AdminFmt.DateTimeShort(lo) : "—")</strong></div>
+                            </div>
+                            @if (_selected.Orders.Count == 0)
+                            {
+                                <p class="fu-hint">No orders yet. When the customer agrees to buy, use <strong>Order</strong> to place it for them.</p>
+                            }
+                            else
+                            {
+                                <div class="lo-orders">
+                                    @foreach (var o in _selected.Orders)
+                                    {
+                                        <div class="lo-order">
+                                            <div>
+                                                <strong>@o.Id</strong>
+                                                <small>@o.Items</small>
+                                                <small>@AdminFmt.DateTimeShort(o.CreatedAt) · @(o.PaymentMethod == "COD" ? "Cash on delivery" : "Paid") @(string.IsNullOrEmpty(o.Awb) ? "" : "· " + o.Courier + " " + o.Awb)</small>
+                                            </div>
+                                            <div class="lo-order-end">
+                                                <b>₹@AdminFmt.Inr(o.TotalAmount)</b>
+                                                <span class="@($"ld-pill {OrderTone(o.FulfillmentStatus)}")">@o.DeliveryStatus</span>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            <div class="ld-actions"><button type="button" class="ld-btn primary" @onclick="() => _orderDialog = true"><Icon Name="Package" Size="13" /> Create order</button></div>
+                        </div>
+                        <div class="ld-card wide">
+                            <h4>Follow-ups</h4>
+                            @if (_selected.FollowUps.Count == 0)
+                            {
+                                <p class="fu-hint">No follow-ups yet. Schedule a call or message so this lead is not forgotten.</p>
+                            }
+                            <div class="fu-list tight">
+                                @foreach (var fu in _selected.FollowUps)
+                                {
+                                    <FollowUpCard @key="fu.Id" Item="fu" ShowLead="false" IsAdmin="Everyone" Team="_team" OnChanged="OnFollowUpChanged" />
+                                }
+                            </div>
+                            <div class="ld-actions"><button type="button" class="ld-btn primary" @onclick="() => _composer = true"><Icon Name="Plus" Size="13" /> Schedule follow-up</button></div>
                         </div>
                         <div class="ld-card">
                             <h4>First message</h4>
@@ -287,7 +392,19 @@
     </div>
 </div>
 
+@if (_orderDialog && _selected?.Lead is { } ol)
+{
+    <LeadOrderDialog LeadId="ol.Id" LeadName="@ol.Name" LeadEmail="@ol.Email" OnClose="() => _orderDialog = false" OnCreated="OnOrderCreated" />
+}
+
+@if (_composer && _selected?.Lead is { } cl)
+{
+    <FollowUpComposer LeadId="cl.Id" LeadName="@cl.Name" LeadPhone="@cl.Phone" IsAdmin="Everyone" Team="_team" OnClose="() => _composer = false" OnCreated="OnFollowUpCreated" />
+}
+
 @code {
+    private void NewTaskFor(long leadId) => Nav.NavigateTo("/admin/tasks?lead=" + leadId);
+    private bool Everyone => AdminAuth.CanAll("leads");
     private static readonly string[] KpiStatuses = [LeadStatuses.New, LeadStatuses.Interested, LeadStatuses.FollowUp, LeadStatuses.Converted];
     private static readonly string[] Palette = ["#235b40", "#2f6f8f", "#7a5aa6", "#b5792a", "#a24b5a", "#3f7d7a", "#5b6f2c"];
 
@@ -300,6 +417,8 @@
     private string _reply = "";
     private string _notes = "";
     private string _tab = "chat";
+    private bool _composer;
+    private bool _orderDialog;
     private string _assignee = "";
     private int _unassigned;
     private List<EmployeeDto> _team = new();
@@ -313,7 +432,11 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await Task.WhenAll(LoadAsync(true), LoadTeamAsync());
+        await Task.WhenAll(LoadAsync(true), LoadTeamAsync(), LoadAssistantSettingsAsync());
+        // Arrived from a follow-up or notification: open that lead straight away.
+        var q = Nav.ToAbsoluteUri(Nav.Uri).Query;
+        var m = System.Text.RegularExpressions.Regex.Match(q, @"[?&]open=(\d+)");
+        if (m.Success && long.TryParse(m.Groups[1].Value, out var openId)) await OpenAsync(openId);
         _ = PollAsync();
     }
 
@@ -359,12 +482,12 @@
         if (_selected?.Lead is not { } lead) return;
         var raw = e.Value?.ToString() ?? "";
         long? target = long.TryParse(raw, out var id) ? id : null;
-        if (target is null && !AdminAuth.IsAdmin) return; // placeholder option
+        if (target is null && !AdminAuth.CanAll("leads")) return; // placeholder option
         if (target == lead.AssignedToEmployeeId) return;
         _busy = true;
         var res = await Api.AdminLeadAssignAsync(lead.Id, new LeadAssignRequest { EmployeeId = target });
         _toast = res.Message;
-        if (res.Success && !AdminAuth.IsAdmin) { _selected = null; } // no longer theirs
+        if (res.Success && !AdminAuth.CanAll("leads")) { _selected = null; } // no longer theirs
         else await RefreshDetailAsync(lead.Id, keepNotes: true);
         await LoadAsync(false);
         _busy = false;
@@ -375,7 +498,7 @@
 
     private async Task OpenAsync(long id)
     {
-        _toast = null; _tab = "chat"; _reply = "";
+        _toast = null; _tab = "chat"; _reply = ""; _draft = null; _draftForMessage = 0;
         await RefreshDetailAsync(id, keepNotes: false);
         await LoadAsync(false); // the unread badge clears once the conversation is opened
     }
@@ -392,6 +515,7 @@
         _selected = res;
         _notes = keepNotes && sameLead ? prevNotes : res.Lead.Notes ?? "";
         StateHasChanged();
+        await MaybeDraftAsync();
     }
 
     private async Task OnStatusChanged(ChangeEventArgs e)
@@ -405,6 +529,45 @@
         _busy = false;
     }
 
+    private async Task OnFollowUpChanged(string? message)
+    {
+        _toast = message;
+        if (_selected?.Lead is { } l) await RefreshDetailAsync(l.Id, keepNotes: true);
+        await LoadAsync(false);
+    }
+
+    private static string OrderTone(string fulfillment) => fulfillment switch
+    {
+        "DELIVERED" => "converted",
+        "CANCELLED" or "RTO" => "not-interested",
+        "PENDING" => "follow-up",
+        _ => "new",
+    };
+
+    private async Task OnOrderCreated(string? message)
+    {
+        _orderDialog = false;
+        _tab = "info";
+        await OnFollowUpChanged(message);
+    }
+
+    private async Task OnFollowUpCreated(string? message)
+    {
+        _composer = false;
+        _tab = "info";
+        await OnFollowUpChanged(message);
+    }
+
+    private async Task SetConsentAsync(string status)
+    {
+        if (_selected?.Lead is not { } lead) return;
+        _busy = true;
+        var res = await Api.AdminLeadConsentAsync(lead.Id, status);
+        _toast = res.Message;
+        await RefreshDetailAsync(lead.Id, keepNotes: true);
+        _busy = false;
+    }
+
     private async Task SaveNotesAsync()
     {
         if (_selected?.Lead is not { } lead) return;
@@ -414,13 +577,72 @@
         _busy = false;
     }
 
+    // ---- Reply assistant: a drafted reply the employee edits before sending ----
+
+    private sealed record Tweak(string Label, string Instruction);
+    private static readonly Tweak[] Tweaks =
+    [
+        new("Shorter", "make it shorter"),
+        new("Friendlier", "make it warmer and friendlier"),
+        new("More formal", "make it more formal and professional"),
+        new("Tamil", "translate it into natural Tamil"),
+        new("Hindi", "translate it into natural Hindi"),
+    ];
+
+    private ReplySuggestionResponse? _draft;
+    private bool _drafting;
+    private bool _assistantOn = true;
+    private long _draftForMessage;
+
+    private int ReplyRows => Math.Clamp((_reply ?? "").Split('\n').Length + (_reply?.Length ?? 0) / 70, 2, 8);
+
+    private async Task OnReplyKey(KeyboardEventArgs e)
+    {
+        if (e.CtrlKey && e.Key == "Enter") await ReplyAsync();
+    }
+
+    /// <summary>When a customer message is waiting and the box is empty, draft the reply into it.</summary>
+    private async Task MaybeDraftAsync()
+    {
+        if (!_assistantOn || _drafting || _tab != "chat" || _selected?.Lead is not { } lead || !CanReply(lead)) return;
+        var last = _selected.Messages.LastOrDefault();
+        if (last is null || last.Direction != "inbound" || last.Id == _draftForMessage || !string.IsNullOrWhiteSpace(_reply)) return;
+        await SuggestAsync(null, false);
+    }
+
+    private async Task SuggestAsync(string? instruction, bool fresh)
+    {
+        if (_selected?.Lead is not { } lead) return;
+        var lastInbound = _selected.Messages.LastOrDefault(m => m.Direction == "inbound");
+        _drafting = true; _toast = null; StateHasChanged();
+        var res = await Api.AdminSuggestReplyAsync(lead.Id, new ReplySuggestRequest { Fresh = fresh, Instruction = instruction, CurrentDraft = string.IsNullOrWhiteSpace(_reply) ? null : _reply });
+        _drafting = false;
+        if (_selected?.Lead?.Id != lead.Id) return; // moved on to another lead meanwhile
+        if (res.Success)
+        {
+            _draft = res; _reply = res.Reply; _draftForMessage = lastInbound?.Id ?? 0;
+            if (instruction is not null && res.Source != "ai") _toast = res.ReviewNote;
+        }
+        else
+        {
+            if (res.Message?.Contains("switched off") == true) _assistantOn = false;
+            _toast = res.Message ?? "Could not write a reply.";
+        }
+    }
+
+    private async Task LoadAssistantSettingsAsync()
+    {
+        var s = await Api.AdminReplySettingsAsync();
+        if (s.Success) _assistantOn = s.Enabled;
+    }
+
     private async Task ReplyAsync()
     {
         if (_selected?.Lead is not { } lead || string.IsNullOrWhiteSpace(_reply) || !CanReply(lead)) return;
         _busy = true;
         var res = await Api.AdminLeadReplyAsync(lead.Id, _reply.Trim());
         _toast = res.Success ? null : res.Message;
-        if (res.Success) _reply = "";
+        if (res.Success) { _reply = ""; _draft = null; }
         await RefreshDetailAsync(lead.Id, keepNotes: true);
         await LoadAsync(false);
         _busy = false;
@@ -508,6 +730,59 @@
         var today = DateTime.Now.Date;
         return day == today ? "Today" : day == today.AddDays(-1) ? "Yesterday" : day.ToString("dd MMMM yyyy");
     }
+
+    /// <summary>Photo, sticker, video, voice note or document the customer sent. Shows a plain note if the file can no longer be fetched.</summary>
+    private RenderFragment MediaView(WhatsAppMessageDto m) => builder =>
+    {
+        var url = m.MediaUrl is null ? null : Api.Url(m.MediaUrl);
+        var label = m.Type switch { "image" => "photo", "sticker" => "sticker", "video" => "video", "audio" => "voice message", _ => "document" };
+        if (url is null)
+        {
+            builder.AddMarkupContent(0, $"<span class=\"ld-nomedia\">{(m.Type == "sticker" ? "Sticker" : "A " + label)} was sent, but the file is not available.</span>");
+            return;
+        }
+        var safeUrl = System.Net.WebUtility.HtmlEncode(url);
+        var fallback = $"<span class=\"ld-nomedia\" hidden>The {label} could not be loaded. Ask the customer to send it again.</span>";
+        switch (m.Type)
+        {
+            case "image":
+                builder.AddMarkupContent(1, $"<a href=\"{safeUrl}\" target=\"_blank\" rel=\"noopener\"><img class=\"ld-media\" loading=\"lazy\" alt=\"Photo from the customer\" src=\"{safeUrl}\" onerror=\"this.hidden=true;this.parentElement.nextElementSibling.hidden=false\" /></a>{fallback}");
+                break;
+            case "sticker":
+                builder.AddMarkupContent(1, $"<img class=\"ld-sticker\" loading=\"lazy\" alt=\"Sticker from the customer\" src=\"{safeUrl}\" onerror=\"this.hidden=true;this.nextElementSibling.hidden=false\" />{fallback}");
+                break;
+            case "video":
+                builder.AddMarkupContent(1, $"<video class=\"ld-media\" controls preload=\"metadata\" src=\"{safeUrl}\" onerror=\"this.hidden=true;this.nextElementSibling.hidden=false\"></video>{fallback}");
+                break;
+            case "audio":
+                builder.AddMarkupContent(1, $"<audio class=\"ld-audio\" controls preload=\"none\" src=\"{safeUrl}\" onerror=\"this.hidden=true;this.nextElementSibling.hidden=false\"></audio>{fallback}");
+                break;
+            default:
+                var name = System.Net.WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(m.MediaName) ? "Document" : m.MediaName);
+                builder.AddMarkupContent(1, $"<a class=\"ld-doc\" href=\"{safeUrl}\" target=\"_blank\" rel=\"noopener\"><span>📄</span><strong>{name}</strong><small>Open</small></a>");
+                break;
+        }
+    };
+
+    /// <summary>Message text with web links (such as a shared location) made clickable. Everything else is plain text.</summary>
+    private static RenderFragment LinkedText(string text) => builder =>
+    {
+        var parts = System.Text.RegularExpressions.Regex.Split(text, @"(https?://\S+)");
+        var seq = 0;
+        foreach (var p in parts)
+        {
+            if (p.StartsWith("http://") || p.StartsWith("https://"))
+            {
+                builder.OpenElement(seq++, "a");
+                builder.AddAttribute(seq++, "href", p);
+                builder.AddAttribute(seq++, "target", "_blank");
+                builder.AddAttribute(seq++, "rel", "noopener");
+                builder.AddContent(seq++, p);
+                builder.CloseElement();
+            }
+            else builder.AddContent(seq++, p);
+        }
+    };
 
     private static RenderFragment Ticks(string status) => builder =>
     {

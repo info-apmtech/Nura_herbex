@@ -1,0 +1,139 @@
+@inject ApiClient Api
+
+@* "Schedule a follow-up" dialog. Pass a lead to fix it, or leave LeadId empty to search for one. *@
+<div class="fu-modal-backdrop" @onclick="OnClose">
+    <div class="fu-modal" role="dialog" aria-modal="true" aria-label="Schedule a follow-up" @onclick:stopPropagation="true">
+        <header>
+            <h3>Schedule a follow-up</h3>
+            <button type="button" class="em-x" aria-label="Close" @onclick="OnClose"><Icon Name="X" Size="16" /></button>
+        </header>
+
+        <div class="fu-form">
+            @* 1. who *@
+            <div class="fu-step"><span>1</span> Who?</div>
+            @if (_lead is not null)
+            {
+                <div class="fu-picked">
+                    <strong>@_lead.Name</strong><small>+@_lead.Phone</small>
+                    @if (LeadId is null) { <button type="button" class="fu-link" @onclick="() => { _lead = null; _hits = new(); }">Change</button> }
+                </div>
+            }
+            else
+            {
+                <div class="ld-search"><Icon Name="Search" Size="15" />
+                    <input type="search" placeholder="Search a lead by name or phone" aria-label="Search leads" @bind="_query" @bind:event="oninput" @bind:after="SearchAsync" />
+                </div>
+                @if (_hits.Count > 0)
+                {
+                    <div class="fu-hits">
+                        @foreach (var h in _hits)
+                        {
+                            var hit = h;
+                            <button type="button" @onclick="() => _lead = hit"><strong>@hit.Name</strong><small>+@hit.Phone · @hit.Status</small></button>
+                        }
+                    </div>
+                }
+                else if (_query.Trim().Length >= 2 && !_searching) { <p class="fu-hint">No lead found. Leads appear here once someone messages you or orders.</p> }
+            }
+
+            @* 2. what *@
+            <div class="fu-step"><span>2</span> What should happen?</div>
+            <div class="fu-types">
+                @foreach (var t in Types)
+                {
+                    var type = t;
+                    <button type="button" class="@($"fu-type {(_type == type ? "is-picked" : "")}")" @onclick="() => _type = type"><Icon Name="@FuFmt.Icon(type)" Size="16" /> @FuFmt.TypeLabel(type)</button>
+                }
+            </div>
+            <input type="text" class="fu-input" maxlength="200" placeholder="Short title (optional) — e.g. Confirm the 3-month pack" @bind="_title" @bind:event="oninput" />
+
+            @* 3. when *@
+            <div class="fu-step"><span>3</span> When?</div>
+            <div class="fu-quick">
+                @foreach (var p in FuFmt.QuickPicks())
+                {
+                    var pick = p;
+                    <button type="button" class="@Quick(pick.When)" @onclick="() => _due = pick.When">@pick.Label</button>
+                }
+            </div>
+            <label class="fu-field">Or pick a date and time
+                <input type="datetime-local" class="fu-input" aria-label="Custom date and time" min="@FuFmt.DateInput(DateTime.Now)" value="@FuFmt.DateInput(_due)" @onchange="e => _due = DateTime.TryParse(e.Value?.ToString(), out var d) ? d : _due" />
+            </label>
+            <p class="fu-hint"><Icon Name="Bell" Size="12" /> The owner is reminded 2 days before, and again when it is due.</p>
+
+            <textarea class="fu-input" rows="2" maxlength="500" placeholder="Notes for whoever follows up (optional)" @bind="_notes" @bind:event="oninput"></textarea>
+
+            @if (IsAdmin && Team.Count > 0)
+            {
+                <label class="fu-field">Owner
+                    <select @bind="_owner">
+                        <option value="">Same as the lead's owner</option>
+                        @foreach (var t in Team) { <option value="@t.Id">@t.Name</option> }
+                    </select>
+                </label>
+            }
+
+            @if (!string.IsNullOrEmpty(_error)) { <div class="fu-flash bad" role="alert">@_error</div> }
+        </div>
+
+        <footer>
+            <button type="button" class="ld-btn" @onclick="OnClose">Cancel</button>
+            <button type="button" class="ld-btn primary" disabled="@(_busy || _lead is null)" @onclick="SaveAsync">@(_busy ? "Saving…" : "Schedule")</button>
+        </footer>
+    </div>
+</div>
+
+@code {
+    [Parameter] public long? LeadId { get; set; }
+    [Parameter] public string? LeadName { get; set; }
+    [Parameter] public string? LeadPhone { get; set; }
+    [Parameter] public bool IsAdmin { get; set; }
+    [Parameter] public List<EmployeeDto> Team { get; set; } = new();
+    [Parameter] public EventCallback<string?> OnCreated { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private static readonly string[] Types = [FollowUpTypes.Call, FollowUpTypes.WhatsApp, FollowUpTypes.Reorder, FollowUpTypes.Other];
+
+    private LeadDto? _lead;
+    private List<LeadDto> _hits = new();
+    private string _query = "";
+    private string _type = FollowUpTypes.Call;
+    private string _title = "";
+    private string _notes = "";
+    private string _owner = "";
+    private DateTime _due = FuFmt.AtTen(1);
+    private string? _error;
+    private bool _busy, _searching;
+
+    protected override void OnInitialized()
+    {
+        if (LeadId is { } id) _lead = new LeadDto { Id = id, Name = LeadName ?? "Lead", Phone = LeadPhone ?? "" };
+    }
+
+    private string Quick(DateTime t) => $"fu-chip {(_due == t ? "is-picked" : "")}";
+
+    private async Task SearchAsync()
+    {
+        var q = _query.Trim();
+        if (q.Length < 2) { _hits = new(); return; }
+        _searching = true;
+        var res = await Api.AdminLeadsAsync(null, null, q, null, 6);
+        _hits = res.Success ? res.Leads : new();
+        _searching = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_lead is null) return;
+        _busy = true; _error = null;
+        var res = await Api.AdminCreateFollowUpAsync(new FollowUpCreateRequest
+        {
+            LeadId = _lead.Id, Type = _type, Title = string.IsNullOrWhiteSpace(_title) ? null : _title.Trim(),
+            Notes = string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim(), DueAt = FuFmt.ToUtc(_due),
+            AssignedToEmployeeId = long.TryParse(_owner, out var o) ? o : null,
+        });
+        _busy = false;
+        if (res.Success) await OnCreated.InvokeAsync(res.Message);
+        else _error = res.Message ?? "Could not schedule the follow-up.";
+    }
+}

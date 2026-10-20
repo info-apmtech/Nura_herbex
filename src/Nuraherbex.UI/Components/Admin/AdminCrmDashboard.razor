@@ -1,0 +1,179 @@
+@inject ApiClient Api
+@inject AdminSession AdminAuth
+@inject NavigationManager Nav
+
+<div class="ld fr">
+    <div class="fr-bar">
+        <p>@(AdminAuth.CanAll("crm") ? "How leads turn into customers, how fast the team replies, and what needs a person right now." : "Your leads, your replies and your sales.")</p>
+        <div class="fr-range" role="group" aria-label="Period">
+            @foreach (var d in new[] { 7, 30, 90 })
+            {
+                var days = d;
+                <button type="button" class="@($"fu-chip {(_days == days ? "is-picked" : "")}")" @onclick="() => LoadAsync(days)">Last @days days</button>
+            }
+        </div>
+    </div>
+
+    @if (_r is null)
+    {
+        <div class="ld-empty">@(_error ?? "Loading dashboard…")</div>
+    }
+    else
+    {
+        <div class="fr-kpis">
+            <div class="fr-kpi"><span>New leads</span><strong>@_r.NewLeads</strong><small>@_r.ConvertedLeads became customers in this period</small></div>
+            <div class="fr-kpi"><span>Conversion</span><strong>@_r.ConversionRate%</strong><small>of new leads are now customers</small><i style="width:@_r.ConversionRate%"></i></div>
+            <div class="fr-kpi"><span>Sales from leads</span><strong>₹@AdminFmt.Inr(_r.Revenue)</strong><small>@_r.Orders order@(_r.Orders == 1 ? "" : "s")@(_r.Orders > 0 ? $" · average ₹{AdminFmt.Inr(_r.AverageOrderValue)}" : "")</small></div>
+            <div class="@($"fr-kpi {(_r.AwaitingFirstReply > 0 ? "bad" : "")}")">
+                <span>First reply</span><strong>@(_r.MedianFirstReplyMinutes is { } m ? Mins(m) : "—")</strong>
+                <small>@(_r.AwaitingFirstReply > 0 ? $"{_r.AwaitingFirstReply} waiting over an hour · " : "")@_r.RepliedWithinHourPercent% answered within an hour</small>
+            </div>
+        </div>
+
+        <div class="fr-kpis">
+            <div class="fr-kpi"><span>Open leads</span><strong>@_r.OpenLeads</strong><small>still being worked</small></div>
+            @if (AdminAuth.CanAll("crm"))
+            {
+                <div class="@($"fr-kpi {(_r.Unassigned > 0 ? "bad" : "")}")"><span>Unassigned</span><strong>@_r.Unassigned</strong><small>nobody owns these yet</small></div>
+            }
+            <div class="@($"fr-kpi {(_r.FollowUpsOverdue > 0 ? "bad" : "")}")"><span>Follow-ups overdue</span><strong>@_r.FollowUpsOverdue</strong><small><button type="button" class="fu-link" @onclick='() => Nav.NavigateTo("/admin/followups")'>Open follow-ups</button></small></div>
+            <div class="fr-kpi"><span>Due today</span><strong>@_r.FollowUpsToday</strong><small>calls and messages to do today</small></div>
+        </div>
+
+        @if (_r.NeedsAttention.Count > 0)
+        {
+            <div class="ld-card">
+                <h4>Needs attention now</h4>
+                <ul class="cd-attn">
+                    @foreach (var a in _r.NeedsAttention)
+                    {
+                        var row = a;
+                        <li>
+                            <button type="button" class="fu-link" @onclick='() => Nav.NavigateTo("/admin/leads?open=" + row.LeadId)'>@row.Name</button>
+                            <span>@row.Reason</span>
+                            <small>@(row.Owner is null ? "Unassigned" : row.Owner) · since @FuFmt.Due(row.Since)</small>
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <div class="cd-two">
+            <div class="ld-card">
+                <h4>Lead funnel</h4>
+                @{ var max = Math.Max(1, _r.Funnel.Max(f => f.Count)); }
+                @foreach (var f in _r.Funnel)
+                {
+                    <div class="cd-bar">
+                        <span>@StatusLabel(f.Status)</span>
+                        <div><i class="@($"s-{f.Status}")" style="width:@(100.0 * f.Count / max)%"></i></div>
+                        <b>@f.Count</b>
+                    </div>
+                }
+                <p class="fu-hint">Where the leads created in this period are now.</p>
+            </div>
+
+            <div class="ld-card">
+                <h4>New leads by day</h4>
+                @if (_r.Trend.All(t => t.NewLeads == 0 && t.Converted == 0))
+                {
+                    <p class="fu-hint">No new leads in this period yet.</p>
+                }
+                else
+                {
+                    var tmax = Math.Max(1, _r.Trend.Max(t => Math.Max(t.NewLeads, t.Converted)));
+                    <div class="fr-chart" role="img" aria-label="New leads and conversions per day">
+                        @foreach (var t in _r.Trend)
+                        {
+                            <div class="fr-col" title="@t.Day: @t.NewLeads new, @t.Converted converted">
+                                <div class="fr-bars"><span class="due" style="height:@(100.0 * t.NewLeads / tmax)%"></span><span class="done" style="height:@(100.0 * t.Converted / tmax)%"></span></div>
+                                <small>@(_r.Trend.Count <= 14 || _r.Trend.IndexOf(t) % 4 == 0 ? t.Day : "")</small>
+                            </div>
+                        }
+                    </div>
+                    <div class="fr-legend"><span><i class="due"></i> New leads</span><span><i class="done"></i> Became customers</span></div>
+                }
+            </div>
+        </div>
+
+        <div class="ld-card em-table-card">
+            <h4 class="fr-pad">Where leads come from</h4>
+            <div class="em-scroll">
+                <table class="em-table">
+                    <thead><tr><th class="sn">S.No</th><th>Source</th><th class="num">Leads</th><th class="num">Customers</th><th class="num">Conversion</th><th class="num">Sales</th></tr></thead>
+                    <tbody>
+                        @{ _sn = 0; }
+                        @foreach (var s in _r.BySource)
+                        {
+                            <tr><td class="sn">@(++_sn)</td><td><strong>@SourceLabel(s.Source)</strong></td><td class="num">@s.Leads</td><td class="num">@s.Converted</td><td class="num">@(s.Leads == 0 ? "—" : s.ConversionPercent + "%")</td><td class="num">₹@AdminFmt.Inr(s.Revenue)</td></tr>
+                        }
+                        @if (_r.BySource.Count == 0) { <tr><td colspan="6" class="em-empty">No leads in this period yet.</td></tr> }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (AdminAuth.CanAll("crm"))
+        {
+            <div class="ld-card em-table-card">
+                <h4 class="fr-pad">Team</h4>
+                <div class="em-scroll">
+                    <table class="em-table">
+                        <thead><tr><th class="sn">S.No</th><th>Employee</th><th class="num">New leads</th><th class="num">Customers</th><th class="num">Sales</th><th class="num">First reply</th><th class="num">Open leads</th><th class="num">Overdue</th></tr></thead>
+                        <tbody>
+                            @{ _sn = 0; }
+                            @foreach (var e in _r.ByEmployee)
+                            {
+                                <tr>
+                                    <td class="sn">@(++_sn)</td><td><strong>@e.Name</strong></td><td class="num">@e.Leads</td><td class="num">@e.Converted</td><td class="num">₹@AdminFmt.Inr(e.Revenue)</td>
+                                    <td class="num">@(e.MedianFirstReplyMinutes is { } em ? Mins(em) : "—")</td><td class="num">@e.OpenLeads</td>
+                                    <td class="num @(e.OverdueFollowUps > 0 ? "ld-bad" : "")">@e.OverdueFollowUps</td>
+                                </tr>
+                            }
+                            @if (_r.ByEmployee.Count == 0) { <tr><td colspan="8" class="em-empty"><strong>No employees yet</strong>Add your sales team in the Team tab.</td></tr> }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private int _sn;
+    private CrmDashboardResponse? _r;
+    private int _days = 30;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => LoadAsync(30);
+
+    private async Task LoadAsync(int days)
+    {
+        _days = days;
+        var res = await Api.AdminCrmDashboardAsync(days);
+        if (res.Success) { _r = res; _error = null; }
+        else _error = res.Message ?? "Could not load the dashboard.";
+    }
+
+    private static string Mins(int m) => m < 1 ? "under a minute" : m < 60 ? $"{m} min" : m < 1440 ? $"{m / 60} h {m % 60} m" : $"{m / 1440} d {m % 1440 / 60} h";
+
+    private static string StatusLabel(string s) => s switch
+    {
+        LeadStatuses.New => "New",
+        LeadStatuses.Interested => "Interested",
+        LeadStatuses.FollowUp => "Follow-up",
+        LeadStatuses.Converted => "Customer",
+        LeadStatuses.NotInterested => "Not interested",
+        _ => s,
+    };
+
+    private static string SourceLabel(string s) => s switch
+    {
+        "whatsapp" => "WhatsApp",
+        "instagram" => "Instagram",
+        "facebook" => "Facebook",
+        "website" => "Website / orders",
+        "manual" => "Added by hand",
+        _ => s,
+    };
+}

@@ -38,6 +38,12 @@ public class LeadDto
     public long? AssignedToEmployeeId { get; set; }
     public string? AssignedToName { get; set; }
     public DateTime? AssignedAt { get; set; }
+    /// <summary>Soonest pending follow-up, if any.</summary>
+    public DateTime? NextFollowUpAt { get; set; }
+    /// <summary>Orders placed by this customer (matched by phone) and what they are worth.</summary>
+    public int OrderCount { get; set; }
+    public decimal LifetimeValue { get; set; }
+    public DateTime? LastOrderAt { get; set; }
 }
 
 public class LeadStatusHistoryDto
@@ -65,6 +71,8 @@ public class LeadDetailResponse : ApiResult
     public List<WhatsAppMessageDto> Messages { get; set; } = new();
     public List<LeadStatusHistoryDto> History { get; set; } = new();
     public List<LeadAssignmentDto> Assignments { get; set; } = new();
+    public List<FollowUpDto> FollowUps { get; set; } = new();
+    public List<LeadOrderDto> Orders { get; set; } = new();
 }
 
 public class LeadStatusRequest
@@ -122,6 +130,11 @@ public class EmployeeDto
     /// <summary>Assigned leads that are not yet converted / closed.</summary>
     public int OpenLeads { get; set; }
     public int TotalLeads { get; set; }
+    public long? DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
+    public long? DesignationId { get; set; }
+    public string? DesignationName { get; set; }
+    public int OpenTasks { get; set; }
 }
 
 public class EmployeeSaveRequest
@@ -133,6 +146,8 @@ public class EmployeeSaveRequest
     public bool IsActive { get; set; } = true;
     /// <summary>Required when creating; when editing, leave empty to keep the current password.</summary>
     public string? Password { get; set; }
+    public long? DepartmentId { get; set; }
+    public long? DesignationId { get; set; }
 }
 
 public class EmployeeListResponse : ApiResult
@@ -156,4 +171,10 @@ public class EmployeeRemoveRequest
 public class LeadSettingsRequest
 {
     public bool AutoAssign { get; set; }
+}
+
+public class LeadConsentRequest
+{
+    /// <summary>opted_in | unknown</summary>
+    public string Status { get; set; } = "opted_in";
 }

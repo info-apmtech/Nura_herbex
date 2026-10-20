@@ -11,11 +11,11 @@ namespace Nuraherbex.Api.Controllers;
 public sealed class ShippingController(OrderService orders, ShippingGateway shipping) : ControllerBase
 {
     [HttpGet("{id}/track")]
-    [Authorize(Roles = "admin,customer")]
+    [Authorize(Roles = "admin,sales,customer")]
     public async Task<IActionResult> Track(string id)
     {
         var order = await orders.GetAsync(id);
-        if (order is null || (!User.IsInRole("admin") && (order.CustomerId is null || order.CustomerId != User.FindFirstValue(ClaimTypes.NameIdentifier))))
+        if (order is null || (!User.IsInRole("admin") && !User.IsInRole("sales") && (order.CustomerId is null || order.CustomerId != User.FindFirstValue(ClaimTypes.NameIdentifier))))
             return NotFound(new ApiResult { Message = "Order not found" });
         var dto = order.ToDto();
         await shipping.EnrichTrackingAsync(dto);

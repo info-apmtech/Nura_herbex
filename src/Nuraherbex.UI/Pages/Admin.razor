@@ -21,20 +21,21 @@ else
         <aside class="admin-sidebar @(_mobileMenu ? "is-open" : "")" aria-label="Admin navigation">
             <a class="admin-brand" href="/admin"><img class="admin-brand-logo" src="/_content/Nuraherbex.UI/images/logo-mark.png" alt="" /><span>Nura Herbex<small>STORE ADMINISTRATION</small></span></a>
             <div class="admin-store-label"><span class="admin-store-dot"></span> Your store workspace</div>
-            <nav>@foreach (var item in Navigation) { @if (item.Id == "overview") { <span class="admin-nav-label">MANAGE</span> } @if (item.Id == "leads" && !AdminAuth.IsAdmin) { <span class="admin-nav-label">MY WORK</span> } @if (item.Id == "batches") { <span class="admin-nav-label">STOREFRONT &amp; SUPPORT</span> }<button class="admin-nav-item @(_activeTab == item.Id ? "is-active" : "")" aria-current="@(_activeTab == item.Id ? "page" : null)" @onclick="() => Navigate(item.Id)"><Icon Name="@item.Icon" Size="19" /><span>@item.Label</span>@if (item.Id == "orders" && _orders.Any(o => o.FulfillmentStatus == "PENDING")) { <small>@_orders.Count(o => o.FulfillmentStatus == "PENDING")</small> }</button> }</nav>
-            <div class="admin-sidebar-bottom"><a class="admin-nav-item" href="/shop"><Icon Name="ExternalLink" Size="18" /> View storefront</a><div class="admin-user"><span class="admin-avatar">@(string.IsNullOrEmpty(AdminAuth.Name) ? "A" : AdminAuth.Name[..1].ToUpperInvariant())</span><span><strong>@(string.IsNullOrEmpty(AdminAuth.Name) ? "Administrator" : AdminAuth.Name)</strong><small>@AdminAuth.Email</small></span><button class="admin-icon-btn" title="Sign out" aria-label="Sign out" @onclick="LogoutAsync"><Icon Name="LogOut" Size="18" /></button></div></div>
+            <nav>@foreach (var group in Navigation.GroupBy(n => n.Group)) { <span class="admin-nav-label">@group.Key</span> @foreach (var item in group) { <button class="admin-nav-item @(_activeTab == item.Id ? "is-active" : "")" aria-current="@(_activeTab == item.Id ? "page" : null)" @onclick="() => Navigate(item.Id)"><Icon Name="@item.Icon" Size="19" /><span>@item.Label</span>@if (item.Id == "orders" && _orders.Any(o => o.FulfillmentStatus == "PENDING")) { <small>@_orders.Count(o => o.FulfillmentStatus == "PENDING")</small> }</button> } }</nav>
+            <div class="admin-sidebar-bottom"><a class="admin-nav-item" href="/shop"><Icon Name="ExternalLink" Size="18" /> View storefront</a><div class="admin-user"><span class="admin-avatar">@(string.IsNullOrEmpty(AdminAuth.Name) ? "A" : AdminAuth.Name[..1].ToUpperInvariant())</span><span><strong>@(string.IsNullOrEmpty(AdminAuth.Name) ? "Administrator" : AdminAuth.Name)</strong><small>@(AdminAuth.Designation ?? AdminAuth.Email)</small></span><button class="admin-icon-btn" title="Sign out" aria-label="Sign out" @onclick="LogoutAsync"><Icon Name="LogOut" Size="18" /></button></div></div>
         </aside>
         @if (_mobileMenu) { <button class="admin-mobile-backdrop" aria-label="Close navigation" @onclick="() => _mobileMenu = false"></button> }
-        <div class="admin-main"><header class="admin-topbar"><div class="admin-actions"><button class="admin-icon-btn admin-menu-toggle" aria-label="Toggle navigation" aria-expanded="@_mobileMenu" @onclick="() => _mobileMenu = !_mobileMenu"><Icon Name="Menu" Size="22" /></button><span class="admin-breadcrumb">Workspace <span>/</span> <strong>@PageName</strong></span></div><div class="admin-actions"><span class="admin-today">@DateTime.Now.ToString("ddd, dd MMM yyyy")</span><a class="admin-btn admin-btn-small" href="/shop"><Icon Name="ExternalLink" Size="15" /> Open store</a></div></header>
+        <div class="admin-main"><header class="admin-topbar"><div class="admin-actions"><button class="admin-icon-btn admin-menu-toggle" aria-label="Toggle navigation" aria-expanded="@_mobileMenu" @onclick="() => _mobileMenu = !_mobileMenu"><Icon Name="Menu" Size="22" /></button><span class="admin-breadcrumb">Workspace <span>/</span> <strong>@PageName</strong></span></div><div class="admin-actions">@if (AdminAuth.IsAuthenticated) { <AdminBell /> }<span class="admin-today">@DateTime.Now.ToString("ddd, dd MMM yyyy")</span><a class="admin-btn admin-btn-small" href="/shop"><Icon Name="ExternalLink" Size="15" /> Open store</a></div></header>
         <main class="admin-content">
         @if (_loadErrors.Count > 0) { <div role="alert" class="admin-error">@string.Join(" · ", _loadErrors.Select(e => e.Key + ": " + e.Value)) <button class="admin-btn admin-btn-small" @onclick="RefreshAsync">Retry</button></div> }
-        @if (_activeTab == "products") { <AdminProductsTab /> }
+        @if (!AdminAuth.HasAnyPage) { <div class="admin-error" role="status"><strong>No pages assigned yet.</strong> Ask an administrator to give your account a designation.</div> }
+        else if (_activeTab == "products") { <AdminProductsTab /> }
         else if (_activeTab == "coupons") { <AdminCouponsTab /> }
         else if (_activeTab == "reviews") { <AdminReviewsTab /> }
         else if (_activeTab == "overview") { <AdminDashboard Orders="_orders" Customers="_customers" Loading="@(_ordersLoading || _customersLoading)" OnNavigate="Navigate" /> }
         else
         {
-            <div class="admin-section-heading"><div><span class="admin-eyebrow">STORE OPERATIONS</span><h2>@PageName</h2><p>Manage your @PageName.ToLowerInvariant() in one place.</p></div></div>
+            @if (_activeTab is not ("team" or "tasks")) {<div class="admin-section-heading"><div><span class="admin-eyebrow">STORE OPERATIONS</span><h2>@PageName</h2><p>Manage your @PageName.ToLowerInvariant() in one place.</p></div></div>}
             <div class="admin-legacy">
             @if (_activeTab == "orders") { <AdminOrdersTab Orders="_orders" Loading="_ordersLoading" OnReload="LoadOrdersAsync" /> }
             else if (_activeTab == "payments") { <AdminPaymentsTab Attempts="_payments" Loading="_paymentsLoading" OnReload="LoadPaymentsAsync" /> }
@@ -42,9 +43,12 @@ else
             else if (_activeTab == "batches") { <AdminBatchesTab Batches="_batches" Loading="_batchesLoading" OnReload="LoadBatchesAsync" /> }
             else if (_activeTab == "formulation") { <AdminFormulationTab Ingredients="_ingredients" Metrics="_metrics" IngredientsChanged="OnIngredientsChanged" MetricsChanged="OnMetricsChanged" /> }
             else if (_activeTab == "content") { <AdminContentTab /> }
+            else if (_activeTab == "crm") { <AdminCrmDashboard /> }
             else if (_activeTab == "leads") { <AdminLeadsTab /> }
+            else if (_activeTab == "followups") { <AdminFollowUpsTab /> }
             else if (_activeTab == "whatsapp") { <AdminWhatsAppTab /> }
-            else if (_activeTab == "employees") { <AdminEmployeesTab /> }
+            else if (_activeTab == "team") { <AdminOrganisation /> }
+            else if (_activeTab == "tasks") { <AdminTasksTab /> }
             </div>
         }
         <footer class="admin-footer"><span>Nura Herbex · Store administration</span><span>Made for your everyday operations</span></footer>
@@ -55,13 +59,34 @@ else
     [Parameter] public string? Section { get; set; }
     private readonly Dictionary<string, string> _loadErrors = new();
     private bool _mobileMenu;
-    private static readonly (string Id, string Label, string Icon)[] AdminNavigation = { ("overview", "Overview", "TrendingUp"), ("products", "Products", "Package"), ("orders", "Orders", "ShoppingBag"), ("coupons", "Coupons", "Tag"), ("customers", "Customers", "Users"), ("reviews", "Reviews", "MessageSquare"), ("payments", "Payments", "CreditCard"), ("batches", "Batch reports", "ShieldCheck"), ("formulation", "Formulation", "FlaskConical"), ("content", "Store content", "FileText"), ("leads", "Leads", "Phone"), ("whatsapp", "WhatsApp", "MessageCircle"), ("employees", "Employees", "KeyRound") };
-    private static readonly (string Id, string Label, string Icon)[] SalesNavigation = { ("leads", "Leads", "Phone") };
-    private (string Id, string Label, string Icon)[] Navigation => AdminAuth.IsAdmin ? AdminNavigation : SalesNavigation;
-    private string PageName => Navigation.FirstOrDefault(n => n.Id == _activeTab).Label ?? "Overview";
-    protected override void OnParametersSet() => _activeTab = Navigation.Any(n => n.Id == Section) ? Section! : (AdminAuth.IsAdmin ? "overview" : "leads");
-    /// <summary>Sales users only get the leads workspace: send them there once their role is known.</summary>
-    private void EnsureRoleView() { if (AdminAuth.IsAuthenticated && !AdminAuth.IsAdmin && _activeTab != "leads") { _activeTab = "leads"; Nav.NavigateTo("/admin/leads", replace: true); } }
+    private record NavItem(string Id, string Label, string Icon, string Group);
+    private static readonly NavItem[] AllPages =
+    {
+        new("overview", "Overview", "TrendingUp", "MANAGE"), new("orders", "Orders", "ShoppingBag", "MANAGE"), new("payments", "Payments", "CreditCard", "MANAGE"), new("customers", "Customers", "Users", "MANAGE"),
+        new("products", "Products", "Package", "MANAGE"), new("coupons", "Coupons", "Tag", "MANAGE"), new("reviews", "Reviews", "MessageSquare", "MANAGE"),
+        new("crm", "Sales dashboard", "BarChart3", "SALES & WORK"), new("leads", "Leads", "Phone", "SALES & WORK"), new("followups", "Follow-ups", "Clock", "SALES & WORK"), new("tasks", "Tasks", "CheckCircle2", "SALES & WORK"),
+        new("whatsapp", "WhatsApp log", "MessageCircle", "ADMIN"), new("team", "Team & organisation", "KeyRound", "ADMIN"),
+        new("batches", "Batch reports", "ShieldCheck", "STOREFRONT & SUPPORT"), new("formulation", "Formulation", "FlaskConical", "STOREFRONT & SUPPORT"), new("content", "Store content", "FileText", "STOREFRONT & SUPPORT"),
+    };
+    /// <summary>Only the pages this person's designation allows. People who only see their own records get "My" wording.</summary>
+    private NavItem[] Navigation => AllPages.Where(p => AdminAuth.Can(p.Id)).Select(p => p.Id switch
+    {
+        "crm" when !AdminAuth.CanAll("crm") => p with { Label = "My dashboard" },
+        "followups" when !AdminAuth.CanAll("followups") => p with { Label = "My follow-ups" },
+        "tasks" when !AdminAuth.CanAll("tasks") => p with { Label = "My tasks" },
+        _ => p,
+    }).ToArray();
+    private string PageName => Navigation.FirstOrDefault(n => n.Id == _activeTab)?.Label ?? "Workspace";
+    private string DefaultTab => Navigation.Any(n => n.Id == "overview") ? "overview" : Navigation.Any(n => n.Id == "leads") ? "leads" : Navigation.FirstOrDefault()?.Id ?? "overview";
+    protected override void OnParametersSet() => _activeTab = Navigation.Any(n => n.Id == Section) ? Section! : DefaultTab;
+    /// <summary>Anyone who opens a page they have no right to is sent to the first page they can use.</summary>
+    private void EnsureRoleView()
+    {
+        if (!AdminAuth.IsAuthenticated || Navigation.Length == 0) return;
+        var want = Navigation.Any(n => n.Id == Section) ? Section! : DefaultTab;
+        if (want != _activeTab) _activeTab = want;
+        if (Section is not null && want != Section) Nav.NavigateTo("/admin/" + want, replace: true);
+    }
     private void Navigate(string id) { _mobileMenu = false; Nav.NavigateTo("/admin/" + id); }
     private void RecordError(string key, ApiResult result) { if (result.Success) _loadErrors.Remove(key); else _loadErrors[key] = result.Message ?? "Could not load data."; }
     private async Task RefreshAsync() { _dataLoaded = false; await LoadAllAsync(); }
@@ -116,9 +141,15 @@ else
 
     private async Task LoadAllAsync()
     {
-        if (_dataLoaded || !AdminAuth.IsAdmin) return;
+        if (_dataLoaded || !AdminAuth.IsAuthenticated) return;
         _dataLoaded = true;
-        await Task.WhenAll(LoadOrdersAsync(), LoadPaymentsAsync(), LoadBatchesAsync(), LoadCustomersAsync(), LoadIngredientsAsync(), LoadMetricsAsync());
+        var jobs = new List<Task>();
+        if (AdminAuth.Can("orders")) jobs.Add(LoadOrdersAsync()); else _ordersLoading = false;
+        if (AdminAuth.Can("payments")) jobs.Add(LoadPaymentsAsync()); else _paymentsLoading = false;
+        if (AdminAuth.Can("batches")) jobs.Add(LoadBatchesAsync()); else _batchesLoading = false;
+        if (AdminAuth.Can("customers")) jobs.Add(LoadCustomersAsync()); else _customersLoading = false;
+        if (AdminAuth.Can("formulation")) { jobs.Add(LoadIngredientsAsync()); jobs.Add(LoadMetricsAsync()); }
+        await Task.WhenAll(jobs);
     }
 
     private async Task LoadOrdersAsync()

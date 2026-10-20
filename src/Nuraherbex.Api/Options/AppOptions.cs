@@ -139,6 +139,8 @@ public class WhatsAppOptions
     public string PhoneNumberId { get; set; } = "";
     public string ApiVersion { get; set; } = "v21.0";
     public string DefaultCountryCode { get; set; } = "91";
+    /// <summary>Folder for photos, stickers and voice notes customers send. Empty = App_Data/whatsapp-media next to the API. Keep it outside the deployment folder so redeploys do not delete it.</summary>
+    public string MediaPath { get; set; } = "";
     /// <summary>Approved template names. Leave empty to send plain text (only deliverable inside the 24h customer-service window).</summary>
     public string OrderConfirmationTemplate { get; set; } = "";
     public string OrderShippedTemplate { get; set; } = "";

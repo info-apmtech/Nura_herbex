@@ -15,7 +15,7 @@ namespace Nuraherbex.Api.Controllers;
 
 [ApiController]
 [Route("api/admin")]
-[Authorize(Roles = "admin")]
+[Authorize(Roles = "admin,sales")]
 public class AdminController(
     NuraDbContext db,
     OrderService orders,
@@ -26,6 +26,8 @@ public class AdminController(
     WhatsAppService whatsapp,
     IOptionsMonitor<AdminOptions> admin,
     IOptions<WhatsAppOptions> waOptions,
+    RightsService rightsSvc,
+    MediaSigner mediaSigner,
     ILogger<AdminController> log) : ControllerBase
 {
     private static bool SafeEquals(string a, string b)
@@ -58,7 +60,7 @@ public class AdminController(
                 ? AdminPassword.Verify(req.Password, o.PasswordHash)
                 : SafeEquals(req.Password, o.Password); // Compatibility for existing environment-based credentials.
             if (!passOk) return DeniedLogin(req.Email);
-            return Ok(new AdminLoginResponse { Success = true, Valid = true, Message = "Authenticated successfully", Token = tokens.CreateAdminToken(email), User = new AdminUserDto { Email = email, Role = "admin", Name = "Administrator" } });
+            return Ok(new AdminLoginResponse { Success = true, Valid = true, Message = "Authenticated successfully", Token = tokens.CreateAdminToken(email), User = new AdminUserDto { Email = email, Role = "admin", Name = "Administrator", Rights = PageCatalog.AllFull(), Designation = "Administrator" } });
         }
 
         // 2) CRM employees (role admin or sales) created in the Employees tab.
@@ -76,7 +78,7 @@ public class AdminController(
         return Ok(new AdminLoginResponse
         {
             Success = true, Valid = true, Message = "Authenticated successfully", Token = tokens.CreateStaffToken(emp),
-            User = new AdminUserDto { Email = emp.Email, Role = emp.Role, Name = emp.Name, EmployeeId = emp.Id },
+            User = new AdminUserDto { Email = emp.Email, Role = emp.Role, Name = emp.Name, EmployeeId = emp.Id, Rights = new Dictionary<string, int>((await rightsSvc.ResolveEmployeeAsync(emp.Id)).Levels), Department = (await rightsSvc.ResolveEmployeeAsync(emp.Id)).Department, Designation = (await rightsSvc.ResolveEmployeeAsync(emp.Id)).Designation },
         });
     }
 
@@ -88,7 +90,7 @@ public class AdminController(
 
     // ---- Orders ----------------------------------------------------------------------
 
-    [HttpGet("orders"), Authorize(Roles = "admin")]
+    [HttpGet("orders"), Authorize(Roles = "admin,sales")]
     public async Task<OrderListResponse> ListOrders()
     {
         var list = (await orders.ListAllAsync()).Select(o =>
@@ -100,7 +102,7 @@ public class AdminController(
         return new OrderListResponse { Success = true, Count = list.Count, Orders = list };
     }
 
-    [HttpPost("orders"), Authorize(Roles = "admin")]
+    [HttpPost("orders"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> CreateManualOrder(AdminCreateOrderRequest r)
     {
         try
@@ -126,9 +128,9 @@ public class AdminController(
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
-    [HttpPost("/api/shipping/{id}/book"), Authorize(Roles = "admin")]
-    [HttpPost("orders/{id}/retry-shipment"), Authorize(Roles = "admin")]
-    [HttpPost("orders/{id}/retry-shiprocket"), Authorize(Roles = "admin")]
+    [HttpPost("/api/shipping/{id}/book"), Authorize(Roles = "admin,sales")]
+    [HttpPost("orders/{id}/retry-shipment"), Authorize(Roles = "admin,sales")]
+    [HttpPost("orders/{id}/retry-shiprocket"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> RetryShipment(string id)
     {
         try
@@ -148,8 +150,8 @@ public class AdminController(
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
-    [HttpPost("/api/shipping/{id}/label"), Authorize(Roles = "admin")]
-    [HttpPost("orders/{id}/shipping-label"), Authorize(Roles = "admin")]
+    [HttpPost("/api/shipping/{id}/label"), Authorize(Roles = "admin,sales")]
+    [HttpPost("orders/{id}/shipping-label"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> GenerateShipmentLabel(string id)
     {
         try
@@ -165,8 +167,8 @@ public class AdminController(
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
-    [HttpPost("/api/shipping/{id}/cancel"), Authorize(Roles = "admin")]
-    [HttpPost("orders/{id}/cancel-shipment"), Authorize(Roles = "admin")]
+    [HttpPost("/api/shipping/{id}/cancel"), Authorize(Roles = "admin,sales")]
+    [HttpPost("orders/{id}/cancel-shipment"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> CancelShipment(string id, [FromQuery] string? reason)
     {
         try { return Ok(new ApiResult { Success = true, Message = await orders.CancelShipmentAsync(id, reason) }); }
@@ -174,7 +176,7 @@ public class AdminController(
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
-    [HttpPost("/api/shipping/{id}/ready"), Authorize(Roles = "admin")]
+    [HttpPost("/api/shipping/{id}/ready"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> MarkReady(string id, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ParcelSpecs? parcel = null)
     {
         try { return Ok(new OrderResponse { Success = true, Order = (await orders.MarkReadyAsync(id, parcel)).ToDto() }); }
@@ -182,7 +184,7 @@ public class AdminController(
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Message = ex.Message }); }
     }
 
-    [HttpPost("orders/{id}/deliver"), Authorize(Roles = "admin")]
+    [HttpPost("orders/{id}/deliver"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> Deliver(string id)
     {
         try
@@ -193,7 +195,7 @@ public class AdminController(
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
-    [HttpPost("orders/{id}/send-email"), Authorize(Roles = "admin")]
+    [HttpPost("orders/{id}/send-email"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> SendEmail(string id, AdminEmailRequest req)
     {
         var o = await orders.GetAsync(id);
@@ -212,7 +214,7 @@ public class AdminController(
     }
 
     /// <summary>PayU attempts: SUCCESS rows have an order; FAILED / CANCELLED rows are the stored failure records.</summary>
-    [HttpGet("payments"), Authorize(Roles = "admin")]
+    [HttpGet("payments"), Authorize(Roles = "admin,sales")]
     public async Task<PaymentAttemptListResponse> ListPayments([FromQuery] string? status)
     {
         var q = db.PaymentAttempts.AsNoTracking().Where(a => a.Status != "CREATED");
@@ -227,7 +229,7 @@ public class AdminController(
         return new PaymentAttemptListResponse { Success = true, Count = list.Count, Attempts = list };
     }
 
-    [HttpGet("customers"), Authorize(Roles = "admin")]
+    [HttpGet("customers"), Authorize(Roles = "admin,sales")]
     public async Task<AdminCustomerListResponse> ListCustomers()
     {
         var list = await customers.ListForAdminAsync();
@@ -236,14 +238,14 @@ public class AdminController(
 
     // ---- Customer review moderation ---------------------------------------------------
 
-    [HttpGet("reviews"), Authorize(Roles = "admin")]
+    [HttpGet("reviews"), Authorize(Roles = "admin,sales")]
     public async Task<ReviewListResponse> ListReviews() => new()
     {
         Success = true,
         Reviews = (await db.Reviews.AsNoTracking().OrderByDescending(r => r.CreatedAt).ToListAsync()).Select(r => r.ToDto()).ToList(),
     };
 
-    [HttpPut("reviews/{id}"), Authorize(Roles = "admin")]
+    [HttpPut("reviews/{id}"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> ModerateReview(string id, ReviewModerationRequest request)
     {
         var review = await db.Reviews.FirstOrDefaultAsync(r => r.Id == id);
@@ -255,14 +257,14 @@ public class AdminController(
 
     // ---- Product quality and batch reports ------------------------------------------
 
-    [HttpGet("batches"), Authorize(Roles = "admin")]
+    [HttpGet("batches"), Authorize(Roles = "admin,sales")]
     public async Task<TrustBatchListResponse> ListBatches() => new()
     {
         Success = true,
         Batches = (await db.TrustBatches.AsNoTracking().OrderByDescending(b => b.CreatedAt).ToListAsync()).Select(b => b.ToDto()).ToList(),
     };
 
-    [HttpPut("batches"), Authorize(Roles = "admin")]
+    [HttpPut("batches"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> UpsertBatch(TrustBatchDto dto)
     {
         if (string.IsNullOrWhiteSpace(dto.BatchNo)) return BadRequest(new ApiResult { Success = false, Message = "Batch number is required" });
@@ -282,7 +284,7 @@ public class AdminController(
         return Ok(new TrustBatchResponse { Success = true, Batch = b.ToDto() });
     }
 
-    [HttpDelete("batches/{idOrNo}"), Authorize(Roles = "admin")]
+    [HttpDelete("batches/{idOrNo}"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> DeleteBatch(string idOrNo)
     {
         var key = idOrNo.Trim().ToUpperInvariant();
@@ -294,35 +296,35 @@ public class AdminController(
 
     // ---- Site content / formulation --------------------------------------------------
 
-    [HttpPut("content"), Authorize(Roles = "admin")]
+    [HttpPut("content"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> SaveContent(SiteContent content)
     {
         await settings.SetAsync(SettingsService.SiteContentKey, content);
         return Ok(new ApiResult { Success = true });
     }
 
-    [HttpDelete("content"), Authorize(Roles = "admin")]
+    [HttpDelete("content"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> ResetContent()
     {
         await settings.DeleteAsync(SettingsService.SiteContentKey);
         return Ok(new ApiResult { Success = true });
     }
 
-    [HttpPut("formulation/ingredients"), Authorize(Roles = "admin")]
+    [HttpPut("formulation/ingredients"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> SaveIngredients(List<FormulationIngredientDto> list)
     {
         await settings.SetAsync(SettingsService.IngredientsKey, list);
         return Ok(new ApiResult { Success = true });
     }
 
-    [HttpPut("formulation/metrics"), Authorize(Roles = "admin")]
+    [HttpPut("formulation/metrics"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> SaveMetrics(FormulationMetricsDto metrics)
     {
         await settings.SetAsync(SettingsService.MetricsKey, metrics);
         return Ok(new ApiResult { Success = true });
     }
 
-    [HttpGet("products"), Authorize(Roles = "admin")]
+    [HttpGet("products"), Authorize(Roles = "admin,sales")]
     public async Task<ProductListResponse> AllProducts() => new()
     {
         Success = true,
@@ -350,7 +352,7 @@ public class AdminController(
     }
     // ---- WhatsApp --------------------------------------------------------------------
 
-    [HttpGet("whatsapp/status"), Authorize(Roles = "admin")]
+    [HttpGet("whatsapp/status"), Authorize(Roles = "admin,sales")]
     public async Task<WhatsAppStatusDto> WhatsAppStatus() => new()
     {
         Success = true,
@@ -360,19 +362,19 @@ public class AdminController(
         OutboundCount = await db.WhatsAppMessages.CountAsync(m => m.Direction == "outbound"),
     };
 
-    [HttpGet("whatsapp/messages"), Authorize(Roles = "admin")]
+    [HttpGet("whatsapp/messages"), Authorize(Roles = "admin,sales")]
     public async Task<WhatsAppMessageListResponse> WhatsAppMessages([FromQuery] int take = 100) => new()
     {
         Success = true,
-        Messages = (await db.WhatsAppMessages.AsNoTracking().OrderByDescending(m => m.CreatedAt).Take(Math.Clamp(take, 1, 500)).ToListAsync()).Select(m => m.ToDto()).ToList(),
+        Messages = (await db.WhatsAppMessages.AsNoTracking().OrderByDescending(m => m.CreatedAt).Take(Math.Clamp(take, 1, 500)).ToListAsync()).Select(m => m.ToDto(mediaSigner)).ToList(),
     };
 
-    [HttpPost("whatsapp/send"), Authorize(Roles = "admin")]
+    [HttpPost("whatsapp/send"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> WhatsAppSend(WhatsAppSendRequest r)
     {
         if (string.IsNullOrWhiteSpace(r.Phone) || string.IsNullOrWhiteSpace(r.Text))
             return BadRequest(new ApiResult { Success = false, Message = "Phone and text are required" });
-        var ok = await whatsapp.SendTextAsync(r.Phone, r.Text, r.OrderId);
+        var ok = await whatsapp.SendTextAsync(r.Phone, r.Text, r.OrderId, User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "admin");
         return Ok(new ApiResult { Success = ok, Message = ok ? "Message sent" : "Message could not be sent. Check WhatsApp credentials, and that the customer messaged you in the last 24h (or use a template)." });
     }
 }

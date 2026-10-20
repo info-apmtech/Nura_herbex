@@ -34,7 +34,7 @@
         <div class="overflow-x-auto">
             <table class="w-full text-left text-xs border-collapse">
                 <thead>
-                    <tr class="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono text-[11px] font-medium tracking-wider uppercase">
+                    <tr class="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono text-[11px] font-medium tracking-wider uppercase"><th class="px-3 py-3 w-12">S.No</th>
                         <th class="px-4 py-3">Order ID &amp; Date</th>
                         <th class="px-4 py-3">Customer Details</th>
                         <th class="px-4 py-3">Items Ordered</th>
@@ -48,7 +48,7 @@
                     @if (Loading)
                     {
                         <tr>
-                            <td colspan="7" class="p-8 text-center text-zinc-500">
+                            <td colspan="8" class="p-8 text-center text-zinc-500">
                                 <Icon Name="RefreshCw" Size="20" Class="animate-spin mx-auto mb-2 text-zinc-400" />
                                 <span>Loading orders from database...</span>
                             </td>
@@ -57,7 +57,7 @@
                     else if (FilteredOrders.Count == 0)
                     {
                         <tr>
-                            <td colspan="7" class="p-8 text-center text-zinc-500">
+                            <td colspan="8" class="p-8 text-center text-zinc-500">
                                 @(Orders.Count == 0
                                     ? "No customer orders recorded yet. Live orders placed from the storefront or checkout will appear here."
                                     : "No orders matched your search query.")
@@ -66,9 +66,11 @@
                     }
                     else
                     {
+                        _sn = 0;
                         @foreach (var order in FilteredOrders)
                         {
                             <tr @key="order.Id" class="hover:bg-zinc-800/30 transition-colors">
+                                <td class="px-3 py-4 text-zinc-500 font-mono align-top">@(++_sn)</td>
                                 <td class="px-4 py-3 font-mono font-medium text-zinc-200 whitespace-nowrap">
                                     <div>@order.Id</div>
                                     <div class="text-[10px] text-zinc-500 font-sans font-normal mt-0.5">
@@ -471,6 +473,7 @@
 }
 
 @code {
+    private int _sn;
     [Parameter] public List<OrderDto> Orders { get; set; } = new();
     [Parameter] public bool Loading { get; set; }
     [Parameter] public EventCallback OnReload { get; set; }

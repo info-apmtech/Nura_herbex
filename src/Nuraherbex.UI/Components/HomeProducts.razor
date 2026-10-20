@@ -1,0 +1,89 @@
+@inject ApiClient Api
+@inject CartState Cart
+@inject NavigationManager Nav
+
+<section id="products" class="hm-section hm-light">
+  <div class="hm-wrap">
+    <header class="hm-head reveal-on-scroll">
+      <span class="hm-kicker">The Collection</span>
+      <h2>Shop our bestsellers</h2>
+      <p>Pure botanical formulas crafted for everyday energy, stamina and recovery.</p>
+    </header>
+
+    @if (_loading)
+    {
+      <div class="hm-grid" aria-busy="true">
+        @for (var i = 0; i < 4; i++) { <div class="hm-card hm-skeleton"><div class="hm-card-img"></div><div class="hm-card-body"><i></i><i></i><i></i></div></div> }
+      </div>
+    }
+    else if (_products.Count == 0)
+    {
+      <div class="hm-empty reveal-on-scroll"><Icon Name="Package" Size="40" /><h3>New products arriving soon</h3><p>Check back shortly, or explore the full shop.</p><a class="hm-btn hm-btn-primary" href="/shop">Visit the shop</a></div>
+    }
+    else
+    {
+      <div class="hm-grid">
+        @foreach (var p in _products)
+        {
+          var soldOut = p.StockQuantity <= 0;
+          var onSale = p.CompareAtPrice > p.Price;
+          <article class="hm-card reveal-on-scroll" @key="p.Id">
+            <a class="hm-card-img" href="@Url(p)" aria-label="@p.Name">
+              @if (!string.IsNullOrWhiteSpace(p.ImageUrl)) { <img src="@p.ImageUrl" alt="@p.Name" loading="lazy" /> } else { <Icon Name="Package" Size="56" /> }
+              @if (soldOut) { <span class="hm-badge hm-badge-dark">Sold out</span> }
+              else if (onSale) { <span class="hm-badge">@Math.Round((1 - p.Price / p.CompareAtPrice!.Value) * 100)% OFF</span> }
+              <span class="hm-quick">View details <Icon Name="ArrowRight" Size="14" /></span>
+            </a>
+            <div class="hm-card-body">
+              <div class="hm-stars" aria-label="Rated 5 out of 5"><Icon Name="Star" Size="13" /><Icon Name="Star" Size="13" /><Icon Name="Star" Size="13" /><Icon Name="Star" Size="13" /><Icon Name="Star" Size="13" /></div>
+              <a href="@Url(p)"><h3>@p.Name</h3></a>
+              @if (!string.IsNullOrWhiteSpace(p.Subtitle)) { <p class="hm-sub">@p.Subtitle</p> }
+              @if (!string.IsNullOrWhiteSpace(p.Description)) { <p class="hm-desc">@p.Description</p> }
+              <ul class="hm-meta">
+                @if (p.WeightKg > 0) { <li><Icon Name="Package" Size="13" /> @(Math.Round(p.WeightKg * 1000))&nbsp;g</li> }
+                <li class="@(soldOut ? "hm-out" : p.StockQuantity <= 10 ? "hm-low" : "hm-in")"><i></i>@(soldOut ? "Out of stock" : p.StockQuantity <= 10 ? $"Only {p.StockQuantity} left" : "In stock")</li>
+                <li><Icon Name="ShieldCheck" Size="13" /> GMP</li>
+              </ul>
+              <div class="hm-card-foot">
+                <div class="hm-price">@SiteConfig.Money(p.Price)@if (onSale) { <del>@SiteConfig.Money(p.CompareAtPrice!.Value)</del> }</div>
+                <button class="hm-add" disabled="@(soldOut || _busyId == p.Id)" @onclick="() => AddAsync(p)" aria-label="Add @p.Name to cart">
+                  <Icon Name="@(_addedId == p.Id ? "Check" : "ShoppingBag")" Size="17" /><span>@(soldOut ? "Sold out" : _addedId == p.Id ? "Added" : "Add")</span>
+                </button>
+              </div>
+            </div>
+          </article>
+        }
+      </div>
+      <div class="hm-center"><a class="hm-btn hm-btn-ghost" href="/shop">View all products <Icon Name="ArrowRight" Size="16" /></a></div>
+    }
+  </div>
+</section>
+
+@code {
+    private List<ProductDto> _products = new();
+    private bool _loading = true;
+    private string? _busyId, _addedId;
+
+    private static string Url(ProductDto p) => "/catalog/" + Uri.EscapeDataString(p.Id);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await Api.GetCatalogAsync();
+        _products = result.Products.Where(p => p.Status == "active").Take(8).ToList();
+        _loading = false;
+    }
+
+    private async Task AddAsync(ProductDto p)
+    {
+        if (_busyId is not null) return;
+        var existing = Cart.Items.Where(i => i.Id == p.Id).Sum(i => i.Quantity);
+        if (existing + 1 > p.StockQuantity) { Nav.NavigateTo(Url(p)); return; }
+        _busyId = p.Id;
+        try { await Cart.AddToCartAsync(new CartItem { Id = p.Id, Name = p.Name, Price = p.Price, Image = p.ImageUrl, ServingsText = p.Subtitle }, 1); }
+        finally { _busyId = null; }
+        _addedId = p.Id;
+        StateHasChanged();
+        await Task.Delay(1600);
+        if (_addedId == p.Id) { _addedId = null; StateHasChanged(); }
+    }
+}

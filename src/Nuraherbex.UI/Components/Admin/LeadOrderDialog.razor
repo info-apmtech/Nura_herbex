@@ -1,0 +1,142 @@
+@inject ApiClient Api
+
+@* Sell to a lead: pick products, confirm the delivery address, choose how it is paid. Creates a normal store order. *@
+<div class="fu-modal-backdrop" @onclick="OnClose">
+    <div class="fu-modal lo" role="dialog" aria-modal="true" aria-label="Create an order" @onclick:stopPropagation="true">
+        <header>
+            <h3>Create an order for @LeadName</h3>
+            <button type="button" class="em-x" aria-label="Close" @onclick="OnClose"><Icon Name="X" Size="16" /></button>
+        </header>
+
+        <div class="fu-form">
+            <div class="fu-step"><span>1</span> What are they buying?</div>
+            @if (_products is null)
+            {
+                <p class="fu-hint">Loading products…</p>
+            }
+            else
+            {
+                <div class="lo-products">
+                    @foreach (var p in _products)
+                    {
+                        var prod = p;
+                        <div class="@($"lo-product {(Qty(prod.Id) > 0 ? "is-picked" : "")}")">
+                            <div><strong>@prod.Name</strong><small>₹@AdminFmt.Inr(prod.Price)@(prod.StockQuantity <= 0 ? " · out of stock" : prod.StockQuantity < 10 ? $" · only {prod.StockQuantity} left" : "")</small></div>
+                            <div class="lo-qty" role="group" aria-label="@($"Quantity of {prod.Name}")">
+                                <button type="button" aria-label="Less" disabled="@(Qty(prod.Id) == 0)" @onclick="() => Change(prod.Id, -1)">−</button>
+                                <span>@Qty(prod.Id)</span>
+                                <button type="button" aria-label="More" disabled="@(prod.StockQuantity <= Qty(prod.Id))" @onclick="() => Change(prod.Id, 1)">+</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="lo-coupon">
+                    <input type="text" class="fu-input" placeholder="Coupon code (optional)" maxlength="40" @bind="_coupon" @bind:event="oninput" @bind:after="PriceAsync" />
+                </div>
+
+                @if (_totals is not null && _lines.Count > 0)
+                {
+                    <dl class="lo-totals">
+                        <dt>Items</dt><dd>₹@AdminFmt.Inr(_totals.Subtotal)</dd>
+                        @if (_totals.DiscountAmount > 0) { <dt>Discount @(_totals.CouponCode)</dt><dd>− ₹@AdminFmt.Inr(_totals.DiscountAmount)</dd> }
+                        <dt>Delivery</dt><dd>@(_totals.ShippingFee == 0 ? "Free" : "₹" + AdminFmt.Inr(_totals.ShippingFee))</dd>
+                        <dt class="grand">Total</dt><dd class="grand">₹@AdminFmt.Inr(_totals.FinalTotal)</dd>
+                    </dl>
+                }
+                else if (!string.IsNullOrEmpty(_priceError)) { <div class="fu-flash bad" role="alert">@_priceError</div> }
+            }
+
+            <div class="fu-step"><span>2</span> Where should it go?</div>
+            <div class="lo-grid">
+                <label class="fu-field">Name<input type="text" maxlength="200" @bind="_name" @bind:event="oninput" /></label>
+                <label class="fu-field">Email <span>(for the confirmation)</span><input type="email" maxlength="200" placeholder="name@example.com" @bind="_email" @bind:event="oninput" /></label>
+                <label class="fu-field wide">Address<input type="text" maxlength="200" placeholder="House / street" @bind="_a.AddressLine1" @bind:event="oninput" /></label>
+                <label class="fu-field wide">Area <span>(optional)</span><input type="text" maxlength="200" @bind="_a.AddressLine2" @bind:event="oninput" /></label>
+                <label class="fu-field">City<input type="text" maxlength="100" @bind="_a.City" @bind:event="oninput" /></label>
+                <label class="fu-field">State<input type="text" maxlength="100" @bind="_a.State" @bind:event="oninput" /></label>
+                <label class="fu-field">Pincode<input type="text" inputmode="numeric" maxlength="6" @bind="_a.Pincode" @bind:event="oninput" /></label>
+            </div>
+
+            <div class="fu-step"><span>3</span> How is it paid?</div>
+            <div class="fu-types two">
+                <button type="button" class="@($"fu-type {(!_paid ? "is-picked" : "")}")" @onclick="() => _paid = false">Cash on delivery</button>
+                <button type="button" class="@($"fu-type {(_paid ? "is-picked" : "")}")" @onclick="() => _paid = true">Already paid (UPI / bank)</button>
+            </div>
+            @if (_paid)
+            {
+                <input type="text" class="fu-input" maxlength="80" placeholder="Payment reference, e.g. UPI transaction id" @bind="_ref" @bind:event="oninput" />
+                <p class="fu-hint"><Icon Name="Info" Size="12" /> Only choose this once the money is in your account. The order is marked paid and goes straight to shipping.</p>
+            }
+            else
+            {
+                <p class="fu-hint"><Icon Name="Info" Size="12" /> The customer pays the courier on delivery.</p>
+            }
+
+            @if (!string.IsNullOrEmpty(_error)) { <div class="fu-flash bad" role="alert">@_error</div> }
+        </div>
+
+        <footer>
+            <button type="button" class="ld-btn" @onclick="OnClose">Cancel</button>
+            <button type="button" class="ld-btn primary" disabled="@(_busy || _lines.Count == 0)" @onclick="SaveAsync">@(_busy ? "Creating…" : _totals is null ? "Create order" : $"Create order · ₹{AdminFmt.Inr(_totals.FinalTotal)}")</button>
+        </footer>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public long LeadId { get; set; }
+    [Parameter] public string LeadName { get; set; } = "";
+    [Parameter] public string? LeadEmail { get; set; }
+    [Parameter] public EventCallback<string?> OnCreated { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<ProductDto>? _products;
+    private readonly Dictionary<string, int> _lines = new();
+    private OrderTotalsDto? _totals;
+    private readonly AddressDto _a = new();
+    private string _name = "", _email = "", _coupon = "", _ref = "";
+    private string? _error, _priceError;
+    private bool _paid, _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _name = LeadName; _email = LeadEmail ?? "";
+        _products = await Api.GetProductsAsync();
+    }
+
+    private int Qty(string id) => _lines.GetValueOrDefault(id);
+
+    private async Task Change(string id, int delta)
+    {
+        var q = Math.Clamp(Qty(id) + delta, 0, 20);
+        if (q == 0) _lines.Remove(id); else _lines[id] = q;
+        await PriceAsync();
+    }
+
+    private async Task PriceAsync()
+    {
+        _priceError = null;
+        if (_lines.Count == 0) { _totals = null; return; }
+        var res = await Api.ValidateCartAsync(new ValidateCartRequest
+        {
+            Items = _lines.Select(kv => new CartLineDto { Id = kv.Key, Quantity = kv.Value }).ToList(),
+            CouponCode = string.IsNullOrWhiteSpace(_coupon) ? null : _coupon.Trim(),
+        });
+        if (res.Success || res.Items.Count > 0) _totals = res;
+        else { _totals = null; _priceError = res.Message ?? "Could not price this basket."; }
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = null; _busy = true;
+        var res = await Api.AdminLeadOrderAsync(LeadId, new LeadOrderRequest
+        {
+            Items = _lines.Select(kv => new LeadOrderLineRequest { ProductId = kv.Key, Quantity = kv.Value }).ToList(),
+            CouponCode = string.IsNullOrWhiteSpace(_coupon) ? null : _coupon.Trim(),
+            CustomerName = _name, Email = _email, Address = _a, AlreadyPaid = _paid, PaymentReference = _paid ? _ref : null,
+        });
+        _busy = false;
+        if (res.Success) await OnCreated.InvokeAsync(res.Message);
+        else _error = res.Message ?? "Could not create the order.";
+    }
+}

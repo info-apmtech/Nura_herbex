@@ -1,0 +1,49 @@
+@inject NavigationManager Nav
+
+<section id="formula" class="hm-section hm-ing">
+  <div class="hm-wrap">
+    <header class="hm-head hm-head-left reveal-on-scroll">
+      <span class="hm-eyebrow">The formulation</span>
+      <h2>The <em>Ingredient</em> Matrix</h2>
+      <p>A synergistic blend of 17 herbs, seeds, nuts and whole botanicals, formulated on Unani principles. Uncompromising quality, complete transparency.</p>
+    </header>
+
+    <div class="hm-panels reveal-on-scroll">
+      @foreach (var (it, i) in Items.Select((it, i) => (it, i)))
+      {
+        <article class="hm-panel @(_active == i ? "is-active" : "")" tabindex="0"
+                 @onmouseenter="() => _active = i" @onfocus="() => _active = i" @onclick="() => _active = i">
+          <img src="@it.Image" alt="@it.Name" loading="lazy" />
+          <div class="hm-panel-shade"></div>
+          <span class="hm-panel-no">0@(i + 1)</span>
+          <div class="hm-panel-text">
+            <small>@it.Dose</small>
+            <h3>@it.Name</h3>
+            <p>@it.Desc</p>
+          </div>
+        </article>
+      }
+    </div>
+
+    <div class="hm-center">
+      <button class="hm-btn hm-btn-gold" @onclick='() => Nav.NavigateTo("/formulation")'><Icon Name="FlaskConical" Size="16" /> View the complete formulation <Icon Name="ArrowRight" Size="16" /></button>
+    </div>
+  </div>
+</section>
+
+@code {
+    private int _active;
+    private record Ing(string Name, string Dose, string Desc, string Image);
+
+    private static readonly Ing[] Items =
+    {
+        new("Drumstick Flower, Bark & Seed", "Whole botanical blend",
+            "A traditional powerhouse of naturally occurring minerals, iron and plant antioxidants, supporting vitality and everyday resilience.", Media.Incred1),
+        new("Whole Ashwagandha Root", "Traditional whole root",
+            "Pure whole-root powder traditionally used to support the stress response, restful sleep and steady everyday energy.", Media.Incred2),
+        new("Watermelon Seed", "Cold-pressed whole seed",
+            "Botanically rich whole seeds, valued as a natural whole-food source of citrulline, amino acids and micronutrients.", Media.Incred3),
+        new("Kaunch Beej (Mucuna)", "Traditional whole seed",
+            "A revered Unani seed used to support vigor, stamina, nervous-system tone and baseline male vitality.", Media.Incred4),
+    };
+}

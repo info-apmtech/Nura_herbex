@@ -114,10 +114,16 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     }
 
     /// <summary>The active sales employee who was given a lead the longest ago (never-assigned first), excluding <paramref name="excludeId"/>.</summary>
-    public Task<Employee?> PickNextEmployeeAsync(long? excludeId = null) =>
-        db.Employees.Where(e => e.IsActive && e.Role == EmployeeRoles.Sales && e.Id != excludeId)
+    public async Task<Employee?> PickNextEmployeeAsync(long? excludeId = null)
+    {
+        // Only people whose designation lets them work leads take part in the rotation.
+        var rights = await db.Designations.AsNoTracking().ToDictionaryAsync(d => d.Id, d => d.RightsJson);
+        var staff = await db.Employees.Where(e => e.IsActive && e.Role == EmployeeRoles.Sales && e.Id != excludeId).ToListAsync();
+        return staff
+            .Where(e => (e.DesignationId is { } id && rights.TryGetValue(id, out var json) ? PageCatalog.LevelFrom(json, "leads") : PageCatalog.DefaultStaff.GetValueOrDefault("leads")) >= PageCatalog.Limited)
             .OrderBy(e => e.LastAssignedAt == null ? 0 : 1).ThenBy(e => e.LastAssignedAt).ThenBy(e => e.Id)
-            .FirstOrDefaultAsync();
+            .FirstOrDefault();
+    }
 
     /// <summary>Assigns the lead (null = unassign) and records history. Caller saves.</summary>
     public async Task AssignAsync(Lead lead, long? employeeId, string? reason, string changedBy)
@@ -161,6 +167,51 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         }
         return open.Count;
     }
+    /// <summary>
+    /// Makes sure a customer who ordered has a lead, marked Converted and owned by someone. Idempotent: safe to call every cycle.
+    /// A lead that already exists (e.g. from WhatsApp) is reused so the whole history stays on one record.
+    /// </summary>
+    public async Task<Lead> UpsertFromOrderAsync(Order o)
+    {
+        var norm = NormalizePhone(o.CustomerPhone);
+        var now = DateTime.UtcNow;
+        var lead = await db.Leads.FirstOrDefaultAsync(l => l.Phone == norm);
+        if (lead is null)
+        {
+            lead = new Lead
+            {
+                Phone = norm, Name = string.IsNullOrWhiteSpace(o.CustomerName) ? norm : o.CustomerName.Trim(), Email = o.CustomerEmail,
+                Source = "website", SourceDetail = $"Order {o.Id}", Status = LeadStatuses.Converted, ConvertedAt = now,
+                CustomerId = o.CustomerId, CreatedAt = now, UpdatedAt = now, LastContactAt = now,
+            };
+            db.Leads.Add(lead);
+            try { await db.SaveChangesAsync(); }
+            catch (DbUpdateException)
+            {
+                db.Entry(lead).State = EntityState.Detached;
+                lead = await db.Leads.FirstAsync(l => l.Phone == norm);
+            }
+            if (lead.Status == LeadStatuses.Converted && lead.SourceDetail == $"Order {o.Id}")
+                db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, ToStatus = LeadStatuses.Converted, Note = $"Customer placed order {o.Id}", CreatedAt = now });
+        }
+        else
+        {
+            if (lead.Status != LeadStatuses.Converted)
+            {
+                db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, FromStatus = lead.Status, ToStatus = LeadStatuses.Converted, Note = $"Customer placed order {o.Id}", CreatedAt = now });
+                lead.Status = LeadStatuses.Converted;
+                lead.ConvertedAt ??= now;
+                lead.UpdatedAt = now;
+            }
+            if (lead.CustomerId is null && o.CustomerId is not null) lead.CustomerId = o.CustomerId;
+            if (string.IsNullOrEmpty(lead.Email) && !string.IsNullOrEmpty(o.CustomerEmail)) lead.Email = o.CustomerEmail;
+            if (lead.Name == lead.Phone && !string.IsNullOrWhiteSpace(o.CustomerName)) lead.Name = o.CustomerName.Trim();
+        }
+        await AutoAssignAsync(lead);
+        await db.SaveChangesAsync();
+        return lead;
+    }
+
     /// <summary>Links an outbound message to an existing lead and stamps the conversation (caller saves). Never creates a lead.</summary>
     public async Task<long?> RecordOutboundAsync(string phone)
     {

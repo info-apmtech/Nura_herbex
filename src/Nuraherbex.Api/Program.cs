@@ -59,7 +59,16 @@ builder.Services.AddHttpClient<EmailService>();
 builder.Services.AddHttpClient<ShiprocketService>();
 builder.Services.AddHttpClient<ShadowfaxService>(http => http.Timeout = TimeSpan.FromSeconds(25));
 builder.Services.AddScoped<ShippingGateway>();
+builder.Services.AddSingleton<MediaSigner>();
 builder.Services.AddScoped<LeadService>();
+builder.Services.Configure<FollowUpOptions>(cfg.GetSection(FollowUpOptions.Section));
+builder.Services.AddScoped<FollowUpService>();
+builder.Services.AddScoped<CrmDashboardService>();
+builder.Services.AddScoped<RightsService>();
+builder.Services.AddScoped<TaskService>();
+builder.Services.Configure<AiOptions>(o => { cfg.GetSection(AiOptions.Section).Bind(o); if (string.IsNullOrWhiteSpace(o.ApiKey)) o.ApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? ""; });
+builder.Services.AddScoped<ReplyAssistantService>();
+builder.Services.AddHostedService<FollowUpWorker>();
 builder.Services.AddHttpClient<WhatsAppService>();
 
 // ---- Auth (JWT for customers and admins) ----------------------------------------------
@@ -179,6 +188,8 @@ if (cfg.GetValue("Database:AutoCreate", true))
         if (provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase)) await db.Database.EnsureCreatedAsync();
         else await db.Database.MigrateAsync();
         await DbSeeder.SeedAsync(db, cfg.GetValue("Database:SeedDemoBatch", false));
+        await WhatsAppMediaBackfill.RunAsync(db, app.Logger);
+        await OrgSeeder.RunAsync(db, app.Logger);
     }
     catch (Exception ex)
     {
@@ -192,6 +203,7 @@ if (!app.Environment.IsDevelopment()) app.UseHsts();
 app.UseCors();
 app.UseRateLimiter();
 app.UseAuthentication();
+app.UseMiddleware<PageRightsMiddleware>(); // page rights for every staff API route (closed by default)
 app.UseAuthorization();
 app.MapControllers();
 var swaggerOn = app.Environment.IsDevelopment() || cfg.GetValue("Swagger:Enabled", false);

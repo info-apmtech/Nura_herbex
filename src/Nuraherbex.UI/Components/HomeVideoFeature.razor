@@ -1,0 +1,32 @@
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<section class="hm-video">
+  <video id="home-feature-video" autoplay loop muted playsinline preload="metadata" disablepictureinpicture>
+    <source src="@Media.SolutionVideo" type="video/mp4" />
+  </video>
+  <div class="hm-video-shade"></div>
+  <div class="hm-wrap hm-video-inner">
+    <div class="hm-video-copy reveal-on-scroll">
+      <span class="hm-kicker">Nature, perfected</span>
+      <h2>17 botanicals. One daily ritual.</h2>
+      <p>A full 20 g serving of herbs, seeds and nuts, blended in a GMP certified facility. Nothing synthetic, nothing hidden.</p>
+      <div class="hm-video-actions">
+        <button class="hm-btn hm-btn-primary" @onclick='() => Nav.NavigateTo("/shop")'>Shop now <Icon Name="ArrowRight" Size="16" /></button>
+        <button class="hm-btn hm-btn-glass" @onclick='() => Nav.NavigateTo("/formulation")'><Icon Name="FlaskConical" Size="16" /> See the formula</button>
+      </div>
+    </div>
+    <ul class="hm-video-stats reveal-on-scroll">
+      <li><strong>17</strong><span>Botanicals</span></li>
+      <li><strong>20 g</strong><span>Daily serving</span></li>
+      <li><strong>0%</strong><span>Synthetic fillers</span></li>
+    </ul>
+  </div>
+</section>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await HomeJs.PlayVideoAsync(JS, "home-feature-video");
+    }
+}

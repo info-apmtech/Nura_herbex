@@ -5,8 +5,8 @@
 
     <div class="em-head">
         <div>
-            <h3>Sales team</h3>
-            <p>Each employee signs in at <strong>/admin</strong> with their own email and password. Sales executives only see the leads assigned to them; administrators see everything.</p>
+            <h3>People</h3>
+            <p>Each employee signs in at <strong>/admin</strong> with their own email and password. What each person can open is decided by their <strong>designation</strong> (see Designations &amp; rights).</p>
         </div>
         <div class="em-head-actions">
             <label class="em-switch" title="When on, every new lead goes to the next active sales executive in turn.">
@@ -34,12 +34,27 @@
                 <label>Full name<input type="text" required maxlength="200" @bind="_form.Name" @bind:event="oninput" placeholder="e.g. Priya Raman" /></label>
                 <label>Work email (login)<input type="email" required maxlength="200" @bind="_form.Email" @bind:event="oninput" placeholder="name@nuraherbex.com" autocomplete="off" /></label>
                 <label>Phone<input type="tel" maxlength="32" @bind="_form.Phone" @bind:event="oninput" placeholder="+91 98765 43210" /></label>
-                <label>Role
-                    <select @bind="_form.Role">
-                        <option value="sales">Sales executive — own leads only</option>
-                        <option value="admin">Administrator — full access</option>
+                <label>Designation <small class="em-hint">decides which pages they can open</small>
+                    <select @bind="_form.DesignationId">
+                        <option value="@((long?)null)">No designation (basic sales access)</option>
+                        @foreach (var d in _designations.Where(x => x.IsActive || x.Id == _form.DesignationId)) { <option value="@d.Id">@d.Name@(d.DepartmentName is { } dn ? " · " + dn : "")</option> }
                     </select>
                 </label>
+                <label>Department
+                    <select @bind="_form.DepartmentId">
+                        <option value="@((long?)null)">No department</option>
+                        @foreach (var d in _departments.Where(x => x.IsActive || x.Id == _form.DepartmentId)) { <option value="@d.Id">@d.Name</option> }
+                    </select>
+                </label>
+                @if (AdminAuth.IsAdmin)
+                {
+                    <label>Account type
+                        <select @bind="_form.Role">
+                            <option value="sales">Staff — pages come from the designation</option>
+                            <option value="admin">Administrator — every page</option>
+                        </select>
+                    </label>
+                }
                 <label>@(_editingId is null ? "Password" : "New password")
                     <input type="password" minlength="8" required="@(_editingId is null)" @bind="_form.Password" @bind:event="oninput" autocomplete="new-password"
                            placeholder="@(_editingId is null ? "At least 8 characters" : "Leave empty to keep the current one")" />
@@ -59,31 +74,33 @@
         <div class="em-scroll">
             <table class="em-table">
                 <thead>
-                    <tr><th>Employee</th><th>Role</th><th>Status</th><th class="num">Open leads</th><th class="num">All leads</th><th>Last sign-in</th><th></th></tr>
+                    <tr><th class="sn">S.No</th><th>Employee</th><th>Designation</th><th>Department</th><th>Status</th><th class="num">Open leads</th><th class="num">Open tasks</th><th>Last sign-in</th><th></th></tr>
                 </thead>
                 <tbody>
                     @if (_loading)
                     {
-                        <tr><td colspan="7" class="em-empty">Loading team…</td></tr>
+                        <tr><td colspan="9" class="em-empty">Loading team…</td></tr>
                     }
                     else if (_employees.Count == 0)
                     {
-                        <tr><td colspan="7" class="em-empty"><strong>No employees yet</strong>Add your first sales executive so new leads can be assigned and followed up.</td></tr>
+                        <tr><td colspan="9" class="em-empty"><strong>No employees yet</strong>Add your first sales executive so new leads can be assigned and followed up.</td></tr>
                     }
+                    @{ var sn = 0; }
                     @foreach (var e in _employees)
                     {
                         var emp = e;
                         <tr @key="emp.Id" class="@(emp.IsActive ? "" : "is-off")">
+                            <td class="sn">@(++sn)</td>
                             <td>
                                 <div class="em-person">
                                     <span class="ld-avatar" style="background:@Palette[(int)(emp.Id % Palette.Length)]">@emp.Name[..1].ToUpperInvariant()</span>
                                     <span><strong>@emp.Name</strong><small>@emp.Email@(string.IsNullOrEmpty(emp.Phone) ? "" : " · " + emp.Phone)</small></span>
                                 </div>
                             </td>
-                            <td><span class="@($"ld-pill {(emp.Role == "admin" ? "interested" : "new")}")">@(emp.Role == "admin" ? "Administrator" : "Sales executive")</span></td>
+                            <td><span class="@($"ld-pill {(emp.Role == "admin" ? "interested" : "new")}")">@(emp.Role == "admin" ? (emp.DesignationName ?? "Administrator") : (emp.DesignationName ?? "No designation"))</span></td><td>@(emp.DepartmentName ?? "—")</td>
                             <td><span class="@($"ld-pill {(emp.IsActive ? "converted" : "not-interested")}")">@(emp.IsActive ? "Active" : "Inactive")</span></td>
                             <td class="num">@emp.OpenLeads</td>
-                            <td class="num">@emp.TotalLeads</td>
+                            <td class="num">@emp.OpenTasks</td>
                             <td>@(emp.LastLoginAt is { } t ? AdminFmt.DateTimeShort(t) : "Never")</td>
                             <td class="em-actions">
                                 @if (_removingId == emp.Id)
@@ -104,8 +121,8 @@
                                 }
                                 else
                                 {
-                                    <button type="button" class="ld-btn" @onclick="() => StartEdit(emp)">Edit</button>
-                                    @if (emp.IsActive)
+                                    @if (AdminAuth.IsAdmin || emp.Role != "admin") { <button type="button" class="ld-btn" @onclick="() => StartEdit(emp)">Edit</button> }
+                                    @if (emp.IsActive && (AdminAuth.IsAdmin || emp.Role != "admin") && emp.Id != AdminAuth.EmployeeId)
                                     {
                                         <button type="button" class="ld-btn danger-outline" title="Deactivate this login and move their open leads" @onclick="() => _removingId = emp.Id">Remove</button>
                                     }
@@ -117,12 +134,15 @@
             </table>
         </div>
     </div>
+    <AdminReplyAssistantCard />
 </div>
 
 @code {
     private static readonly string[] Palette = ["#235b40", "#2f6f8f", "#7a5aa6", "#b5792a", "#a24b5a", "#3f7d7a", "#5b6f2c"];
 
     private List<EmployeeDto> _employees = new();
+    private List<DepartmentDto> _departments = new();
+    private List<DesignationDto> _designations = new();
     private EmployeeSaveRequest? _form;
     private long? _editingId;
     private long? _removingId;
@@ -136,6 +156,9 @@
 
     private async Task LoadAsync()
     {
+        var (dr, gr) = (await Api.AdminDepartmentsAsync(), await Api.AdminDesignationsAsync());
+        if (dr.Success) _departments = dr.Departments;
+        if (gr.Success) _designations = gr.Designations;
         var res = await Api.AdminEmployeesAsync();
         if (res.Success) { _employees = res.Employees; _autoAssign = res.AutoAssign; }
         else Say(res.Message ?? "Could not load the team.", false);
@@ -149,7 +172,7 @@
     private void StartEdit(EmployeeDto e)
     {
         _editingId = e.Id; _removingId = null;
-        _form = new EmployeeSaveRequest { Name = e.Name, Email = e.Email, Phone = e.Phone, Role = e.Role, IsActive = e.IsActive };
+        _form = new EmployeeSaveRequest { Name = e.Name, Email = e.Email, Phone = e.Phone, Role = e.Role, IsActive = e.IsActive, DepartmentId = e.DepartmentId, DesignationId = e.DesignationId };
     }
 
     private void Cancel() { _form = null; _editingId = null; }

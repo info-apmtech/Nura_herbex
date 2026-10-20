@@ -99,6 +99,15 @@ public class AdminSession(ApiClient api, SessionTokens tokens, BrowserInterop br
     public bool IsAdmin => Role == "admin";
     /// <summary>Set for employee logins (null for the configured super administrator).</summary>
     public long? EmployeeId { get; private set; }
+    public string? Department { get; private set; }
+    public string? Designation { get; private set; }
+    private Dictionary<string, int> _rights = new();
+    /// <summary>Access level for a page: 0 none, 1 own records / view only, 2 everyone's records / view and change.</summary>
+    public int Level(string page) => IsAdmin ? 2 : _rights.GetValueOrDefault(page);
+    public bool Can(string page, int level = 1) => Level(page) >= level;
+    /// <summary>Sees everyone's records on this page, not only their own.</summary>
+    public bool CanAll(string page) => Level(page) >= 2;
+    public bool HasAnyPage => IsAdmin || _rights.Values.Any(v => v > 0);
     public event Action? Changed;
     private bool _initialised;
 
@@ -108,6 +117,9 @@ public class AdminSession(ApiClient api, SessionTokens tokens, BrowserInterop br
         Name = string.IsNullOrWhiteSpace(u?.Name) ? u?.Email ?? "" : u!.Name;
         Role = u?.Role == "sales" ? "sales" : "admin";
         EmployeeId = u?.EmployeeId;
+        Department = u?.Department;
+        Designation = u?.Designation;
+        _rights = u?.Rights is { } r ? new Dictionary<string, int>(r) : new();
     }
 
     /// <summary>Restores and server-validates a stored admin token.</summary>

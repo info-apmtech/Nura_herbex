@@ -78,7 +78,7 @@
         <div class="overflow-x-auto">
             <table class="w-full text-xs">
                 <thead class="bg-zinc-950/70 text-zinc-400 font-mono text-[11px] border-b border-zinc-800">
-                    <tr>
+                    <tr><th class="px-3 py-3 text-left font-medium w-12">S.No</th>
                         <th class="px-4 py-3 text-left font-medium">Customer</th>
                         <th class="px-4 py-3 text-left font-medium">Contact</th>
                         <th class="px-4 py-3 text-left font-medium">Registered Date</th>
@@ -92,7 +92,7 @@
                     @if (Loading)
                     {
                         <tr>
-                            <td colspan="7" class="px-4 py-12 text-center text-zinc-500">
+                            <td colspan="8" class="px-4 py-12 text-center text-zinc-500">
                                 <div class="flex flex-col items-center justify-center gap-2">
                                     <Icon Name="RefreshCw" Size="18" Class="animate-spin text-zinc-400" />
                                     <span class="text-xs">Fetching registered users strictly from database...</span>
@@ -103,7 +103,7 @@
                     else if (FilteredCustomers.Count == 0)
                     {
                         <tr>
-                            <td colspan="7" class="px-4 py-12 text-center text-zinc-500">
+                            <td colspan="8" class="px-4 py-12 text-center text-zinc-500">
                                 <div class="flex flex-col items-center justify-center gap-2">
                                     <Icon Name="Users" Size="24" Class="text-zinc-600" />
                                     <div class="font-medium text-zinc-300">
@@ -120,6 +120,7 @@
                     }
                     else
                     {
+                        _sn = 0;
                         @foreach (var cust in FilteredCustomers)
                         {
                             var name = string.IsNullOrEmpty(cust.FullName) ? "Vitality Customer" : cust.FullName;
@@ -134,6 +135,7 @@
                                 : null;
 
                             <tr @key="cust.Id" class="hover:bg-zinc-800/30 transition-colors">
+                                <td class="px-3 py-3 text-zinc-500 font-mono">@(++_sn)</td>
                                 @* Customer Profile & ID *@
                                 <td class="px-4 py-3">
                                     <div class="flex items-center gap-2.5">
@@ -389,6 +391,7 @@
 }
 
 @code {
+    private int _sn;
     [Parameter] public List<AdminCustomerDto> Customers { get; set; } = new();
     [Parameter] public bool Loading { get; set; }
     [Parameter] public EventCallback OnReload { get; set; }

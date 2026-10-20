@@ -21,7 +21,8 @@ public partial class WhatsAppService(
     HttpClient http,
     LeadService leads,
     IOptions<WhatsAppOptions> options,
-    ILogger<WhatsAppService> log)
+    ILogger<WhatsAppService> log,
+    Microsoft.Extensions.Hosting.IHostEnvironment? env = null)
 {
     private readonly WhatsAppOptions _o = options.Value;
 
@@ -106,18 +107,33 @@ public partial class WhatsAppService(
     private async Task HandleInboundMessageAsync(JsonElement m, Dictionary<string, string> names)
     {
         var id = m.GetProperty("id").GetString() ?? "";
-        if (await db.WhatsAppMessages.AnyAsync(x => x.WaMessageId == id && x.Direction == "inbound")) return; // Meta retries; stay idempotent
-
         var from = m.GetProperty("from").GetString() ?? "";
         var type = m.TryGetProperty("type", out var t) ? t.GetString() ?? "text" : "text";
+
+        // A reaction is not a new message: show the emoji on the message it was left on.
+        if (type == "reaction") { await ApplyReactionAsync(m); return; }
+
+        if (await db.WhatsAppMessages.AnyAsync(x => x.WaMessageId == id && x.Direction == "inbound")) return; // Meta retries; stay idempotent
+
+        // Photos, stickers, videos, voice notes and documents carry a media id (downloaded below) and an optional caption.
+        string? mediaId = null, mediaMime = null, mediaName = null;
+        string? caption = null;
+        if (Mapping.MediaTypes.Contains(type) && m.TryGetProperty(type, out var media) && media.ValueKind == JsonValueKind.Object)
+        {
+            mediaId = media.TryGetProperty("id", out var mid) ? mid.GetString() : null;
+            mediaMime = media.TryGetProperty("mime_type", out var mm) ? mm.GetString() : null;
+            mediaName = media.TryGetProperty("filename", out var fn) ? fn.GetString() : null;
+            caption = media.TryGetProperty("caption", out var cap) ? cap.GetString() : null;
+        }
+
         var body = type switch
         {
             "text" => m.GetProperty("text").GetProperty("body").GetString(),
             "button" => m.GetProperty("button").GetProperty("text").GetString(),
             "interactive" => ExtractInteractive(m.GetProperty("interactive")),
-            "image" or "video" or "audio" or "document" or "sticker" =>
-                m.GetProperty(type).TryGetProperty("caption", out var cap) ? cap.GetString() : $"[{type}]",
-            "location" => "[location shared]",
+            "location" => LocationText(m),
+            "unsupported" => UnsupportedText(m),
+            _ when Mapping.MediaTypes.Contains(type) => caption,
             _ => $"[{type}]",
         };
 
@@ -131,18 +147,27 @@ public partial class WhatsAppService(
         }
 
         var profileName = names.GetValueOrDefault(from);
-        var lead = (await leads.UpsertFromWhatsAppAsync(from, profileName, body, referralJson, referralDetail)).Lead;
+        var lead = (await leads.UpsertFromWhatsAppAsync(from, profileName, body ?? Mapping.MessageLabel(type), referralJson, referralDetail)).Lead;
 
-        db.WhatsAppMessages.Add(new WhatsAppMessage
+        var saved = new WhatsAppMessage
         {
             Direction = "inbound", WaMessageId = id, Phone = from, ProfileName = profileName,
             Type = type, Body = body, Status = "received", RawPayload = m.GetRawText(), LeadId = lead.Id,
-        });
+            MediaId = mediaId, MediaMime = mediaMime, MediaName = mediaName,
+        };
+        db.WhatsAppMessages.Add(saved);
         await db.SaveChangesAsync();
+
+        // Meta deletes media after about 30 days, so keep a copy now. A failure here never loses the message; the file is fetched again when someone opens it.
+        if (mediaId is not null)
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            await DownloadMediaAsync(saved, cts.Token);
+        }
 
         if (LeadService.IsStopKeyword(body))
         {
-            if (_o.CanSend) await SendTextAsync(from, "You've been unsubscribed from Nura Herbex messages. Reply START any time to opt back in. 🌿");
+            if (_o.CanSend) await SendTextAsync(from, "You have been unsubscribed from Nura Herbex messages. Reply START any time to opt back in. 🌿");
             return;
         }
 
@@ -150,6 +175,115 @@ public partial class WhatsAppService(
         {
             try { await AutoReplyAsync(from, body ?? ""); }
             catch (Exception ex) { log.LogWarning(ex, "[WhatsApp] Auto-reply failed for {Phone}", from); }
+        }
+    }
+
+    private async Task ApplyReactionAsync(JsonElement m)
+    {
+        if (!m.TryGetProperty("reaction", out var r) || !r.TryGetProperty("message_id", out var mid)) return;
+        var target = mid.GetString();
+        if (string.IsNullOrEmpty(target)) return;
+        var emoji = r.TryGetProperty("emoji", out var e) ? e.GetString() : null; // no emoji = the reaction was removed
+        var msg = await db.WhatsAppMessages.FirstOrDefaultAsync(x => x.WaMessageId == target);
+        if (msg is null) return;
+        msg.Reaction = string.IsNullOrWhiteSpace(emoji) ? null : emoji.Length > 16 ? emoji[..16] : emoji;
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>Meta sends type "unsupported" (error 131051) when it cannot pass the content on; say so instead of showing a bare tag.</summary>
+    private static string UnsupportedText(JsonElement m)
+    {
+        string? why = null;
+        if (m.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array && errs.GetArrayLength() > 0)
+        {
+            var e = errs[0];
+            why = e.TryGetProperty("details", out var d) && !string.IsNullOrWhiteSpace(d.GetString()) ? d.GetString()
+                : e.TryGetProperty("title", out var t) ? t.GetString() : null;
+        }
+        return "WhatsApp could not deliver this message's content" + (string.IsNullOrWhiteSpace(why) ? "." : $" ({why}).") + " Ask the customer to send it again, or as a document.";
+    }
+
+    private static string LocationText(JsonElement m)
+    {
+        if (!m.TryGetProperty("location", out var l)) return "[location shared]";
+        var lat = l.TryGetProperty("latitude", out var la) ? la.GetDouble() : (double?)null;
+        var lng = l.TryGetProperty("longitude", out var lo) ? lo.GetDouble() : (double?)null;
+        var name = l.TryGetProperty("name", out var n) ? n.GetString() : null;
+        var address = l.TryGetProperty("address", out var a) ? a.GetString() : null;
+        var label = string.Join(", ", new[] { name, address }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        return lat is null || lng is null ? "[location shared]"
+            : $"Location: {label}{(label.Length > 0 ? " - " : "")}https://maps.google.com/?q={lat.Value.ToString(inv)},{lng.Value.ToString(inv)}";
+    }
+
+    // ---------------------------------------------------------------------
+    // Customer media (photos, stickers, voice notes, documents)
+    // ---------------------------------------------------------------------
+
+    private const long MaxMediaBytes = 16 * 1024 * 1024;
+
+    public string MediaDirectory => string.IsNullOrWhiteSpace(_o.MediaPath)
+        ? Path.Combine(env?.ContentRootPath ?? AppContext.BaseDirectory, "App_Data", "whatsapp-media")
+        : _o.MediaPath;
+
+    private static bool IsMetaHost(Uri u) =>
+        u.Scheme == Uri.UriSchemeHttps && (u.Host.EndsWith(".fbsbx.com") || u.Host.EndsWith(".facebook.com") || u.Host.EndsWith(".whatsapp.net") || u.Host.EndsWith(".fbcdn.net") || u.Host.EndsWith(".whatsapp.com"));
+
+    private static string ExtensionFor(string? mime, string? fileName)
+    {
+        var fromName = Path.GetExtension(fileName ?? "");
+        if (fromName is { Length: > 1 and <= 8 } && fromName.Skip(1).All(char.IsLetterOrDigit)) return fromName.ToLowerInvariant();
+        return (mime ?? "").Split(';')[0].Trim().ToLowerInvariant() switch
+        {
+            "image/jpeg" => ".jpg", "image/png" => ".png", "image/webp" => ".webp", "image/gif" => ".gif",
+            "video/mp4" => ".mp4", "video/3gpp" => ".3gp", "audio/ogg" => ".ogg", "audio/mpeg" => ".mp3", "audio/aac" => ".aac",
+            "audio/amr" => ".amr", "audio/mp4" => ".m4a", "application/pdf" => ".pdf",
+            _ => ".bin",
+        };
+    }
+
+    /// <summary>Fetches the customer's file from Meta and keeps it on disk. Safe to call again: returns true if the file is already stored.</summary>
+    public async Task<bool> DownloadMediaAsync(WhatsAppMessage msg, CancellationToken ct = default)
+    {
+        if (msg.MediaId is null) return false;
+        if (msg.MediaFile is not null && File.Exists(Path.Combine(MediaDirectory, Path.GetFileName(msg.MediaFile)))) return true;
+        if (!_o.CanSend) return false;
+        try
+        {
+            using var metaReq = new HttpRequestMessage(HttpMethod.Get, $"https://graph.facebook.com/{_o.ApiVersion}/{Uri.EscapeDataString(msg.MediaId)}");
+            metaReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _o.AccessToken);
+            using var metaRes = await http.SendAsync(metaReq, ct);
+            if (!metaRes.IsSuccessStatusCode)
+            {
+                log.LogWarning("[WhatsApp] Media lookup for message {Id} failed with HTTP {Status}", msg.Id, (int)metaRes.StatusCode);
+                return false;
+            }
+            using var info = JsonDocument.Parse(await metaRes.Content.ReadAsStringAsync(ct));
+            var url = info.RootElement.TryGetProperty("url", out var u) ? u.GetString() : null;
+            var mime = info.RootElement.TryGetProperty("mime_type", out var mt) ? mt.GetString() : null;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || !IsMetaHost(uri)) { log.LogWarning("[WhatsApp] Media url for message {Id} was not a Meta address", msg.Id); return false; }
+            if (info.RootElement.TryGetProperty("file_size", out var fs) && fs.TryGetInt64(out var size) && size > MaxMediaBytes) return false;
+
+            using var fileReq = new HttpRequestMessage(HttpMethod.Get, uri);
+            fileReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _o.AccessToken);
+            using var fileRes = await http.SendAsync(fileReq, ct);
+            if (!fileRes.IsSuccessStatusCode) { log.LogWarning("[WhatsApp] Media download for message {Id} failed with HTTP {Status}", msg.Id, (int)fileRes.StatusCode); return false; }
+            var bytes = await fileRes.Content.ReadAsByteArrayAsync(ct);
+            if (bytes.Length == 0 || bytes.Length > MaxMediaBytes) return false;
+
+            Directory.CreateDirectory(MediaDirectory);
+            var name = $"{msg.Id}{ExtensionFor(mime ?? msg.MediaMime, msg.MediaName)}";
+            await File.WriteAllBytesAsync(Path.Combine(MediaDirectory, name), bytes, ct);
+            msg.MediaMime = mime ?? msg.MediaMime;
+            msg.MediaFile = name;
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (OperationCanceledException) { return false; }
+        catch (Exception ex)
+        {
+            log.LogWarning(ex, "[WhatsApp] Could not download media for message {Id}", msg.Id);
+            return false;
         }
     }
 
@@ -229,14 +363,14 @@ public partial class WhatsAppService(
         return digits;
     }
 
-    public Task<bool> SendTextAsync(string phone, string text, string? orderId = null) =>
+    public Task<bool> SendTextAsync(string phone, string text, string? orderId = null, string? sentBy = null) =>
         SendAsync(phone, new
         {
             messaging_product = "whatsapp", recipient_type = "individual", to = NormalizePhone(phone),
             type = "text", text = new { preview_url = false, body = text },
-        }, "text", text, orderId);
+        }, "text", text, orderId, sentBy);
 
-    public Task<bool> SendTemplateAsync(string phone, string template, IEnumerable<string> bodyParams, string? orderId = null) =>
+    public Task<bool> SendTemplateAsync(string phone, string template, IEnumerable<string> bodyParams, string? orderId = null, string? sentBy = null) =>
         SendAsync(phone, new
         {
             messaging_product = "whatsapp", to = NormalizePhone(phone), type = "template",
@@ -245,9 +379,9 @@ public partial class WhatsAppService(
                 name = template, language = new { code = _o.TemplateLanguage },
                 components = new[] { new { type = "body", parameters = bodyParams.Select(p => new { type = "text", text = p }).ToArray() } },
             },
-        }, "template", $"[template:{template}] {string.Join(" | ", bodyParams)}", orderId);
+        }, "template", $"[template:{template}] {string.Join(" | ", bodyParams)}", orderId, sentBy);
 
-    private async Task<bool> SendAsync(string phone, object payload, string type, string logBody, string? orderId)
+    private async Task<bool> SendAsync(string phone, object payload, string type, string logBody, string? orderId, string? sentBy)
     {
         if (!_o.CanSend)
         {
@@ -277,7 +411,7 @@ public partial class WhatsAppService(
             db.WhatsAppMessages.Add(new WhatsAppMessage
             {
                 Direction = "outbound", WaMessageId = waId ?? $"failed-{Guid.NewGuid():N}", Phone = NormalizePhone(phone),
-                Type = type, Body = logBody, Status = res.IsSuccessStatusCode ? "sent" : "failed", OrderId = orderId, LeadId = leadId,
+                Type = type, Body = logBody, Status = res.IsSuccessStatusCode ? "sent" : "failed", OrderId = orderId, LeadId = leadId, SentBy = sentBy ?? "system",
             });
             await db.SaveChangesAsync();
             return res.IsSuccessStatusCode;

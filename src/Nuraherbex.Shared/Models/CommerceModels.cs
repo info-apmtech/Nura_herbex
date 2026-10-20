@@ -375,6 +375,10 @@ public class AdminUserDto
     public string Name { get; set; } = "";
     /// <summary>Set for employee logins; null for the configured super administrator.</summary>
     public long? EmployeeId { get; set; }
+    /// <summary>Page key to access level (see PageCatalog). The administrator has full access to every page.</summary>
+    public Dictionary<string, int> Rights { get; set; } = new();
+    public string? Department { get; set; }
+    public string? Designation { get; set; }
 }
 
 public class AdminLoginResponse : ApiResult
@@ -548,6 +552,14 @@ public class WhatsAppMessageDto
     /// <summary>received | sent | delivered | read | failed</summary>
     public string Status { get; set; } = "received";
     public string? OrderId { get; set; }
+    /// <summary>Employee name for messages sent by a person; empty for automatic ones.</summary>
+    public string? SentBy { get; set; }
+    /// <summary>Signed link (relative to the API) to the photo / sticker / video / audio / document. Null for text.</summary>
+    public string? MediaUrl { get; set; }
+    public string? MediaMime { get; set; }
+    public string? MediaName { get; set; }
+    /// <summary>Emoji reaction left on this message.</summary>
+    public string? Reaction { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

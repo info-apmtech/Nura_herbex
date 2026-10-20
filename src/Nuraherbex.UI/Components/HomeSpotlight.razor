@@ -1,0 +1,67 @@
+@inject ApiClient Api
+@inject CartState Cart
+@inject NavigationManager Nav
+
+@if (_p is { } p)
+{
+  var soldOut = p.StockQuantity <= 0;
+  var onSale = p.CompareAtPrice > p.Price;
+  <section class="hm-section">
+    <div class="hm-wrap">
+      <div class="hm-spot reveal-on-scroll">
+        <div class="hm-spot-img">
+          @if (!string.IsNullOrWhiteSpace(p.ImageUrl)) { <img src="@p.ImageUrl" alt="@p.Name" loading="lazy" /> } else { <Icon Name="Package" Size="80" /> }
+          @if (onSale) { <span class="hm-badge">@Math.Round((1 - p.Price / p.CompareAtPrice!.Value) * 100)% OFF</span> }
+        </div>
+        <div class="hm-spot-copy">
+          <span class="hm-kicker">Featured product</span>
+          <h2>@p.Name</h2>
+          @if (!string.IsNullOrWhiteSpace(p.Subtitle)) { <p class="hm-spot-sub">@p.Subtitle</p> }
+          @if (!string.IsNullOrWhiteSpace(p.Description)) { <p class="hm-spot-desc">@p.Description</p> }
+          <ul class="hm-spot-list">
+            <li><Icon Name="Check" Size="16" /> 17 botanicals, herbs, seeds &amp; nuts</li>
+            <li><Icon Name="Check" Size="16" /> Full 20 g daily serving</li>
+            <li><Icon Name="Check" Size="16" /> Supports energy, stamina &amp; focus</li>
+            <li><Icon Name="Check" Size="16" /> Made in a GMP certified facility</li>
+          </ul>
+          <div class="hm-spot-specs">
+            <div><strong>@(p.WeightKg > 0 ? $"{Math.Round(p.WeightKg * 1000)} g" : "20 g")</strong><span>@(p.WeightKg > 0 ? "Pack weight" : "Serving")</span></div>
+            <div><strong>@(soldOut ? "Sold out" : "In stock")</strong><span>Availability</span></div>
+            <div><strong>@p.Sku</strong><span>SKU</span></div>
+          </div>
+          <div class="hm-spot-buy">
+            <div class="hm-spot-price">@SiteConfig.Money(p.Price)@if (onSale) { <del>@SiteConfig.Money(p.CompareAtPrice!.Value)</del> }</div>
+            <div class="hm-qty"><button @onclick="() => _qty = Math.Max(1, _qty - 1)" aria-label="Decrease quantity">−</button><span>@_qty</span><button @onclick="() => _qty = Math.Min(Math.Max(1, p.StockQuantity), _qty + 1)" aria-label="Increase quantity">+</button></div>
+          </div>
+          <div class="hm-video-actions" style="margin-top:1.2rem">
+            <button class="hm-btn hm-btn-primary" disabled="@soldOut" @onclick="() => AddAsync(p, false)"><Icon Name="ShoppingBag" Size="16" /> @(_added ? "Added to cart" : "Add to cart")</button>
+            <button class="hm-btn hm-btn-ghost" disabled="@soldOut" @onclick="() => AddAsync(p, true)">Buy now</button>
+            <a class="hm-btn hm-btn-ghost" href="@("/catalog/" + Uri.EscapeDataString(p.Id))">Full details</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+}
+
+@code {
+    private ProductDto? _p;
+    private int _qty = 1;
+    private bool _added;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var r = await Api.GetCatalogAsync();
+        _p = r.Products.Where(x => x.Status == "active").OrderByDescending(x => x.StockQuantity > 0).FirstOrDefault();
+    }
+
+    private async Task AddAsync(ProductDto p, bool buyNow)
+    {
+        var existing = Cart.Items.Where(i => i.Id == p.Id).Sum(i => i.Quantity);
+        if (existing + _qty > p.StockQuantity) { Nav.NavigateTo("/catalog/" + Uri.EscapeDataString(p.Id)); return; }
+        await Cart.AddToCartAsync(new CartItem { Id = p.Id, Name = p.Name, Price = p.Price, Image = p.ImageUrl, ServingsText = p.Subtitle }, _qty);
+        if (buyNow) { Nav.NavigateTo("/checkout"); return; }
+        _added = true; StateHasChanged();
+        await Task.Delay(1600); _added = false; StateHasChanged();
+    }
+}

@@ -55,16 +55,38 @@ public static class Mapping
         CreatedAt = r.CreatedAt,
     };
 
-    public static WhatsAppMessageDto ToDto(this WhatsAppMessage m) => new()
+    public static readonly string[] MediaTypes = ["image", "video", "audio", "document", "sticker"];
+
+    public static WhatsAppMessageDto ToDto(this WhatsAppMessage m, MediaSigner? signer = null) => new()
     {
         Id = m.Id, Direction = m.Direction, WaMessageId = m.WaMessageId, Phone = m.Phone, ProfileName = m.ProfileName,
         Type = m.Type, Body = m.Body, Status = m.Status, OrderId = m.OrderId, CreatedAt = m.CreatedAt,
+        SentBy = m.SentBy is null or "system" or "auto" ? null : m.SentBy,
+        MediaUrl = signer is not null && (m.MediaId is not null || m.MediaFile is not null) ? signer.Url(m.Id) : null,
+        MediaMime = m.MediaMime, MediaName = m.MediaName, Reaction = m.Reaction,
+    };
+
+    /// <summary>Short text for lists and AI context when a message has no text of its own.</summary>
+    public static string MessageLabel(string type) => type switch
+    {
+        "image" => "Photo", "sticker" => "Sticker", "video" => "Video", "audio" => "Voice message", "document" => "Document",
+        "location" => "Location", "contacts" => "Contact", "unsupported" => "Unsupported message", _ => $"[{type}]",
+    };
+
+    public static FollowUpDto ToDto(this FollowUp f, string leadName, string leadPhone, string? ownerName) => new()
+    {
+        Id = f.Id, LeadId = f.LeadId, LeadName = leadName, LeadPhone = leadPhone, OrderId = f.OrderId,
+        AssignedToEmployeeId = f.AssignedToEmployeeId, AssignedToName = ownerName, Type = f.Type, Title = f.Title, Notes = f.Notes,
+        SuggestedMessage = f.SuggestedMessage, DueAt = f.DueAt, Status = f.Status, Outcome = f.Outcome, CompletedAt = f.CompletedAt,
+        CompletedBy = f.CompletedBy, Source = f.Source, StepKey = f.StepKey, RemindAt = f.RemindAt, CreatedAt = f.CreatedAt,
+        IsOverdue = f.Status == "pending" && f.DueAt < FollowUpService.TodayStartUtc(),
+        CanMessage = f.Status == "pending" && !string.IsNullOrWhiteSpace(f.SuggestedMessage),
     };
 
     public static EmployeeDto ToDto(this Employee e) => new()
     {
         Id = e.Id, Name = e.Name, Email = e.Email, Phone = e.Phone, Role = e.Role, IsActive = e.IsActive,
-        CreatedAt = e.CreatedAt, LastLoginAt = e.LastLoginAt,
+        CreatedAt = e.CreatedAt, LastLoginAt = e.LastLoginAt, DepartmentId = e.DepartmentId, DesignationId = e.DesignationId,
     };
 
     public static LeadDto ToDto(this Lead l, Conversation? c = null) => new()

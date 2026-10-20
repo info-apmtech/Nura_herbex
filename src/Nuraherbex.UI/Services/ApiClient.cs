@@ -28,6 +28,9 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
 
     private enum Who { None, Customer, Admin }
 
+    /// <summary>Full address of an API path (used for signed media links that are loaded straight by the browser).</summary>
+    public string Url(string relative) => http.BaseAddress is { } b ? new Uri(b, relative).ToString() : "/" + relative;
+
     // ------------------------------------------------------------------ plumbing
     private async Task<T> Call<T>(HttpMethod method, string path, object? body = null, Who who = Who.None) where T : ApiResult, new()
     {
@@ -163,12 +166,53 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
         Call<LeadListResponse>(HttpMethod.Get, $"api/admin/leads?take={take}&status={Uri.EscapeDataString(status ?? "")}&source={Uri.EscapeDataString(source ?? "")}&q={Uri.EscapeDataString(q ?? "")}&assignee={Uri.EscapeDataString(assignee ?? "")}", null, Who.Admin);
     public Task<ApiResult> AdminLeadAssignAsync(long id, LeadAssignRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/assign", r, Who.Admin);
     public Task<ApiResult> AdminLeadReplyAsync(long id, string text) => Call<ApiResult>(HttpMethod.Post, $"api/admin/leads/{id}/reply", new LeadReplyRequest { Text = text }, Who.Admin);
-    public Task<EmployeeListResponse> AdminTeamAsync() => Call<EmployeeListResponse>(HttpMethod.Get, "api/admin/team", null, Who.Admin);
+    public Task<EmployeeListResponse> AdminTeamAsync(string? forPage = null) => Call<EmployeeListResponse>(HttpMethod.Get, forPage is null ? "api/admin/team" : $"api/admin/team?for={forPage}", null, Who.Admin);
+    public Task<DepartmentListResponse> AdminTeamDepartmentsAsync() => Call<DepartmentListResponse>(HttpMethod.Get, "api/admin/team/departments", null, Who.Admin);
     public Task<EmployeeListResponse> AdminEmployeesAsync() => Call<EmployeeListResponse>(HttpMethod.Get, "api/admin/employees", null, Who.Admin);
+    public Task<RightsCatalogResponse> AdminRightsCatalogAsync() => Call<RightsCatalogResponse>(HttpMethod.Get, "api/admin/rights/catalog", null, Who.Admin);
+    public Task<DepartmentListResponse> AdminDepartmentsAsync() => Call<DepartmentListResponse>(HttpMethod.Get, "api/admin/departments", null, Who.Admin);
+    public Task<ApiResult> AdminSaveDepartmentAsync(long? id, DepartmentSaveRequest r) => Call<ApiResult>(id is null ? HttpMethod.Post : HttpMethod.Put, id is null ? "api/admin/departments" : $"api/admin/departments/{id}", r, Who.Admin);
+    public Task<ApiResult> AdminDeleteDepartmentAsync(long id) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/departments/{id}", null, Who.Admin);
+    public Task<DesignationListResponse> AdminDesignationsAsync() => Call<DesignationListResponse>(HttpMethod.Get, "api/admin/designations", null, Who.Admin);
+    public Task<ApiResult> AdminSaveDesignationAsync(long? id, DesignationSaveRequest r) => Call<ApiResult>(id is null ? HttpMethod.Post : HttpMethod.Put, id is null ? "api/admin/designations" : $"api/admin/designations/{id}", r, Who.Admin);
+    public Task<ApiResult> AdminDeleteDesignationAsync(long id) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/designations/{id}", null, Who.Admin);
+
+    public Task<TaskListResponse> AdminTasksAsync(string? scope = null, string? assignee = null, long? department = null, string? priority = null, string? q = null, long? leadId = null, bool createdByMe = false) =>
+        Call<TaskListResponse>(HttpMethod.Get, $"api/admin/tasks?scope={Uri.EscapeDataString(scope ?? "")}&assignee={Uri.EscapeDataString(assignee ?? "")}&priority={Uri.EscapeDataString(priority ?? "")}&q={Uri.EscapeDataString(q ?? "")}{(department is { } d ? $"&department={d}" : "")}{(leadId is { } l ? $"&leadId={l}" : "")}{(createdByMe ? "&createdByMe=true" : "")}", null, Who.Admin);
+    public Task<TaskDetailResponse> AdminTaskAsync(long id) => Call<TaskDetailResponse>(HttpMethod.Get, $"api/admin/tasks/{id}", null, Who.Admin);
+    public Task<TaskDetailResponse> AdminCreateTaskAsync(TaskSaveRequest r) => Call<TaskDetailResponse>(HttpMethod.Post, "api/admin/tasks", r, Who.Admin);
+    public Task<ApiResult> AdminUpdateTaskAsync(long id, TaskSaveRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/tasks/{id}", r, Who.Admin);
+    public Task<ApiResult> AdminTaskStatusAsync(long id, string status, string? note = null) => Call<ApiResult>(HttpMethod.Put, $"api/admin/tasks/{id}/status", new TaskStatusRequest { Status = status, Note = note }, Who.Admin);
+    public Task<ApiResult> AdminDeleteTaskAsync(long id) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/tasks/{id}", null, Who.Admin);
+    public Task<ApiResult> AdminTaskCommentAsync(long id, string body) => Call<ApiResult>(HttpMethod.Post, $"api/admin/tasks/{id}/comments", new TaskCommentRequest { Body = body }, Who.Admin);
+    public Task<ApiResult> AdminTaskAddItemAsync(long id, string text) => Call<ApiResult>(HttpMethod.Post, $"api/admin/tasks/{id}/checklist", new TaskChecklistRequest { Text = text }, Who.Admin);
+    public Task<ApiResult> AdminTaskTickItemAsync(long id, long itemId, bool done) => Call<ApiResult>(HttpMethod.Put, $"api/admin/tasks/{id}/checklist/{itemId}", new TaskChecklistRequest { Done = done }, Who.Admin);
+    public Task<ApiResult> AdminTaskRemoveItemAsync(long id, long itemId) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/tasks/{id}/checklist/{itemId}", null, Who.Admin);
+
     public Task<EmployeeResponse> AdminCreateEmployeeAsync(EmployeeSaveRequest r) => Call<EmployeeResponse>(HttpMethod.Post, "api/admin/employees", r, Who.Admin);
     public Task<EmployeeResponse> AdminUpdateEmployeeAsync(long id, EmployeeSaveRequest r) => Call<EmployeeResponse>(HttpMethod.Put, $"api/admin/employees/{id}", r, Who.Admin);
     public Task<ApiResult> AdminRemoveEmployeeAsync(long id, bool spreadLeads) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/employees/{id}?reassign={(spreadLeads ? "auto" : "unassigned")}", null, Who.Admin);
     public Task<ApiResult> AdminLeadSettingsAsync(bool autoAssign) => Call<ApiResult>(HttpMethod.Put, "api/admin/leads/settings", new LeadSettingsRequest { AutoAssign = autoAssign }, Who.Admin);
+    public Task<LeadOrderResponse> AdminLeadOrderAsync(long id, LeadOrderRequest r) => Call<LeadOrderResponse>(HttpMethod.Post, $"api/admin/leads/{id}/order", r, Who.Admin);
+    public Task<CrmDashboardResponse> AdminCrmDashboardAsync(int days) => Call<CrmDashboardResponse>(HttpMethod.Get, $"api/admin/crm/dashboard?days={days}", null, Who.Admin);
+    public Task<ReplySuggestionResponse> AdminSuggestReplyAsync(long id, ReplySuggestRequest r) => Call<ReplySuggestionResponse>(HttpMethod.Post, $"api/admin/leads/{id}/suggest-reply", r, Who.Admin);
+    public Task<ReplyAssistantSettingsDto> AdminReplySettingsAsync() => Call<ReplyAssistantSettingsDto>(HttpMethod.Get, "api/admin/ai/reply-settings", null, Who.Admin);
+    public Task<ApiResult> AdminSaveReplySettingsAsync(ReplyAssistantSettingsRequest r) => Call<ApiResult>(HttpMethod.Put, "api/admin/ai/reply-settings", r, Who.Admin);
+    public Task<ApiResult> AdminLeadConsentAsync(long id, string status) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/consent", new LeadConsentRequest { Status = status }, Who.Admin);
+
+    public Task<FollowUpListResponse> AdminFollowUpsAsync(string? scope = null, string? assignee = null, string? type = null, long? leadId = null) =>
+        Call<FollowUpListResponse>(HttpMethod.Get, $"api/admin/followups?scope={Uri.EscapeDataString(scope ?? "")}&assignee={Uri.EscapeDataString(assignee ?? "")}&type={Uri.EscapeDataString(type ?? "")}{(leadId is { } l ? $"&leadId={l}" : "")}", null, Who.Admin);
+    public Task<ApiResult> AdminCreateFollowUpAsync(FollowUpCreateRequest r) => Call<ApiResult>(HttpMethod.Post, "api/admin/followups", r, Who.Admin);
+    public Task<ApiResult> AdminCompleteFollowUpAsync(long id, FollowUpCompleteRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/followups/{id}/complete", r, Who.Admin);
+    public Task<ApiResult> AdminRescheduleFollowUpAsync(long id, FollowUpRescheduleRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/followups/{id}/reschedule", r, Who.Admin);
+    public Task<ApiResult> AdminSkipFollowUpAsync(long id) => Call<ApiResult>(HttpMethod.Put, $"api/admin/followups/{id}/skip", new { }, Who.Admin);
+    public Task<ApiResult> AdminSendFollowUpAsync(long id) => Call<ApiResult>(HttpMethod.Post, $"api/admin/followups/{id}/send", new { }, Who.Admin);
+    public Task<FollowUpSettingsDto> AdminFollowUpSettingsAsync() => Call<FollowUpSettingsDto>(HttpMethod.Get, "api/admin/followups/settings", null, Who.Admin);
+    public Task<ApiResult> AdminSaveFollowUpSettingsAsync(FollowUpSettingsRequest r) => Call<ApiResult>(HttpMethod.Put, "api/admin/followups/settings", r, Who.Admin);
+    public Task<FollowUpReportResponse> AdminFollowUpReportAsync(int days) => Call<FollowUpReportResponse>(HttpMethod.Get, $"api/admin/followups/report?days={days}", null, Who.Admin);
+    public Task<NotificationListResponse> AdminNotificationsAsync() => Call<NotificationListResponse>(HttpMethod.Get, "api/admin/notifications", null, Who.Admin);
+    public Task<ApiResult> AdminReadAllNotificationsAsync() => Call<ApiResult>(HttpMethod.Put, "api/admin/notifications/read-all", new { }, Who.Admin);
+    public Task<ApiResult> AdminReadNotificationAsync(long id) => Call<ApiResult>(HttpMethod.Put, $"api/admin/notifications/{id}/read", new { }, Who.Admin);
     public Task<LeadDetailResponse> AdminLeadDetailAsync(long id) => Call<LeadDetailResponse>(HttpMethod.Get, $"api/admin/leads/{id}", null, Who.Admin);
     public Task<ApiResult> AdminLeadStatusAsync(long id, LeadStatusRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/status", r, Who.Admin);
     public Task<ApiResult> AdminLeadNotesAsync(long id, LeadNotesRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/notes", r, Who.Admin);

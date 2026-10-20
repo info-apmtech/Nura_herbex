@@ -1,0 +1,23 @@
+@inject AdminSession AdminAuth
+
+@* Organisation: people, departments and designations (with the pages each designation can open). *@
+<div class="ld org">
+    <div class="org-intro">
+        <div>
+            <h3>Team &amp; organisation</h3>
+            <p>Three steps: create <strong>departments</strong>, create <strong>designations</strong> and choose the pages each one may open, then give every <strong>person</strong> a designation.</p>
+        </div>
+    </div>
+    <div class="org-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected="@(_tab == "people")" class="@(_tab == "people" ? "is-active" : "")" @onclick='() => _tab = "people"'><Icon Name="Users" Size="15" /> People</button>
+        <button type="button" role="tab" aria-selected="@(_tab == "departments")" class="@(_tab == "departments" ? "is-active" : "")" @onclick='() => _tab = "departments"'><Icon Name="MapPin" Size="15" /> Departments</button>
+        <button type="button" role="tab" aria-selected="@(_tab == "designations")" class="@(_tab == "designations" ? "is-active" : "")" @onclick='() => _tab = "designations"'><Icon Name="ShieldCheck" Size="15" /> Designations &amp; page rights</button>
+    </div>
+    @if (_tab == "people") { <AdminEmployeesTab /> }
+    else if (_tab == "departments") { <AdminDepartmentsPanel /> }
+    else { <AdminDesignationsPanel /> }
+</div>
+
+@code {
+    private string _tab = "people";
+}

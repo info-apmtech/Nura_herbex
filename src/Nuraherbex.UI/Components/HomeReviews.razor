@@ -1,0 +1,48 @@
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+<section id="testimonials" class="hm-section hm-rev">
+  <div class="hm-wrap">
+    <header class="hm-head reveal-on-scroll">
+      <span class="hm-eyebrow">Real stories</span>
+      <h2>Voices of the <em>Stamix</em> movement</h2>
+      <p>Authentic experiences from men who made Stamix part of their daily ritual.</p>
+    </header>
+
+    @if (_reviews.Count == 0)
+    {
+      <div class="hm-empty reveal-on-scroll"><Icon Name="MessageSquare" Size="32" /><h3>No approved reviews yet</h3><p>Reviews appear here once approved.</p>
+        <button class="hm-btn hm-btn-gold" @onclick='() => Nav.NavigateTo("/account/reviews")'>Write a review</button></div>
+    }
+    else
+    {
+      <div class="hm-quotes">
+        @foreach (var r in _reviews)
+        {
+          <figure class="hm-quote reveal-on-scroll" @key="r.Id">
+            <div class="hm-quote-mark">“</div>
+            <div class="hm-stars">@for (var i = 0; i < Math.Clamp(r.Rating, 1, 5); i++) { <Icon Name="Star" Size="14" /> }</div>
+            @if (!string.IsNullOrWhiteSpace(r.Title)) { <h3>@r.Title</h3> }
+            <blockquote>@r.Body</blockquote>
+            <figcaption>
+              @if (!string.IsNullOrEmpty(r.ProfileImageData)) { <img src="@r.ProfileImageData" alt="@r.Name" loading="lazy" /> }
+              else { <span class="hm-avatar">@Initial(r.Name)</span> }
+              <div><strong>@r.Name</strong><span>@(string.IsNullOrWhiteSpace(r.City) ? "India" : r.City) · Verified buyer</span></div>
+            </figcaption>
+          </figure>
+        }
+      </div>
+    }
+  </div>
+</section>
+
+@code {
+    private List<ReviewDto> _reviews = new();
+    private static string Initial(string n) => string.IsNullOrWhiteSpace(n) ? "?" : n.Trim()[..1].ToUpperInvariant();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var list = await Api.GetReviewsAsync();
+        _reviews = list.Where(r => !string.IsNullOrWhiteSpace(r.Body)).Take(6).ToList();
+    }
+}

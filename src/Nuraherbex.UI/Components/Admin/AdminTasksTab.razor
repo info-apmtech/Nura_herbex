@@ -1,0 +1,481 @@
+@inject ApiClient Api
+@inject AdminSession AdminAuth
+@inject NavigationManager Nav
+
+<div class="ld tk">
+    <div class="em-head">
+        <div>
+            <h3>Tasks</h3>
+            <p>@(AdminAuth.CanAll("tasks") ? "Every task across the team: who owns it, what is late and what is done." : "Tasks assigned to you or created by you.")</p>
+        </div>
+        <div class="em-head-actions"><button type="button" class="ld-btn primary" @onclick="StartCreate"><Icon Name="Plus" Size="14" /> New task</button></div>
+    </div>
+
+    <details class="tk-help" open>
+        <summary><Icon Name="Sparkles" Size="14" /> How tasks work</summary>
+        <ol>
+            <li><b>Create</b> a task: say what must be done, who does it, by when and how important it is.</li>
+            <li><b>Assign</b> it to one person, or tick several people (or a whole department). Each person gets their <em>own copy</em> and is notified.</li>
+            <li><b>Work on it</b>: <span class="tk-st todo">To do</span> → <span class="tk-st in_progress">In progress</span>. Use <span class="tk-st blocked">Blocked</span> when you are waiting on someone. Tick the checklist steps as you go.</li>
+            <li>Press <b>Mark done</b> when finished. The person who created it is told. A repeating task creates the next one by itself.</li>
+        </ol>
+        <p>Late tasks turn red and the assignee is reminded a day before and when overdue. Comments on a task are visible to everyone involved.</p>
+    </details>
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="@($"em-note {(_ok ? "ok" : "bad")}")" role="status"><Icon Name="@(_ok ? "CheckCircle2" : "AlertCircle")" Size="15" /><span>@_message</span><button type="button" class="em-x" aria-label="Dismiss" @onclick="() => _message = null"><Icon Name="X" Size="14" /></button></div>
+    }
+
+    <div class="fu-chips tk-chips">
+        <button type="button" class="@Chip("open", "")" @onclick='() => SetView("open", "")'><b>@_counts.Open</b><span>Open</span></button>
+        <button type="button" class="@Chip("overdue", "late")" @onclick='() => SetView("overdue", "")'><b>@_counts.Overdue</b><span>Overdue</span></button>
+        <button type="button" class="@Chip("today", "today")" @onclick='() => SetView("today", "")'><b>@_counts.DueToday</b><span>Due today</span></button>
+        <button type="button" class="@Chip("done", "")" @onclick='() => SetView("done", "")'><b>@_counts.Done</b><span>Done</span></button>
+    </div>
+
+    <div class="tk-bar">
+        <div class="ld-search"><Icon Name="Search" Size="15" /><input type="search" placeholder="Search tasks" aria-label="Search tasks" @bind="_q" @bind:event="oninput" @bind:after="LoadAsync" /></div>
+        <select aria-label="Person" @bind="_assignee" @bind:after="LoadAsync">
+            <option value="">Everyone</option>
+            <option value="me">My tasks (@_counts.Mine)</option>
+            <option value="unassigned">Unassigned (@_counts.Unassigned)</option>
+            @foreach (var p in _team) { <option value="@p.Id">@p.Name</option> }
+        </select>
+        <select aria-label="Department" @bind="_department" @bind:after="LoadAsync">
+            <option value="">All departments</option>
+            @foreach (var d in _departments) { <option value="@d.Id">@d.Name</option> }
+        </select>
+        <select aria-label="Priority" @bind="_priority" @bind:after="LoadAsync">
+            <option value="">Any priority</option>
+            @foreach (var p in TaskPriorities.All) { <option value="@p">@Cap(p)</option> }
+        </select>
+        @if (_leadFilter is not null) { <button type="button" class="ld-tab is-active" title="Show all tasks" @onclick="ClearLead">Lead #@_leadFilter <Icon Name="X" Size="12" /></button> }
+        <div class="tk-view" role="group" aria-label="View">
+            <button type="button" class="@(_board ? "" : "is-on")" @onclick="() => SetBoard(false)">List</button>
+            <button type="button" class="@(_board ? "is-on" : "")" @onclick="() => SetBoard(true)">Board</button>
+        </div>
+    </div>
+
+    @if (_loading) { <div class="ld-card ld-empty">Loading tasks…</div> }
+    else if (_board)
+    {
+        <div class="tk-board">
+            @foreach (var st in TaskStatuses.All)
+            {
+                var status = st;
+                var col = _items.Where(t => t.Status == status).ToList();
+                <section class="tk-col @(_dropOn == status ? "is-over" : "")" @ondragover:preventDefault @ondragenter="() => _dropOn = status" @ondrop="() => DropAsync(status)" aria-label="@TaskStatuses.Label(status)">
+                    <header><span>@TaskStatuses.Label(status)</span><b>@col.Count</b></header>
+                    @foreach (var t in col)
+                    {
+                        var task = t;
+                        <article class="tk-card @PriClass(task)" draggable="true" @key="task.Id" @ondragstart="() => _dragId = task.Id" @ondragend="() => { _dragId = null; _dropOn = null; }" @onclick="() => OpenAsync(task.Id)">
+                            <strong>@task.Title</strong>
+                            <div class="tk-meta">
+                                <span class="@($"tk-pri {task.Priority}")">@Cap(task.Priority)</span>
+                                @if (task.DueAt is { } du) { <span class="@($"tk-due {(task.IsOverdue ? "late" : "")}")"><Icon Name="Clock" Size="11" /> @AdminFmt.DateTimeShort(du)</span> }
+                                @if (task.ChecklistTotal > 0) { <span><Icon Name="Check" Size="11" /> @task.ChecklistDone/@task.ChecklistTotal</span> }
+                                @if (task.CommentCount > 0) { <span><Icon Name="MessageSquare" Size="11" /> @task.CommentCount</span> }
+                            </div>
+                            <div class="tk-foot"><span>@(task.AssignedToName ?? "Unassigned")</span>@if (task.DepartmentName is { } dn) { <small>@dn</small> }</div>
+                            @if (task.CanEdit && task.Status != "done") { <button type="button" class="ld-btn tk-donebtn" @onclick="() => ToggleDoneAsync(task)" @onclick:stopPropagation="true"><Icon Name="Check" Size="13" /> Mark done</button> }
+                        </article>
+                    }
+                    @if (col.Count == 0) { <p class="tk-none">Nothing here</p> }
+                </section>
+            }
+        </div>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="ld-card ld-empty"><strong>No tasks here</strong>@(_scope == "open" && _q == "" ? "Create a task to give someone work with a due date." : "Nothing matches these filters.")</div>
+    }
+    else
+    {
+        <div class="ld-card tk-list">
+            <div class="tk-row tk-headrow" aria-hidden="true"><span>S.No</span><span>Task</span><span>Priority</span><span>Status</span><span>Due</span><span>Assigned to</span><span>Progress</span><span>Action</span></div>
+            @{ var sn = 0; }
+            @foreach (var t in _items)
+            {
+                var task = t;
+                <div class="tk-row @(task.Status == "done" ? "is-done" : "")" @key="task.Id">
+                    <span class="tk-sn">@(++sn)</span>
+                    <button type="button" class="tk-main" @onclick="() => OpenAsync(task.Id)">
+                        <strong>@task.Title</strong>
+                        <small>@string.Join(" · ", new[] { task.DepartmentName, task.LeadName is { } ln ? "Lead: " + ln : null, task.Repeat != "none" ? "Repeats " + task.Repeat : null }.Where(x => x is not null))</small>
+                    </button>
+                    <span class="@($"tk-pri {task.Priority}")">@Cap(task.Priority)</span>
+                    <span class="tk-st @task.Status">@TaskStatuses.Label(task.Status)</span>
+                    <span class="@($"tk-due {(task.IsOverdue ? "late" : "")}")">@(task.DueAt is { } du ? AdminFmt.DateTimeShort(du) : "No due date")</span>
+                    <span class="tk-who">@(task.AssignedToName ?? "Unassigned")@if (task.DepartmentName is { } dn) { <small>@dn</small> }</span>
+                    <span class="tk-sm">@if (task.ChecklistTotal > 0) { <span title="Checklist steps done"><Icon Name="Check" Size="11" /> @task.ChecklistDone/@task.ChecklistTotal</span> } else { <span>—</span> }</span>
+                    <span class="tk-act">
+                        @if (!task.CanEdit) { <span class="tk-muted">View only</span> }
+                        else if (task.Status == "done") { <button type="button" class="ld-btn" title="Move it back to To do" @onclick="() => ToggleDoneAsync(task)">Reopen</button> }
+                        else { <button type="button" class="ld-btn tk-donebtn" title="Finish this task" @onclick="() => ToggleDoneAsync(task)"><Icon Name="Check" Size="13" /> Mark done</button> }
+                    </span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@if (_form is not null)
+{
+    <div class="fu-modal-backdrop" @onclick="() => _form = null">
+        <div class="fu-modal lo" role="dialog" aria-modal="true" aria-label="@(_editingId is null ? "New task" : "Edit task")" @onclick:stopPropagation="true">
+            <header><h3>@(_editingId is null ? "New task" : "Edit task")</h3><button type="button" class="em-x" aria-label="Close" @onclick="() => _form = null"><Icon Name="X" Size="16" /></button></header>
+            <form class="fu-form" @onsubmit="SaveAsync" @onsubmit:preventDefault>
+                <label class="fu-field">What needs to be done<input class="fu-input" type="text" required maxlength="200" @bind="_form.Title" @bind:event="oninput" placeholder="e.g. Call back the Chennai bulk enquiry" /></label>
+                <label class="fu-field">Details<textarea class="fu-input tk-text" maxlength="4000" rows="3" @bind="_form.Description" @bind:event="oninput" placeholder="Optional"></textarea></label>
+                <div class="tk-two">
+                    <label class="fu-field">Department
+                        <select value="@(_form.DepartmentId?.ToString() ?? "")" @onchange="OnDepartmentChanged">
+                            <option value="">All / none</option>
+                            @foreach (var d in _departments) { <option value="@d.Id">@d.Name</option> }
+                        </select>
+                    </label>
+                    <div class="fu-field tk-wide">
+                        <span>Assign to @if (_editingId is null) { <small>tick one or more people — each gets their own copy of the task</small> }</span>
+                        @if (_editingId is not null)
+                        {
+                            <select value="@(_form.AssignedToEmployeeId?.ToString() ?? "")" @onchange="OnSingleAssignee">
+                                <option value="">Unassigned</option>
+                                @foreach (var p in _team) { <option value="@p.Id">@p.Name@(DeptOf(p) is { } dn ? " · " + dn : "")@(p.Id == AdminAuth.EmployeeId ? " (me)" : "")</option> }
+                            </select>
+                        }
+                        else
+                        {
+                            <div class="tk-people">
+                                <div class="tk-people-tools">
+                                    @if (_form.DepartmentId is not null) { <button type="button" class="ld-tab" @onclick="PickWholeDepartment">Select everyone in this department (@PeopleShown.Count)</button> }
+                                    @if (_picked.Count > 0) { <button type="button" class="ld-tab" @onclick="ClearPicked">Clear (@_picked.Count)</button> }
+                                </div>
+                                @foreach (var p in PeopleShown)
+                                {
+                                    var person = p;
+                                    <label class="tk-person @(_picked.Contains(person.Id) ? "is-on" : "")">
+                                        <input type="checkbox" checked="@_picked.Contains(person.Id)" @onchange="e => TogglePerson(person, e.Value is true)" />
+                                        <span class="ld-avatar">@person.Name[..1].ToUpperInvariant()</span>
+                                        <span><strong>@person.Name@(person.Id == AdminAuth.EmployeeId ? " (me)" : "")</strong><small>@(DeptOf(person) ?? "No department")</small></span>
+                                    </label>
+                                }
+                                @if (PeopleShown.Count == 0) { <p class="fu-hint">Nobody in this department yet. Leave it unassigned, or choose another department.</p> }
+                            </div>
+                        }
+                    </div>
+                    <label class="fu-field">Priority
+                        <select @bind="_form.Priority">@foreach (var p in TaskPriorities.All) { <option value="@p">@Cap(p)</option> }</select>
+                    </label>
+                    <label class="fu-field">Due
+                        <input class="fu-input" type="datetime-local" @bind="_due" />
+                    </label>
+                    <label class="fu-field">Repeat
+                        <select @bind="_form.Repeat">
+                            <option value="none">Does not repeat</option>
+                            <option value="daily">Every day</option>
+                            <option value="weekly">Every week</option>
+                            <option value="monthly">Every month</option>
+                        </select>
+                    </label>
+                    @if (_form.LeadId is not null) { <div class="fu-field">About<div class="tk-lead">Lead #@_form.LeadId <button type="button" class="fu-link" @onclick="() => _form.LeadId = null">Remove</button></div></div> }
+                </div>
+                @if (_form.Repeat != "none" && _due is null) { <p class="fu-hint">A repeating task needs a due date.</p> }
+                @if (_editingId is null)
+                {
+                    <label class="fu-field">Checklist <small>one step per line</small><textarea class="fu-input tk-text" rows="3" @bind="_checklistText" @bind:event="oninput" placeholder="e.g. Print labels (then press Enter for the next step)"></textarea></label>
+                }
+                <footer>
+                    <button type="button" class="ld-btn" @onclick="() => _form = null">Cancel</button>
+                    <button type="submit" class="ld-btn primary" disabled="@_busy">@(_busy ? "Saving…" : _editingId is null ? "Create task" : "Save changes")</button>
+                </footer>
+            </form>
+        </div>
+    </div>
+}
+
+@if (_detail is { Task: { } dt })
+{
+    <div class="fu-modal-backdrop tk-drawer-bg" @onclick="CloseDetail">
+        <aside class="tk-drawer" role="dialog" aria-modal="true" aria-label="Task details" @onclick:stopPropagation="true">
+            <header>
+                <div><span class="@($"tk-pri {dt.Priority}")">@Cap(dt.Priority)</span> @if (dt.IsOverdue) { <span class="tk-due late">Overdue</span> }<h3>@dt.Title</h3></div>
+                <button type="button" class="em-x" aria-label="Close" @onclick="CloseDetail"><Icon Name="X" Size="16" /></button>
+            </header>
+            <div class="tk-body">
+                <div class="tk-facts">
+                    <div><small>Status</small>
+                        @if (dt.CanEdit) { <select value="@dt.Status" @onchange="OnDetailStatus">@foreach (var s in TaskStatuses.All) { <option value="@s">@TaskStatuses.Label(s)</option> }</select> }
+                        else { <b>@TaskStatuses.Label(dt.Status)</b> }
+                    </div>
+                    <div><small>Assigned to</small><b>@(dt.AssignedToName ?? "Unassigned")</b></div>
+                    <div><small>Due</small><b class="@(dt.IsOverdue ? "late" : "")">@(dt.DueAt is { } d ? AdminFmt.DateTimeShort(d) : "No due date")</b></div>
+                    <div><small>Department</small><b>@(dt.DepartmentName ?? "—")</b></div>
+                    <div><small>Created by</small><b>@dt.CreatedByName</b></div>
+                    @if (dt.Repeat != "none") { <div><small>Repeats</small><b>@Cap(dt.Repeat)</b></div> }
+                </div>
+                @if (!string.IsNullOrWhiteSpace(dt.Description)) { <p class="tk-desc">@dt.Description</p> }
+                @if (dt.LeadId is { } lid) { <p><button type="button" class="fu-link" @onclick="() => OpenLead(lid)">Open lead @(dt.LeadName ?? "#" + lid)</button></p> }
+
+                <h4>Checklist @if (_detail.Checklist.Count > 0) { <small>@_detail.Checklist.Count(c => c.Done)/@_detail.Checklist.Count</small> }</h4>
+                @foreach (var c in _detail.Checklist)
+                {
+                    var item = c;
+                    <div class="tk-check @(item.Done ? "done" : "")">
+                        <label><input type="checkbox" checked="@item.Done" disabled="@(!dt.CanEdit)" @onchange="e => TickAsync(item, e.Value is true)" /> <span>@item.Text</span></label>
+                        @if (dt.CanEdit) { <button type="button" class="em-x" aria-label="Remove step" @onclick="() => RemoveItemAsync(item)"><Icon Name="X" Size="13" /></button> }
+                    </div>
+                }
+                @if (dt.CanEdit)
+                {
+                    <form class="tk-add" @onsubmit="AddItemAsync" @onsubmit:preventDefault><input class="fu-input" maxlength="300" placeholder="Add a step" aria-label="Add a step" @bind="_newItem" @bind:event="oninput" /><button class="ld-btn" type="submit" disabled="@string.IsNullOrWhiteSpace(_newItem)">Add</button></form>
+                }
+
+                <h4>Comments</h4>
+                @foreach (var c in _detail.Comments)
+                {
+                    <div class="tk-comment"><b>@c.Author</b> <small>@AdminFmt.DateTimeShort(c.CreatedAt)</small><p>@c.Body</p></div>
+                }
+                @if (_detail.Comments.Count == 0) { <p class="tk-none">No comments yet.</p> }
+                <form class="tk-add" @onsubmit="CommentAsync" @onsubmit:preventDefault><input class="fu-input" maxlength="2000" placeholder="Write a comment" aria-label="Write a comment" @bind="_comment" @bind:event="oninput" /><button class="ld-btn primary" type="submit" disabled="@string.IsNullOrWhiteSpace(_comment)">Send</button></form>
+
+                <details class="tk-activity"><summary>Activity (@_detail.Activity.Count)</summary>
+                    @foreach (var a in _detail.Activity) { <div><small>@AdminFmt.DateTimeShort(a.CreatedAt)</small> <b>@a.Actor</b> @a.Text</div> }
+                </details>
+            </div>
+            @if (dt.CanEdit)
+            {
+                <footer>
+                    @if (_confirmDelete) { <span class="em-confirm">Delete this task? <button class="ld-btn danger" disabled="@_busy" @onclick="DeleteAsync">Yes, delete</button> <button class="ld-btn" @onclick="() => _confirmDelete = false">Keep</button></span> }
+                    else { <button type="button" class="ld-btn danger-outline" @onclick="() => _confirmDelete = true">Delete</button> }
+                    <button type="button" class="ld-btn primary" @onclick="StartEdit">Edit task</button>
+                </footer>
+            }
+        </aside>
+    </div>
+}
+
+@code {
+    private List<TaskDto> _items = new();
+    private TaskCounts _counts = new();
+    private List<EmployeeDto> _team = new();
+    private List<DepartmentDto> _departments = new();
+    private string _scope = "open", _assignee = "", _priority = "", _q = "", _department = "";
+    private long? _leadFilter;
+    private bool _board, _loading = true, _busy, _ok, _confirmDelete;
+    private string? _message;
+
+    private TaskSaveRequest? _form;
+    private readonly HashSet<long> _picked = new();
+    private string? DeptOf(EmployeeDto p) => p.DepartmentId is { } d ? _departments.FirstOrDefault(x => x.Id == d)?.Name : null;
+    private List<EmployeeDto> PeopleShown => _form?.DepartmentId is { } d ? _team.Where(p => p.DepartmentId == d).ToList() : _team;
+
+    /// <summary>Picking people fills in the department when they all belong to the same one.</summary>
+    private void SyncDepartment(IEnumerable<long> ids)
+    {
+        if (_form is null || _form.DepartmentId is not null) return;
+        var depts = _team.Where(p => ids.Contains(p.Id)).Select(p => p.DepartmentId).Distinct().ToList();
+        if (depts.Count == 1 && depts[0] is { } d) _form.DepartmentId = d;
+    }
+
+    private void OnDepartmentChanged(ChangeEventArgs e)
+    {
+        if (_form is null) return;
+        _form.DepartmentId = long.TryParse(e.Value?.ToString(), out var d) ? d : null;
+        if (_form.DepartmentId is { } dep) _picked.RemoveWhere(id => _team.FirstOrDefault(p => p.Id == id)?.DepartmentId != dep);
+    }
+
+    private void OnSingleAssignee(ChangeEventArgs e)
+    {
+        if (_form is null) return;
+        _form.AssignedToEmployeeId = long.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        if (_form.AssignedToEmployeeId is { } who) { _form.DepartmentId = null; SyncDepartment([who]); }
+    }
+
+    private void TogglePerson(EmployeeDto p, bool on)
+    {
+        if (on) _picked.Add(p.Id); else _picked.Remove(p.Id);
+        SyncDepartment(_picked);
+    }
+
+    private void PickWholeDepartment() { foreach (var p in PeopleShown) _picked.Add(p.Id); }
+    private void ClearPicked() => _picked.Clear();
+    private long? _editingId;
+    private DateTime? _due;
+    private string _checklistText = "";
+
+    private TaskDetailResponse? _detail;
+    private string _newItem = "", _comment = "";
+    private long? _dragId;
+    private string? _dropOn;
+    private string? _lastQuery;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var team = await Api.AdminTeamAsync("tasks");
+        if (team.Success) _team = team.Employees;
+        var dep = await Api.AdminTeamDepartmentsAsync();
+        if (dep.Success) _departments = dep.Departments;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Notifications and the lead screen link here as /admin/tasks?open=ID or ?lead=ID.
+        var query = new Uri(Nav.Uri).Query;
+        if (query == _lastQuery && !_loading) return;
+        _lastQuery = query;
+        var args = System.Web.HttpUtility.ParseQueryString(query);
+        if (long.TryParse(args["lead"], out var lead)) { _leadFilter = lead; _scope = "all"; }
+        await LoadAsync();
+        if (long.TryParse(args["open"], out var open)) await OpenAsync(open);
+        else if (_leadFilter is { } l && args["lead"] is not null && !_leadPrompted) { _leadPrompted = true; StartCreate(); _form!.LeadId = l; }
+    }
+    private bool _leadPrompted;
+
+    private async Task LoadAsync()
+    {
+        var scope = _board ? (_scope == "done" ? "done" : "board") : _scope;
+        var res = await Api.AdminTasksAsync(scope, _assignee, long.TryParse(_department, out var d) ? d : null, _priority, _q, _leadFilter);
+        if (res.Success) { _items = res.Items; _counts = res.Counts; }
+        else Say(res.Message ?? "Could not load tasks.", false);
+        _loading = false;
+    }
+
+    private void Say(string? text, bool ok) { _message = text; _ok = ok; }
+    private void OpenLead(long id) => Nav.NavigateTo("/admin/leads?open=" + id);
+    private static string Cap(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
+    private static string PriClass(TaskDto t) => t.Priority is "urgent" or "high" ? "is-" + t.Priority : "";
+    private string Chip(string scope, string tone) => $"fu-chip-card {tone} {(_scope == scope ? "is-active" : "")}";
+
+    private async Task SetView(string scope, string assignee) { _scope = scope; if (assignee != "") _assignee = assignee; await LoadAsync(); }
+    private async Task SetBoard(bool board) { _board = board; if (board && _scope is "overdue" or "today") _scope = "open"; await LoadAsync(); }
+    private async Task ClearLead() { _leadFilter = null; _scope = "open"; Nav.NavigateTo("/admin/tasks"); await LoadAsync(); }
+
+    // ---- create / edit
+    private void StartCreate()
+    {
+        _editingId = null; _checklistText = ""; _due = null;
+        _picked.Clear();
+        if (AdminAuth.EmployeeId is { } me && _team.Any(p => p.Id == me)) _picked.Add(me);
+        _form = new TaskSaveRequest();
+        SyncDepartment(_picked);
+    }
+
+    private void StartEdit()
+    {
+        if (_detail?.Task is not { } t) return;
+        _editingId = t.Id;
+        _due = t.DueAt?.ToLocalTime();
+        _form = new TaskSaveRequest { Title = t.Title, Description = t.Description, Priority = t.Priority, AssignedToEmployeeId = t.AssignedToEmployeeId, DepartmentId = t.DepartmentId, LeadId = t.LeadId, OrderId = t.OrderId, Tags = t.Tags, Repeat = t.Repeat };
+        _detail = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_form is null) return;
+        _busy = true;
+        _form.DueAt = _due?.ToUniversalTime();
+        _form.Checklist = _checklistText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        if (_editingId is { } id)
+        {
+            var res = await Api.AdminUpdateTaskAsync(id, _form);
+            Say(res.Message, res.Success);
+            if (res.Success) { _form = null; await LoadAsync(); }
+        }
+        else
+        {
+            // One task per person, so everybody tracks and finishes their own. No one picked = one unassigned task.
+            var ids = _picked.Count > 0 ? _picked.OrderBy(x => x).Select(x => (long?)x).ToList() : new List<long?> { null };
+            var made = 0; string? error = null;
+            foreach (var who in ids)
+            {
+                _form.AssignedToEmployeeId = who;
+                var res = await Api.AdminCreateTaskAsync(_form);
+                if (res.Success) made++; else { error = res.Message; break; }
+            }
+            Say(error is not null ? $"{made} created, then stopped: {error}" : made == 1 ? "Task created" : $"{made} tasks created, one for each person", error is null);
+            if (error is null) { _form = null; await LoadAsync(); }
+        }
+        _busy = false;
+    }
+
+    // ---- status
+    private async Task ToggleDoneAsync(TaskDto t)
+    {
+        var res = await Api.AdminTaskStatusAsync(t.Id, t.Status == "done" ? "todo" : "done");
+        Say(res.Message, res.Success);
+        await LoadAsync();
+    }
+
+    private async Task DropAsync(string status)
+    {
+        _dropOn = null;
+        if (_dragId is not { } id) return;
+        _dragId = null;
+        var task = _items.FirstOrDefault(t => t.Id == id);
+        if (task is null || task.Status == status) return;
+        var res = await Api.AdminTaskStatusAsync(id, status);
+        if (!res.Success) Say(res.Message, false);
+        await LoadAsync();
+    }
+
+    // ---- detail
+    private async Task OpenAsync(long id)
+    {
+        var res = await Api.AdminTaskAsync(id);
+        if (res.Success && res.Task is not null) { _detail = res; _confirmDelete = false; _newItem = _comment = ""; }
+        else Say(res.Message ?? "That task is not available to you.", false);
+    }
+
+    private async Task RefreshDetailAsync() { if (_detail?.Task is { } t) await OpenAsync(t.Id); await LoadAsync(); }
+    private void CloseDetail() { _detail = null; if (new Uri(Nav.Uri).Query.Contains("open=")) Nav.NavigateTo("/admin/tasks"); }
+
+    private async Task OnDetailStatus(ChangeEventArgs e)
+    {
+        if (_detail?.Task is not { } t) return;
+        var res = await Api.AdminTaskStatusAsync(t.Id, e.Value?.ToString() ?? "todo");
+        if (!res.Success) Say(res.Message, false);
+        await RefreshDetailAsync();
+    }
+
+    private async Task TickAsync(TaskChecklistItemDto item, bool done)
+    {
+        if (_detail?.Task is not { } t) return;
+        await Api.AdminTaskTickItemAsync(t.Id, item.Id, done);
+        await RefreshDetailAsync();
+    }
+
+    private async Task RemoveItemAsync(TaskChecklistItemDto item)
+    {
+        if (_detail?.Task is not { } t) return;
+        await Api.AdminTaskRemoveItemAsync(t.Id, item.Id);
+        await RefreshDetailAsync();
+    }
+
+    private async Task AddItemAsync()
+    {
+        if (_detail?.Task is not { } t || string.IsNullOrWhiteSpace(_newItem)) return;
+        var res = await Api.AdminTaskAddItemAsync(t.Id, _newItem.Trim());
+        if (res.Success) _newItem = ""; else Say(res.Message, false);
+        await RefreshDetailAsync();
+    }
+
+    private async Task CommentAsync()
+    {
+        if (_detail?.Task is not { } t || string.IsNullOrWhiteSpace(_comment)) return;
+        var res = await Api.AdminTaskCommentAsync(t.Id, _comment.Trim());
+        if (res.Success) _comment = ""; else Say(res.Message, false);
+        await RefreshDetailAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_detail?.Task is not { } t) return;
+        _busy = true;
+        var res = await Api.AdminDeleteTaskAsync(t.Id);
+        Say(res.Message, res.Success);
+        if (res.Success) { _detail = null; await LoadAsync(); }
+        _busy = false;
+    }
+}

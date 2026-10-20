@@ -191,6 +191,17 @@ public class WhatsAppMessage
     public string? OrderId { get; set; }
     public string? RawPayload { get; set; }
     public long? LeadId { get; set; }
+    /// <summary>Employee who sent an outbound message; null/"system" for automatic ones (auto-reply, order updates, journey).</summary>
+    public string? SentBy { get; set; }
+    /// <summary>Meta media id of a photo / sticker / video / voice note / document the customer sent (expires on Meta after about 30 days).</summary>
+    public string? MediaId { get; set; }
+    public string? MediaMime { get; set; }
+    /// <summary>File name inside the media folder once downloaded.</summary>
+    public string? MediaFile { get; set; }
+    /// <summary>Original file name of a document.</summary>
+    public string? MediaName { get; set; }
+    /// <summary>Emoji the other side reacted with, if any.</summary>
+    public string? Reaction { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
@@ -275,6 +286,9 @@ public class Employee
     public DateTime? LastLoginAt { get; set; }
     /// <summary>Round-robin cursor: the employee who was assigned a lead longest ago gets the next one.</summary>
     public DateTime? LastAssignedAt { get; set; }
+    public long? DepartmentId { get; set; }
+    /// <summary>Gives the page rights. Administrators (Role admin) ignore it and can open every page.</summary>
+    public long? DesignationId { get; set; }
 }
 
 public class LeadAssignmentHistory
@@ -286,5 +300,146 @@ public class LeadAssignmentHistory
     public string? Reason { get; set; }
     /// <summary>auto | admin name/email of whoever made the change.</summary>
     public string ChangedBy { get; set; } = "auto";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A task to contact a lead/customer: manual, from the 15-day journey, or raised by order progress checks.</summary>
+public class FollowUp
+{
+    public long Id { get; set; }
+    public long LeadId { get; set; }
+    public string? OrderId { get; set; }
+    public long? AssignedToEmployeeId { get; set; }
+    /// <summary>call | whatsapp | review | reorder | order | other</summary>
+    public string Type { get; set; } = "call";
+    public string Title { get; set; } = "";
+    public string? Notes { get; set; }
+    /// <summary>Ready-to-send WhatsApp text (placeholders already filled) for message-type tasks.</summary>
+    public string? SuggestedMessage { get; set; }
+    public DateTime DueAt { get; set; }
+    /// <summary>When the owner gets an advance heads-up (normally 2 days before DueAt).</summary>
+    public DateTime? RemindAt { get; set; }
+    public DateTime? ReminderSentAt { get; set; }
+    public DateTime? DueNotifiedAt { get; set; }
+    public DateTime? EscalatedAt { get; set; }
+    /// <summary>pending | done | skipped</summary>
+    public string Status { get; set; } = "pending";
+    public string? Outcome { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public string? CompletedBy { get; set; }
+    /// <summary>manual | journey | system</summary>
+    public string Source { get; set; } = "manual";
+    public long? EnrollmentId { get; set; }
+    /// <summary>Journey step or order-check key, e.g. day3-usage. With OrderId it is unique, so a step is created only once.</summary>
+    public string? StepKey { get; set; }
+    public string CreatedBy { get; set; } = "system";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A customer's 15-day journey, started when their order is delivered.</summary>
+public class JourneyEnrollment
+{
+    public long Id { get; set; }
+    public long LeadId { get; set; }
+    public string OrderId { get; set; } = "";
+    /// <summary>Delivery time; every step is scheduled relative to it.</summary>
+    public DateTime AnchorAt { get; set; }
+    /// <summary>active | completed | stopped</summary>
+    public string Status { get; set; } = "active";
+    public string? StoppedReason { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>In-app notification. EmployeeId null = every administrator.</summary>
+public class Notification
+{
+    public long Id { get; set; }
+    public long? EmployeeId { get; set; }
+    /// <summary>reminder | due | overdue | order | lead | info</summary>
+    public string Kind { get; set; } = "info";
+    public string Title { get; set; } = "";
+    public string? Body { get; set; }
+    /// <summary>Admin route to open, e.g. /admin/followups.</summary>
+    public string? Link { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ReadAt { get; set; }
+}
+
+public class Department
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = "";
+    public string? Description { get; set; }
+    public long? HeadEmployeeId { get; set; }
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A job title that carries page rights, e.g. Sales Executive.</summary>
+public class Designation
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = "";
+    public string? Description { get; set; }
+    public long? DepartmentId { get; set; }
+    public int Level { get; set; } = 3;
+    public bool IsActive { get; set; } = true;
+    /// <summary>JSON object: page key to access level 0-2 (see PageCatalog).</summary>
+    public string RightsJson { get; set; } = "{}";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A piece of team work (not tied to a customer follow-up). Named WorkTask to avoid clashing with System.Threading.Tasks.Task.</summary>
+public class WorkTask
+{
+    public long Id { get; set; }
+    public string Title { get; set; } = "";
+    public string? Description { get; set; }
+    /// <summary>todo | in_progress | blocked | done</summary>
+    public string Status { get; set; } = "todo";
+    /// <summary>low | normal | high | urgent</summary>
+    public string Priority { get; set; } = "normal";
+    public DateTime? DueAt { get; set; }
+    public long? AssignedToEmployeeId { get; set; }
+    public long? CreatedByEmployeeId { get; set; }
+    public string CreatedByName { get; set; } = "";
+    public long? DepartmentId { get; set; }
+    public long? LeadId { get; set; }
+    public string? OrderId { get; set; }
+    public string? Tags { get; set; }
+    /// <summary>none | daily | weekly | monthly: finishing the task creates the next one.</summary>
+    public string Repeat { get; set; } = "none";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? CompletedAt { get; set; }
+    public DateTime? ReminderSentAt { get; set; }
+    public DateTime? OverdueNotifiedAt { get; set; }
+}
+
+public class TaskComment
+{
+    public long Id { get; set; }
+    public long TaskId { get; set; }
+    public long? AuthorEmployeeId { get; set; }
+    public string Author { get; set; } = "";
+    public string Body { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class TaskChecklistItem
+{
+    public long Id { get; set; }
+    public long TaskId { get; set; }
+    public string Text { get; set; } = "";
+    public bool Done { get; set; }
+    public int Position { get; set; }
+}
+
+public class TaskActivity
+{
+    public long Id { get; set; }
+    public long TaskId { get; set; }
+    public string Actor { get; set; } = "";
+    public string Text { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
