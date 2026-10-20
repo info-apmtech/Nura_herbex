@@ -126,3 +126,4 @@
 
 /* Body copy uses Manrope even where a global element rule sets another family (zero specificity, so class rules still win) */
 :where(.hm-home) :where(p,li,blockquote,figcaption,span,a,button,small,strong,div){font-family:'Manrope',system-ui,sans-serif}
+.hm-home p,.hm-home li,.hm-home blockquote{font-family:'Manrope',system-ui,sans-serif}

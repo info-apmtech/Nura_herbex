@@ -12,15 +12,15 @@
 @inject ApiClient Api
 @inject BrowserInterop Browser
 
-<div class="pt-4 sm:pt-14 md:pt-20 pb-24 bg-[#07050d] text-left text-slate-200 min-h-screen relative overflow-hidden">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+<div class="sp-page text-left text-slate-200 min-h-screen relative overflow-hidden">
+  <div class="sp-container relative z-10">
     @if (IsPdp)
     {
       <ShopPdpView Products="_products" />
     }
     else
     {
-      @if (_loading) { <p role="status">Loading products…</p> } else if (_loadError is not null) { <p role="alert">@_loadError <button @onclick="LoadProductsAsync">Try again</button></p> } else { <StoreCatalog Products="_products" ProductId="@CatalogProductId" /> }
+      @if (_loading) { <div class="sc-empty" role="status"><span class="sc-spinner"></span><p>Loading products…</p></div> } else if (_loadError is not null) { <div class="sc-empty" role="alert"><Icon Name="AlertCircle" Size="40" /><h2>We couldn't load the shop</h2><p>@_loadError</p><button class="sc-btn sc-btn-primary" @onclick="LoadProductsAsync">Try again</button></div> } else { <StoreCatalog Products="_products" ProductId="@CatalogProductId" /> }
     }
   </div>
 </div>

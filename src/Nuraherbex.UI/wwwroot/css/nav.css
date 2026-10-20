@@ -117,3 +117,4 @@
 @media(min-width:1024px) and (max-width:1199px){.nv-link{font-size:.72rem;letter-spacing:.06em;padding:.6rem .5rem}.nv-cta{display:none}.nv-brand span{font-size:1.3rem}}
 
 :where(.nf,.nv-bar,.nv-drawer) :where(p,li,figcaption,span,a,button,small,strong,div){font-family:'Manrope',system-ui,sans-serif}
+.nf p,.nf li,.nv-drawer p{font-family:'Manrope',system-ui,sans-serif}

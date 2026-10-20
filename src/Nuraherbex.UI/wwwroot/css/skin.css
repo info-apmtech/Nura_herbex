@@ -1,0 +1,62 @@
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Manrope:wght@400;500;600;700;800&display=swap");
+
+/* Shared skin for Track Order and Quality & Testing: re-themes the existing markup to the gold / aubergine system. */
+.skin{--gold:#d9b86c;--gold-2:#f0d596;--ink:#0a0610;--card:linear-gradient(180deg,#171024,#0f0a1a);
+  font-family:'Manrope',system-ui,sans-serif;color:#e9e4f2;
+}
+.tk-page,.vf-page{padding-top:7.5rem;background:radial-gradient(ellipse at 85% -5%,rgba(153,41,234,.32),transparent 55%),radial-gradient(ellipse at 0 90%,rgba(217,184,108,.08),transparent 50%),var(--ink)}
+.ck-page{padding-top:7.5rem!important}
+body:has(.ck-page){background:radial-gradient(ellipse at 85% -5%,rgba(153,41,234,.32),transparent 55%),radial-gradient(ellipse at 0 90%,rgba(217,184,108,.08),transparent 50%),#0a0610!important}
+.ck-page :is(.bg-black\/40,.bg-black\/50,.bg-black\/60){background-color:rgba(0,0,0,.4)!important}
+.ck-page .bg-\[\#0c0a16\]{background:var(--card)!important}
+.ck-page :is(.bg-white,.bg-slate-100){background:#fff3dc!important;color:#241532!important}
+.ck-page .text-\[\#fff3bf\]{color:var(--gold-2)!important}
+.skin :where(p,li,span,a,button,input,label,small,div,td,th){font-family:inherit}
+.skin .font-mono{font-family:'Manrope',system-ui,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.skin p,.skin li{font-family:'Manrope',system-ui,sans-serif}
+.skin h1,.skin h2,.skin h3{font-family:'Cormorant Garamond',Georgia,serif;font-weight:600;letter-spacing:-.01em;color:#fbf3dc}
+.skin h1{font-size:clamp(2.1rem,4.6vw,3.4rem);line-height:1.05}
+.skin h2{font-size:clamp(1.6rem,3vw,2.2rem);line-height:1.1}
+.skin h3{font-size:1.35rem}
+.skin h4{font-family:'Manrope',sans-serif;font-weight:700}
+.skin h1 .text-transparent{background:linear-gradient(90deg,#fbf3dc,#f0d596,#d9b86c)!important;-webkit-background-clip:text;background-clip:text;color:transparent}
+.skin .font-black,.skin .font-extrabold{font-weight:700}
+
+/* Surfaces */
+.skin :is(.bg-\[\#0a0714\],.bg-\[\#0c0916\],.bg-\[\#0e0b16\],.bg-\[\#0e0b18\],.bg-\[\#120e22\],.bg-\[\#0b0816\],.bg-\[\#0f0b1e\],.bg-\[\#121215\],.bg-\[\#1a112c\],.bg-zinc-950,.bg-zinc-900,.bg-zinc-900\/90,.bg-zinc-900\/60,.bg-zinc-900\/40,.bg-purple-950\/30,.bg-purple-950\/50){background:var(--card)!important}
+.skin :is(.bg-zinc-800,.bg-zinc-200){background-color:rgba(255,255,255,.08)!important;color:#fff}
+.skin :is(.border-zinc-800,.border-zinc-800\/80,.border-purple-900\/30,.border-purple-800\/60,.border-purple-500\/30,.border-purple-500\/20,.border-white\/5,.border-white\/10,.border-white\/15){border-color:rgba(217,184,108,.22)!important}
+.skin .rounded-2xl,.skin .rounded-xl,.skin .rounded-lg{border-radius:1.2rem}
+.skin .rounded-md,.skin .rounded{border-radius:.6rem}
+.skin :is(.shadow-2xl,.shadow-xl,.shadow-lg){box-shadow:0 24px 50px -28px rgba(0,0,0,.9)!important}
+
+/* Accent colours: purple / orange become gold */
+.skin :is(.text-purple-200,.text-purple-300,.text-purple-400,.text-purple-400\/60,.text-orange-300,.text-orange-400,.text-indigo-400,.text-amber-400){color:var(--gold-2)!important}
+.skin :is(.bg-purple-900\/30,.bg-purple-900\/40,.bg-purple-900\/70,.bg-purple-900\/90,.bg-purple-950\/70,.bg-purple-950\/80,.bg-orange-500\/15,.bg-amber-500\/15){background:rgba(217,184,108,.14)!important}
+.skin :is(.border-orange-500\/30,.border-orange-500\/70,.border-amber-500\/30,.border-purple-500\/40,.border-purple-500,.border-purple-400){border-color:rgba(217,184,108,.5)!important}
+.skin :is(.bg-purple-600,.bg-purple-500,.bg-\[\#9929ea\],.bg-\[\#f97316\],.bg-orange-500,.bg-orange-600,.hover\:bg-purple-500:hover,.hover\:bg-\[\#a83bed\]:hover,.hover\:bg-orange-500:hover){background:linear-gradient(135deg,#f0d596,#d9b86c)!important;color:#241532!important;box-shadow:0 12px 28px -12px rgba(217,184,108,.7)!important}
+.skin :is(.bg-purple-600,.bg-purple-500,.bg-\[\#9929ea\],.bg-\[\#f97316\],.bg-orange-500,.bg-orange-600) *{color:inherit!important}
+.skin :is(.bg-orange-400){background:var(--gold)!important}
+.skin :is(.from-purple-600){--tw-gradient-from:#d9b86c!important}
+.skin :is(.focus\:border-purple-500:focus,.focus\:ring-purple-500:focus){border-color:var(--gold)!important;--tw-ring-color:rgba(217,184,108,.35)!important}
+.skin :is(.ring-orange-500\/50,.ring-orange-500\/25){--tw-ring-color:rgba(217,184,108,.5)!important}
+.skin ::selection{background:var(--gold);color:#241532}
+
+/* Inputs and buttons */
+.skin input{background:rgba(0,0,0,.4)!important;border-color:rgba(217,184,108,.28)!important;border-radius:9999px;color:#fff}
+.skin input::placeholder{color:#8d84a0}
+.skin button,.skin a{transition:all .3s}
+.skin .text-slate-400,.skin .text-zinc-400{color:#b1a8c2}
+.skin .text-slate-500,.skin .text-zinc-500{color:#8d84a0}
+
+/* Track order: stepper and empty-state hero */
+.tk-page .max-w-2xl h1{font-size:clamp(2.6rem,6vw,4.4rem)}
+.tk-page .max-w-2xl>div:first-child{background:transparent!important;border:1px solid rgba(217,184,108,.5)!important;box-shadow:0 0 0 10px rgba(217,184,108,.07),0 30px 60px -20px rgba(153,41,234,.5)!important}
+.tk-page .grid-cols-2.sm\:grid-cols-4>div{border-radius:1.2rem}
+
+/* Quality & testing: give the narrow column more room and presence */
+.vf-page .max-w-xl{max-width:46rem}
+.vf-page h1{font-size:clamp(2.4rem,5.4vw,3.8rem)}
+.vf-page .text-xl,.vf-page .text-2xl{line-height:1.05}
+.vf-page button.bg-zinc-100,.vf-page .bg-zinc-100{background:linear-gradient(135deg,#f0d596,#d9b86c)!important;color:#241532!important}
+.vf-page .bg-white,.vf-page button.bg-white{background:linear-gradient(135deg,#f0d596,#d9b86c)!important;color:#241532!important}
