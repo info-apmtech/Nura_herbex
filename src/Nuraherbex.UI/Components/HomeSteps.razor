@@ -1,0 +1,30 @@
+<section id="how-to-use" class="hm-section hm-light">
+  <div class="hm-wrap">
+    <header class="hm-head reveal-on-scroll">
+      <span class="hm-eyebrow">Simple routine</span>
+      <h2>Three steps to your <em>daily ritual</em></h2>
+      <p>No complicated regimen. Thirty seconds each morning is all it takes.</p>
+    </header>
+    <div class="hm-steps">
+      @foreach (var (s, i) in Steps.Select((s, i) => (s, i)))
+      {
+        <div class="hm-step reveal-on-scroll">
+          <div class="hm-step-img"><img src="@s.Image" alt="@s.Title" loading="lazy" /></div>
+          <span class="hm-step-no">0@(i + 1)</span>
+          <h3>@s.Title</h3>
+          <p>@s.Text</p>
+        </div>
+      }
+    </div>
+  </div>
+</section>
+
+@code {
+    private record Step(string Title, string Text, string Image);
+    private static readonly Step[] Steps =
+    {
+        new("Scoop", "Measure one 20 g serving of Stamix powder.", Media.Step1),
+        new("Mix", "Stir into warm milk or water until perfectly smooth.", Media.Step2),
+        new("Enjoy", "Sip daily and feel the difference build over time.", Media.Step3),
+    };
+}

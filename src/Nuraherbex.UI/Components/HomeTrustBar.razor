@@ -1,0 +1,23 @@
+
+<section class="hm-trust" aria-label="Why shop with us">
+  <div class="hm-wrap hm-trust-grid">
+    @foreach (var t in Items)
+    {
+      <div class="hm-trust-item reveal-on-scroll">
+        <span class="hm-trust-icon"><Icon Name="@t.Icon" Size="22" /></span>
+        <div><strong>@t.Title</strong><span>@t.Text</span></div>
+      </div>
+    }
+  </div>
+</section>
+
+@code {
+    private record Trust(string Icon, string Title, string Text);
+    private static readonly Trust[] Items =
+    {
+        new("Truck", "Free Shipping", "On orders above the free-shipping limit"),
+        new("ShieldCheck", "GMP Certified", "Made in a certified facility"),
+        new("Leaf", "100% Botanical", "Herbs, seeds and nuts. No fillers"),
+        new("Award", "Batch Verified", "Scan and verify every pack"),
+    };
+}

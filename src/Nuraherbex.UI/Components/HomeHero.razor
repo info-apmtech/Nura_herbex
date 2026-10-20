@@ -1,0 +1,45 @@
+@inject ContentState ContentState
+@inject NavigationManager Nav
+@inject BrowserInterop Browser
+@inject IJSRuntime JS
+@implements IDisposable
+
+<section id="hero" class="hm-hero">
+  <video id="hero-video" autoplay loop muted playsinline preload="auto" disablepictureinpicture>
+    <source src="@Media.HeroVideo" type="video/mp4" />
+  </video>
+  <div class="hm-hero-shade"></div>
+  <div class="hm-hero-glow"></div>
+
+  <div class="hm-wrap hm-hero-inner">
+    <div class="hm-hero-copy">
+      <span class="hm-eyebrow hm-rise">Unani-inspired · Botanical vitality</span>
+      <h1 class="hm-rise hm-d1">@Or(HeroContent.Headline, "Built for men who run on empty")</h1>
+      <p class="hm-rise hm-d2">@Or(HeroContent.Subtext, "Stamix is a herbal health supplement for adult men. Seventeen botanicals, herbs, seeds and nuts, in a full 20 g daily serving, made to support energy, stamina, focus and recovery.")</p>
+      <div class="hm-hero-cta hm-rise hm-d3">
+        <button class="hm-btn hm-btn-gold" @onclick='() => Nav.NavigateTo("/shop")'>@Or(HeroContent.CtaText, "Shop Stamix") <Icon Name="ArrowRight" Size="16" /></button>
+        <button class="hm-btn hm-btn-glass" @onclick='() => Nav.NavigateTo("/formulation")'><Icon Name="FlaskConical" Size="16" /> Explore the formula</button>
+      </div>
+      <ul class="hm-hero-stats hm-rise hm-d4">
+        <li><strong><CountUp Value="17" Duration="1800" /></strong><span>Botanicals</span></li>
+        <li><strong><CountUp Value="20" Suffix=" g" Duration="1800" /></strong><span>Daily serving</span></li>
+        <li><strong>GMP</strong><span>Certified facility</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <a href="#products" class="hm-scroll" @onclick='() => Browser.ScrollToIdAsync("products")' @onclick:preventDefault aria-label="Scroll to products"><i></i></a>
+</section>
+
+@code {
+    private HeroContent HeroContent => ContentState.Content?.Hero ?? new();
+    private static string Or(string? v, string fallback) => string.IsNullOrEmpty(v) ? fallback : v;
+
+    protected override void OnInitialized() => ContentState.Changed += OnChanged;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await HomeJs.PlayVideoAsync(JS, "hero-video");
+    }
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => ContentState.Changed -= OnChanged;
+}

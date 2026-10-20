@@ -1,0 +1,82 @@
+@implements IDisposable
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+<div class="bell">
+    <button type="button" class="admin-icon-btn bell-btn" aria-label="@($"Notifications, {_unread} unread")" aria-expanded="@_open" @onclick="Toggle">
+        <Icon Name="Bell" Size="20" />
+        @if (_unread > 0) { <span class="bell-count">@(_unread > 9 ? "9+" : _unread.ToString())</span> }
+    </button>
+
+    @if (_open)
+    {
+        <button type="button" class="bell-scrim" aria-label="Close notifications" @onclick="() => _open = false"></button>
+        <section class="bell-panel" role="dialog" aria-label="Notifications">
+            <header>
+                <strong>Notifications</strong>
+                @if (_unread > 0) { <button type="button" class="fu-link" @onclick="ReadAllAsync">Mark all read</button> }
+            </header>
+            <div class="bell-list">
+                @if (_items.Count == 0)
+                {
+                    <p class="bell-empty">You are all caught up.<small>Reminders for follow-ups, overdue tasks and order problems show up here.</small></p>
+                }
+                @foreach (var n in _items)
+                {
+                    var item = n;
+                    <button type="button" class="@($"bell-item k-{item.Kind} {(item.IsRead ? "" : "is-new")}")" @onclick="() => OpenAsync(item)">
+                        <span class="bell-dot"></span>
+                        <span>
+                            <strong>@item.Title</strong>
+                            @if (!string.IsNullOrEmpty(item.Body)) { <small>@item.Body</small> }
+                            <em>@FuFmt.Due(item.CreatedAt)</em>
+                        </span>
+                    </button>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    private readonly CancellationTokenSource _cts = new();
+    private List<NotificationDto> _items = new();
+    private int _unread;
+    private bool _open;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        _ = PollAsync();
+    }
+
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        try { while (await timer.WaitForNextTickAsync(_cts.Token)) await InvokeAsync(LoadAsync); }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+
+    private async Task LoadAsync()
+    {
+        var res = await Api.AdminNotificationsAsync();
+        if (_cts.IsCancellationRequested || !res.Success) return;
+        _items = res.Items; _unread = res.Unread;
+        StateHasChanged();
+    }
+
+    private async Task Toggle() { _open = !_open; if (_open) await LoadAsync(); }
+
+    private async Task ReadAllAsync() { await Api.AdminReadAllNotificationsAsync(); await LoadAsync(); }
+
+    private async Task OpenAsync(NotificationDto n)
+    {
+        if (!n.IsRead) await Api.AdminReadNotificationAsync(n.Id);
+        _open = false;
+        if (!string.IsNullOrEmpty(n.Link)) Nav.NavigateTo(n.Link);
+        await LoadAsync();
+    }
+
+    public void Dispose() { _cts.Cancel(); _cts.Dispose(); }
+}

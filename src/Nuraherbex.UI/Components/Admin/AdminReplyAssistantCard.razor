@@ -1,0 +1,72 @@
+@inject ApiClient Api
+
+@* Admin: control the reply assistant that drafts WhatsApp answers for the team. *@
+<div class="ld-card ras">
+    <h4>Reply assistant</h4>
+    <p class="ras-intro">When a customer writes, the assistant drafts a professional reply into the chat. Your team reads it, changes anything they like, and sends it. <strong>Nothing is ever sent automatically.</strong></p>
+
+    @if (_s is null)
+    {
+        <p class="fu-hint">@(_error ?? "Loading…")</p>
+    }
+    else
+    {
+        <div class="ras-status">
+            @if (_s.AiConnected)
+            {
+                <span class="ld-pill converted">AI connected</span><small>Drafts are written by <strong>@_s.Model</strong> using the facts below and each customer's conversation.</small>
+            }
+            else
+            {
+                <span class="ld-pill follow-up">Standard replies</span><small>No AI key is set on the server, so ready-made professional replies are used (price, delivery, payment, order status, complaints, health questions). To switch on AI drafting, set <code>Ai__ApiKey</code> on the server.</small>
+            }
+        </div>
+
+        <label class="fp-toggle">
+            <input type="checkbox" checked="@_s.Enabled" disabled="@_busy" @onchange="e => _s.Enabled = e.Value is true" />
+            <span class="em-track"><span class="em-knob"></span></span>
+            <span><strong>Suggest replies to my team</strong><small>Turn off to hide the suggestions in the chat.</small></span>
+        </label>
+
+        <label class="fu-field ras-know">What the assistant should know and how it should sound
+            <textarea rows="9" maxlength="6000" @bind="_s.Knowledge" @bind:event="oninput"></textarea>
+            <span>Product facts, delivery and payment rules, tone, and what it must never promise. Prices are added automatically from your product list.</span>
+        </label>
+
+        @if (!string.IsNullOrEmpty(_msg)) { <div class="@($"fu-flash {(_ok ? "ok" : "bad")}")" role="status">@_msg</div> }
+        <div class="ld-actions">
+            <button type="button" class="ld-btn" disabled="@_busy" @onclick="ResetAsync">Restore the default text</button>
+            <button type="button" class="ld-btn primary" disabled="@_busy" @onclick="SaveAsync">@(_busy ? "Saving…" : "Save")</button>
+        </div>
+    }
+</div>
+
+@code {
+    private ReplyAssistantSettingsDto? _s;
+    private string? _msg, _error;
+    private bool _ok, _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var res = await Api.AdminReplySettingsAsync();
+        if (res.Success) _s = res; else _error = res.Message ?? "Could not load the settings.";
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_s is null) return;
+        _busy = true;
+        var res = await Api.AdminSaveReplySettingsAsync(new ReplyAssistantSettingsRequest { Enabled = _s.Enabled, Knowledge = _s.Knowledge });
+        _ok = res.Success; _msg = res.Message; _busy = false;
+    }
+
+    private async Task ResetAsync()
+    {
+        if (_s is null) return;
+        _busy = true;
+        var res = await Api.AdminSaveReplySettingsAsync(new ReplyAssistantSettingsRequest { Enabled = _s.Enabled, Knowledge = "" });
+        var fresh = await Api.AdminReplySettingsAsync();
+        if (fresh.Success) _s = fresh;
+        _ok = res.Success; _msg = res.Success ? "Default text restored" : res.Message; _busy = false;
+    }
+}

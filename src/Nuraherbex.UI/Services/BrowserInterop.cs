@@ -44,6 +44,11 @@ public class BrowserInterop(IJSRuntime js)
         try { return await js.InvokeAsync<FilePick?>("nura.readFileAsDataUrl", inputElementId); } catch { return null; }
     }
 
+    public async Task<FilePick?> CompressProfilePhotoAsync(string inputElementId)
+    {
+        try { return await js.InvokeAsync<FilePick?>("nura.compressProfilePhoto", inputElementId); } catch { return null; }
+    }
+
     public async Task<bool> ConfirmAsync(string message) { try { return await js.InvokeAsync<bool>("confirm", message); } catch { return false; } }
 }
 

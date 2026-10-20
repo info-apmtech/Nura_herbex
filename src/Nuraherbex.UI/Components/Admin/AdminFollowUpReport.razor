@@ -1,0 +1,138 @@
+@inject ApiClient Api
+@inject AdminSession AdminAuth
+
+<div class="fr">
+    <div class="fr-bar">
+        <p>@(AdminAuth.CanAll("followups") ? "How well the team follows up, and how the 15-day journey is performing." : "Your follow-up performance.")</p>
+        <div class="fr-range" role="group" aria-label="Report period">
+            @foreach (var d in new[] { 7, 30, 90 })
+            {
+                var days = d;
+                <button type="button" class="@($"fu-chip {(_days == days ? "is-picked" : "")}")" @onclick="() => LoadAsync(days)">Last @days days</button>
+            }
+        </div>
+    </div>
+
+    @if (_r is null)
+    {
+        <div class="ld-empty">@(_error ?? "Loading report…")</div>
+    }
+    else
+    {
+        <div class="fr-kpis">
+            <div class="fr-kpi"><span>Completion</span><strong>@_r.CompletionRate%</strong><small>@_r.Done of @_r.Due follow-ups done</small><i style="width:@_r.CompletionRate%"></i></div>
+            <div class="fr-kpi"><span>Done on time</span><strong>@_r.OnTimeRate%</strong><small>@_r.DoneOnTime finished by their due day</small><i style="width:@_r.OnTimeRate%"></i></div>
+            <div class="@($"fr-kpi {(_r.Overdue > 0 ? "bad" : "")}")"><span>Overdue now</span><strong>@_r.Overdue</strong><small>@_r.Pending still to do today or later</small></div>
+            <div class="fr-kpi"><span>Sent automatically</span><strong>@_r.AutoSent</strong><small>journey messages sent by template</small></div>
+        </div>
+
+        <div class="fr-kpis">
+            <div class="fr-kpi"><span>New leads</span><strong>@_r.NewLeads</strong><small>@_r.ConvertedLeads became customers</small></div>
+            <div class="fr-kpi"><span>Journeys started</span><strong>@_r.JourneysStarted</strong><small>delivered orders in the 15-day plan</small></div>
+            <div class="fr-kpi"><span>Review requests</span><strong>@_r.ReviewRequests</strong><small>@_r.ReviewsReceived review@(_r.ReviewsReceived == 1 ? "" : "s") received in the period</small></div>
+            <div class="fr-kpi"><span>Reorders</span><strong>@_r.Reorders</strong><small>customers who ordered again after delivery</small></div>
+        </div>
+
+        <div class="ld-card">
+            <h4>Due vs done by day</h4>
+            @if (_r.Trend.All(t => t.Due == 0))
+            {
+                <p class="fu-hint">No follow-ups fell due in this period yet.</p>
+            }
+            else
+            {
+                var max = Math.Max(1, _r.Trend.Max(t => t.Due));
+                <div class="fr-chart" role="img" aria-label="Follow-ups due and done per day">
+                    @foreach (var t in _r.Trend)
+                    {
+                        <div class="fr-col" title="@t.Day: @t.Done done of @t.Due due">
+                            <div class="fr-bars"><span class="due" style="height:@(100.0 * t.Due / max)%"></span><span class="done" style="height:@(100.0 * t.Done / max)%"></span></div>
+                            <small>@(_r.Trend.Count <= 14 || _r.Trend.IndexOf(t) % 3 == 0 ? t.Day : "")</small>
+                        </div>
+                    }
+                </div>
+                <div class="fr-legend"><span><i class="due"></i> Due</span><span><i class="done"></i> Done</span></div>
+            }
+        </div>
+
+        @if (AdminAuth.CanAll("followups"))
+        {
+            <div class="ld-card em-table-card">
+                <h4 class="fr-pad">By employee</h4>
+                <div class="em-scroll">
+                    <table class="em-table">
+                        <thead><tr><th class="sn">S.No</th><th>Employee</th><th class="num">Due</th><th class="num">Done</th><th class="num">Overdue</th><th class="num">On time</th><th class="num">Open leads</th><th class="num">Won</th></tr></thead>
+                        <tbody>
+                            @{ _sn = 0; }
+                            @foreach (var e in _r.ByEmployee)
+                            {
+                                <tr>
+                                    <td class="sn">@(++_sn)</td><td><strong>@e.Label</strong></td>
+                                    <td class="num">@e.Due</td><td class="num">@e.Done</td>
+                                    <td class="num @(e.Overdue > 0 ? "ld-bad" : "")">@e.Overdue</td>
+                                    <td class="num">@(e.Done == 0 ? "—" : e.OnTimePercent + "%")</td>
+                                    <td class="num">@e.OpenLeads</td><td class="num">@e.ConvertedLeads</td>
+                                </tr>
+                            }
+                            @if (_r.ByEmployee.Count == 0) { <tr><td colspan="8" class="em-empty">No data yet.</td></tr> }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        <div class="ld-card em-table-card">
+            <h4 class="fr-pad">15-day journey — step by step</h4>
+            <div class="em-scroll">
+                <table class="em-table">
+                    <thead><tr><th class="sn">S.No</th><th>Step</th><th class="num">Scheduled</th><th class="num">Done</th><th class="num">Auto-sent</th><th class="num">To do</th><th class="num">Overdue</th><th class="num">Skipped</th></tr></thead>
+                    <tbody>
+                        @{ _sn = 0; }
+                        @foreach (var j in _r.Journey)
+                        {
+                            <tr>
+                                <td class="sn">@(++_sn)</td><td><strong>@j.Title</strong></td>
+                                <td class="num">@j.Total</td><td class="num">@j.Done</td><td class="num">@j.AutoSent</td>
+                                <td class="num">@j.Pending</td><td class="num @(j.Overdue > 0 ? "ld-bad" : "")">@j.Overdue</td><td class="num">@j.Skipped</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="ld-card em-table-card">
+            <h4 class="fr-pad">By type</h4>
+            <div class="em-scroll">
+                <table class="em-table">
+                    <thead><tr><th class="sn">S.No</th><th>Type</th><th class="num">Due</th><th class="num">Done</th><th class="num">Overdue</th></tr></thead>
+                    <tbody>
+                        @{ _sn = 0; }
+                        @foreach (var t in _r.ByType)
+                        {
+                            <tr><td class="sn">@(++_sn)</td><td><strong>@FuFmt.TypeLabel(t.Label)</strong></td><td class="num">@t.Due</td><td class="num">@t.Done</td><td class="num @(t.Overdue > 0 ? "ld-bad" : "")">@t.Overdue</td></tr>
+                        }
+                        @if (_r.ByType.Count == 0) { <tr><td colspan="5" class="em-empty">No data yet.</td></tr> }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private int _sn;
+    private FollowUpReportResponse? _r;
+    private int _days = 30;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => LoadAsync(30);
+
+    private async Task LoadAsync(int days)
+    {
+        _days = days;
+        var res = await Api.AdminFollowUpReportAsync(days);
+        if (res.Success) { _r = res; _error = null; }
+        else _error = res.Message ?? "Could not load the report.";
+    }
+}

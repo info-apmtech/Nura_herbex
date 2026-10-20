@@ -1,0 +1,183 @@
+@inject ApiClient Api
+
+@* One follow-up task. Used on the Follow-ups page and inside a lead. *@
+<article class="@($"fu-card {(Item.Status != "pending" ? "is-closed" : Item.IsOverdue ? "is-overdue" : "")}")">
+    <span class="@($"fu-ico t-{Item.Type}")"><Icon Name="@FuFmt.Icon(Item.Type)" Size="18" /></span>
+
+    <div class="fu-main">
+        <div class="fu-title">@Item.Title</div>
+        <div class="fu-meta">
+            @if (ShowLead)
+            {
+                <button type="button" class="fu-link" @onclick="() => OnOpenLead.InvokeAsync(Item.LeadId)">@Item.LeadName</button>
+                <span>·</span><span>+@Item.LeadPhone</span><span>·</span>
+            }
+            @if (Item.Status == "pending")
+            {
+                <span class="@(Item.IsOverdue ? "fu-late" : "")">@(Item.IsOverdue ? FuFmt.Overdue(Item.DueAt) + " (" + FuFmt.Due(Item.DueAt) + ")" : FuFmt.Due(Item.DueAt))</span>
+            }
+            else
+            {
+                <span>@(Item.Status == "skipped" ? "Skipped" : "Done") @(Item.CompletedAt is { } c ? FuFmt.Due(c) : "")@(string.IsNullOrEmpty(Item.CompletedBy) ? "" : " by " + (Item.CompletedBy == "auto" ? "automation" : Item.CompletedBy))</span>
+            }
+            @if (!string.IsNullOrEmpty(FuFmt.Origin(Item))) { <span class="fu-tag">@FuFmt.Origin(Item)</span> }
+            @if (IsAdmin && ShowOwner) { <span class="@($"fu-tag {(Item.AssignedToEmployeeId is null ? "warn" : "")}")">@(Item.AssignedToName ?? "Unassigned")</span> }
+            @if (!string.IsNullOrEmpty(Item.OrderId)) { <span class="fu-tag">@Item.OrderId</span> }
+        </div>
+
+        @if (Item.Status == "pending" && !string.IsNullOrWhiteSpace(Item.Notes))
+        {
+            <p class="fu-note">@Item.Notes</p>
+        }
+        @if (Item.Status == "pending" && !string.IsNullOrWhiteSpace(Item.SuggestedMessage))
+        {
+            <p class="fu-msg" title="The message that will be sent"><Icon Name="MessageCircle" Size="12" /> @Item.SuggestedMessage</p>
+        }
+        @if (Item.Status != "pending" && !string.IsNullOrEmpty(Item.Outcome))
+        {
+            <p class="fu-note">@FuFmt.Outcome(Item.Outcome)</p>
+        }
+
+        @if (!string.IsNullOrEmpty(_message))
+        {
+            <div class="@($"fu-flash {(_ok ? "ok" : "bad")}")" role="status">@_message</div>
+        }
+
+        @* ── Complete ── *@
+        @if (_mode == "complete")
+        {
+            <div class="fu-panel">
+                <div class="fu-panel-title">How did it go?</div>
+                <div class="fu-outcomes">
+                    @foreach (var o in Outcomes)
+                    {
+                        var code = o.Code;
+                        <button type="button" class="@($"fu-outcome {(_outcome == code ? "is-picked" : "")}")" @onclick="() => _outcome = code">
+                            <strong>@o.Label</strong><small>@o.Hint</small>
+                        </button>
+                    }
+                </div>
+                @if (_outcome == FollowUpOutcomes.Callback)
+                {
+                    <label class="fu-field">Call back on
+                        <input type="datetime-local" min="@FuFmt.DateInput(DateTime.Now)" value="@FuFmt.DateInput(_next)" @onchange="e => _next = Parse(e.Value, _next)" />
+                    </label>
+                }
+                <label class="fu-field">Note <span>(optional)</span>
+                    <input type="text" maxlength="300" placeholder="e.g. Wants the 3-month pack, will pay Friday" @bind="_note" @bind:event="oninput" />
+                </label>
+                <div class="fu-actions">
+                    <button type="button" class="ld-btn" @onclick="Close">Cancel</button>
+                    <button type="button" class="ld-btn primary" disabled="@_busy" @onclick="CompleteAsync">Save</button>
+                </div>
+            </div>
+        }
+
+        @* ── Reschedule ── *@
+        @if (_mode == "resched")
+        {
+            <div class="fu-panel">
+                <div class="fu-panel-title">Move to</div>
+                <div class="fu-quick">
+                    @foreach (var p in FuFmt.QuickPicks())
+                    {
+                        var pick = p;
+                        <button type="button" class="@($"fu-chip {(_next == pick.When ? "is-picked" : "")}")" @onclick="() => _next = pick.When">@pick.Label</button>
+                    }
+                </div>
+                <label class="fu-field">Or pick a time
+                    <input type="datetime-local" min="@FuFmt.DateInput(DateTime.Now)" value="@FuFmt.DateInput(_next)" @onchange="e => _next = Parse(e.Value, _next)" />
+                </label>
+                @if (IsAdmin && Team.Count > 0)
+                {
+                    <label class="fu-field">Owner
+                        <select @bind="_owner">
+                            <option value="">Keep current</option>
+                            @foreach (var t in Team) { <option value="@t.Id">@t.Name</option> }
+                        </select>
+                    </label>
+                }
+                <div class="fu-actions">
+                    <button type="button" class="ld-btn" @onclick="Close">Cancel</button>
+                    <button type="button" class="ld-btn primary" disabled="@_busy" @onclick="RescheduleAsync">Move</button>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (Item.Status == "pending" && _mode == "")
+    {
+        <div class="fu-side">
+            @if (Item.CanMessage)
+            {
+                <button type="button" class="ld-btn primary" disabled="@_busy" title="Sends the message shown above on WhatsApp and completes this task" @onclick="SendAsync"><Icon Name="Send" Size="13" /> Send</button>
+            }
+            <button type="button" class="@($"ld-btn {(Item.CanMessage ? "" : "primary")}")" disabled="@_busy" @onclick="OpenComplete"><Icon Name="Check" Size="13" /> Done</button>
+            <button type="button" class="ld-btn" disabled="@_busy" @onclick="OpenResched">Reschedule</button>
+            <button type="button" class="fu-skip" disabled="@_busy" @onclick="SkipAsync" title="Close without doing it">Skip</button>
+        </div>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired] public FollowUpDto Item { get; set; } = new();
+    [Parameter] public bool ShowLead { get; set; } = true;
+    [Parameter] public bool ShowOwner { get; set; } = true;
+    [Parameter] public bool IsAdmin { get; set; }
+    [Parameter] public List<EmployeeDto> Team { get; set; } = new();
+    [Parameter] public EventCallback<string?> OnChanged { get; set; }
+    [Parameter] public EventCallback<long> OnOpenLead { get; set; }
+
+    private sealed record OutcomeChoice(string Code, string Label, string Hint);
+    private static readonly OutcomeChoice[] Outcomes =
+    [
+        new(FollowUpOutcomes.Done, "Completed", "Did what was needed"),
+        new(FollowUpOutcomes.Interested, "Interested", "Wants to buy or needs time"),
+        new(FollowUpOutcomes.Converted, "Ordered", "Customer placed an order"),
+        new(FollowUpOutcomes.NoAnswer, "No answer", "Try again tomorrow"),
+        new(FollowUpOutcomes.Callback, "Call back later", "Pick a time"),
+        new(FollowUpOutcomes.NotInterested, "Not interested", "Close this lead"),
+    ];
+
+    private string _mode = "";
+    private string _outcome = FollowUpOutcomes.Done;
+    private string _note = "";
+    private string _owner = "";
+    private DateTime _next = FuFmt.AtTen(1);
+    private string? _message;
+    private bool _ok;
+    private bool _busy;
+
+    private string Quick(int i) => $"fu-chip {(_next == (i == 0 ? FuFmt.AtTen(1) : i == 1 ? FuFmt.AtTen(2) : FuFmt.AtTen(7)) ? "is-picked" : "")}";
+    private static DateTime Parse(object? v, DateTime fallback) => DateTime.TryParse(v?.ToString(), out var d) ? d : fallback;
+
+    private void OpenComplete() { _mode = "complete"; _outcome = FollowUpOutcomes.Done; _note = ""; _message = null; _next = FuFmt.AtTen(1); }
+    private void OpenResched() { _mode = "resched"; _message = null; _owner = ""; _next = FuFmt.AtTen(1); }
+    private void Close() { _mode = ""; }
+
+    private async Task Finish(ApiResult res)
+    {
+        _ok = res.Success; _message = res.Message;
+        if (res.Success) { _mode = ""; await OnChanged.InvokeAsync(res.Message); }
+        _busy = false;
+    }
+
+    private async Task CompleteAsync()
+    {
+        _busy = true;
+        await Finish(await Api.AdminCompleteFollowUpAsync(Item.Id, new FollowUpCompleteRequest
+        {
+            Outcome = _outcome, Note = string.IsNullOrWhiteSpace(_note) ? null : _note.Trim(),
+            NextDueAt = _outcome == FollowUpOutcomes.Callback ? FuFmt.ToUtc(_next) : _outcome == FollowUpOutcomes.NoAnswer ? null : null,
+        }));
+    }
+
+    private async Task RescheduleAsync()
+    {
+        _busy = true;
+        await Finish(await Api.AdminRescheduleFollowUpAsync(Item.Id, new FollowUpRescheduleRequest { DueAt = FuFmt.ToUtc(_next), AssignedToEmployeeId = long.TryParse(_owner, out var o) ? o : null }));
+    }
+
+    private async Task SendAsync() { _busy = true; await Finish(await Api.AdminSendFollowUpAsync(Item.Id)); }
+    private async Task SkipAsync() { _busy = true; await Finish(await Api.AdminSkipFollowUpAsync(Item.Id)); }
+}

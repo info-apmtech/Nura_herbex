@@ -10,7 +10,7 @@
 {
     var isPrepaid = _confirmed.PaymentMethod.ToLowerInvariant().Contains("prepaid") || _confirmed.PaymentStatus == "PAID";
 
-    <div class="min-h-screen pt-4 sm:pt-14 md:pt-20 pb-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto text-left">
+    <div class="skin ck-page min-h-screen pb-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto text-left">
         <div class="rounded-3xl bg-[#0c0a16] border border-emerald-500/30 p-8 sm:p-12 shadow-2xl shadow-emerald-950/40 relative overflow-hidden">
             @* Ambient Glow *@
             <div class="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -48,7 +48,7 @@
                     @if (!string.IsNullOrEmpty(_confirmed.Awb))
                     {
                         <div class="flex justify-between items-center pb-3 border-b border-white/10">
-                            <span class="text-slate-400">Shiprocket Waybill (AWB):</span>
+                            <span class="text-slate-400">Courier Waybill (AWB):</span>
                             <span class="font-mono font-bold text-purple-300">
                                 @_confirmed.Awb (@(string.IsNullOrEmpty(_confirmed.Courier) ? "Express Air" : _confirmed.Courier))
                             </span>
@@ -78,7 +78,7 @@
                             @(_confirmed.AccountCreated ? "Vitality Account Activated!" : "Order Linked to Your Vitality Account!")
                         </div>
                         <div class="text-purple-300 text-[11px] mt-0.5 leading-relaxed">
-                            You can now monitor real-time Shiprocket dispatch milestones, review your batch laboratory test certificate (COA), and manage saved shipping addresses directly in your account.
+                            You can now monitor real-time courier dispatch milestones, review your batch laboratory test certificate (COA), and manage saved shipping addresses directly in your account.
                         </div>
                     </div>
                 </div>
@@ -116,7 +116,7 @@ else
     var isLoggedIn = Auth.IsAuthenticated;
     var customer = Auth.Customer;
 
-    <div class="min-h-screen pt-4 sm:pt-14 md:pt-20 pb-20 px-4 sm:px-6 lg:px-12 max-w-7xl mx-auto text-left relative">
+    <div class="skin ck-page min-h-screen pb-20 px-4 sm:px-6 lg:px-12 max-w-7xl mx-auto text-left relative">
 
         @* Top Breadcrumb Header *@
         <div class="flex items-center justify-between pb-3 mb-4 sm:pb-6 sm:mb-8 border-b border-white/10 pr-12 sm:pr-0">
@@ -249,8 +249,12 @@ else
                                 Pincode *
                             </label>
                             <input type="text" required maxlength="6" placeholder="6-digit"
-                                   value="@_f.Pincode" @oninput="e => _f.Pincode = Digits(e.Value?.ToString())"
+                                   value="@_f.Pincode" @oninput="OnPincodeInputAsync"
                                    class="w-full sm:w-1/2 px-4 py-3 rounded-xl bg-black/40 border border-white/15 text-white text-xs outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all" />
+                            @if (_pincodeServiceable == false)
+                            {
+                                <p class="mt-1.5 text-[11px] text-amber-400">We may not be able to deliver to this pincode yet. You can still place the order and we will contact you if delivery is not possible.</p>
+                            }
                         </div>
                     </div>
                 </div>
@@ -395,7 +399,7 @@ else
                                 <div class="p-3.5 rounded-2xl bg-purple-950/30 border border-purple-500/20 flex items-start gap-2.5 text-slate-300">
                                     <Icon Name="Sparkles" Size="16" Class="text-purple-400 shrink-0 mt-0.5" />
                                     <span>
-                                        Set a password to establish your <strong>Nura Herbex Vitality Account</strong>. This enables live Shiprocket courier tracking, batch laboratory test certificates, and 1-click reorders.
+                                        Set a password to create your <strong>Nura Herbex account</strong>. You can track orders, manage delivery details, and submit product reviews from your account.
                                     </span>
                                 </div>
 
@@ -604,6 +608,21 @@ else
 }
 
 @code {
+    // null = unknown / not checked. Advisory only: checkout is never blocked on this.
+    private bool? _pincodeServiceable;
+
+    private async Task OnPincodeInputAsync(ChangeEventArgs e)
+    {
+        _f.Pincode = Digits(e.Value?.ToString());
+        _pincodeServiceable = null;
+        if (_f.Pincode.Length != 6) return;
+
+        var pin = _f.Pincode;
+        var res = await Api.CheckPincodeAsync(pin);
+        if (_f.Pincode == pin) _pincodeServiceable = res.Serviceable; // ignore stale replies if the user kept typing
+        StateHasChanged();
+    }
+
     [SupplyParameterFromQuery(Name = "status"), Parameter] public string? StatusParam { get; set; }
     [SupplyParameterFromQuery(Name = "orderId"), Parameter] public string? OrderIdParam { get; set; }
     [SupplyParameterFromQuery(Name = "message"), Parameter] public string? MessageParam { get; set; }

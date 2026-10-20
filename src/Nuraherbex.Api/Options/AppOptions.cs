@@ -3,8 +3,8 @@ namespace Nuraherbex.Api.Options;
 public class StoreOptions
 {
     public const string Section = "Store";
-    public string FrontendUrl { get; set; } = "http://localhost:5200";
-    public string ApiPublicUrl { get; set; } = "http://localhost:5118";
+    public string FrontendUrl { get; set; } = "https://nura.apmiot.com";
+    public string ApiPublicUrl { get; set; } = "https://nuraapi.apmiot.com";
     public string SupportEmail { get; set; } = "care@nuraherbex.com";
     public string SupportPhone { get; set; } = "08888003430";
     public decimal FreeShippingThreshold { get; set; } = 999;
@@ -25,6 +25,7 @@ public class JwtOptions
 public class AdminOptions
 {
     public const string Section = "Admin";
+    public string PasswordHash { get; set; } = "";
     public string Email { get; set; } = "";
     public string Password { get; set; } = "";
 }
@@ -54,12 +55,76 @@ public class ShiprocketOptions
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Token) || (!string.IsNullOrWhiteSpace(Email) && !string.IsNullOrWhiteSpace(Password));
 }
 
+public class ShippingOptions
+{
+    public const string Section = "Shipping";
+    /// <summary>Legacy configuration only. New confirmed orders are booked through Shadowfax; existing bookings retain their recorded courier.</summary>
+    public string Provider { get; set; } = "Shadowfax";
+}
+
+public class ShadowfaxAddress
+{
+    public string Name { get; set; } = "";
+    public string Contact { get; set; } = "";
+    public string AddressLine1 { get; set; } = "";
+    public string AddressLine2 { get; set; } = "";
+    public string City { get; set; } = "";
+    public string State { get; set; } = "";
+    public string Pincode { get; set; } = "";
+    public string Email { get; set; } = "";
+    /// <summary>Seller pickup code registered with Shadowfax; required for marketplace orders.</summary>
+    public string UniqueCode { get; set; } = "";
+    public bool IsComplete => !string.IsNullOrWhiteSpace(AddressLine1)
+        && !string.IsNullOrWhiteSpace(City) && !string.IsNullOrWhiteSpace(Pincode)
+        && Pincode.Length == 6 && Pincode.All(char.IsDigit);
+}
+
+public class ShadowfaxOptions
+{
+    public const string Section = "Shadowfax";
+    /// <summary>staging | production</summary>
+    public string Env { get; set; } = "staging";
+    public string Token { get; set; } = "";
+    public string StagingToken { get; set; } = "";
+    /// <summary>marketplace (Shadowfax picks up from the seller) | warehouse (you hand over at a Shadowfax facility).</summary>
+    public string OrderType { get; set; } = "marketplace";
+    /// <summary>Regular or Surface, as provisioned for this Shadowfax account.</summary>
+    public string ServiceTier { get; set; } = "Regular";
+    /// <summary>Value Shadowfax sends in the callback Authorization header (set in the Shadowfax client portal, Webhook tab).</summary>
+    public string WebhookToken { get; set; } = "";
+    /// <summary>Book the Shadowfax pickup automatically once an order is confirmed (COD placed / online payment verified), using the catalog parcel estimate. Set false to require the admin Packed + Book steps.</summary>
+    public bool AutoBook { get; set; } = true;
+    public ShadowfaxAddress Pickup { get; set; } = new();
+    /// <summary>Return-to-seller / return-to-origin address. Falls back to <see cref="Pickup"/> when empty.</summary>
+    public ShadowfaxAddress Return { get; set; } = new();
+    public bool IsProduction => Env.Equals("production", StringComparison.OrdinalIgnoreCase);
+    public string ApiUrl => IsProduction ? "https://dale.shadowfax.in/api" : "https://dale.staging.shadowfax.in/api";
+    public string ActiveToken => IsProduction ? Token : StagingToken;
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ActiveToken);
+}
+
 public class EmailOptions
 {
     public const string Section = "Email";
     public string ResendApiKey { get; set; } = "";
     public string From { get; set; } = "Nura Herbex <care@nuraherbex.com>";
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(ResendApiKey);
+    public SmtpSettings Smtp { get; set; } = new();
+
+    /// <summary>SMTP is used when Email:Smtp:Host is set; otherwise the Resend HTTP API.</summary>
+    public bool IsConfigured => Smtp.IsConfigured || !string.IsNullOrWhiteSpace(ResendApiKey);
+}
+
+/// <summary>Direct SMTP submission — Gmail app password, Google Workspace, or any mail server.</summary>
+public class SmtpSettings
+{
+    public string Host { get; set; } = "";
+    public int Port { get; set; } = 587;
+    public string Username { get; set; } = "";
+    public string Password { get; set; } = "";
+    public bool EnableSsl { get; set; } = true;
+
+    /// <summary>Host alone is enough: a trusted relay may not need credentials.</summary>
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(Host) && Port > 0;
 }
 
 public class WhatsAppOptions
@@ -74,6 +139,8 @@ public class WhatsAppOptions
     public string PhoneNumberId { get; set; } = "";
     public string ApiVersion { get; set; } = "v21.0";
     public string DefaultCountryCode { get; set; } = "91";
+    /// <summary>Folder for photos, stickers and voice notes customers send. Empty = App_Data/whatsapp-media next to the API. Keep it outside the deployment folder so redeploys do not delete it.</summary>
+    public string MediaPath { get; set; } = "";
     /// <summary>Approved template names. Leave empty to send plain text (only deliverable inside the 24h customer-service window).</summary>
     public string OrderConfirmationTemplate { get; set; } = "";
     public string OrderShippedTemplate { get; set; } = "";

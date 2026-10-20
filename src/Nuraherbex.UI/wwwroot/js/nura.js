@@ -225,5 +225,36 @@
         reader.readAsDataURL(file);
       });
     },
-  };
+    // Resizes customer portraits before they are stored in the account database.
+    compressProfilePhoto(inputId) {
+      return new Promise((resolve) => {
+        const input = document.getElementById(inputId);
+        const file = input && input.files && input.files[0];
+        if (!file || file.size > 8 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+          resolve(null);
+          return;
+        }
+
+        const objectUrl = URL.createObjectURL(file);
+        const image = new Image();
+        const finish = (value) => { URL.revokeObjectURL(objectUrl); resolve(value); };
+        image.onerror = () => finish(null);
+        image.onload = () => {
+          const scale = Math.min(1, 512 / Math.max(image.naturalWidth, image.naturalHeight));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+          const context = canvas.getContext('2d');
+          if (!context) { finish(null); return; }
+          context.fillStyle = '#ffffff';
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          const size = Math.ceil((dataUrl.length - 'data:image/jpeg;base64,'.length) * 3 / 4);
+          if (size > 512 * 1024) { finish(null); return; }
+          finish({ name: file.name, type: 'image/jpeg', size: file.size, dataUrl });
+        };
+        image.src = objectUrl;
+      });
+    },  };
 })();

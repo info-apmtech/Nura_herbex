@@ -18,6 +18,21 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
     public DbSet<SiteSetting> SiteSettings => Set<SiteSetting>();
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
+    public DbSet<Lead> Leads => Set<Lead>();
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<LeadSourceEvent> LeadSourceEvents => Set<LeadSourceEvent>();
+    public DbSet<LeadStatusHistory> LeadStatusHistory => Set<LeadStatusHistory>();
+    public DbSet<Employee> Employees => Set<Employee>();
+    public DbSet<FollowUp> FollowUps => Set<FollowUp>();
+    public DbSet<JourneyEnrollment> JourneyEnrollments => Set<JourneyEnrollment>();
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<Department> Departments => Set<Department>();
+    public DbSet<Designation> Designations => Set<Designation>();
+    public DbSet<WorkTask> WorkTasks => Set<WorkTask>();
+    public DbSet<TaskComment> TaskComments => Set<TaskComment>();
+    public DbSet<TaskChecklistItem> TaskChecklistItems => Set<TaskChecklistItem>();
+    public DbSet<TaskActivity> TaskActivities => Set<TaskActivity>();
+    public DbSet<LeadAssignmentHistory> LeadAssignmentHistory => Set<LeadAssignmentHistory>();
 
     private static JsonSerializerOptions J => NuraJson.Options;
 
@@ -94,6 +109,14 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.Property(x => x.PaymentStatus).HasMaxLength(32);
             e.Property(x => x.FulfillmentStatus).HasMaxLength(32);
             e.Property(x => x.ShiprocketAwb).HasMaxLength(64);
+            e.Property(x => x.Courier).HasMaxLength(16);
+            e.Property(x => x.ParcelWeightKg).HasPrecision(9, 3);
+            e.Property(x => x.ParcelLengthCm).HasPrecision(9, 2);
+            e.Property(x => x.ParcelBreadthCm).HasPrecision(9, 2);
+            e.Property(x => x.ParcelHeightCm).HasPrecision(9, 2);
+            e.Property(x => x.ShipmentClientOrderId).HasMaxLength(100);
+            e.HasIndex(x => x.ShipmentClientOrderId).IsUnique().HasFilter("[ShipmentClientOrderId] IS NOT NULL");
+            e.HasIndex(x => new { x.Courier, x.ShiprocketAwb }).IsUnique().HasFilter("[Courier] = 'Shadowfax' AND [ShiprocketAwb] IS NOT NULL");
             e.HasIndex(x => x.CreatedAt);
             e.HasIndex(x => x.CustomerPhone);
             e.HasIndex(x => x.ShiprocketAwb);
@@ -156,16 +179,192 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.ToTable("reviews");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasMaxLength(32);
+            e.Property(x => x.CustomerId).HasMaxLength(32);
+            e.HasIndex(x => x.CustomerId);
+            e.HasOne<Customer>().WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<WhatsAppMessage>(e =>
         {
             e.ToTable("whatsapp_messages");
+            e.Property(x => x.MediaId).HasMaxLength(200);
+            e.Property(x => x.MediaMime).HasMaxLength(100);
+            e.Property(x => x.MediaFile).HasMaxLength(200);
+            e.Property(x => x.MediaName).HasMaxLength(260);
+            e.Property(x => x.Reaction).HasMaxLength(16);
+            e.Property(x => x.SentBy).HasMaxLength(200);
             e.HasKey(x => x.Id);
             e.Property(x => x.WaMessageId).HasMaxLength(200);
             e.Property(x => x.Phone).HasMaxLength(32);
             e.HasIndex(x => x.WaMessageId);
             e.HasIndex(x => x.CreatedAt);
+            e.HasIndex(x => x.LeadId);
+        });
+
+        b.Entity<Lead>(e =>
+        {
+            e.ToTable("leads");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Phone).HasMaxLength(32);
+            e.Property(x => x.Email).HasMaxLength(200);
+            e.Property(x => x.Source).HasMaxLength(32);
+            e.Property(x => x.SourceDetail).HasMaxLength(500);
+            e.Property(x => x.Status).HasMaxLength(32);
+            e.Property(x => x.ConsentStatus).HasMaxLength(32);
+            e.Property(x => x.ConsentSource).HasMaxLength(64);
+            e.Property(x => x.CustomerId).HasMaxLength(64);
+            e.HasIndex(x => x.Phone).IsUnique();
+            e.HasIndex(x => new { x.Status, x.LastContactAt });
+            e.HasIndex(x => x.AssignedToEmployeeId);
+        });
+
+        b.Entity<Conversation>(e =>
+        {
+            e.ToTable("conversations");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.LeadId).IsUnique();
+        });
+
+        b.Entity<LeadSourceEvent>(e =>
+        {
+            e.ToTable("lead_source_events");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Source).HasMaxLength(32);
+            e.HasIndex(x => x.LeadId);
+        });
+
+        b.Entity<LeadStatusHistory>(e =>
+        {
+            e.ToTable("lead_status_history");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.FromStatus).HasMaxLength(32);
+            e.Property(x => x.ToStatus).HasMaxLength(32);
+            e.Property(x => x.ChangedBy).HasMaxLength(200);
+            e.HasIndex(x => x.LeadId);
+        });
+
+        b.Entity<Employee>(e =>
+        {
+            e.ToTable("employees");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Email).HasMaxLength(200);
+            e.Property(x => x.Phone).HasMaxLength(32);
+            e.Property(x => x.PasswordHash).HasMaxLength(400);
+            e.Property(x => x.Role).HasMaxLength(16);
+            e.HasIndex(x => x.Email).IsUnique();
+            e.HasIndex(x => x.DesignationId);
+        });
+
+        b.Entity<LeadAssignmentHistory>(e =>
+        {
+            e.ToTable("lead_assignment_history");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Reason).HasMaxLength(500);
+            e.Property(x => x.ChangedBy).HasMaxLength(200);
+            e.HasIndex(x => x.LeadId);
+        });
+
+        b.Entity<FollowUp>(e =>
+        {
+            e.ToTable("follow_ups");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.OrderId).HasMaxLength(64);
+            e.Property(x => x.Type).HasMaxLength(16);
+            e.Property(x => x.Title).HasMaxLength(300);
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.Outcome).HasMaxLength(500);
+            e.Property(x => x.CompletedBy).HasMaxLength(200);
+            e.Property(x => x.Source).HasMaxLength(16);
+            e.Property(x => x.StepKey).HasMaxLength(64);
+            e.Property(x => x.CreatedBy).HasMaxLength(200);
+            e.HasIndex(x => new { x.AssignedToEmployeeId, x.Status, x.DueAt });
+            e.HasIndex(x => x.LeadId);
+            // One automatic task per order step, even if two servers run the worker at once.
+            e.HasIndex(x => new { x.OrderId, x.StepKey }).IsUnique().HasFilter("[OrderId] IS NOT NULL AND [StepKey] IS NOT NULL");
+        });
+
+        b.Entity<JourneyEnrollment>(e =>
+        {
+            e.ToTable("journey_enrollments");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.OrderId).HasMaxLength(64);
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.StoppedReason).HasMaxLength(300);
+            e.HasIndex(x => x.OrderId).IsUnique();
+            e.HasIndex(x => x.LeadId);
+        });
+
+        b.Entity<Notification>(e =>
+        {
+            e.ToTable("notifications");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Kind).HasMaxLength(16);
+            e.Property(x => x.Title).HasMaxLength(300);
+            e.Property(x => x.Link).HasMaxLength(200);
+            e.HasIndex(x => new { x.EmployeeId, x.ReadAt, x.CreatedAt });
+        });
+
+        b.Entity<Department>(e =>
+        {
+            e.ToTable("departments");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(120);
+            e.Property(x => x.Description).HasMaxLength(500);
+            e.HasIndex(x => x.Name).IsUnique();
+        });
+
+        b.Entity<Designation>(e =>
+        {
+            e.ToTable("designations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(120);
+            e.Property(x => x.Description).HasMaxLength(500);
+            e.Property(x => x.RightsJson).HasColumnType("nvarchar(max)");
+            e.HasIndex(x => x.Name).IsUnique();
+        });
+
+        b.Entity<WorkTask>(e =>
+        {
+            e.ToTable("work_tasks");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(300);
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.Priority).HasMaxLength(16);
+            e.Property(x => x.CreatedByName).HasMaxLength(200);
+            e.Property(x => x.OrderId).HasMaxLength(64);
+            e.Property(x => x.Tags).HasMaxLength(300);
+            e.Property(x => x.Repeat).HasMaxLength(16);
+            e.HasIndex(x => new { x.AssignedToEmployeeId, x.Status, x.DueAt });
+            e.HasIndex(x => x.LeadId);
+            e.HasIndex(x => x.DepartmentId);
+        });
+
+        b.Entity<TaskComment>(e =>
+        {
+            e.ToTable("task_comments");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Author).HasMaxLength(200);
+            e.Property(x => x.Body).HasMaxLength(4000);
+            e.HasIndex(x => x.TaskId);
+        });
+
+        b.Entity<TaskChecklistItem>(e =>
+        {
+            e.ToTable("task_checklist");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Text).HasMaxLength(300);
+            e.HasIndex(x => x.TaskId);
+        });
+
+        b.Entity<TaskActivity>(e =>
+        {
+            e.ToTable("task_activity");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Actor).HasMaxLength(200);
+            e.Property(x => x.Text).HasMaxLength(500);
+            e.HasIndex(x => x.TaskId);
         });
     }
 }

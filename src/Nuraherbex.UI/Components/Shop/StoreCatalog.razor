@@ -1,0 +1,125 @@
+@inject CartState Cart
+@inject NavigationManager Nav
+
+<div class="sc">
+@if (ProductId is not null)
+{
+    <nav class="sc-crumbs" aria-label="Breadcrumb"><a href="/">Home</a><Icon Name="ChevronRight" Size="12" /><a href="/shop">Shop</a><Icon Name="ChevronRight" Size="12" />@(Selected?.Name ?? "Product")</nav>
+    @if (Selected is { } p)
+    {
+        var soldOut = p.StockQuantity <= 0;
+        var onSale = p.CompareAtPrice > p.Price;
+        <div class="sc-detail">
+          <div class="sc-detail-img">
+            @if (!string.IsNullOrEmpty(p.ImageUrl)) { <img src="@p.ImageUrl" alt="@p.Name" /> } else { <Icon Name="Package" Size="80" /> }
+            @if (onSale) { <span class="sc-badge">@Math.Round((1 - p.Price / p.CompareAtPrice!.Value) * 100)% OFF</span> }
+          </div>
+          <div class="sc-detail-info">
+            <span class="sc-eyebrow">Nura Herbex</span>
+            <h1>@p.Name</h1>
+            @if (!string.IsNullOrWhiteSpace(p.Subtitle)) { <p class="sc-sub">@p.Subtitle</p> }
+            <div class="sc-rating"><span class="sc-stars"><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /></span><span>Loved by our customers</span></div>
+            <div class="sc-price">@SiteConfig.Money(p.Price)@if (onSale) { <del>@SiteConfig.Money(p.CompareAtPrice!.Value)</del> }<small>Inclusive of applicable taxes</small></div>
+            @if (!string.IsNullOrWhiteSpace(p.Description)) { <p class="sc-desc">@p.Description</p> }
+
+            <dl class="sc-specs">
+              <div><dt>Availability</dt><dd class="@(soldOut ? "is-out" : p.StockQuantity <= 10 ? "is-low" : "is-in")">@(soldOut ? "Out of stock" : p.StockQuantity <= 10 ? $"Only {p.StockQuantity} left" : "In stock")</dd></div>
+              @if (p.WeightKg > 0) { <div><dt>Net weight</dt><dd>@(Math.Round(p.WeightKg * 1000)) g</dd></div> }
+              <div><dt>SKU</dt><dd>@p.Sku</dd></div>
+            </dl>
+
+            <div class="sc-buy">
+              <div class="sc-qty"><button aria-label="Decrease quantity" @onclick="() => _quantity = Math.Max(1, _quantity - 1)"><Icon Name="Minus" Size="15" /></button><span>@_quantity</span><button aria-label="Increase quantity" @onclick="() => _quantity = Math.Min(Math.Max(1, Math.Min(100, p.StockQuantity)), _quantity + 1)"><Icon Name="Plus" Size="15" /></button></div>
+              <button class="sc-btn sc-btn-primary" disabled="@(soldOut || _busy)" @onclick="() => AddAsync(p)"><Icon Name="ShoppingBag" Size="17" /> Add to cart</button>
+              <button class="sc-btn sc-btn-ghost" disabled="@(soldOut || _busy)" @onclick="() => BuyNowAsync(p)">Buy now</button>
+            </div>
+            @if (_error is not null) { <p role="alert" class="sc-error">@_error</p> }
+
+            <ul class="sc-assure">
+              <li><Icon Name="ShieldCheck" Size="18" /> GMP certified</li>
+              <li><Icon Name="Truck" Size="18" /> Fast, tracked delivery</li>
+              <li><Icon Name="Leaf" Size="18" /> 100% botanical</li>
+              <li><Icon Name="Award" Size="18" /> Batch verified</li>
+            </ul>
+          </div>
+        </div>
+    }
+    else
+    {
+        <div class="sc-empty"><Icon Name="Package" Size="44" /><h1>Product unavailable</h1><p>This product is no longer available in the store.</p><a class="sc-btn sc-btn-primary" href="/shop">Browse our products</a></div>
+    }
+}
+else
+{
+    <header class="sc-hero">
+      <span class="sc-eyebrow">The Nura Herbex collection</span>
+      <h1>Find your <em>daily ritual</em></h1>
+      <p>Natural ingredients, honest formulas and everyday care, made with 17 botanicals and nothing you can't pronounce.</p>
+      <ul class="sc-hero-points"><li><Icon Name="ShieldCheck" Size="16" /> GMP certified</li><li><Icon Name="Truck" Size="16" /> Free shipping on qualifying orders</li><li><Icon Name="Leaf" Size="16" /> No synthetic fillers</li></ul>
+    </header>
+
+    <div class="sc-toolbar">
+      <label class="sc-search"><Icon Name="Search" Size="17" /><input aria-label="Search the shop" placeholder="Search products" @bind="_search" @bind:event="oninput" /></label>
+      <span class="sc-count">@Filtered.Count() @(Filtered.Count() == 1 ? "product" : "products")</span>
+      <select aria-label="Sort products" @bind="_sort"><option value="name">Sort: A to Z</option><option value="price">Price: low to high</option><option value="price-desc">Price: high to low</option></select>
+    </div>
+
+    @if (!Filtered.Any())
+    {
+        <div class="sc-empty"><Icon Name="Package" Size="44" /><h2>No products found</h2><p>Try another search or check back soon.</p></div>
+    }
+    <div class="sc-grid">
+      @foreach (var p in Filtered)
+      {
+        var soldOut = p.StockQuantity <= 0;
+        var onSale = p.CompareAtPrice > p.Price;
+        <article class="sc-card" @key="p.Id">
+          <a href="@("/catalog/" + Uri.EscapeDataString(p.Id))" class="sc-card-img" aria-label="@p.Name">
+            @if (!string.IsNullOrWhiteSpace(p.ImageUrl)) { <img src="@p.ImageUrl" alt="@p.Name" loading="lazy" /> } else { <Icon Name="Package" Size="56" /> }
+            @if (soldOut) { <span class="sc-badge sc-badge-dark">Sold out</span> } else if (onSale) { <span class="sc-badge">@Math.Round((1 - p.Price / p.CompareAtPrice!.Value) * 100)% OFF</span> }
+          </a>
+          <div class="sc-card-body">
+            <span class="sc-stars"><Icon Name="Star" Size="13" /><Icon Name="Star" Size="13" /><Icon Name="Star" Size="13" /><Icon Name="Star" Size="13" /><Icon Name="Star" Size="13" /></span>
+            <a href="@("/catalog/" + Uri.EscapeDataString(p.Id))"><h2>@p.Name</h2></a>
+            @if (!string.IsNullOrWhiteSpace(p.Subtitle)) { <p class="sc-card-sub">@p.Subtitle</p> }
+            @if (!string.IsNullOrWhiteSpace(p.Description)) { <p class="sc-card-desc">@p.Description</p> }
+            <div class="sc-card-foot">
+              <div class="sc-price">@SiteConfig.Money(p.Price)@if (onSale) { <del>@SiteConfig.Money(p.CompareAtPrice!.Value)</del> }</div>
+              <button class="sc-btn sc-btn-primary sc-btn-sm" disabled="@(soldOut || _busy)" @onclick="() => AddAsync(p)">@(soldOut ? "Out of stock" : "Add to cart")<Icon Name="ArrowRight" Size="15" /></button>
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+}
+@if (_error is not null && ProductId is null) { <p role="alert" class="sc-error">@_error</p> }
+</div>
+
+@code {
+    [Parameter] public List<ProductDto> Products { get; set; } = new();
+    [Parameter] public string? ProductId { get; set; }
+    private string _search = "", _sort = "name";
+    private int _quantity = 1;
+    private bool _busy;
+    private string? _error;
+    private ProductDto? Selected => Products.FirstOrDefault(p => p.Id == ProductId);
+    private IEnumerable<ProductDto> Filtered { get { var p = Products.Where(p => p.Status == "active" && p.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)); return _sort == "price" ? p.OrderBy(p => p.Price) : _sort == "price-desc" ? p.OrderByDescending(p => p.Price) : p.OrderBy(p => p.Name); } }
+    protected override void OnParametersSet() { _quantity = 1; _error = null; }
+
+    private async Task<bool> AddAsync(ProductDto p)
+    {
+        if (_busy) return false;
+        var qty = ProductId is null ? 1 : _quantity;
+        var existing = Cart.Items.Where(i => i.Id == p.Id).Sum(i => i.Quantity);
+        if (qty < 1 || qty + existing > p.StockQuantity) { _error = $"Only {p.StockQuantity} units are available, including quantities already in your cart."; return false; }
+        _busy = true; _error = null;
+        try { await Cart.AddToCartAsync(new CartItem { Id = p.Id, Name = p.Name, Price = p.Price, Image = p.ImageUrl, ServingsText = p.Subtitle }, qty); }
+        finally { _busy = false; }
+        return true;
+    }
+
+    private async Task BuyNowAsync(ProductDto p)
+    {
+        if (await AddAsync(p)) Nav.NavigateTo("/checkout");
+    }
+}

@@ -21,7 +21,7 @@
                     class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                     title="Reload customer registry from database">
                 <Icon Name="RefreshCw" Size="12" Class="@(Loading ? "animate-spin" : "")" />
-                <span>Sync DB</span>
+                <span>Refresh</span>
             </button>
         </div>
     </div>
@@ -36,7 +36,7 @@
             <div class="text-2xl font-semibold text-zinc-100 font-mono tracking-tight">
                 @Customers.Count
             </div>
-            <span class="text-[11px] text-zinc-500 font-normal">Active in DB</span>
+            <span class="text-[11px] text-zinc-500 font-normal">Registered accounts</span>
         </div>
 
         <div class="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-1 text-left">
@@ -78,7 +78,7 @@
         <div class="overflow-x-auto">
             <table class="w-full text-xs">
                 <thead class="bg-zinc-950/70 text-zinc-400 font-mono text-[11px] border-b border-zinc-800">
-                    <tr>
+                    <tr><th class="px-3 py-3 text-left font-medium w-12">S.No</th>
                         <th class="px-4 py-3 text-left font-medium">Customer</th>
                         <th class="px-4 py-3 text-left font-medium">Contact</th>
                         <th class="px-4 py-3 text-left font-medium">Registered Date</th>
@@ -92,7 +92,7 @@
                     @if (Loading)
                     {
                         <tr>
-                            <td colspan="7" class="px-4 py-12 text-center text-zinc-500">
+                            <td colspan="8" class="px-4 py-12 text-center text-zinc-500">
                                 <div class="flex flex-col items-center justify-center gap-2">
                                     <Icon Name="RefreshCw" Size="18" Class="animate-spin text-zinc-400" />
                                     <span class="text-xs">Fetching registered users strictly from database...</span>
@@ -103,7 +103,7 @@
                     else if (FilteredCustomers.Count == 0)
                     {
                         <tr>
-                            <td colspan="7" class="px-4 py-12 text-center text-zinc-500">
+                            <td colspan="8" class="px-4 py-12 text-center text-zinc-500">
                                 <div class="flex flex-col items-center justify-center gap-2">
                                     <Icon Name="Users" Size="24" Class="text-zinc-600" />
                                     <div class="font-medium text-zinc-300">
@@ -120,6 +120,7 @@
                     }
                     else
                     {
+                        _sn = 0;
                         @foreach (var cust in FilteredCustomers)
                         {
                             var name = string.IsNullOrEmpty(cust.FullName) ? "Vitality Customer" : cust.FullName;
@@ -134,6 +135,7 @@
                                 : null;
 
                             <tr @key="cust.Id" class="hover:bg-zinc-800/30 transition-colors">
+                                <td class="px-3 py-3 text-zinc-500 font-mono">@(++_sn)</td>
                                 @* Customer Profile & ID *@
                                 <td class="px-4 py-3">
                                     <div class="flex items-center gap-2.5">
@@ -309,6 +311,7 @@
                 </div>
             </div>
 
+            <AdminCustomerEditor Customer="sc" OnSaved="OnReload" />
             @* Order History *@
             <div class="space-y-2.5 pt-2">
                 <div class="flex items-center justify-between">
@@ -380,7 +383,7 @@
             <div class="flex gap-2.5 pt-3 border-t border-zinc-800">
                 <button @onclick="@(() => _selected = null)"
                         class="w-full py-2 px-4 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 font-medium text-xs cursor-pointer transition-colors">
-                    Close Customer Dossier
+                    Close customer details
                 </button>
             </div>
         </div>
@@ -388,6 +391,7 @@
 }
 
 @code {
+    private int _sn;
     [Parameter] public List<AdminCustomerDto> Customers { get; set; } = new();
     [Parameter] public bool Loading { get; set; }
     [Parameter] public EventCallback OnReload { get; set; }

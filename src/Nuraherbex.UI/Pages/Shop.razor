@@ -1,5 +1,6 @@
 @page "/shop"
 @page "/store"
+@page "/catalog/{ProductId}"
 @page "/products/stamix"
 @page "/product/stamix"
 @page "/products"
@@ -11,24 +12,28 @@
 @inject ApiClient Api
 @inject BrowserInterop Browser
 
-<div class="pt-4 sm:pt-14 md:pt-20 pb-24 bg-[#07050d] text-left text-slate-200 min-h-screen relative overflow-hidden">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+<div class="sp-page text-left text-slate-200 min-h-screen relative overflow-hidden">
+  <div class="sp-container relative z-10">
     @if (IsPdp)
     {
       <ShopPdpView Products="_products" />
     }
     else
     {
-      <ShopPreviewView Products="_products" />
+      @if (_loading) { <div class="sc-empty" role="status"><span class="sc-spinner"></span><p>Loading products…</p></div> } else if (_loadError is not null) { <div class="sc-empty" role="alert"><Icon Name="AlertCircle" Size="40" /><h2>We couldn't load the shop</h2><p>@_loadError</p><button class="sc-btn sc-btn-primary" @onclick="LoadProductsAsync">Try again</button></div> } else { <StoreCatalog Products="_products" ProductId="@CatalogProductId" /> }
     }
   </div>
 </div>
 
 @code {
-    private static readonly string[] PdpPaths = { "products/stamix", "product/stamix", "products", "product", "shop/stamix" };
-    private static readonly string[] PreviewPaths = { "shop", "store" };
+    [Parameter] public string? ProductId { get; set; }
+    private bool _loading = true;
+    private string? _loadError;
+    private static readonly string[] PdpPaths = { "products/stamix", "product/stamix", "shop/stamix" };
+    private static readonly string[] PreviewPaths = { "shop", "store", "products", "product" };
 
     private bool IsPdp { get; set; }
+    private string? CatalogProductId => Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].Trim('/').StartsWith("catalog/", StringComparison.OrdinalIgnoreCase) ? ProductId : null;
     private bool _metaDirty = true;
     private List<ProductDto> _products = new();
 
@@ -38,11 +43,8 @@
         Nav.LocationChanged += OnLocationChanged;
     }
 
-    protected override async Task OnInitializedAsync()
-    {
-        try { _products = await Api.GetProductsAsync() ?? new(); }
-        catch { _products = new(); }
-    }
+    protected override Task OnInitializedAsync() => LoadProductsAsync();
+    private async Task LoadProductsAsync() { _loading = true; var result = await Api.GetCatalogAsync(); _products = result.Products; _loadError = result.Success ? null : result.Message; _loading = false; }
 
     protected override void OnParametersSet() => Sync();
 
@@ -68,7 +70,7 @@
         if (cut >= 0) path = path[..cut];
         path = path.Trim('/').ToLowerInvariant();
 
-        bool? pdp = PdpPaths.Contains(path) ? true : PreviewPaths.Contains(path) ? false : null;
+        bool? pdp = PdpPaths.Contains(path) ? true : (PreviewPaths.Contains(path) || path.StartsWith("catalog/")) ? false : null;
         if (pdp is null || pdp == IsPdp) return false;
         IsPdp = pdp.Value;
         _metaDirty = true;

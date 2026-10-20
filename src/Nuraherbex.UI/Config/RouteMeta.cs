@@ -28,16 +28,16 @@ public static class RouteMeta
         "Secure Checkout · Stamix™ | Nura Herbex");
 
     public static readonly PageMeta Track = new(
-        "Track Your Order & Batch Verification | Nura Herbex — Stamix™",
-        "Check real-time Shiprocket AWB logistics telemetry, shipment milestones, and verify batch authenticity for Stamix™ Botanical Vitality Formula for Men.",
+        "Track Your Order & Batch Details | Nura Herbex — Stamix™",
+        "View order delivery updates and product batch details for Stamix™ Botanical Nutrition Formula.",
         "https://nuraherbex.com/track",
         "Track Your Stamix™ Order | Nura Herbex");
 
-    public static readonly PageMeta TrustPassport = new(
-        "Trust Passport | Stamix™ Batch Verification · Nura Herbex",
-        "Official Nura Herbex Trust Passport. Review verified batch details, Certificate of Analysis (COA), ICP-MS heavy metals testing, and FSSAI compliance.",
-        "https://nuraherbex.com/trust-passport",
-        "Trust Passport — Verified Stamix™ Batch Dossier | Nura Herbex");
+    public static readonly PageMeta QualityReports = new(
+        "Stamix™ Quality & Batch Test Reports | Nura Herbex",
+        "Review available batch-specific Certificates of Analysis (COA), laboratory results, and product quality information for Stamix™ botanical nutrition formula.",
+        "https://nuraherbex.com/quality-reports",
+        "Stamix™ Product Quality & Batch Reports | Nura Herbex");
 
     public static readonly PageMeta Formulation = new(
         "Full Formulation & Botanical Ingredients | Stamix™ Nura Herbex",
@@ -46,18 +46,18 @@ public static class RouteMeta
         "Stamix™ Clinical Formulation & Botanical Ingredients | Nura Herbex");
 
     public static readonly PageMeta Account = new(
-        "Vitality Account & Order Tracking | Nura Herbex",
-        "Sign in to your Nura Herbex Vitality Account. View live Shiprocket courier tracking, batch Certificate of Analysis dossiers, and manage delivery addresses.",
+        "My Account, Orders & Reviews | Nura Herbex",
+        "Sign in to manage Nura Herbex orders, delivery details, and product reviews. Review available batch quality reports and Certificates of Analysis.",
         "https://nuraherbex.com/account",
-        "Vitality Account & Order Tracking · Nura Herbex");
+        "My Account & Order Management · Nura Herbex");
 
     public static readonly PageMeta Admin = new(
-        "Admin Portal & Logistics Telemetry | Nura Herbex",
-        "Internal administration operations center for Nura Herbex. Real-time order fulfillment tracking, Shiprocket API sync, and Trust Passport batch certificate governance.",
+        "Store Admin & Operations | Nura Herbex",
+        "Nura Herbex administration for products, orders, customers, review moderation, and batch quality report management.",
         "https://nuraherbex.com/admin",
-        "Nura Herbex Admin Portal & Fulfillment Operations");
+        "Nura Herbex Store Administration");
 
-    public static readonly PageMeta ReviewModal = new("Submit Clinical Verification & Review | Nura Herbex", "Verified reviews and community feedback for Stamix™ Botanical Formula.");
+    public static readonly PageMeta ReviewModal = new("Share Your Product Experience | Nura Herbex", "Submit a customer review for moderation and possible publication on the Nura Herbex storefront.");
     public static readonly PageMeta PrivacyModal = new("Privacy Policy & Data Security | Nura Herbex", "Military-grade privacy protection and 256-bit encrypted checkout compliance.");
     public static readonly PageMeta TermsModal = new("Terms of Service & 60-Day Guarantee | Nura Herbex", "Terms of service, warranty, and 60-day empty-jar satisfaction guarantee for Stamix™.");
 }

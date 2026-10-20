@@ -120,6 +120,7 @@ public class AddressDto
 
 public class TrackingEventDto
 {
+    public string? EventKey { get; set; }
     public string Status { get; set; } = "";
     public string? Location { get; set; }
     public string? Time { get; set; }
@@ -129,6 +130,17 @@ public class TrackingEventDto
 
 public class OrderDto
 {
+    public decimal ParcelWeightKg { get; set; }
+    public decimal ParcelLengthCm { get; set; }
+    public decimal ParcelBreadthCm { get; set; }
+    public decimal ParcelHeightCm { get; set; }
+    public DateTime? FulfillmentReadyAt { get; set; }
+    public string? ShipmentClientOrderId { get; set; }
+    public DateTime? ShipmentBookedAt { get; set; }
+    public DateTime? PickedUpAt { get; set; }
+    public DateTime? DeliveredAt { get; set; }
+    public DateTime? LastShippingEventAt { get; set; }
+    public DateTime? LastTrackingCheckedAt { get; set; }
     public string Id { get; set; } = "";
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -154,10 +166,13 @@ public class OrderDto
 
     /// <summary>PENDING | SHIPMENT_CREATED | AWB_ASSIGNED | PICKED_UP | IN_TRANSIT | OUT_FOR_DELIVERY | DELIVERED | RTO | CANCELLED</summary>
     public string FulfillmentStatus { get; set; } = "PENDING";
+    /// <summary>Shiprocket | Shadowfax (null = Shiprocket). The Shiprocket* fields hold that courier platform's ids.</summary>
+    public string? Courier { get; set; }
     public string? ShiprocketOrderId { get; set; }
     public string? ShiprocketShipmentId { get; set; }
     public string? ShiprocketAwb { get; set; }
     public string? ShiprocketCourier { get; set; }
+    /// <summary>Admin-only printable label URL; customer DTO mappings deliberately leave this empty.</summary>
     public string? ShippingLabelUrl { get; set; }
     public string DeliveryStatus { get; set; } = "Order Placed";
     public List<TrackingEventDto> DeliveryTrackingEvents { get; set; } = new();
@@ -255,6 +270,7 @@ public class CustomerDto
     public string FullName { get; set; } = "";
     public string Email { get; set; } = "";
     public string Phone { get; set; } = "";
+    public string? ProfileImageData { get; set; }
     public AddressDto ShippingAddress { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -304,8 +320,17 @@ public class VerifyOtpRequest
 public class UpdateProfileRequest
 {
     public string? FullName { get; set; }
+    /// <summary>Optional. When present and different it replaces the sign-in email and is carried over to the customer's existing orders.</summary>
+    public string? Email { get; set; }
     public string? Phone { get; set; }
+    public string? ProfileImageData { get; set; }
     public AddressDto? ShippingAddress { get; set; }
+}
+
+public class ChangePasswordRequest
+{
+    public string CurrentPassword { get; set; } = "";
+    public string NewPassword { get; set; } = "";
 }
 
 public class AuthResponse : ApiResult
@@ -319,6 +344,13 @@ public class AuthResponse : ApiResult
 public class CustomerResponse : ApiResult
 {
     public CustomerDto? Customer { get; set; }
+}
+
+public class PincodeCheckResponse
+{
+    public bool Success { get; set; }
+    /// <summary>null = unknown (courier check unavailable); never block checkout on null.</summary>
+    public bool? Serviceable { get; set; }
 }
 
 public class CheckUserResponse
@@ -340,6 +372,13 @@ public class AdminUserDto
 {
     public string Email { get; set; } = "";
     public string Role { get; set; } = "admin";
+    public string Name { get; set; } = "";
+    /// <summary>Set for employee logins; null for the configured super administrator.</summary>
+    public long? EmployeeId { get; set; }
+    /// <summary>Page key to access level (see PageCatalog). The administrator has full access to every page.</summary>
+    public Dictionary<string, int> Rights { get; set; } = new();
+    public string? Department { get; set; }
+    public string? Designation { get; set; }
 }
 
 public class AdminLoginResponse : ApiResult
@@ -351,7 +390,7 @@ public class AdminLoginResponse : ApiResult
 
 public class AdminEmailRequest
 {
-    /// <summary>confirmation | delivered</summary>
+    /// <summary>confirmation | delivered | shipped | out-for-delivery | cancelled | returned</summary>
     public string Type { get; set; } = "confirmation";
 }
 
@@ -363,6 +402,7 @@ public class AdminCreateOrderRequest
     public string CustomerPhone { get; set; } = "";
     public AddressDto Address { get; set; } = new();
     public string ProductId { get; set; } = "stamix-single";
+    public string? CouponCode { get; set; }
     public int Quantity { get; set; } = 1;
     /// <summary>COD | ONLINE</summary>
     public string PaymentMethod { get; set; } = "ONLINE";
@@ -373,11 +413,13 @@ public class ShipmentResultDto
 {
     public bool Success { get; set; }
     public bool Simulated { get; set; }
+    public string? Courier { get; set; }
     public string? ShiprocketOrderId { get; set; }
     public string? ShiprocketShipmentId { get; set; }
     public string? ShiprocketAwb { get; set; }
     public string? ShiprocketCourier { get; set; }
     public string? DeliveryStatus { get; set; }
+    public string? ShippingLabelUrl { get; set; }
 }
 
 public class ShipmentResponse : ApiResult
@@ -386,7 +428,7 @@ public class ShipmentResponse : ApiResult
 }
 
 // ---------------------------------------------------------------------------
-// Trust Passport (batch verification)
+// Product quality and batch laboratory reports
 // ---------------------------------------------------------------------------
 public class QualityCheckDto
 {
@@ -479,7 +521,14 @@ public class ReviewDto
     public string? Title { get; set; }
     public string Body { get; set; } = "";
     public bool Verified { get; set; }
+    public bool Approved { get; set; }
+    public string? ProfileImageData { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+public class ReviewModerationRequest
+{
+    public bool Approved { get; set; }
 }
 
 public class ReviewListResponse : ApiResult
@@ -503,6 +552,14 @@ public class WhatsAppMessageDto
     /// <summary>received | sent | delivered | read | failed</summary>
     public string Status { get; set; } = "received";
     public string? OrderId { get; set; }
+    /// <summary>Employee name for messages sent by a person; empty for automatic ones.</summary>
+    public string? SentBy { get; set; }
+    /// <summary>Signed link (relative to the API) to the photo / sticker / video / audio / document. Null for text.</summary>
+    public string? MediaUrl { get; set; }
+    public string? MediaMime { get; set; }
+    public string? MediaName { get; set; }
+    /// <summary>Emoji reaction left on this message.</summary>
+    public string? Reaction { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

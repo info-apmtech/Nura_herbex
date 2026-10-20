@@ -8,18 +8,19 @@ namespace Nuraherbex.Api.Services;
 public partial class OrderService(
     NuraDbContext db,
     ProductService products,
-    ShiprocketService shiprocket,
+    ShippingGateway shipping,
+    OrderOperationLock operationLock,
+    Microsoft.Extensions.Options.IOptions<Nuraherbex.Api.Options.ShadowfaxOptions> shadowfaxOptions,
     IServiceScopeFactory scopes,
     ILogger<OrderService> log)
 {
     [GeneratedRegex(@"^[1-9][0-9]{5}$")]
     private static partial Regex PincodeRegex();
 
-    public static string NewOrderId() => $"NH-{Random.Shared.Next(100000, 999999)}";
+    public static string NewOrderId() => $"NH-{Guid.NewGuid():N}"[..32].ToUpperInvariant();
 
     /// <param name="holdUntilPaid">
-    /// Public checkout: an ONLINE order is not saved to the orders table. It is held as a <see cref="PaymentAttempt"/> snapshot and only
-    /// becomes a real order once PayU confirms payment (see <see cref="ConfirmHeldOrderAsync"/>).
+    /// Public checkout persists the pending order and a payment-attempt snapshot before payment confirmation.
     /// </param>
     public async Task<Order> CreateAsync(CreateOrderRequest req, string? customerId, bool holdUntilPaid = false)
     {
@@ -46,7 +47,7 @@ public partial class OrderService(
         var order = new Order
         {
             Id = id, CustomerName = c.FullName.Trim(), CustomerEmail = c.Email.Trim().ToLowerInvariant(), CustomerPhone = phone,
-            CustomerId = customerId ?? c.Id,
+            CustomerId = customerId,
             ShippingAddress = new AddressDto
             {
                 AddressLine1 = s.AddressLine1.Trim(), AddressLine2 = (s.AddressLine2 ?? "").Trim(), City = s.City.Trim(),
@@ -56,6 +57,8 @@ public partial class OrderService(
             ShippingFee = t.ShippingFee, TaxAmount = t.TaxAmount, TotalAmount = t.FinalTotal,
             PaymentMethod = isCod ? "COD" : "ONLINE", PaymentStatus = isCod ? "COD_PENDING" : "PENDING",
             FulfillmentStatus = "PENDING",
+            ParcelWeightKg = calc.Parcel.WeightKg, ParcelLengthCm = calc.Parcel.LengthCm,
+            ParcelBreadthCm = calc.Parcel.BreadthCm, ParcelHeightCm = calc.Parcel.HeightCm,
             Notes = isCod ? "Cash on Delivery order" : "Pending online payment settlement",
             DeliveryStatus = isCod ? "Order Confirmed" : "Payment Pending",
             DeliveryTrackingEvents =
@@ -65,13 +68,11 @@ public partial class OrderService(
         };
 
         if (isCod)
-        {
-            await TryDispatchAsync(order, calc.Parcel);
             await products.DecrementStockAsync(order);
-        }
 
         if (!isCod && holdUntilPaid)
         {
+            db.Orders.Add(order);
             db.PaymentAttempts.Add(new PaymentAttempt
             {
                 OrderId = order.Id, Amount = order.TotalAmount, Status = "CREATED",
@@ -85,7 +86,13 @@ public partial class OrderService(
         db.Orders.Add(order);
         await db.SaveChangesAsync();
 
-        if (isCod) NotifyConfirmed(order);
+        if (isCod)
+        {
+            order.Courier = shipping.ProviderFor(order);
+            await db.SaveChangesAsync();
+            NotifyConfirmed(order);
+            AutoBookInBackground(order.Id);
+        }
         return order;
     }
 
@@ -94,7 +101,7 @@ public partial class OrderService(
         db.PaymentAttempts.Where(a => a.OrderId == orderId && a.Status != "SUCCESS")
             .OrderByDescending(a => a.CreatedAt).FirstOrDefaultAsync();
 
-    /// <summary>PayU confirmed payment: create the real order from the held snapshot, then settle it (stock, Shiprocket, notifications).</summary>
+    /// <summary>Recover legacy held checkouts; persist settlement and inventory. Booking requires packing.</summary>
     public async Task<Order> ConfirmHeldOrderAsync(PaymentAttempt attempt, string? paymentRef, string? txnId, string rawGatewayJson)
     {
         var order = await GetAsync(attempt.OrderId);
@@ -135,7 +142,7 @@ public partial class OrderService(
             .OrderByDescending(o => o.CreatedAt).ToListAsync();
     }
 
-    /// <summary>Marks an online order PAID (idempotent), decrements stock, dispatches to Shiprocket, notifies the customer.</summary>
+    /// <summary>Marks an online order PAID and persists settlement; fulfillment readiness is separate.</summary>
     public async Task<Order> MarkPaidAsync(string orderId, string? paymentRef, string? txnId, string rawGatewayJson)
     {
         var order = await GetAsync(orderId) ?? throw new InvalidOperationException($"Order {orderId} not found");
@@ -148,9 +155,6 @@ public partial class OrderService(
         order.UpdatedAt = DateTime.UtcNow;
         order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto { Status = $"Payment Verified ({paymentRef})", Time = Mapping.TimelineStamp(), Done = true }];
 
-        var parcel = new ParcelSpecs { WeightKg = order.Items.Sum(i => (i.WeightKg > 0 ? i.WeightKg : 0.38m) * i.Quantity) };
-        await TryDispatchAsync(order, parcel);
-
         db.Payments.Add(new Payment
         {
             OrderId = order.Id, Provider = "PAYU", GatewayOrderId = txnId, GatewayPaymentId = paymentRef,
@@ -159,13 +163,23 @@ public partial class OrderService(
         await products.DecrementStockAsync(order);
         await db.SaveChangesAsync();
 
+        order.Courier = shipping.ProviderFor(order);
+        await db.SaveChangesAsync();
+
         NotifyConfirmed(order);
+        AutoBookInBackground(order.Id);
         return order;
     }
 
     public async Task<Order> MarkDeliveredAsync(string orderId)
     {
+        await using var lease = await operationLock.AcquireAsync(orderId);
+        db.ChangeTracker.Clear();
         var order = await GetAsync(orderId) ?? throw new InvalidOperationException($"Order {orderId} not found");
+        if (order.FulfillmentStatus == "DELIVERED") return order;
+        if (order.FulfillmentStatus is "CANCELLED" or "RTO" || string.IsNullOrWhiteSpace(order.ShiprocketAwb))
+            throw new InvalidOperationException("Only an active shipment can be marked delivered.");
+        order.DeliveredAt = DateTime.UtcNow;
         order.FulfillmentStatus = "DELIVERED";
         order.DeliveryStatus = "Delivered";
         if (order.PaymentMethod == "COD") order.PaymentStatus = "COD_COLLECTED";
@@ -181,39 +195,155 @@ public partial class OrderService(
         return order;
     }
 
-    /// <summary>Manual / retry push to Shiprocket (admin).</summary>
-    public async Task<ShiprocketResult> RetryShiprocketAsync(string orderId)
+    /// <summary>Manual / retry push to the active courier platform (admin).</summary>
+    public async Task<ShiprocketResult> RetryShipmentAsync(string orderId)
     {
+        await using var lease = await operationLock.AcquireAsync(orderId);
+        db.ChangeTracker.Clear();
         var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
-        if (order.PaymentStatus != "PAID" && order.PaymentMethod != "COD")
+        if (order.FulfillmentStatus is "CANCELLED" or "DELIVERED" or "RTO")
+            throw new InvalidOperationException("A cancelled, returned, or delivered order cannot be booked.");
+        if (order.FulfillmentReadyAt is null)
+            throw new InvalidOperationException("Mark the parcel as packed before booking pickup.");
+        if (order.PaymentStatus != "PAID" && !(order.PaymentMethod == "COD" && order.PaymentStatus == "COD_PENDING"))
             throw new InvalidOperationException("Cannot ship an unpaid online order. Verify payment first.");
+        if (!string.IsNullOrWhiteSpace(order.ShiprocketAwb) && !order.ShiprocketAwb.StartsWith("SR-PENDING-") && order.FulfillmentStatus != "CANCELLED")
+            return new ShiprocketResult { Success = true, ShiprocketAwb = order.ShiprocketAwb, ShiprocketOrderId = order.ShiprocketOrderId ?? "", ShiprocketShipmentId = order.ShiprocketShipmentId ?? "", ShiprocketCourier = order.ShiprocketCourier ?? "", DeliveryStatus = order.DeliveryStatus };
 
-        var res = await shiprocket.CreateOrderAsync(order, new ParcelSpecs());
-        Apply(order, res);
+        var parcel = new ParcelSpecs { WeightKg = order.ParcelWeightKg, LengthCm = order.ParcelLengthCm, BreadthCm = order.ParcelBreadthCm, HeightCm = order.ParcelHeightCm };
+        if (parcel.WeightKg <= 0 || parcel.LengthCm <= 0 || parcel.BreadthCm <= 0 || parcel.HeightCm <= 0)
+            throw new InvalidOperationException("Parcel dimensions are missing. Mark packed again with measured parcel dimensions.");
+        // Persist and reuse the same reference after a timeout or database save failure.
+        var clientOrderId = order.ShipmentClientOrderId ??= ShippingGateway.ShadowfaxClientOrderId(order);
+        order.Courier = shipping.ProviderFor(order);
         await db.SaveChangesAsync();
-        return res;
-    }
-
-    private async Task TryDispatchAsync(Order order, ParcelSpecs parcel)
-    {
         try
         {
-            var res = await shiprocket.CreateOrderAsync(order, parcel);
-            if (res.Success) Apply(order, res);
+            var (res, courier) = await shipping.CreateOrderAsync(order, parcel, clientOrderId);
+            Apply(order, res, courier);
+            await db.SaveChangesAsync();
+            return res;
         }
         catch (Exception ex)
         {
-            log.LogError(ex, "[Shiprocket] Dispatch deferred for {Order}", order.Id);
-            order.Notes += $" | Shiprocket auto-dispatch deferred: {ex.Message}";
+            order.Notes = string.IsNullOrWhiteSpace(order.Notes)
+                ? $"{order.Courier} retry failed: {ex.Message}"
+                : $"{order.Notes} | {order.Courier} retry failed: {ex.Message}";
+            order.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            throw;
         }
     }
 
-    private static void Apply(Order order, ShiprocketResult res)
+    /// <summary>Creates and stores a Shadowfax PDF shipping label for an active, not-yet-picked shipment.</summary>
+    public async Task<string> GenerateShipmentLabelAsync(string orderId)
     {
+        await using var lease = await operationLock.AcquireAsync(orderId);
+        db.ChangeTracker.Clear();
+        var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
+        if (!ShippingGateway.IsShadowfax(order.Courier))
+            throw new InvalidOperationException("Shipping labels are available here for Shadowfax shipments only.");
+        if (string.IsNullOrWhiteSpace(order.ShiprocketAwb) || order.ShiprocketAwb.StartsWith("SR-PENDING-", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("This order does not have a Shadowfax AWB yet. Book the shipment first.");
+        if (order.FulfillmentStatus is "CANCELLED" or "PICKED_UP" or "IN_TRANSIT" or "OUT_FOR_DELIVERY" or "DELIVERED" or "RTO")
+            throw new InvalidOperationException("Shadowfax labels can only be generated before courier pickup and before cancellation.");
+
+        order.ShippingLabelUrl = await shipping.GenerateLabelAsync(order.ShiprocketAwb);
+        order.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return order.ShippingLabelUrl;
+    }
+
+    /// <summary>Cancels the booked Shadowfax shipment (admin). Order stays; fulfillment returns to a re-shippable state once Shadowfax confirms.</summary>
+    public async Task<string> CancelShipmentAsync(string orderId, string? reason)
+    {
+        await using var lease = await operationLock.AcquireAsync(orderId);
+        db.ChangeTracker.Clear();
+        var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
+        if (order.FulfillmentStatus == "CANCELLED") return "Shipment already cancelled";
+        if (order.FulfillmentStatus is "DELIVERED" or "RTO") throw new InvalidOperationException("This shipment is already terminal.");
+        var msg = await shipping.CancelAsync(order, string.IsNullOrWhiteSpace(reason) ? "Cancelled by client" : reason.Trim());
+        var queued = msg.Contains("queued", StringComparison.OrdinalIgnoreCase);
+        if (!queued)
+        {
+            order.FulfillmentStatus = "CANCELLED";
+            order.DeliveryStatus = "Shipment Cancelled";
+            order.ShippingLabelUrl = null;
+        }
+        order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto { Status = queued ? "Shipment cancellation queued" : "Shipment Cancelled", Time = Mapping.TimelineStamp(), Done = true, Active = true }];
+        order.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        if (!queued) NotifyStatus(order, "CANCELLED");
+        return msg;
+    }
+
+    public async Task<Order> MarkReadyAsync(string orderId, ParcelSpecs? parcel = null)
+    {
+        await using var lease = await operationLock.AcquireAsync(orderId);
+        db.ChangeTracker.Clear();
+        var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
+        if (order.FulfillmentStatus != "PENDING") throw new InvalidOperationException("Only a pending order can be marked packed.");
+        if (order.PaymentStatus != "PAID" && !(order.PaymentMethod == "COD" && order.PaymentStatus == "COD_PENDING"))
+            throw new InvalidOperationException("Verify payment before packing the order.");
+        if (parcel is not null)
+        {
+            if (parcel.WeightKg <= 0 || parcel.LengthCm <= 0 || parcel.BreadthCm <= 0 || parcel.HeightCm <= 0)
+                throw new InvalidOperationException("Positive weight and dimensions are required.");
+            order.ParcelWeightKg = parcel.WeightKg; order.ParcelLengthCm = parcel.LengthCm;
+            order.ParcelBreadthCm = parcel.BreadthCm; order.ParcelHeightCm = parcel.HeightCm;
+        }
+        if (order.ParcelWeightKg <= 0 || order.ParcelLengthCm <= 0 || order.ParcelBreadthCm <= 0 || order.ParcelHeightCm <= 0)
+            throw new InvalidOperationException("Supply measured parcel weight and dimensions using the ready API.");
+        order.FulfillmentReadyAt ??= DateTime.UtcNow;
+        order.DeliveryStatus = "Packed - Ready for Pickup Booking";
+        order.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return order;
+    }
+
+    /// <summary>
+    /// Creates the Shadowfax order right after an order is confirmed (COD placed, or online payment verified): marks it packed with the
+    /// catalog parcel estimate, then books. Runs in its own DI scope so it outlives the HTTP request. On failure the order stays
+    /// packed and the reason is saved in its notes, so an admin can fix the cause and press Book again.
+    /// </summary>
+    private void AutoBookInBackground(string orderId)
+    {
+        if (!shadowfaxOptions.Value.AutoBook) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = scopes.CreateScope();
+                var svc = scope.ServiceProvider.GetRequiredService<OrderService>();
+                await svc.AutoBookAsync(orderId);
+            }
+            catch (Exception ex) { log.LogWarning(ex, "[Shadowfax] Auto-booking failed for {OrderId}", orderId); }
+        });
+    }
+
+    public async Task AutoBookAsync(string orderId)
+    {
+        var order = await GetAsync(orderId);
+        if (order is null || shipping.ProviderFor(order) != ShippingGateway.Shadowfax) return;
+        if (!shadowfaxOptions.Value.IsConfigured)
+        {
+            log.LogWarning("[Shadowfax] Auto-book skipped for {OrderId}: Shadowfax token is not configured", orderId);
+            return;
+        }
+        if (order.FulfillmentStatus == "PENDING") await MarkReadyAsync(orderId);
+        var res = await RetryShipmentAsync(orderId);
+        log.LogInformation("[Shadowfax] Auto-booked {OrderId} → AWB {Awb}", orderId, res.ShiprocketAwb);
+    }
+
+    private static void Apply(Order order, ShiprocketResult res, string courier)
+    {
+        order.Courier = courier;
         order.ShiprocketOrderId = res.ShiprocketOrderId;
         order.ShiprocketShipmentId = res.ShiprocketShipmentId;
         order.ShiprocketAwb = res.ShiprocketAwb;
         order.ShiprocketCourier = res.ShiprocketCourier;
+        order.ShippingLabelUrl = null;
+        order.ShipmentBookedAt ??= DateTime.UtcNow;
         order.FulfillmentStatus = res.ShiprocketAwb.StartsWith("SR-PENDING-") ? "SHIPMENT_CREATED" : "AWB_ASSIGNED";
         order.DeliveryStatus = res.DeliveryStatus;
         order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, .. res.TrackingEvents];
@@ -224,6 +354,12 @@ public partial class OrderService(
     {
         try { await email.SendOrderConfirmationAsync(order); } catch (Exception ex) { log.LogWarning(ex, "Confirmation email failed"); }
         try { await whatsapp.NotifyOrderConfirmedAsync(order); } catch (Exception ex) { log.LogWarning(ex, "Confirmation WhatsApp failed"); }
+    });
+
+    /// <summary>Sends a customer status email (cancel/return/etc.) from its own DI scope. Email only — WhatsApp hooks come later.</summary>
+    private void NotifyStatus(Order order, string status) => InBackground(async (email, _) =>
+    {
+        try { await email.SendStatusUpdateAsync(order, status); } catch (Exception ex) { log.LogWarning(ex, "{Status} email failed", status); }
     });
 
     /// <summary>Runs notification work in its own DI scope so it outlives the HTTP request's DbContext.</summary>

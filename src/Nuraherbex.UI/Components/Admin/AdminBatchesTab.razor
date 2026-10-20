@@ -9,19 +9,34 @@
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
             <h2 class="text-base font-semibold text-zinc-100 tracking-tight">
-                Trust Passport Batch Dossiers
+                Batch quality &amp; lab reports
             </h2>
             <p class="text-xs text-zinc-500">
-                Each batch contains one official laboratory-certified Trust Passport document with ICP-MS heavy metals and actives testing.
+                Maintain the batch-specific Certificate of Analysis (COA) and laboratory reports for customer review.
             </p>
         </div>
 
-        <button @onclick="OpenAddBatch"
-                class="px-3.5 py-1.5 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm">
-            <Icon Name="Upload" Size="14" />
-            <span>Upload Batch Document</span>
-        </button>
+        <div class="flex items-center gap-2">
+            <button type="button" @onclick="() => _showSample = true"
+                    class="px-3.5 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700/70 font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer">
+                <Icon Name="Eye" Size="14" />
+                <span>View sample</span>
+            </button>
+            <button type="button" @onclick="OpenAddBatch" disabled="@(!_sampleViewed)"
+                    class="px-3.5 py-1.5 rounded-md bg-white hover:bg-zinc-200 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:border-zinc-700 text-zinc-950 font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:cursor-not-allowed shadow-sm">
+                <Icon Name="Upload" Size="14" />
+                <span>Upload Batch Document</span>
+            </button>
+        </div>
     </div>
+
+    @if (!_sampleViewed)
+    {
+        <div class="p-3 rounded-lg bg-amber-950/20 border border-amber-700/30 text-amber-200 text-xs flex items-start gap-2.5">
+            <Icon Name="Info" Size="15" Class="shrink-0 text-amber-300 mt-0.5" />
+            <span>Review the sample format first. The upload button unlocks after you confirm you have reviewed it.</span>
+        </div>
+    }
 
     @if (!string.IsNullOrEmpty(_listError))
     {
@@ -44,7 +59,7 @@
         {
             <div class="col-span-2 p-12 text-center text-zinc-500 border border-dashed border-zinc-800 rounded-lg">
                 <Icon Name="ShieldCheck" Size="28" Class="mx-auto mb-2 text-zinc-600" />
-                <p class="text-sm text-zinc-300 font-medium">No trust passport batches published yet</p>
+                <p class="text-sm text-zinc-300 font-medium">No batch reports published yet</p>
                 <p class="text-xs text-zinc-500 mt-1">Upload a laboratory test dossier to publish your first batch certificate.</p>
             </div>
         }
@@ -52,9 +67,9 @@
         {
             @foreach (var batch in Batches)
             {
-                var docName = string.IsNullOrEmpty(batch.DocumentName) ? $"STAMIX_BATCH_{batch.BatchNo}_CERTIFICATE.png" : batch.DocumentName;
-                var docSize = string.IsNullOrEmpty(batch.FileSize) ? "2.4 MB" : batch.FileSize;
-                var lab = string.IsNullOrEmpty(batch.LabName) ? "Apex Analytical Labs (NABL & FSSAI Accredited)" : batch.LabName;
+                var docName = string.IsNullOrEmpty(batch.DocumentName) ? "No report uploaded" : batch.DocumentName;
+                var docSize = string.IsNullOrEmpty(batch.FileSize) ? "—" : batch.FileSize;
+                var lab = string.IsNullOrEmpty(batch.LabName) ? "Laboratory not specified" : batch.LabName;
                 <div @key="batch.Id"
                      class="rounded-lg border border-zinc-800 bg-zinc-900/40 p-5 space-y-4 text-left relative overflow-hidden flex flex-col justify-between hover:border-zinc-700/70 transition-colors">
                     <div class="space-y-3">
@@ -86,13 +101,13 @@
                                     <span>Official Batch Certificate</span>
                                 </span>
                                 <span class="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">
-                                    @docSize · IMAGE
+                                    @docSize · @(IsPdf(batch) ? "PDF" : "IMAGE")
                                 </span>
                             </div>
 
                             <div class="flex items-center gap-2.5">
                                 <div class="w-8 h-8 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center text-emerald-400 shrink-0 font-mono font-bold text-[10px]">
-                                    IMG
+                                    @(IsPdf(batch) ? "PDF" : "IMG")
                                 </div>
                                 <div class="min-w-0 flex-1">
                                     <div class="text-xs font-medium text-zinc-200 truncate font-mono">
@@ -131,11 +146,11 @@
                             <Icon Name="Eye" Size="13" />
                             <span>View Document</span>
                         </button>
-                        <button @onclick="@(() => Nav.NavigateTo("/trust-passport"))"
+                        <button @onclick="@(() => Nav.NavigateTo("/quality-reports"))"
                                 class="py-1.5 px-3 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-zinc-400 hover:text-zinc-200 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                                title="Open on Live Trust Passport">
+                                title="Open customer quality and testing page">
                             <Icon Name="ExternalLink" Size="13" />
-                            <span>Live Passport</span>
+                            <span>Customer page</span>
                         </button>
                         <button type="button" @onclick="() => _toDelete = batch" @onclick:stopPropagation
                                 class="py-1.5 px-2.5 rounded-md bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-xs font-medium text-red-400 hover:text-red-200 flex items-center justify-center transition-colors cursor-pointer"
@@ -152,7 +167,50 @@
 </div>
 
 @* ======================================================================= *@
-@* MODAL: CREATE / UPLOAD NEW TRUST PASSPORT BATCH                          *@
+@* MODAL: SAMPLE FORMAT GUIDE (NOT A REAL LAB REPORT)                      *@
+@* ======================================================================= *@
+@if (_showSample)
+{
+    <div @onclick="() => _showSample = false"
+         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in text-left">
+        <section role="dialog" aria-modal="true" aria-labelledby="batch-sample-title" @onclick:stopPropagation
+                 class="relative w-full max-w-2xl bg-[#121215] border border-zinc-800 rounded-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <button type="button" aria-label="Close sample" @onclick="() => _showSample = false"
+                    class="absolute top-4 right-4 w-7 h-7 rounded-md bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-zinc-400 hover:text-zinc-200 cursor-pointer">
+                <Icon Name="X" Size="15" />
+            </button>
+            <div class="space-y-2 pr-8">
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[10px] font-mono font-semibold tracking-wider">SAMPLE FORMAT · NOT A CERTIFICATE</span>
+                <h3 id="batch-sample-title" class="text-lg font-semibold text-zinc-100">What to include in a batch document</h3>
+                <p class="text-xs text-zinc-400 leading-relaxed">A product batch is one manufacturing lot. Its batch number should match the number printed on the product pack. This guide shows the information customers need to identify and understand the real laboratory report.</p>
+            </div>
+            <div class="rounded-lg border border-amber-700/30 bg-amber-950/20 p-3 text-xs text-amber-100 leading-relaxed">
+                This is guidance only. It contains no test results and is not proof of testing. Upload the original report issued by your laboratory; do not use sample values or mark unverified checks as passed.
+            </div>
+            <div class="rounded-lg border border-zinc-800 overflow-hidden">
+                <div class="grid grid-cols-[minmax(120px,0.8fr)_1.4fr] bg-zinc-900 text-[10px] uppercase tracking-wider font-mono text-zinc-400">
+                    <span class="p-2.5">Report section</span><span class="p-2.5">Information to check</span>
+                </div>
+                <div class="divide-y divide-zinc-800 text-xs text-zinc-300">
+                    <div class="grid grid-cols-[minmax(120px,0.8fr)_1.4fr]"><strong class="p-2.5">Batch identity</strong><span class="p-2.5">Product name, batch/lot number, pack size, manufacturing and expiry dates.</span></div>
+                    <div class="grid grid-cols-[minmax(120px,0.8fr)_1.4fr]"><strong class="p-2.5">Laboratory</strong><span class="p-2.5">Lab name, report number, sample/test dates and authorized issue details.</span></div>
+                    <div class="grid grid-cols-[minmax(120px,0.8fr)_1.4fr]"><strong class="p-2.5">Test results</strong><span class="p-2.5">The tests performed, methods, measured results, units and limits exactly as stated in the report.</span></div>
+                    <div class="grid grid-cols-[minmax(120px,0.8fr)_1.4fr]"><strong class="p-2.5">Original document</strong><span class="p-2.5">A complete, readable, unaltered lab-issued report (PDF or a clear scan/photo).</span></div>
+                </div>
+            </div>
+            <p class="text-[11px] text-zinc-500">Accepted file types: PDF, PNG, JPG, JPEG or WebP. Maximum file size: 8 MB.</p>
+            <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+                <button type="button" @onclick="() => _showSample = false" class="px-4 py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-medium">Close sample</button>
+                <button type="button" @onclick="ConfirmSampleReviewed" class="px-4 py-2 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-semibold flex items-center justify-center gap-1.5">
+                    <Icon Name="Check" Size="14" /> I’ve reviewed the sample — continue
+                </button>
+            </div>
+        </section>
+    </div>
+}
+
+@* ======================================================================= *@
+@* MODAL: CREATE / UPLOAD BATCH QUALITY REPORT                              *@
 @* ======================================================================= *@
 @if (_showAdd)
 {
@@ -168,13 +226,13 @@
             <div class="space-y-1">
                 <div class="inline-flex items-center gap-1.5 text-xs font-mono font-medium text-zinc-400 uppercase">
                     <Icon Name="ShieldCheck" Size="13" />
-                    <span>Publish Batch to Trust Passport</span>
+                    <span>Publish batch quality report</span>
                 </div>
                 <h3 class="text-base font-semibold text-zinc-100">
-                    Upload Batch Certificate Image
+                    Upload Official Batch Report
                 </h3>
                 <p class="text-xs text-zinc-500">
-                    Upload the official laboratory test certificate image for this batch. Only image formats are accepted. It will be published directly to the customer-facing Trust Passport.
+                    Upload the original laboratory-issued report for this batch. Confirm the batch number and product details match; the report will then appear on the customer-facing quality page.
                 </p>
             </div>
 
@@ -222,14 +280,14 @@
                 @* Single Official Image Upload Section *@
                 <div class="space-y-2 pt-2 border-t border-zinc-800">
                     <label class="text-zinc-300 font-medium block text-xs flex items-center justify-between">
-                        <span>Trust Passport Certificate Image *</span>
-                        <span class="text-[10px] text-emerald-400 font-mono font-medium">Image format only (No PDF)</span>
+                        <span>Laboratory report *</span>
+                        <span class="text-[10px] text-emerald-400 font-mono font-medium">PDF or image · max 8 MB</span>
                     </label>
 
-                    @* Drag & Drop / File Input Box (Strict Image Only) *@
+                    @* Drag & Drop / File Input Box *@
                     <div class="relative rounded-lg border border-dashed border-zinc-700 bg-zinc-950/40 hover:border-zinc-500 p-5 text-center transition-colors">
                         <input @key="_fileKey" id="@FileInputId" type="file"
-                               accept="image/png,image/jpeg,image/jpg,image/webp,image/*"
+                               accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp"
                                @onchange="OnFileSelectedAsync"
                                class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
 
@@ -244,7 +302,7 @@
                                         @_picked.Name
                                     </div>
                                     <div class="text-[10px] text-emerald-400 font-mono">
-                                        @SizeMb(_picked.Size) MB · Valid image format
+                                        @SizeMb(_picked.Size) MB · @FileKind(_picked) file
                                     </div>
                                 </div>
                                 <button type="button" @onclick="RemoveFile" @onclick:stopPropagation
@@ -260,10 +318,10 @@
                                     <Icon Name="Upload" Size="15" />
                                 </div>
                                 <div class="text-xs font-medium text-zinc-200">
-                                    Click or drag certificate image here to upload
+                                    Click or drag the lab report here to upload
                                 </div>
                                 <div class="text-[10px] text-emerald-400/90 font-mono font-medium">
-                                    Allowed formats: PNG, JPG, JPEG, WebP (PDF not accepted)
+                                    Allowed formats: PDF, PNG, JPG, JPEG, WebP · max 8 MB
                                 </div>
                             </div>
                         }
@@ -274,8 +332,8 @@
                 @* Lab & Summary Info *@
                 <div class="space-y-3 pt-2 border-t border-zinc-800">
                     <div class="space-y-1">
-                        <label class="text-zinc-400 block text-[11px]">Accredited Testing Laboratory</label>
-                        <input type="text" placeholder="e.g. Apex Analytical Labs (NABL & FSSAI Accredited)"
+                        <label class="text-zinc-400 block text-[11px]">Laboratory named on the report *</label>
+                        <input type="text" required placeholder="Enter the name printed on the report"
                                @bind="_form.LabName" @bind:event="oninput"
                                class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500 text-xs" />
                     </div>
@@ -305,7 +363,7 @@
 }
 
 @* ======================================================================= *@
-@* MODAL: TRUST PASSPORT DOCUMENT PREVIEW                                   *@
+@* MODAL: BATCH LAB REPORT PREVIEW                                          *@
 @* ======================================================================= *@
 @if (_preview is not null)
 {
@@ -323,7 +381,7 @@
             <div class="border-b border-zinc-800 pb-3.5 space-y-1">
                 <div class="flex items-center gap-2 text-xs font-mono font-medium text-zinc-400 uppercase">
                     <Icon Name="ShieldCheck" Size="14" />
-                    <span>Nura Herbex · Official Trust Passport Certificate Dossier</span>
+                    <span>Nura Herbex · Batch quality report</span>
                 </div>
                 <h3 class="text-base font-semibold text-zinc-100 font-mono">
                     @(string.IsNullOrEmpty(pv.DocumentName) ? $"STAMIX_BATCH_{pv.BatchNo}_CERTIFICATE.png" : pv.DocumentName)
@@ -334,7 +392,14 @@
             </div>
 
             @* Actual Uploaded Certificate Image Viewer *@
-            @if (!string.IsNullOrEmpty(pv.DocumentUrl))
+            @if (!string.IsNullOrEmpty(pv.DocumentUrl) && IsPdf(pv))
+            {
+                <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-2">
+                    <iframe src="@pv.DocumentUrl" title="Uploaded batch laboratory report" class="w-full h-[65vh] rounded bg-white"></iframe>
+                    <a href="@pv.DocumentUrl" target="_blank" rel="noopener noreferrer" class="text-xs text-emerald-300 underline">Open report in a new tab</a>
+                </div>
+            }
+            else if (!string.IsNullOrEmpty(pv.DocumentUrl))
             {
                 <div class="rounded-lg border border-zinc-800 bg-zinc-950 p-4 flex items-center justify-center min-h-[350px] overflow-hidden">
                     <img src="@pv.DocumentUrl" alt="Uploaded Batch Certificate"
@@ -344,7 +409,7 @@
             else
             {
                 @* Fallback Simulated Verified Preview Sheet when no file was uploaded *@
-                <div class="rounded-lg border border-zinc-800 bg-zinc-950/60 p-5 space-y-3.5 font-sans text-xs">
+                            <div class="rounded-lg border border-zinc-800 bg-zinc-950/60 p-5 space-y-3.5 font-sans text-xs">
                     <div class="flex items-center justify-between pb-3 border-b border-zinc-800">
                         <div>
                             <div class="font-semibold text-xs text-zinc-100 tracking-tight">NURA HERBEX LABORATORY DOSSIER</div>
@@ -455,7 +520,7 @@
                         Are you sure you want to permanently delete batch <span class="text-amber-300 font-mono font-bold">@(string.IsNullOrEmpty(del.BatchNo) ? del.Id : del.BatchNo)</span>?
                     </p>
                     <p class="text-[11px] text-zinc-500 leading-relaxed">
-                        This action removes this batch certificate from the Trust Passport verification registry and backend database.
+                        This action removes the batch certificate from the customer-facing quality page and backend database.
                     </p>
                 </div>
             </div>
@@ -485,14 +550,17 @@
 
 @code {
     private const string FileInputId = "admin-batch-cert-input";
-    private const string PdfError = "Document validation failed: Only image formats (PNG, JPG, JPEG, WebP) are allowed. PDF files are strictly not accepted.";
-    private static readonly Regex ImageExt = new(@"\.(png|jpe?g|webp|gif|avif)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private const long MaxDocumentBytes = 8 * 1024 * 1024;
+    private const string DocumentError = "Choose a PDF, PNG, JPG, JPEG or WebP report smaller than 8 MB.";
+    private static readonly Regex AllowedDocumentExt = new(@"\.(pdf|png|jpe?g|webp)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     [Parameter] public List<TrustBatchDto> Batches { get; set; } = new();
     [Parameter] public bool Loading { get; set; }
     [Parameter] public EventCallback OnReload { get; set; }
 
     private bool _showAdd;
+    private bool _showSample;
+    private bool _sampleViewed;
     private bool _saving;
     private bool _deleting;
     private int _fileKey;
@@ -507,16 +575,26 @@
 
     private static string SizeMb(long bytes) => (bytes / (1024.0 * 1024.0)).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
 
-    private static bool IsAllowedImage(FilePick f)
+    private static bool IsAllowedDocument(FilePick f)
     {
-        var name = (f.Name ?? "").ToLowerInvariant();
-        var isPdf = f.Type == "application/pdf" || name.EndsWith(".pdf");
-        var isImage = (f.Type ?? "").StartsWith("image/") || ImageExt.IsMatch(name);
-        return !isPdf && isImage;
+        if (f.Size <= 0 || f.Size > MaxDocumentBytes || !AllowedDocumentExt.IsMatch(f.Name ?? "")) return false;
+        var ext = Path.GetExtension(f.Name).ToLowerInvariant();
+        var type = (f.Type ?? "").ToLowerInvariant();
+        return ext == ".pdf" ? type is "" or "application/pdf" : type is "" or "image/png" or "image/jpeg" or "image/webp";
+    }
+
+    private static bool IsPdf(TrustBatchDto batch) => string.Equals(batch.DocumentType, "pdf", StringComparison.OrdinalIgnoreCase) || batch.DocumentUrl?.StartsWith("data:application/pdf", StringComparison.OrdinalIgnoreCase) == true;
+    private static string FileKind(FilePick file) => Path.GetExtension(file.Name).Equals(".pdf", StringComparison.OrdinalIgnoreCase) ? "PDF" : "Image";
+
+    private void ConfirmSampleReviewed()
+    {
+        _sampleViewed = true;
+        _showSample = false;
     }
 
     private void OpenAddBatch()
     {
+        if (!_sampleViewed) { _showSample = true; return; }
         _uploadError = null;
         _picked = null;
         _form = NewForm();
@@ -530,9 +608,9 @@
         var pick = await Browser.ReadFileAsDataUrlAsync(FileInputId);
         if (pick is null) return;
 
-        if (!IsAllowedImage(pick))
+        if (!IsAllowedDocument(pick))
         {
-            _uploadError = PdfError;
+            _uploadError = DocumentError;
             _picked = null;
             _fileKey++;
             return;
@@ -552,15 +630,15 @@
         _uploadError = null;
         if (string.IsNullOrWhiteSpace(_form.BatchNo)) return;
 
-        // Strict validation: require an uploaded image file and reject PDF
+        // Require a readable official report before publishing the batch.
         if (_picked is null)
         {
-            _uploadError = "Please select or upload a certificate image file (PNG, JPG, JPEG, WebP) for this batch.";
+            _uploadError = "Please select the official laboratory report for this batch.";
             return;
         }
-        if (!IsAllowedImage(_picked))
+        if (!IsAllowedDocument(_picked))
         {
-            _uploadError = PdfError;
+            _uploadError = DocumentError;
             return;
         }
 
@@ -576,18 +654,11 @@
             Status = "Active / Verified",
             DocumentName = _picked.Name,
             DocumentUrl = _picked.DataUrl,
-            DocumentType = "image",
+            DocumentType = FileKind(_picked).Equals("PDF", StringComparison.Ordinal) ? "pdf" : "image",
             FileSize = $"{SizeMb(_picked.Size)} MB",
-            LabName = string.IsNullOrWhiteSpace(_form.LabName) ? "Apex Analytical Labs (NABL & FSSAI Accredited)" : _form.LabName,
-            Notes = string.IsNullOrWhiteSpace(_form.Notes) ? "Full ICP-MS heavy metals, microbial assay, and active compound HPLC testing certified." : _form.Notes,
-            QualityChecks = new()
-            {
-                new() { Label = "Identity", Status = "Passed" },
-                new() { Label = "Purity", Status = "Passed" },
-                new() { Label = "Microbial Test", Status = "Passed" },
-                new() { Label = "Heavy Metals", Status = "Within Limits" },
-                new() { Label = "Label Match", Status = "Confirmed" },
-            },
+            LabName = _form.LabName.Trim(),
+            Notes = string.IsNullOrWhiteSpace(_form.Notes) ? null : _form.Notes.Trim(),
+            QualityChecks = new(),
             Documents = new(),
             IsActive = true,
             CreatedAt = DateTime.UtcNow,

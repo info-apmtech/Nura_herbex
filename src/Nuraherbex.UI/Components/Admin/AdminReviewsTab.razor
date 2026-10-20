@@ -1,0 +1,117 @@
+@inject ApiClient Api
+
+<section class="admin-reviews">
+    <div class="admin-section-heading">
+        <div>
+            <span class="admin-eyebrow">CUSTOMER FEEDBACK</span>
+            <h2>Review moderation <span class="admin-count">@PendingCount pending</span></h2>
+            <p>Customer submissions stay off the storefront until you approve them.</p>
+        </div>
+        <button class="admin-btn" disabled="@_loading" @onclick="LoadAsync"><Icon Name="RefreshCw" Size="16" /> Refresh</button>
+    </div>
+
+    @if (_message is not null) { <div role="status" class="admin-notice">@_message</div> }
+    @if (_error is not null) { <div role="alert" class="admin-error">@_error</div> }
+
+    <div class="admin-toolbar">
+        <label class="admin-search"><Icon Name="Search" Size="18" /><input aria-label="Search reviews" placeholder="Search reviewer or review text…" @bind="_search" @bind:event="oninput" /></label>
+        <select aria-label="Filter reviews" @bind="_filter">
+            <option value="pending">Awaiting approval (@PendingCount)</option>
+            <option value="approved">Published (@ApprovedCount)</option>
+            <option value="all">All reviews (@_reviews.Count)</option>
+        </select>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="admin-card admin-empty"><span class="admin-loading-mark"></span><p>Loading customer reviews…</p></div>
+    }
+    else if (!Filtered.Any())
+    {
+        <div class="admin-card admin-empty">
+            <Icon Name="MessageSquare" Size="30" />
+            <h3>@(_filter == "pending" ? "You’re all caught up" : "No reviews found")</h3>
+            <p>@(_filter == "pending" ? "New customer submissions will appear here for approval." : "Try another filter or search term.")</p>
+        </div>
+    }
+    else
+    {
+        <div class="admin-review-list">
+            @foreach (var review in Filtered)
+            {
+                <article @key="review.Id" class="admin-card admin-review-card">
+                    <div class="admin-review-top">
+                        <div>
+                            <div class="admin-review-stars" aria-label="@($"{review.Rating} out of 5 stars")">
+                                @for (var star = 0; star < Math.Clamp(review.Rating, 0, 5); star++) { <Icon Name="Star" Size="15" Fill="currentColor" /> }
+                            </div>
+                            <h3>@(string.IsNullOrWhiteSpace(review.Title) ? "Customer review" : review.Title)</h3>
+                            <p class="admin-review-meta">@review.Name @if (!string.IsNullOrWhiteSpace(review.City)) { <span>· @review.City</span> } · @review.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, h:mm tt")</p>
+                        </div>
+                        <span class="admin-badge @((review.Approved ? "active" : "draft"))">@(review.Approved ? "Published" : "Pending review")</span>
+                    </div>
+                    <p class="admin-review-body">@review.Body</p>
+                    <div class="admin-review-actions">
+                        @if (review.Approved)
+                        {
+                            <button class="admin-btn" disabled="@(_workingId is not null)" @onclick="() => SetApprovalAsync(review, false)"><Icon Name="EyeOff" Size="15" /> Unpublish from storefront</button>
+                        }
+                        else
+                        {
+                            <button class="admin-btn admin-btn-primary" disabled="@(_workingId is not null)" @onclick="() => SetApprovalAsync(review, true)"><Icon Name="CheckCircle2" Size="15" /> @(_workingId == review.Id ? "Approving…" : "Approve and publish")</button>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+<style>
+    .admin-review-list { display: grid; gap: 14px; }
+    .admin-review-card { display: grid; gap: 14px; }
+    .admin-review-top { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+    .admin-review-top h3 { margin: 7px 0 3px; font-size: 15px; font-weight: 650; color: var(--admin-text, #18332b); }
+    .admin-review-meta { margin:0; font-size:12px; color:var(--admin-muted, #72837b); }
+    .admin-review-stars { display:flex; gap:2px; color:#d49b2a; }
+    .admin-review-body { margin:0; max-width:900px; white-space:pre-wrap; color:var(--admin-text, #334b41); font-size:13px; line-height:1.7; }
+    .admin-review-actions { display:flex; justify-content:flex-end; border-top:1px solid var(--admin-border, #e4ebe6); padding-top:12px; }
+    @@media (max-width: 560px) { .admin-review-top { flex-direction:column; } .admin-review-actions { justify-content:stretch; } .admin-review-actions button { width:100%; justify-content:center; } }
+</style>
+
+@code {
+    private List<ReviewDto> _reviews = new();
+    private string _filter = "pending", _search = "";
+    private string? _error, _message, _workingId;
+    private bool _loading = true;
+
+    private int PendingCount => _reviews.Count(r => !r.Approved);
+    private int ApprovedCount => _reviews.Count(r => r.Approved);
+    private IEnumerable<ReviewDto> Filtered => _reviews
+        .Where(r => _filter == "all" || (_filter == "approved" ? r.Approved : !r.Approved))
+        .Where(r => string.IsNullOrWhiteSpace(_search) || Contains(r.Name, _search) || Contains(r.City, _search) || Contains(r.Title, _search) || Contains(r.Body, _search));
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true; _error = null;
+        var response = await Api.AdminReviewsAsync();
+        if (response.Success) _reviews = response.Reviews;
+        else _error = response.Message ?? "Could not load reviews.";
+        _loading = false;
+    }
+
+    private async Task SetApprovalAsync(ReviewDto review, bool approved)
+    {
+        if (_workingId is not null) return;
+        _workingId = review.Id; _error = null; _message = null;
+        var response = await Api.AdminModerateReviewAsync(review.Id, approved);
+        _workingId = null;
+        if (!response.Success) { _error = response.Message ?? "Could not update this review."; return; }
+        _message = response.Message;
+        review.Approved = approved;
+    }
+
+    private static bool Contains(string? value, string search) => value?.Contains(search, StringComparison.OrdinalIgnoreCase) == true;
+}

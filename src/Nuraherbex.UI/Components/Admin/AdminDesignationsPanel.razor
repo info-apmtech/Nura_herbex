@@ -1,0 +1,181 @@
+@inject ApiClient Api
+@inject AdminSession AdminAuth
+
+<div class="ld em">
+    <div class="em-head">
+        <div><h3>Designations &amp; page rights</h3><p>A designation is a job title such as <em>Sales Executive</em>. It decides which pages its people can open. Changes apply straight away, with no need to sign in again.</p></div>
+        <div class="em-head-actions"><button type="button" class="ld-btn primary" @onclick="StartCreate"><Icon Name="Plus" Size="14" /> Add designation</button></div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="@($"em-note {(_ok ? "ok" : "bad")}")" role="status"><Icon Name="@(_ok ? "CheckCircle2" : "AlertCircle")" Size="15" /><span>@_message</span><button type="button" class="em-x" aria-label="Dismiss" @onclick="() => _message = null"><Icon Name="X" Size="14" /></button></div>
+    }
+
+    @if (_form is not null)
+    {
+        <form class="ld-card em-form" @onsubmit="SaveAsync" @onsubmit:preventDefault>
+            <h4>@(_editingId is null ? "New designation" : "Edit designation")</h4>
+            <div class="em-grid">
+                <label>Name<input type="text" required maxlength="120" @bind="_form.Name" @bind:event="oninput" placeholder="e.g. Sales Executive" /></label>
+                <label>Department
+                    <select @bind="_form.DepartmentId">
+                        <option value="@((long?)null)">Any department</option>
+                        @foreach (var d in _departments.Where(x => x.IsActive || x.Id == _form.DepartmentId)) { <option value="@d.Id">@d.Name</option> }
+                    </select>
+                </label>
+                <label>Seniority <small class="em-hint">1 junior – 10 top</small><input type="number" min="1" max="10" @bind="_form.Level" /></label>
+                <label>Short description<input type="text" maxlength="400" @bind="_form.Description" @bind:event="oninput" placeholder="Optional" /></label>
+                <label class="em-check"><input type="checkbox" @bind="_form.IsActive" /> <span>Active (can be given to people)</span></label>
+            </div>
+
+            <div class="org-presets">
+                <span>Start from</span>
+                @foreach (var p in _catalog.Presets)
+                {
+                    var preset = p;
+                    <button type="button" class="ld-tab" title="@preset.Hint" @onclick="() => ApplyPreset(preset)">@preset.Name</button>
+                }
+                <button type="button" class="ld-tab" @onclick="() => _form.Rights = new()">Clear all</button>
+            </div>
+
+            <div class="org-matrix" role="group" aria-label="Page rights">
+                @foreach (var g in _catalog.Pages.GroupBy(p => p.Group))
+                {
+                    <div class="org-group">@g.Key</div>
+                    @foreach (var p in g)
+                    {
+                        var pg = p;
+                        var cur = _form.Rights.GetValueOrDefault(pg.Key);
+                        var mine = AdminAuth.Level(pg.Key);
+                        <div class="org-row">
+                            <div class="org-page"><strong>@pg.Label</strong><small>@pg.Description</small></div>
+                            <div class="org-levels">
+                                <button type="button" class="@(cur == 0 ? "is-on none" : "")" @onclick="() => SetLevel(pg.Key, 0)">No access</button>
+                                <button type="button" class="@(cur == 1 ? "is-on" : "")" disabled="@(mine < 1)" title="@(mine < 1 ? "You do not have this access yourself" : "")" @onclick="() => SetLevel(pg.Key, 1)">@pg.LimitedLabel</button>
+                                <button type="button" class="@(cur == 2 ? "is-on" : "")" disabled="@(mine < 2)" title="@(mine < 2 ? "You do not have this access yourself" : "")" @onclick="() => SetLevel(pg.Key, 2)">@pg.FullLabel</button>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+            <div class="ld-actions">
+                <span class="org-count">@_form.Rights.Count(r => r.Value > 0) of @_catalog.Pages.Count pages</span>
+                <button type="button" class="ld-btn" @onclick="() => _form = null">Cancel</button>
+                <button type="submit" class="ld-btn primary" disabled="@_busy">@(_busy ? "Saving…" : "Save designation")</button>
+            </div>
+        </form>
+    }
+
+    @if (_loading) { <div class="ld-card ld-empty">Loading…</div> }
+    else if (_items.Count == 0) { <div class="ld-card ld-empty"><strong>No designations yet</strong>Add one, pick the pages it needs, then give it to people.</div> }
+    else
+    {
+        @foreach (var grp in _items.GroupBy(i => i.DepartmentName ?? "Any department").OrderBy(g => g.Key == "Any department" ? 1 : 0).ThenBy(g => g.Key))
+        {
+            <section class="org-section">
+                <h4 class="org-section-title">@grp.Key <small>@grp.Count() designation@(grp.Count() == 1 ? "" : "s") · @grp.Sum(x => x.EmployeeCount) people</small></h4>
+                <div class="org-cards">
+                    @foreach (var d in grp.OrderByDescending(x => x.Level).ThenBy(x => x.Name))
+                    {
+                        var des = d;
+                        var granted = des.Rights.Where(r => r.Value > 0).ToList();
+                        <article class="org-card @(des.IsActive ? "" : "is-off")" @key="des.Id">
+                            <header>
+                                <span class="org-tile" style="background:@Tint(des.Id)"><Icon Name="ShieldCheck" Size="18" /></span>
+                                <div><h4>@des.Name</h4><p>@(string.IsNullOrWhiteSpace(des.Description) ? "No description" : des.Description)</p></div>
+                                <span class="@($"ld-pill {(des.IsActive ? "converted" : "not-interested")}")">@(des.IsActive ? "Active" : "Inactive")</span>
+                            </header>
+                            <div class="org-meter" title="@granted.Count of @_catalog.Pages.Count pages"><span style="width:@(_catalog.Pages.Count == 0 ? 0 : granted.Count * 100 / _catalog.Pages.Count)%"></span></div>
+                            <div class="org-meter-label"><span>@granted.Count of @_catalog.Pages.Count pages</span><span>Seniority @des.Level/10 · <strong>@des.EmployeeCount</strong> @(des.EmployeeCount == 1 ? "person" : "people")</span></div>
+                            <div class="org-chips">
+                                @foreach (var kv in granted.OrderByDescending(r => r.Value).Take(7)) { <span class="org-chip @(kv.Value == 2 ? "full" : "")" title="@PageCatalogLabel(kv.Key, kv.Value)">@PageName(kv.Key)</span> }
+                                @if (granted.Count > 7) { <span class="org-chip">+@(granted.Count - 7) more</span> }
+                                @if (granted.Count == 0) { <span class="org-muted">No pages</span> }
+                            </div>
+                            <footer>
+                                @if (_removingId == des.Id)
+                                {
+                                    <span class="em-confirm">Delete @des.Name?
+                                        <button type="button" class="ld-btn danger" disabled="@_busy" @onclick="() => RemoveAsync(des)">Yes, delete</button>
+                                        <button type="button" class="ld-btn" @onclick="() => _removingId = null">Keep</button></span>
+                                }
+                                else
+                                {
+                                    <button type="button" class="ld-btn" @onclick="() => StartEdit(des)"><Icon Name="Edit3" Size="13" /> Edit rights</button>
+                                    <button type="button" class="ld-btn danger-outline" @onclick="() => _removingId = des.Id"><Icon Name="Trash2" Size="13" /> Delete</button>
+                                }
+                            </footer>
+                        </article>
+                    }
+                </div>
+            </section>
+        }
+    }
+</div>
+
+@code {
+    private static readonly string[] Tints = ["#235b40", "#2f6f8f", "#7a5aa6", "#b5792a", "#a24b5a", "#3f7d7a", "#5b6f2c"];
+    private static string Tint(long id) => Tints[(int)(id % Tints.Length)];
+    private List<DesignationDto> _items = new();
+    private List<DepartmentDto> _departments = new();
+    private RightsCatalogResponse _catalog = new();
+    private DesignationSaveRequest? _form;
+    private long? _editingId, _removingId;
+    private bool _loading = true, _busy, _ok;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var cat = await Api.AdminRightsCatalogAsync();
+        if (cat.Success) _catalog = cat;
+        var dep = await Api.AdminDepartmentsAsync();
+        if (dep.Success) _departments = dep.Departments;
+        var res = await Api.AdminDesignationsAsync();
+        if (res.Success) _items = res.Designations; else Say(res.Message ?? "Could not load designations.", false);
+        _loading = false;
+    }
+
+    private string PageName(string key) => _catalog.Pages.FirstOrDefault(p => p.Key == key)?.Label ?? key;
+    private string PageCatalogLabel(string key, int level) => PageName(key) + ": " + PageCatalog.LevelLabel(key, level);
+    private void Say(string? text, bool ok) { _message = text; _ok = ok; }
+
+    private void StartCreate() { _editingId = null; _removingId = null; _form = new() { Rights = new(PageCatalog.DefaultStaff) }; }
+    private void StartEdit(DesignationDto d) { _editingId = d.Id; _removingId = null; _form = new() { Name = d.Name, Description = d.Description, DepartmentId = d.DepartmentId, Level = d.Level, IsActive = d.IsActive, Rights = new(d.Rights) }; }
+
+    private void SetLevel(string page, int level)
+    {
+        if (_form is null) return;
+        if (level == 0) _form.Rights.Remove(page); else _form.Rights[page] = level;
+    }
+
+    /// <summary>A preset only fills in what the signed-in person may grant, so it never overreaches.</summary>
+    private void ApplyPreset(RightsPresetDto p)
+    {
+        if (_form is null) return;
+        _form.Rights = p.Rights.Where(r => r.Value > 0).ToDictionary(r => r.Key, r => Math.Min(r.Value, AdminAuth.Level(r.Key))).Where(r => r.Value > 0).ToDictionary(r => r.Key, r => r.Value);
+        if (string.IsNullOrWhiteSpace(_form.Name)) _form.Name = p.Name;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_form is null) return;
+        _busy = true;
+        var res = await Api.AdminSaveDesignationAsync(_editingId, _form);
+        Say(res.Message, res.Success);
+        if (res.Success) { _form = null; await LoadAsync(); }
+        _busy = false;
+    }
+
+    private async Task RemoveAsync(DesignationDto d)
+    {
+        _busy = true;
+        var res = await Api.AdminDeleteDesignationAsync(d.Id);
+        Say(res.Message, res.Success);
+        _removingId = null;
+        if (res.Success) await LoadAsync();
+        _busy = false;
+    }
+}

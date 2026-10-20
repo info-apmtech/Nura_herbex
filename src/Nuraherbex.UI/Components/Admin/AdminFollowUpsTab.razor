@@ -1,0 +1,183 @@
+@implements IDisposable
+@inject ApiClient Api
+@inject AdminSession AdminAuth
+@inject NavigationManager Nav
+
+<div class="ld fu">
+
+    <div class="fu-head">
+        <div>
+            <p>@(AdminAuth.CanAll("followups") ? "Every call, message and order check across the team: what is late, what is due today, and what is coming." : "Your calls and messages to do. Late ones come first.")</p>
+        </div>
+        <button type="button" class="ld-btn primary" @onclick="() => _composer = true"><Icon Name="Plus" Size="14" /> New follow-up</button>
+    </div>
+
+    <nav class="fu-views" role="tablist">
+        <button type="button" role="tab" class="@ViewClass("tasks")" @onclick='() => _view = "tasks"'>To do</button>
+        <button type="button" role="tab" class="@ViewClass("report")" @onclick='() => _view = "report"'>Report</button>
+        <button type="button" role="tab" class="@ViewClass("plan")" @onclick='() => _view = "plan"'>15-day plan</button>
+    </nav>
+
+    @if (!string.IsNullOrEmpty(_toast))
+    {
+        <div class="em-note ok" role="status"><Icon Name="CheckCircle2" Size="15" /><span>@_toast</span><button type="button" class="em-x" aria-label="Dismiss" @onclick="() => _toast = null"><Icon Name="X" Size="14" /></button></div>
+    }
+
+    @if (_view == "report")
+    {
+        <AdminFollowUpReport />
+    }
+    else if (_view == "plan")
+    {
+        <AdminJourneyPlan />
+    }
+    else
+    {
+        @* Status chips double as the filter *@
+        <div class="fu-chips">
+            <button type="button" class="@ChipClass("overdue", "late")" @onclick='() => SetScopeAsync("overdue")'><b>@_counts.Overdue</b><span>Overdue</span></button>
+            <button type="button" class="@ChipClass("today", "today")" @onclick='() => SetScopeAsync("today")'><b>@_counts.Today</b><span>Due today</span></button>
+            <button type="button" class="@ChipClass("upcoming", "")" @onclick='() => SetScopeAsync("upcoming")'><b>@_counts.Upcoming</b><span>Coming up</span></button>
+            <button type="button" class="@ChipClass("done", "")" @onclick='() => SetScopeAsync("done")'><b>@_counts.Done</b><span>Done (30 days)</span></button>
+        </div>
+
+        @if (AdminAuth.CanAll("followups"))
+        {
+            <div class="fu-filters">
+                <select aria-label="Filter by owner" value="@_assignee" @onchange="e => OnFilter(e, v => _assignee = v)">
+                    <option value="">Everyone</option>
+                    <option value="unassigned">Unassigned</option>
+                    @foreach (var t in _team) { <option value="@t.Id">@t.Name</option> }
+                </select>
+                <select aria-label="Filter by type" value="@_type" @onchange="e => OnFilter(e, v => _type = v)">
+                    <option value="">All types</option>
+                    @foreach (var t in FollowUpTypes.All) { <option value="@t">@FuFmt.TypeLabel(t)</option> }
+                </select>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="em-note bad" role="alert"><Icon Name="AlertCircle" Size="15" /><span>@_error</span></div>
+        }
+
+        <div class="fu-list">
+            @if (_loading)
+            {
+                <div class="ld-empty">Loading…</div>
+            }
+            else if (_items.Count == 0)
+            {
+                <div class="ld-empty"><strong>@EmptyTitle</strong>@EmptyText</div>
+            }
+            else if (_scope == "upcoming")
+            {
+                @foreach (var g in _items.GroupBy(i => FuFmt.Local(i.DueAt).Date))
+                {
+                    <h4 class="fu-day">@FuFmt.DayHeading(g.First().DueAt) <small>@g.Count()</small></h4>
+                    @foreach (var i in g) { <FollowUpCard @key="i.Id" Item="i" IsAdmin="Everyone" Team="_team" OnChanged="OnChanged" OnOpenLead="OpenLead" /> }
+                }
+            }
+            else
+            {
+                @foreach (var i in _items) { <FollowUpCard @key="i.Id" Item="i" IsAdmin="Everyone" Team="_team" OnChanged="OnChanged" OnOpenLead="OpenLead" /> }
+            }
+        </div>
+    }
+</div>
+
+@if (_composer)
+{
+    <FollowUpComposer IsAdmin="Everyone" Team="_team" OnClose="() => _composer = false" OnCreated="OnCreated" />
+}
+
+@code {
+    private bool Everyone => AdminAuth.CanAll("followups");
+    private readonly CancellationTokenSource _cts = new();
+    private List<FollowUpDto> _items = new();
+    private List<EmployeeDto> _team = new();
+    private FollowUpCounts _counts = new();
+    private string _view = "tasks";
+    private string _scope = "";
+    private string _assignee = "";
+    private string _type = "";
+    private string? _toast;
+    private string? _error;
+    private bool _loading = true;
+    private bool _composer;
+
+    private string EmptyTitle => _scope switch
+    {
+        "overdue" => "Nothing is overdue",
+        "today" => "You are all caught up for today",
+        "upcoming" => "Nothing scheduled ahead",
+        "done" => "Nothing completed yet",
+        _ => "No follow-ups",
+    };
+
+    private string EmptyText => _scope switch
+    {
+        "overdue" => "Great — no follow-up has been missed.",
+        "today" => "New work appears here when a task falls due.",
+        "upcoming" => "Schedule a follow-up from a lead, or wait for the 15-day journey of a delivered order to be created.",
+        "done" => "Finished follow-ups from the last 30 days are listed here.",
+        _ => "",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadTeamAsync(), LoadAsync(initial: true));
+        _ = PollAsync();
+    }
+
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        try { while (await timer.WaitForNextTickAsync(_cts.Token)) await InvokeAsync(() => LoadAsync(false)); }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+
+    private async Task LoadTeamAsync()
+    {
+        var res = await Api.AdminTeamAsync();
+        if (res.Success) _team = res.Employees;
+    }
+
+    private async Task LoadAsync(bool initial)
+    {
+        if (_view != "tasks" && !initial) return;
+        var res = await Api.AdminFollowUpsAsync(string.IsNullOrEmpty(_scope) ? "today" : _scope, _assignee, _type);
+        if (_cts.IsCancellationRequested) return;
+        if (res.Success)
+        {
+            _counts = res.Counts;
+            if (initial && string.IsNullOrEmpty(_scope))
+            {
+                // Open on the most useful list: what is late, else what is due today.
+                var best = res.Counts.Overdue > 0 ? "overdue" : "today";
+                _scope = best;
+                if (best != "today") res = await Api.AdminFollowUpsAsync(best, _assignee, _type);
+            }
+            _items = res.Items; _error = null;
+        }
+        else _error = res.Message ?? "Could not load follow-ups.";
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task SetScopeAsync(string scope) { _scope = scope; _loading = true; await LoadAsync(false); }
+
+    private async Task OnFilter(ChangeEventArgs e, Action<string> set) { set(e.Value?.ToString() ?? ""); _loading = true; await LoadAsync(false); }
+
+    private async Task OnChanged(string? message) { _toast = message; await LoadAsync(false); }
+
+    private async Task OnCreated(string? message) { _composer = false; _toast = message; await LoadAsync(false); }
+
+    private void OpenLead(long id) => Nav.NavigateTo($"/admin/leads?open={id}");
+
+    private string ViewClass(string v) => $"fu-view {(_view == v ? "is-active" : "")}";
+    private string ChipClass(string scope, string tone) => $"fu-chip-card {tone} {(_scope == scope ? "is-active" : "")}";
+
+    public void Dispose() { _cts.Cancel(); _cts.Dispose(); }
+}

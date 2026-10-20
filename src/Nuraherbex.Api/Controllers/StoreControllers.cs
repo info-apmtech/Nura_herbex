@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -37,7 +37,7 @@ public class ProductsController(ProductService products) : ControllerBase
 [AllowAnonymous]
 [Route("api/orders")]
 [EnableRateLimiting("orders")]
-public class OrdersController(OrderService orders, ProductService products, CustomerAuthService auth, ShiprocketService shiprocket) : ControllerBase
+public class OrdersController(OrderService orders, ProductService products, CustomerAuthService auth, ShippingGateway shipping) : ControllerBase
 {
     [HttpPost("validate")]
     public async Task<IActionResult> Validate(ValidateCartRequest req)
@@ -47,6 +47,7 @@ public class OrdersController(OrderService orders, ProductService products, Cust
     }
 
     [HttpPost]
+    [HttpPost("place")]
     public async Task<IActionResult> Create(CreateOrderRequest req)
     {
         try
@@ -76,7 +77,7 @@ public class OrdersController(OrderService orders, ProductService products, Cust
                             customerAuth = await auth.LoginAsync(new LoginRequest { EmailOrPhone = req.Customer.Email, Password = req.Customer.Password });
                             customerId = customerAuth.Customer!.Id;
                         }
-                        catch { customerId = existing.Id; }
+                        catch { customerId = null; }
                     }
                 }
                 catch { /* account creation must never block the order */ }
@@ -89,6 +90,14 @@ public class OrdersController(OrderService orders, ProductService products, Cust
         {
             return BadRequest(new ApiResult { Success = false, Message = ex.Message });
         }
+    }
+
+    /// <summary>Pincode delivery check for checkout. serviceable = null means "unknown" (no courier check available) so checkout is never blocked on an outage.</summary>
+    [HttpGet("serviceability/{pincode}")]
+    public async Task<IActionResult> Serviceability(string pincode)
+    {
+        var ok = await shipping.IsServiceableAsync(pincode);
+        return Ok(new { success = true, pincode, serviceable = ok });
     }
 
     [HttpGet("track")]
@@ -112,21 +121,7 @@ public class OrdersController(OrderService orders, ProductService products, Cust
         return order is null ? NotFound(new ApiResult { Success = false, Message = "Order not found" }) : Ok(new OrderResponse { Success = true, Order = order.ToDto() });
     }
 
-    private async Task EnrichTrackingAsync(OrderDto dto)
-    {
-        if (!string.IsNullOrWhiteSpace(dto.ShiprocketAwb) && !dto.ShiprocketAwb.StartsWith("SR-PENDING-"))
-        {
-            dto.ShiprocketTrackUrl = $"https://shiprocket.co/tracking/{dto.ShiprocketAwb}";
-            var live = await shiprocket.FetchLiveTrackingAsync(dto.ShiprocketAwb);
-            if (live is { } td)
-            {
-                dto.ShiprocketTracking = td;
-                if (td.TryGetProperty("track_url", out var u) && u.ValueKind == System.Text.Json.JsonValueKind.String) dto.ShiprocketTrackUrl = u.GetString();
-            }
-        }
-        else if (!string.IsNullOrWhiteSpace(dto.ShiprocketOrderId))
-            dto.ShiprocketTrackUrl = $"https://shiprocket.co/tracking?order_id={dto.ShiprocketOrderId}";
-    }
+    private Task EnrichTrackingAsync(OrderDto dto) => shipping.EnrichTrackingAsync(dto);
 }
 
 [ApiController]
@@ -164,6 +159,14 @@ public class PaymentsController(PayUService payu, IOptions<StoreOptions> store, 
         }
     }
 
+    [HttpPost("/api/orders/{id}/confirm")]
+    public async Task<IActionResult> Confirm(string id, Dictionary<string, string> body)
+    {
+        // The order reference must be part of the signed PayU response, never synthesized.
+        if (body.GetValueOrDefault("udf1") != id) return BadRequest(new ApiResult { Message = "Signed payment order reference does not match." });
+        return await Verify(body);
+    }
+
     [HttpPost("verify")]
     public async Task<IActionResult> Verify(Dictionary<string, string> body)
     {
@@ -178,7 +181,7 @@ public class PaymentsController(PayUService payu, IOptions<StoreOptions> store, 
 
 [ApiController]
 [Route("api/auth")]
-public class AuthController(CustomerAuthService auth, OrderService orders, ShiprocketService shiprocket) : ControllerBase
+public class AuthController(CustomerAuthService auth, OrderService orders, ShippingGateway shipping) : ControllerBase
 {
     private string? CurrentId => User.FindFirstValue(ClaimTypes.NameIdentifier);
 
@@ -230,6 +233,19 @@ public class AuthController(CustomerAuthService auth, OrderService orders, Shipr
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
+    [HttpPut("me/password"), Authorize(Roles = "customer")]
+    public async Task<IActionResult> ChangePassword(ChangePasswordRequest request)
+    {
+        try
+        {
+            await auth.ChangePasswordAsync(CurrentId ?? "", request);
+            return Ok(new ApiResult { Success = true, Message = "Your password has been updated." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ApiResult { Success = false, Message = ex.Message });
+        }
+    }
     [HttpGet("my-orders"), Authorize(Roles = "customer")]
     public async Task<IActionResult> MyOrders()
     {
@@ -238,21 +254,13 @@ public class AuthController(CustomerAuthService auth, OrderService orders, Shipr
 
         var list = (await orders.ListForCustomerAsync(c.Email, c.Phone)).Select(o => o.ToDto()).ToList();
         foreach (var dto in list)
-        {
-            if (!string.IsNullOrWhiteSpace(dto.ShiprocketAwb) && !dto.ShiprocketAwb.StartsWith("SR-PENDING-"))
-            {
-                dto.ShiprocketTrackUrl = $"https://shiprocket.co/tracking/{dto.ShiprocketAwb}";
-                dto.ShiprocketTracking = await shiprocket.FetchLiveTrackingAsync(dto.ShiprocketAwb);
-            }
-            else if (!string.IsNullOrWhiteSpace(dto.ShiprocketOrderId))
-                dto.ShiprocketTrackUrl = $"https://shiprocket.co/tracking?order_id={dto.ShiprocketOrderId}";
-        }
+            await shipping.EnrichTrackingAsync(dto);
         return Ok(new OrderListResponse { Success = true, Count = list.Count, Orders = list });
     }
 }
 
 // ---------------------------------------------------------------------------
-// Public content: Trust Passport batches, site copy, formulation, reviews
+// Public content: batch quality reports, site copy, formulation, reviews
 // ---------------------------------------------------------------------------
 [ApiController]
 [AllowAnonymous]
@@ -296,29 +304,93 @@ public class ContentController(SettingsService settings) : ControllerBase
 }
 
 [ApiController]
-[AllowAnonymous]
 [Route("api/reviews")]
 public class ReviewsController(NuraDbContext db) : ControllerBase
 {
     [HttpGet]
-    public async Task<ReviewListResponse> List() => new()
+    [AllowAnonymous]
+    public async Task<ReviewListResponse> List()
     {
-        Success = true,
-        Reviews = (await db.Reviews.AsNoTracking().Where(r => r.Approved).OrderByDescending(r => r.CreatedAt).Take(50).ToListAsync()).Select(r => r.ToDto()).ToList(),
-    };
+        var reviews = await db.Reviews.AsNoTracking()
+            .Where(r => r.Approved)
+            .OrderByDescending(r => r.CreatedAt)
+            .Take(50)
+            .ToListAsync();
+
+        var customerIds = reviews
+            .Where(review => !string.IsNullOrWhiteSpace(review.CustomerId))
+            .Select(review => review.CustomerId!)
+            .Distinct()
+            .ToList();
+
+        var customers = customerIds.Count == 0
+            ? new Dictionary<string, Customer>()
+            : await db.Customers.AsNoTracking()
+                .Where(customer => customerIds.Contains(customer.Id))
+                .ToDictionaryAsync(customer => customer.Id);
+
+        // Older reviews predate the customer link. Associate them only when the
+        // saved reviewer name matches exactly one customer account.
+        var unlinkedNames = reviews
+            .Where(review => string.IsNullOrWhiteSpace(review.CustomerId))
+            .Select(review => review.Name.Trim())
+            .Where(name => name.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (unlinkedNames.Count > 0)
+        {
+            var possibleMatches = await db.Customers.AsNoTracking()
+                .Where(customer => unlinkedNames.Contains(customer.FullName.Trim()))
+                .ToListAsync();
+
+            var uniqueMatches = possibleMatches
+                .GroupBy(customer => customer.FullName.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() == 1)
+                .ToDictionary(group => group.Key, group => group.Single(), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var review in reviews.Where(review => string.IsNullOrWhiteSpace(review.CustomerId)))
+            {
+                if (uniqueMatches.TryGetValue(review.Name.Trim(), out var customer))
+                {
+                    review.CustomerId = customer.Id;
+                    customers[customer.Id] = customer;
+                }
+            }
+        }
+
+        return new ReviewListResponse
+        {
+            Success = true,
+            Reviews = reviews.Select(review =>
+                customers.TryGetValue(review.CustomerId ?? "", out var customer)
+                    ? review.ToDto(customer)
+                    : review.ToDto()).ToList(),
+        };
+    }
 
     [HttpPost]
+    [Authorize(Roles = "customer")]
     [EnableRateLimiting("orders")]
     public async Task<IActionResult> Create(ReviewDto r)
     {
-        if (string.IsNullOrWhiteSpace(r.Name) || string.IsNullOrWhiteSpace(r.Body))
-            return BadRequest(new ApiResult { Success = false, Message = "Name and review text are required" });
+        if (string.IsNullOrWhiteSpace(r.Body))
+            return BadRequest(new ApiResult { Success = false, Message = "Review text is required" });
+
+        var customerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var customer = string.IsNullOrWhiteSpace(customerId)
+            ? null
+            : await db.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == customerId);
+        if (customer is null)
+            return Unauthorized(new ApiResult { Success = false, Message = "Please sign in again before submitting a review." });
+
         db.Reviews.Add(new Review
         {
-            Name = r.Name.Trim(), City = r.City?.Trim(), Rating = Math.Clamp(r.Rating, 1, 5), Title = r.Title?.Trim(), Body = r.Body.Trim(),
+            CustomerId = customer.Id,
+            Name = customer.FullName.Trim(), City = r.City?.Trim(), Rating = Math.Clamp(r.Rating, 1, 5), Title = r.Title?.Trim(), Body = r.Body.Trim(),
             Approved = false, // moderated before publishing
         });
         await db.SaveChangesAsync();
-        return Ok(new ApiResult { Success = true, Message = "Thank you! Your review has been submitted for verification." });
+        return Ok(new ApiResult { Success = true, Message = "Thank you. Your review has been submitted for moderation." });
     }
 }

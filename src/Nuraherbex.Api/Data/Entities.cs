@@ -44,6 +44,7 @@ public class Customer
     public string FullName { get; set; } = "";
     public string Email { get; set; } = "";
     public string Phone { get; set; } = "";
+    public string? ProfileImageData { get; set; }
     public string PasswordHash { get; set; } = "";
     public AddressDto ShippingAddress { get; set; } = new();
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -52,6 +53,17 @@ public class Customer
 
 public class Order
 {
+    public decimal ParcelWeightKg { get; set; }
+    public decimal ParcelLengthCm { get; set; }
+    public decimal ParcelBreadthCm { get; set; }
+    public decimal ParcelHeightCm { get; set; }
+    public DateTime? FulfillmentReadyAt { get; set; }
+    public string? ShipmentClientOrderId { get; set; }
+    public DateTime? ShipmentBookedAt { get; set; }
+    public DateTime? PickedUpAt { get; set; }
+    public DateTime? DeliveredAt { get; set; }
+    public DateTime? LastShippingEventAt { get; set; }
+    public DateTime? LastTrackingCheckedAt { get; set; }
     public string Id { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
@@ -72,6 +84,8 @@ public class Order
     public string? PaymentRef { get; set; }
     public string? PayuTxnId { get; set; }
     public string FulfillmentStatus { get; set; } = "PENDING";
+    /// <summary>Courier platform that booked this shipment: Shiprocket | Shadowfax (null = Shiprocket, pre-dates multi-courier). The Shiprocket* fields hold that platform's ids.</summary>
+    public string? Courier { get; set; }
     public string? ShiprocketOrderId { get; set; }
     public string? ShiprocketShipmentId { get; set; }
     public string? ShiprocketAwb { get; set; }
@@ -153,13 +167,14 @@ public class SiteSetting
 public class Review
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string? CustomerId { get; set; }
     public string Name { get; set; } = "";
     public string? City { get; set; }
     public int Rating { get; set; } = 5;
     public string? Title { get; set; }
     public string Body { get; set; } = "";
     public bool Verified { get; set; }
-    public bool Approved { get; set; } = true;
+    public bool Approved { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
@@ -175,5 +190,256 @@ public class WhatsAppMessage
     public string Status { get; set; } = "received";
     public string? OrderId { get; set; }
     public string? RawPayload { get; set; }
+    public long? LeadId { get; set; }
+    /// <summary>Employee who sent an outbound message; null/"system" for automatic ones (auto-reply, order updates, journey).</summary>
+    public string? SentBy { get; set; }
+    /// <summary>Meta media id of a photo / sticker / video / voice note / document the customer sent (expires on Meta after about 30 days).</summary>
+    public string? MediaId { get; set; }
+    public string? MediaMime { get; set; }
+    /// <summary>File name inside the media folder once downloaded.</summary>
+    public string? MediaFile { get; set; }
+    /// <summary>Original file name of a document.</summary>
+    public string? MediaName { get; set; }
+    /// <summary>Emoji the other side reacted with, if any.</summary>
+    public string? Reaction { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A sales enquiry captured from WhatsApp (and, in later phases, Instagram / Facebook / website). One lead per normalised phone number.</summary>
+public class Lead
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = "";
+    /// <summary>E.164 digits without '+', e.g. 919876543210. Unique.</summary>
+    public string Phone { get; set; } = "";
+    public string? Email { get; set; }
+    /// <summary>whatsapp | instagram | facebook | website | manual</summary>
+    public string Source { get; set; } = "whatsapp";
+    /// <summary>Campaign / ad headline / form name that brought the lead in.</summary>
+    public string? SourceDetail { get; set; }
+    /// <summary>new | interested | follow-up | converted | not-interested</summary>
+    public string Status { get; set; } = "new";
+    /// <summary>unknown | opted_in | opted_out</summary>
+    public string ConsentStatus { get; set; } = "unknown";
+    public DateTime? ConsentAt { get; set; }
+    public string? ConsentSource { get; set; }
+    public string? FirstMessage { get; set; }
+    public string? Notes { get; set; }
+    public string? CustomerId { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime LastContactAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ConvertedAt { get; set; }
+    /// <summary>Owning sales employee (null = unassigned).</summary>
+    public long? AssignedToEmployeeId { get; set; }
+    public DateTime? AssignedAt { get; set; }
+}
+
+/// <summary>Chat state for a lead: unread count and the 24h WhatsApp customer-service window.</summary>
+public class Conversation
+{
+    public long Id { get; set; }
+    public long LeadId { get; set; }
+    public DateTime? LastInboundAt { get; set; }
+    public DateTime? LastOutboundAt { get; set; }
+    public int UnreadCount { get; set; }
+    /// <summary>Last inbound + 24h: free-form replies are allowed only until then; afterwards approved templates only.</summary>
+    public DateTime? ServiceWindowExpiresAt { get; set; }
+}
+
+/// <summary>Every time a known lead reaches out again through a source (keeps attribution without duplicating the lead).</summary>
+public class LeadSourceEvent
+{
+    public long Id { get; set; }
+    public long LeadId { get; set; }
+    public string Source { get; set; } = "whatsapp";
+    public string? Detail { get; set; }
+    public string? ReferralJson { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class LeadStatusHistory
+{
+    public long Id { get; set; }
+    public long LeadId { get; set; }
+    public string? FromStatus { get; set; }
+    public string ToStatus { get; set; } = "";
+    public string? Note { get; set; }
+    public string ChangedBy { get; set; } = "system";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A CRM user with their own login. Role "admin" sees everything, "sales" sees only the leads assigned to them.</summary>
+public class Employee
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = "";
+    /// <summary>Lower-case, unique; used to sign in.</summary>
+    public string Email { get; set; } = "";
+    public string Phone { get; set; } = "";
+    /// <summary>pbkdf2-sha512:iterations:salt:hash</summary>
+    public string PasswordHash { get; set; } = "";
+    /// <summary>admin | sales</summary>
+    public string Role { get; set; } = "sales";
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? LastLoginAt { get; set; }
+    /// <summary>Round-robin cursor: the employee who was assigned a lead longest ago gets the next one.</summary>
+    public DateTime? LastAssignedAt { get; set; }
+    public long? DepartmentId { get; set; }
+    /// <summary>Gives the page rights. Administrators (Role admin) ignore it and can open every page.</summary>
+    public long? DesignationId { get; set; }
+}
+
+public class LeadAssignmentHistory
+{
+    public long Id { get; set; }
+    public long LeadId { get; set; }
+    public long? FromEmployeeId { get; set; }
+    public long? ToEmployeeId { get; set; }
+    public string? Reason { get; set; }
+    /// <summary>auto | admin name/email of whoever made the change.</summary>
+    public string ChangedBy { get; set; } = "auto";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A task to contact a lead/customer: manual, from the 15-day journey, or raised by order progress checks.</summary>
+public class FollowUp
+{
+    public long Id { get; set; }
+    public long LeadId { get; set; }
+    public string? OrderId { get; set; }
+    public long? AssignedToEmployeeId { get; set; }
+    /// <summary>call | whatsapp | review | reorder | order | other</summary>
+    public string Type { get; set; } = "call";
+    public string Title { get; set; } = "";
+    public string? Notes { get; set; }
+    /// <summary>Ready-to-send WhatsApp text (placeholders already filled) for message-type tasks.</summary>
+    public string? SuggestedMessage { get; set; }
+    public DateTime DueAt { get; set; }
+    /// <summary>When the owner gets an advance heads-up (normally 2 days before DueAt).</summary>
+    public DateTime? RemindAt { get; set; }
+    public DateTime? ReminderSentAt { get; set; }
+    public DateTime? DueNotifiedAt { get; set; }
+    public DateTime? EscalatedAt { get; set; }
+    /// <summary>pending | done | skipped</summary>
+    public string Status { get; set; } = "pending";
+    public string? Outcome { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public string? CompletedBy { get; set; }
+    /// <summary>manual | journey | system</summary>
+    public string Source { get; set; } = "manual";
+    public long? EnrollmentId { get; set; }
+    /// <summary>Journey step or order-check key, e.g. day3-usage. With OrderId it is unique, so a step is created only once.</summary>
+    public string? StepKey { get; set; }
+    public string CreatedBy { get; set; } = "system";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A customer's 15-day journey, started when their order is delivered.</summary>
+public class JourneyEnrollment
+{
+    public long Id { get; set; }
+    public long LeadId { get; set; }
+    public string OrderId { get; set; } = "";
+    /// <summary>Delivery time; every step is scheduled relative to it.</summary>
+    public DateTime AnchorAt { get; set; }
+    /// <summary>active | completed | stopped</summary>
+    public string Status { get; set; } = "active";
+    public string? StoppedReason { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>In-app notification. EmployeeId null = every administrator.</summary>
+public class Notification
+{
+    public long Id { get; set; }
+    public long? EmployeeId { get; set; }
+    /// <summary>reminder | due | overdue | order | lead | info</summary>
+    public string Kind { get; set; } = "info";
+    public string Title { get; set; } = "";
+    public string? Body { get; set; }
+    /// <summary>Admin route to open, e.g. /admin/followups.</summary>
+    public string? Link { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ReadAt { get; set; }
+}
+
+public class Department
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = "";
+    public string? Description { get; set; }
+    public long? HeadEmployeeId { get; set; }
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A job title that carries page rights, e.g. Sales Executive.</summary>
+public class Designation
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = "";
+    public string? Description { get; set; }
+    public long? DepartmentId { get; set; }
+    public int Level { get; set; } = 3;
+    public bool IsActive { get; set; } = true;
+    /// <summary>JSON object: page key to access level 0-2 (see PageCatalog).</summary>
+    public string RightsJson { get; set; } = "{}";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A piece of team work (not tied to a customer follow-up). Named WorkTask to avoid clashing with System.Threading.Tasks.Task.</summary>
+public class WorkTask
+{
+    public long Id { get; set; }
+    public string Title { get; set; } = "";
+    public string? Description { get; set; }
+    /// <summary>todo | in_progress | blocked | done</summary>
+    public string Status { get; set; } = "todo";
+    /// <summary>low | normal | high | urgent</summary>
+    public string Priority { get; set; } = "normal";
+    public DateTime? DueAt { get; set; }
+    public long? AssignedToEmployeeId { get; set; }
+    public long? CreatedByEmployeeId { get; set; }
+    public string CreatedByName { get; set; } = "";
+    public long? DepartmentId { get; set; }
+    public long? LeadId { get; set; }
+    public string? OrderId { get; set; }
+    public string? Tags { get; set; }
+    /// <summary>none | daily | weekly | monthly: finishing the task creates the next one.</summary>
+    public string Repeat { get; set; } = "none";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? CompletedAt { get; set; }
+    public DateTime? ReminderSentAt { get; set; }
+    public DateTime? OverdueNotifiedAt { get; set; }
+}
+
+public class TaskComment
+{
+    public long Id { get; set; }
+    public long TaskId { get; set; }
+    public long? AuthorEmployeeId { get; set; }
+    public string Author { get; set; } = "";
+    public string Body { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class TaskChecklistItem
+{
+    public long Id { get; set; }
+    public long TaskId { get; set; }
+    public string Text { get; set; } = "";
+    public bool Done { get; set; }
+    public int Position { get; set; }
+}
+
+public class TaskActivity
+{
+    public long Id { get; set; }
+    public long TaskId { get; set; }
+    public string Actor { get; set; } = "";
+    public string Text { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

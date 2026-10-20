@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -41,7 +41,10 @@ public class WhatsAppWebhookController(WhatsAppService whatsapp, IWebHostEnviron
 
         if (misconfigured) log.LogError("[WhatsApp] WhatsApp:VerifyToken is not configured â€” cannot verify webhook");
         else log.LogWarning("[WhatsApp] Webhook verification rejected (mode={Mode})", mode);
-        return Forbid();
+        // Plain 403 (not Forbid(), which goes through the JWT handler and looks like an auth failure).
+        return StatusCode(403, misconfigured
+            ? "WhatsApp:VerifyToken is not configured on the server."
+            : "Verification failed: send hub.mode=subscribe, hub.verify_token=<WhatsApp:VerifyToken> and hub.challenge.");
     }
 
     /// <summary>Event delivery. The signature is validated against the exact raw bytes Meta signed.</summary>
@@ -104,7 +107,8 @@ public class ShiprocketWebhookController(
     {
         var expected = options.Value.WebhookToken;
         var supplied = Request.Headers["x-api-key"].FirstOrDefault() ?? Request.Headers.Authorization.FirstOrDefault();
-        if (!string.IsNullOrEmpty(expected) && supplied != expected)
+        if (string.IsNullOrWhiteSpace(expected)) return StatusCode(503);
+        if (supplied != expected)
             return Unauthorized(new ApiResult { Success = false, Message = "Unauthorized webhook request" });
 
         string? Str(string name) => payload.TryGetProperty(name, out var v) ? v.ToString() : null;
@@ -116,7 +120,7 @@ public class ShiprocketWebhookController(
             return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
 
         var order = await db.Orders.FirstOrDefaultAsync(o => (orderId != null && o.Id == orderId) || (awb != null && o.ShiprocketAwb == awb));
-        if (order is null) return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
+        if (order is null || ShippingGateway.IsShadowfax(order.Courier)) return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
 
         string? location = null;
         if (payload.TryGetProperty("scans", out var scans) && scans.ValueKind == System.Text.Json.JsonValueKind.Array && scans.GetArrayLength() > 0
@@ -132,10 +136,9 @@ public class ShiprocketWebhookController(
         await db.SaveChangesAsync();
         log.LogInformation("[Shiprocket] Order {Order} â†’ {Status}", order.Id, mapped.Status);
 
-        // Notify only on a genuine transition so repeated courier scans never spam the customer.
-        var notifyDelivered = mapped.Status == "DELIVERED" && previous != "DELIVERED";
-        var notifyShipped = mapped.Status is "PICKED_UP" or "IN_TRANSIT" && previous is "PENDING" or "SHIPMENT_CREATED" or "AWB_ASSIGNED";
-        if (!notifyDelivered && !notifyShipped) return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
+        // Email every genuine status transition; repeated scans of the same status never spam the customer.
+        var notify = EmailService.TransitionEmail(mapped.Status, previous);
+        if (notify is null) return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
 
         var snapshot = order;
         _ = Task.Run(async () =>
@@ -145,12 +148,37 @@ public class ShiprocketWebhookController(
                 using var scope = scopes.CreateScope();
                 var wa = scope.ServiceProvider.GetRequiredService<WhatsAppService>();
                 var mail = scope.ServiceProvider.GetRequiredService<EmailService>();
-                if (notifyDelivered) { await mail.SendOrderDeliveredAsync(snapshot); await wa.NotifyDeliveredAsync(snapshot); }
-                else await wa.NotifyShippedAsync(snapshot);
+                try { await mail.SendStatusUpdateAsync(snapshot, notify); }
+                catch (Exception ex) { log.LogWarning(ex, "Order {Order} {Notify} email failed", snapshot.Id, notify); }
+                if (notify == "DELIVERED") await wa.NotifyDeliveredAsync(snapshot);
+                else if (notify == "SHIPPED") await wa.NotifyShippedAsync(snapshot);
             }
             catch (Exception ex) { log.LogWarning(ex, "Shiprocket webhook notification failed"); }
         });
 
         return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
+    }
+}
+
+/// <summary>Register the exact callback template and Authorization token with Shadowfax.</summary>
+[ApiController]
+[AllowAnonymous]
+[Route("api/webhooks/shadowfax")]
+public class ShadowfaxWebhookController(IOptions<ShadowfaxOptions> options, ShadowfaxTrackingProcessor processor) : ControllerBase
+{
+    [HttpPost]
+    [RequestSizeLimit(65536)]
+    public async Task<IActionResult> Receive([FromBody] System.Text.Json.JsonElement payload)
+    {
+        var expected = options.Value.WebhookToken;
+        if (string.IsNullOrWhiteSpace(expected)) return StatusCode(503);
+        var supplied = Request.Headers.Authorization.ToString();
+        if (supplied.StartsWith("Token ", StringComparison.Ordinal)) supplied = supplied[6..];
+        if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(supplied)),
+                System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(expected)))) return Unauthorized();
+        try { await processor.ProcessAsync(payload); }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
+        return Ok(new ApiResult { Success = true });
     }
 }

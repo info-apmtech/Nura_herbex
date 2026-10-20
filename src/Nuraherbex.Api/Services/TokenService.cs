@@ -23,6 +23,12 @@ public class TokenService(IOptions<JwtOptions> options)
         [new Claim(JwtRegisteredClaimNames.Sub, email), new Claim(ClaimTypes.Email, email), new Claim(ClaimTypes.Role, "admin")],
         TimeSpan.FromHours(_o.AdminTokenHours));
 
+    /// <summary>JWT for a CRM employee. Role is "admin" or "sales"; emp_id lets the API scope data to the employee.</summary>
+    public string CreateStaffToken(Employee e) => Create(
+        [new Claim(JwtRegisteredClaimNames.Sub, e.Email), new Claim(ClaimTypes.Email, e.Email), new Claim(ClaimTypes.Name, e.Name),
+         new Claim(ClaimTypes.Role, e.Role), new Claim("emp_id", e.Id.ToString())],
+        TimeSpan.FromHours(_o.AdminTokenHours));
+
     private string Create(IEnumerable<Claim> claims, TimeSpan lifetime)
     {
         var creds = new SigningCredentials(Key(_o.Secret), SecurityAlgorithms.HmacSha256);

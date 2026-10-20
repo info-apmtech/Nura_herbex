@@ -180,7 +180,7 @@
         <div class="overflow-x-auto">
             <table class="w-full text-left text-xs border-collapse">
                 <thead>
-                    <tr class="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono text-[11px] font-medium tracking-wider uppercase">
+                    <tr class="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono text-[11px] font-medium tracking-wider uppercase"><th class="px-3 py-3 w-12">S.No</th>
                         <th class="px-4 py-3">Direction</th>
                         <th class="px-4 py-3">Phone</th>
                         <th class="px-4 py-3">Profile Name</th>
@@ -194,7 +194,7 @@
                     @if (_loading && _messages.Count == 0)
                     {
                         <tr>
-                            <td colspan="7" class="p-8 text-center text-zinc-500">
+                            <td colspan="8" class="p-8 text-center text-zinc-500">
                                 <Icon Name="RefreshCw" Size="20" Class="animate-spin mx-auto mb-2 text-zinc-400" />
                                 <span>Loading WhatsApp messages...</span>
                             </td>
@@ -203,16 +203,18 @@
                     else if (_messages.Count == 0)
                     {
                         <tr>
-                            <td colspan="7" class="p-8 text-center text-zinc-500">
+                            <td colspan="8" class="p-8 text-center text-zinc-500">
                                 No WhatsApp messages yet. Customer messages and your replies will appear here.
                             </td>
                         </tr>
                     }
                     else
                     {
+                        _sn = 0;
                         @foreach (var m in _messages)
                         {
                             <tr @key="m.Id" class="hover:bg-zinc-800/30 transition-colors">
+                                <td class="px-3 py-3 text-zinc-500 font-mono">@(++_sn)</td>
                                 <td class="px-4 py-3 whitespace-nowrap">
                                     <span class="@($"inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium {(m.Direction == "inbound" ? "bg-sky-500/10 text-sky-400 border border-sky-500/20" : "bg-purple-500/10 text-purple-300 border border-purple-500/20")}")">
                                         <Icon Name="@(m.Direction == "inbound" ? "ArrowLeft" : "ArrowRight")" Size="10" />
@@ -222,7 +224,13 @@
                                 <td class="px-4 py-3 font-mono text-zinc-300 whitespace-nowrap">@m.Phone</td>
                                 <td class="px-4 py-3 text-zinc-300 whitespace-nowrap">@(string.IsNullOrEmpty(m.ProfileName) ? "—" : m.ProfileName)</td>
                                 <td class="px-4 py-3 text-zinc-200 max-w-md">
-                                    <div class="line-clamp-2 break-words">@(string.IsNullOrEmpty(m.Body) ? $"[{m.Type}]" : m.Body)</div>
+                                    @if (m.MediaUrl is not null)
+                                    {
+                                        <a href="@Api.Url(m.MediaUrl)" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-2 py-1 mb-1 rounded bg-zinc-800 border border-zinc-700 text-sky-300 hover:text-sky-200 text-[11px]">
+                                            <span>@MediaIcon(m.Type)</span><span>@(string.IsNullOrWhiteSpace(m.MediaName) ? MediaLabel(m.Type) : m.MediaName)</span><span class="text-zinc-500">Open</span>
+                                        </a>
+                                    }
+                                    <div class="line-clamp-2 break-words">@(string.IsNullOrEmpty(m.Body) ? (m.MediaUrl is not null ? "" : $"[{MediaLabel(m.Type)}]") : m.Body)</div>
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap">
                                     <span class="@($"inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium {StatusClass(m.Status)}")">
@@ -242,6 +250,10 @@
 </div>
 
 @code {
+    private static string MediaLabel(string type) => type switch { "image" => "Photo", "sticker" => "Sticker", "video" => "Video", "audio" => "Voice message", "document" => "Document", "unsupported" => "Unsupported message", _ => type };
+    private static string MediaIcon(string type) => type switch { "image" or "sticker" => "🖼️", "video" => "🎬", "audio" => "🎵", _ => "📄" };
+
+    private int _sn;
     private readonly CancellationTokenSource _cts = new();
     private WhatsAppStatusDto? _status;
     private List<WhatsAppMessageDto> _messages = new();

@@ -5,8 +5,8 @@ namespace Nuraherbex.Maui;
 
 public static class MauiProgram
 {
-	// Production API address. Update before shipping to the stores.
-	private const string ProductionApi = "https://api.nuraherbex.com/";
+	// Debug and Release both use the live API.
+	private const string ProductionApi = "https://nuraapi.apmiot.com/";
 
 	public static MauiApp CreateMauiApp()
 	{
@@ -29,13 +29,5 @@ public static class MauiProgram
 		return builder.Build();
 	}
 
-	private static string ResolveApiBase()
-	{
-#if DEBUG
-		// The Android emulator reaches the host machine through 10.0.2.2, not localhost.
-		return DeviceInfo.Platform == DevicePlatform.Android ? "http://10.0.2.2:5118/" : "http://localhost:5118/";
-#else
-		return ProductionApi;
-#endif
-	}
+	private static string ResolveApiBase() => ProductionApi;
 }

@@ -15,12 +15,22 @@ var cfg = builder.Configuration;
 // Machine-local settings (PayU keys etc.), git-ignored. Loaded last so it always applies, however the API is launched.
 cfg.AddJsonFile(Path.Combine(builder.Environment.ContentRootPath, "appsettings.Local.json"), optional: true, reloadOnChange: true);
 
+cfg.AddEnvironmentVariables();
+cfg.AddCommandLine(args);
+
 // ---- Options ---------------------------------------------------------------------------
 builder.Services.Configure<StoreOptions>(cfg.GetSection(StoreOptions.Section));
 builder.Services.Configure<JwtOptions>(cfg.GetSection(JwtOptions.Section));
 builder.Services.Configure<AdminOptions>(cfg.GetSection(AdminOptions.Section));
-builder.Services.Configure<PayUOptions>(cfg.GetSection(PayUOptions.Section));
+builder.Services.AddOptions<PayUOptions>().Bind(cfg.GetSection(PayUOptions.Section))
+    .Validate(o => builder.Environment.IsDevelopment() || !o.AllowSimulation, "PayU simulation is permitted only in Development.").ValidateOnStart();
 builder.Services.Configure<ShiprocketOptions>(cfg.GetSection(ShiprocketOptions.Section));
+builder.Services.AddOptions<ShadowfaxOptions>().Bind(cfg.GetSection(ShadowfaxOptions.Section))
+    .Validate(o => o.Env is "staging" or "production", "Shadowfax:Env must be staging or production.")
+    .Validate(o => o.OrderType is "marketplace" or "warehouse", "Unsupported Shadowfax order type.")
+    .Validate(o => o.ServiceTier is "Regular" or "Surface", "Unsupported Shadowfax service tier.")
+    .ValidateOnStart();
+builder.Services.Configure<ShippingOptions>(cfg.GetSection(ShippingOptions.Section));
 builder.Services.Configure<EmailOptions>(cfg.GetSection(EmailOptions.Section));
 builder.Services.Configure<WhatsAppOptions>(cfg.GetSection(WhatsAppOptions.Section));
 
@@ -38,12 +48,27 @@ builder.Services.AddDbContext<NuraDbContext>(o =>
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ProductService>();
 builder.Services.AddScoped<OrderService>();
+builder.Services.AddScoped<OrderOperationLock>();
+builder.Services.AddScoped<ShadowfaxTrackingProcessor>();
+builder.Services.AddHostedService<ShadowfaxReconciliationWorker>();
 builder.Services.AddScoped<PayUService>();
 builder.Services.AddScoped<CustomerAuthService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddHttpClient<EmailService>();
 builder.Services.AddHttpClient<ShiprocketService>();
+builder.Services.AddHttpClient<ShadowfaxService>(http => http.Timeout = TimeSpan.FromSeconds(25));
+builder.Services.AddScoped<ShippingGateway>();
+builder.Services.AddSingleton<MediaSigner>();
+builder.Services.AddScoped<LeadService>();
+builder.Services.Configure<FollowUpOptions>(cfg.GetSection(FollowUpOptions.Section));
+builder.Services.AddScoped<FollowUpService>();
+builder.Services.AddScoped<CrmDashboardService>();
+builder.Services.AddScoped<RightsService>();
+builder.Services.AddScoped<TaskService>();
+builder.Services.Configure<AiOptions>(o => { cfg.GetSection(AiOptions.Section).Bind(o); if (string.IsNullOrWhiteSpace(o.ApiKey)) o.ApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? ""; });
+builder.Services.AddScoped<ReplyAssistantService>();
+builder.Services.AddHostedService<FollowUpWorker>();
 builder.Services.AddHttpClient<WhatsAppService>();
 
 // ---- Auth (JWT for customers and admins) ----------------------------------------------
@@ -98,7 +123,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(o =>
 {
-    o.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo { Title = "Nura Herbex API", Version = "v1", Description = "Store, orders, PayU payments, admin, Shiprocket and WhatsApp webhooks." });
+    o.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo { Title = "Nura Herbex API", Version = "v1", Description = "Store, orders, PayU payments, admin, Shadowfax shipping, legacy Shiprocket tracking, and WhatsApp webhooks." });
     o.CustomSchemaIds(t => t.FullName?.Replace('+', '.'));
     o.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.OpenApiSecurityScheme
     {
@@ -134,6 +159,17 @@ if (genIdx >= 0)
 
 // Startup summary so it is obvious which database / PayU mode this process really uses (no secrets printed).
 {
+// Shadowfax settings problems must not stop the whole API (store, payments, WhatsApp): report them, and booking fails with a clear message instead.
+{
+    var sf = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<ShadowfaxOptions>>().Value;
+    var missing = new List<string>();
+    if (!sf.IsConfigured) missing.Add(sf.IsProduction ? "Shadowfax:Token" : "Shadowfax:StagingToken");
+    if (!sf.Pickup.IsComplete) missing.Add("Shadowfax:Pickup (AddressLine1, City, Pincode)");
+    if (sf.WebhookToken.Length < 32) missing.Add("Shadowfax:WebhookToken (32+ characters)");
+    if (missing.Count > 0)
+        app.Logger.LogWarning("[Startup] Shadowfax ({Env}) is not fully configured - missing: {Missing}. Shipment booking and callbacks will fail until set (env vars such as Shadowfax__Token, or appsettings.Local.json).", sf.Env, string.Join(", ", missing));
+}
+
     var csb = provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase) ? null : new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(cfg.GetConnectionString("Default"));
     var payuKey = cfg["PayU:MerchantKey"];
     app.Logger.LogInformation("[Startup] Environment={Env} | Database={Provider} {Server}/{Db} | PayU={Payu} ({PayuEnv}) | UserSecrets={Secrets}",
@@ -152,6 +188,8 @@ if (cfg.GetValue("Database:AutoCreate", true))
         if (provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase)) await db.Database.EnsureCreatedAsync();
         else await db.Database.MigrateAsync();
         await DbSeeder.SeedAsync(db, cfg.GetValue("Database:SeedDemoBatch", false));
+        await WhatsAppMediaBackfill.RunAsync(db, app.Logger);
+        await OrgSeeder.RunAsync(db, app.Logger);
     }
     catch (Exception ex)
     {
@@ -165,6 +203,7 @@ if (!app.Environment.IsDevelopment()) app.UseHsts();
 app.UseCors();
 app.UseRateLimiter();
 app.UseAuthentication();
+app.UseMiddleware<PageRightsMiddleware>(); // page rights for every staff API route (closed by default)
 app.UseAuthorization();
 app.MapControllers();
 var swaggerOn = app.Environment.IsDevelopment() || cfg.GetValue("Swagger:Enabled", false);

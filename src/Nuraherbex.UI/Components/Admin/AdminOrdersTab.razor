@@ -34,12 +34,12 @@
         <div class="overflow-x-auto">
             <table class="w-full text-left text-xs border-collapse">
                 <thead>
-                    <tr class="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono text-[11px] font-medium tracking-wider uppercase">
+                    <tr class="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono text-[11px] font-medium tracking-wider uppercase"><th class="px-3 py-3 w-12">S.No</th>
                         <th class="px-4 py-3">Order ID &amp; Date</th>
                         <th class="px-4 py-3">Customer Details</th>
                         <th class="px-4 py-3">Items Ordered</th>
                         <th class="px-4 py-3">Amount &amp; Payment</th>
-                        <th class="px-4 py-3">Shiprocket AWB</th>
+                        <th class="px-4 py-3">Courier AWB</th>
                         <th class="px-4 py-3">Delivery Status</th>
                         <th class="px-4 py-3 text-right">Actions</th>
                     </tr>
@@ -48,7 +48,7 @@
                     @if (Loading)
                     {
                         <tr>
-                            <td colspan="7" class="p-8 text-center text-zinc-500">
+                            <td colspan="8" class="p-8 text-center text-zinc-500">
                                 <Icon Name="RefreshCw" Size="20" Class="animate-spin mx-auto mb-2 text-zinc-400" />
                                 <span>Loading orders from database...</span>
                             </td>
@@ -57,7 +57,7 @@
                     else if (FilteredOrders.Count == 0)
                     {
                         <tr>
-                            <td colspan="7" class="p-8 text-center text-zinc-500">
+                            <td colspan="8" class="p-8 text-center text-zinc-500">
                                 @(Orders.Count == 0
                                     ? "No customer orders recorded yet. Live orders placed from the storefront or checkout will appear here."
                                     : "No orders matched your search query.")
@@ -66,9 +66,11 @@
                     }
                     else
                     {
+                        _sn = 0;
                         @foreach (var order in FilteredOrders)
                         {
                             <tr @key="order.Id" class="hover:bg-zinc-800/30 transition-colors">
+                                <td class="px-3 py-4 text-zinc-500 font-mono align-top">@(++_sn)</td>
                                 <td class="px-4 py-3 font-mono font-medium text-zinc-200 whitespace-nowrap">
                                     <div>@order.Id</div>
                                     <div class="text-[10px] text-zinc-500 font-sans font-normal mt-0.5">
@@ -144,7 +146,7 @@
                                         }
                                     </div>
                                     <div class="text-[10px] text-zinc-500 mt-0.5">
-                                        @order.ShiprocketCourier
+                                        @(string.IsNullOrWhiteSpace(order.ShiprocketCourier) ? order.Courier : order.ShiprocketCourier)
                                     </div>
                                 </td>
 
@@ -188,7 +190,7 @@
 
             <div class="space-y-1">
                 <div class="text-[10px] font-mono text-zinc-400 uppercase font-medium">
-                    Shiprocket AWB Telemetry
+                    Courier AWB Telemetry
                 </div>
                 <h3 class="text-base font-semibold text-zinc-100">
                     Order @o.Id
@@ -212,7 +214,7 @@
                 </div>
                 <div class="flex justify-between">
                     <span class="text-zinc-500">Courier Partner</span>
-                    <span class="text-zinc-200 font-medium">@(string.IsNullOrEmpty(o.ShiprocketCourier) ? "Pending Assignment" : o.ShiprocketCourier)</span>
+                    <span class="text-zinc-200 font-medium">@(string.IsNullOrEmpty(o.ShiprocketCourier) ? (o.Courier ?? "Pending Assignment") : o.ShiprocketCourier)</span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-zinc-500">AWB Tracking Code</span>
@@ -261,7 +263,7 @@
                 </div>
             </div>
 
-            @* Order actions (Blazor admin additions: Shiprocket retry, delivery, e-mail, WhatsApp) *@
+            @* Order actions (Blazor admin additions: courier retry, delivery, e-mail, WhatsApp) *@
             <div class="space-y-2 pt-1 border-t border-zinc-800/80">
                 <span class="text-xs font-semibold text-zinc-200 block uppercase tracking-wider pt-3">
                     Order Actions
@@ -276,13 +278,54 @@
                 }
 
                 <div class="flex flex-wrap gap-2">
-                    @if (string.IsNullOrEmpty(o.ShiprocketAwb))
+                    @if (string.IsNullOrEmpty(o.ShiprocketAwb) && o.FulfillmentStatus == "PENDING")
                     {
-                        <button type="button" disabled="@_busy" @onclick="RetryShiprocketAsync"
-                                class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
-                            <Icon Name="Truck" Size="12" />
-                            <span>Retry Shiprocket</span>
+                        @if (o.PaymentMethod == "COD" || o.PaymentStatus == "PAID")
+                        {
+                            @if (o.FulfillmentReadyAt is null)
+                            {
+                                <div class="w-full grid grid-cols-2 gap-2 text-xs text-zinc-300">
+                                    <label>Weight (kg)<input type="number" min="0.001" step="0.001" @bind="_parcelWeight" class="w-full bg-zinc-800 rounded p-2" /></label>
+                                    <label>Length (cm)<input type="number" min="0.01" step="0.01" @bind="_parcelLength" class="w-full bg-zinc-800 rounded p-2" /></label>
+                                    <label>Width (cm)<input type="number" min="0.01" step="0.01" @bind="_parcelBreadth" class="w-full bg-zinc-800 rounded p-2" /></label>
+                                    <label>Height (cm)<input type="number" min="0.01" step="0.01" @bind="_parcelHeight" class="w-full bg-zinc-800 rounded p-2" /></label>
+                                </div>
+                                <button type="button" disabled="@_busy" @onclick="MarkReadyAsync" class="px-2.5 py-1.5 rounded-md bg-zinc-800 text-zinc-200 text-xs">Mark packed</button>
+                            }
+                            <button type="button" disabled="@(_busy || o.FulfillmentReadyAt is null)" @onclick="RetryShipmentAsync"
+                                    class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
+                                <Icon Name="Truck" Size="12" />
+                                <span>Book / Retry Pickup</span>
+                            </button>
+                        }
+                        else
+                        {
+                            <span class="px-2.5 py-1.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">Verify online payment before shipping.</span>
+                        }
+                    }
+                    @if (o.Courier == "Shadowfax" && !string.IsNullOrEmpty(o.ShiprocketAwb) && o.FulfillmentStatus is not ("CANCELLED" or "DELIVERED" or "RTO"))
+                    {
+                        @if (o.FulfillmentStatus is not ("PICKED_UP" or "IN_TRANSIT" or "OUT_FOR_DELIVERY"))
+                        {
+                            <button type="button" disabled="@_busy" @onclick="GenerateShipmentLabelAsync"
+                                    class="px-2.5 py-1.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
+                                <Icon Name="FileText" Size="12" />
+                                <span>Generate PDF label</span>
+                            </button>
+                        }
+                        <button type="button" disabled="@_busy" @onclick="CancelShipmentAsync"
+                                class="px-2.5 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
+                            <Icon Name="AlertCircle" Size="12" />
+                            <span>Cancel Shipment</span>
                         </button>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_shippingLabelUrl))
+                    {
+                        <a href="@_shippingLabelUrl" target="_blank" rel="noopener noreferrer"
+                           class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors">
+                            <Icon Name="ExternalLink" Size="12" />
+                            <span>Open / print label</span>
+                        </a>
                     }
                     @if (o.DeliveryStatus != "Delivered")
                     {
@@ -339,7 +382,7 @@
                     Create Test Order
                 </h3>
                 <p class="text-xs text-zinc-500">
-                    Simulate an order to verify database records &amp; Shiprocket tracking.
+                    Simulate an order to verify database records &amp; courier tracking.
                 </p>
             </div>
 
@@ -368,7 +411,7 @@
                     </div>
                     <div class="space-y-1">
                         <label class="text-zinc-300 font-medium block">Email</label>
-                        <input type="email" placeholder="siddharth@@example.com"
+                        <input type="email" required placeholder="siddharth@@example.com"
                                @bind="_new.CustomerEmail" @bind:event="oninput"
                                class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500" />
                     </div>
@@ -395,12 +438,10 @@
 
                 <div class="grid grid-cols-2 gap-3 pt-1">
                     <div class="space-y-1">
-                        <label class="text-zinc-300 font-medium block">Product Tier</label>
+                        <label class="text-zinc-300 font-medium block">Product</label>
                         <select @bind="_new.ProductId"
                                 class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500">
-                            <option value="stamix-single">Single Canister (₹1,899)</option>
-                            <option value="stamix-duo">Duo Optimizer (₹5,499)</option>
-                            <option value="stamix-trio">Master Vitality System (₹7,999)</option>
+                            @foreach (var product in _catalog.Where(p => p.Status == "active" && p.StockQuantity > 0)) { <option value="@product.Id">@product.Name (₹@AdminFmt.Inr(product.Price))</option> }
                         </select>
                     </div>
 
@@ -412,10 +453,14 @@
                     </div>
                 </div>
 
-                <div class="pt-2 flex gap-2.5">
-                    <button type="submit" disabled="@_creating"
+                                <div class="admin-fields">
+                    <label>Coupon code (optional)<input maxlength="64" @bind="_new.CouponCode" placeholder="e.g. WELCOME10" /></label>
+                    <label>Payment method<select @bind="_new.PaymentMethod"><option value="COD">Cash on delivery</option><option value="ONLINE">Online / manual payment</option></select></label>
+                    @if (_new.PaymentMethod == "ONLINE") { <label class="admin-span-2"><span><input type="checkbox" @bind="_new.MarkPaid" /> Payment already collected</span><small>Only select this after confirming receipt. This records payment; it does not charge the customer.</small></label> }
+                </div><div class="pt-2 flex gap-2.5">
+                    <button type="submit" disabled="@(_creating || string.IsNullOrEmpty(_new.ProductId))"
                             class="flex-1 py-2 px-3 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs tracking-tight shadow-sm cursor-pointer transition-colors disabled:opacity-60">
-                        @(_creating ? "Dispatching..." : "Confirm & Dispatch Order")
+                        @(_creating ? "Creating..." : "Create order")
                     </button>
                     <button type="button" @onclick="CloseAddOrder"
                             class="px-4 py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white font-medium text-xs cursor-pointer transition-colors">
@@ -428,6 +473,7 @@
 }
 
 @code {
+    private int _sn;
     [Parameter] public List<OrderDto> Orders { get; set; } = new();
     [Parameter] public bool Loading { get; set; }
     [Parameter] public EventCallback OnReload { get; set; }
@@ -438,9 +484,12 @@
 
     private OrderDto? _selected;
     private bool _busy;
+    private decimal _parcelWeight, _parcelLength, _parcelBreadth, _parcelHeight;
+    private string? _shippingLabelUrl;
     private string? _actionMessage;
     private bool _actionOk;
 
+    private List<ProductDto> _catalog = new();
     private bool _showAdd;
     private bool _creating;
     private string? _addError;
@@ -450,8 +499,8 @@
     {
         ProductId = "stamix-single",
         Quantity = 1,
-        PaymentMethod = "ONLINE",
-        MarkPaid = true,
+        PaymentMethod = "COD",
+        MarkPaid = false,
         Address = new AddressDto { Country = "India" },
     };
 
@@ -479,21 +528,21 @@
     private void OpenOrder(OrderDto order)
     {
         _selected = order;
+        _parcelWeight = order.ParcelWeightKg; _parcelLength = order.ParcelLengthCm;
+        _parcelBreadth = order.ParcelBreadthCm; _parcelHeight = order.ParcelHeightCm;
+        _shippingLabelUrl = order.ShippingLabelUrl;
         _actionMessage = null;
     }
 
-    private void CloseOrder() { _selected = null; _actionMessage = null; }
+    private void CloseOrder() { _selected = null; _shippingLabelUrl = null; _actionMessage = null; }
 
-    private void OpenAddOrder() { _new = NewOrderForm(); _addError = null; _showAdd = true; }
+    private async Task OpenAddOrder() { _new = NewOrderForm(); _addError = null; _showAdd = true; var result = await Api.AdminProductsAsync(); _catalog = result.Products; _new.ProductId = _catalog.FirstOrDefault(p => p.Status == "active" && p.StockQuantity > 0)?.Id ?? ""; if (!result.Success || _new.ProductId == "") _addError = result.Message ?? "No active products with stock are available."; }
     private void CloseAddOrder() { _showAdd = false; }
 
     private async Task CreateOrderAsync()
     {
         _addError = null;
         _creating = true;
-        // React: an empty email falls back to <name>@gmail.com
-        if (string.IsNullOrWhiteSpace(_new.CustomerEmail))
-            _new.CustomerEmail = $"{new string(_new.CustomerName.ToLowerInvariant().Where(c => !char.IsWhiteSpace(c)).ToArray())}@gmail.com";
         _new.Address.Country = "India";
         _new.Quantity = Math.Clamp(_new.Quantity, 1, 10);
         var res = await Api.AdminCreateOrderAsync(_new);
@@ -512,15 +561,59 @@
         if (updated is not null) _selected = updated;
     }
 
-    private async Task RetryShiprocketAsync()
+    private async Task MarkReadyAsync()
+    {
+        if (_selected is null) return;
+        _busy = true;
+        var result = await Api.AdminMarkReadyAsync(_selected.Id, _parcelWeight, _parcelLength, _parcelBreadth, _parcelHeight);
+        _actionOk = result.Success;
+        _actionMessage = result.Success ? "Parcel marked packed. You can now book pickup." : result.Message;
+        _busy = false;
+        await ReloadSelectedAsync();
+    }
+
+    private async Task RetryShipmentAsync()
     {
         if (_selected is null) return;
         _busy = true; _actionMessage = null;
-        var res = await Api.AdminRetryShiprocketAsync(_selected.Id);
+        var res = await Api.AdminRetryShipmentAsync(_selected.Id);
+        _actionOk = res.Success;
+        var courier = string.IsNullOrWhiteSpace(res.Result?.Courier) ? "Courier" : res.Result.Courier;
+        _actionMessage = res.Success
+            ? (res.Result?.ShiprocketAwb is { Length: > 0 } awb ? $"{courier} shipment created. AWB: {awb}" : $"{courier} shipment created.")
+            : (res.Message ?? "Shipment retry failed.");
+        if (res.Success) _shippingLabelUrl = null;
+        _busy = false;
+        await ReloadSelectedAsync();
+    }
+
+    private async Task GenerateShipmentLabelAsync()
+    {
+        if (_selected is null) return;
+        _busy = true; _actionMessage = null;
+        var res = await Api.AdminGenerateShipmentLabelAsync(_selected.Id);
         _actionOk = res.Success;
         _actionMessage = res.Success
-            ? (res.Result?.ShiprocketAwb is { Length: > 0 } awb ? $"Shiprocket shipment created. AWB: {awb}" : "Shiprocket shipment created.")
-            : (res.Message ?? "Shiprocket retry failed.");
+            ? "Shadowfax PDF label is ready. Open it to print and attach it to the parcel."
+            : (res.Message ?? "Could not generate the Shadowfax label.");
+        if (res.Result?.ShippingLabelUrl is { Length: > 0 } labelUrl)
+        {
+            _shippingLabelUrl = labelUrl;
+            _selected.ShippingLabelUrl = labelUrl;
+        }
+        _busy = false;
+        await ReloadSelectedAsync();
+    }
+
+    private async Task CancelShipmentAsync()
+    {
+        if (_selected is null) return;
+        _busy = true; _actionMessage = null;
+        var res = await Api.AdminCancelShipmentAsync(_selected.Id);
+        _actionOk = res.Success;
+        _actionMessage = res.Message ?? (res.Success ? "Shipment cancelled." : "Could not cancel the shipment.");
+        if (res.Success && res.Message?.Contains("queued", StringComparison.OrdinalIgnoreCase) != true)
+            _shippingLabelUrl = null;
         _busy = false;
         await ReloadSelectedAsync();
     }

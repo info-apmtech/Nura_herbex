@@ -27,8 +27,20 @@ dotnet run --project src/Nuraherbex.Api
 dotnet run --project src/Nuraherbex.Web
 ```
 
-* Admin portal: `/admin` — dev credentials are in `src/Nuraherbex.Api/appsettings.Development.json` (**dev only — override in production**).
-* Payments run in **simulation mode** until `PayU:MerchantKey/MerchantSalt` are set; Shiprocket simulates until credentials are set; emails are skipped until `Email:ResendApiKey` is set.
+* Admin portal: `/admin`. Configure the administrator with `pwsh -File tools/Set-AdminCredentials.ps1`; this prompts for a password and stores a salted PBKDF2 hash in git-ignored `src/Nuraherbex.Api/appsettings.Local.json`. Restart the API after changing credentials. Development defaults apply only when no local credentials are configured.
+* Payments run in **simulation mode** until PayU merchant credentials are set; Shiprocket simulates until its credentials are set.
+
+#### Email and login-code delivery
+
+Transactional email (login codes and order notices) is sent over **SMTP** when `Email:Smtp:Host` is configured, and falls back to the **Resend** HTTP API otherwise. The sender is `Email:From`.
+
+**Order status emails.** Every customer-facing status change emails the buyer: order placed/confirmed (COD at checkout, or on payment confirmation for online orders), shipped (first pickup scan), out for delivery, delivered, cancelled and returned-to-origin. Courier webhooks dedupe on status transitions, so repeated scans of the same status never double-send; the admin order page can also resend any of these templates manually (`POST /api/admin/orders/{id}/send-email` with `{"type": "confirmation|delivered|shipped|out-for-delivery|cancelled|returned"}`).
+
+For local development the SMTP block (Gmail app password for `nuraherbex@gmail.com`) sits directly in `src/Nuraherbex.Api/appsettings.json`, so the API sends email with no extra setup. That password grants send access to the mailbox — if the repository is shared beyond the team, rotate it and move the values to user-secrets or environment variables instead.
+
+Resend alternative (used only when no SMTP host is set): set `Email:ResendApiKey` and a verified `Email:From` through user-secrets or environment variables.
+
+For deployment set the equivalent environment variables (`Email__Smtp__Host`, `Email__Smtp__Username`, `Email__Smtp__Password`, or `Email__ResendApiKey`, `Email__From`) and restart the API. Gmail/Google Workspace require an [app password](https://support.google.com/accounts/answer/185833) when 2-Step Verification is on. The login screen reports an error when the send is rejected; accepted email can still land in Spam/Junk.
 
 ### CSS (Tailwind)
 The UI uses the same Tailwind classes as the React app. After changing markup, rebuild the stylesheet (uses the Tailwind CLI already in `../node_modules`):
@@ -101,3 +113,29 @@ Admin (JWT, role `admin`): `POST /api/admin/login`, `GET /api/admin/verify|order
 * Set `Jwt:Secret` (32+ chars), `Admin:Email/Password`, `Store:FrontendUrl`, `Store:ApiPublicUrl`, `Cors:Origins` (the web app origin) via environment/secrets — the values in `appsettings.Development.json` are for local use only.
 * PayU: set `PayU:MerchantKey/MerchantSalt/Env=live`; the PayU `surl/furl` is `<ApiPublicUrl>/api/payments/payu-response`, which redirects the browser back to `<FrontendUrl>/checkout`.
 * Shiprocket: set credentials and, in Shiprocket's panel, the webhook URL `<ApiPublicUrl>/api/webhooks/shiprocket/webhook` with the token from `Shiprocket:WebhookToken` sent as `x-api-key`.
+
+### Admin authentication
+
+The server issues the `admin` JWT role after administrator login. The entire admin API controller requires that role, with anonymous access allowed only for the rate-limited login endpoint. Customer accounts cannot access admin operations. Admin sessions expire after `Jwt:AdminTokenHours` (default 8 hours).
+
+`Admin:PasswordHash` takes precedence over the legacy `Admin:Password` setting. The setup script preserves unrelated local configuration. Keep local settings out of source control. Password changes affect new logins; already issued tokens remain valid until expiry.
+
+Run the isolated authentication checks with `dotnet run --project tools/AdminAuthChecks`. These use a temporary in-memory database and do not touch store data or configured integrations.
+
+The admin workspace includes products, coupons, orders, customers, payments, batches, content, formulation and WhatsApp. Open `/admin` for the dashboard, `/admin/products` for the catalog or `/admin/coupons` for offers.
+### Catalog and offers
+
+- Products: create drafts, edit names/descriptions/images, set prices and cost, update stock and parcel dimensions, publish, and archive. Archived products stay in admin history and cannot be bought. SKU values must be unique. The editor rejects saves made from a stale product version.
+- Coupons: create percentage or fixed discounts, set minimum order amounts, percentage caps, expiry dates (end of day UTC), enable/disable, and inspect order usage counts. Codes are normalized to uppercase and cannot be renamed. Checkout enforces these rules and limits discounts to the cart subtotal.
+- The live shop (`/shop`) and product pages (`/catalog/{id}`) use the API catalog. Pricing is recalculated by the server at checkout. Manual orders use the current catalog and support coupons; payment collection must be explicitly recorded.
+- Customers: edit contact name, phone, and default address from the customer detail view. Account email and past order details remain intact.
+- Catalog API: admin-only `GET/POST /api/admin/catalog/products`, `PUT/DELETE /api/admin/catalog/products/{id}`, `GET/POST /api/admin/catalog/coupons`, `PUT/DELETE /api/admin/catalog/coupons/{code}`. DELETE archives products or disables coupons. `PUT /api/admin/customers/{id}` updates contact details.
+- Admin styling is isolated in `src/Nuraherbex.UI/wwwroot/css/admin.css`. The responsive sidebar groups everyday operations and storefront tools. The overview uses real orders, customer counts, stock and offer data.
+- Verification: `dotnet run --project tools/AdminAuthChecks -c Release` exercises role restrictions, catalog publication, price and stock validation, coupon rules, customer updates and archival with an isolated in-memory database. Use `pwsh -File build-ui.ps1 -Project src/Nuraherbex.Web/Nuraherbex.Web.csproj -Configuration Release` when Visual Studio holds Debug assemblies open.
+
+No database migration is required for these management screens: they use the existing products, coupons, customers and orders tables. Product images are provided by URL; binary image uploading and payment refunds are not implemented by this change. Production payment/courier credentials and live transaction verification are separate deployment requirements.
+
+
+## Shadowfax integration
+
+See [SHADOWFAX_DEPLOYMENT.md](SHADOWFAX_DEPLOYMENT.md) for the current packing-before-booking flow, API routes, callback configuration, migrations, and offline checks. Orders are now saved before online payment confirmation; shipment booking requires an explicit admin packing action.

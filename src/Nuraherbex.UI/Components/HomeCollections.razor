@@ -1,0 +1,29 @@
+<section class="hm-section hm-section-alt">
+  <div class="hm-wrap">
+    <header class="hm-head reveal-on-scroll">
+      <span class="hm-kicker">Shop by goal</span>
+      <h2>Find what your body needs</h2>
+    </header>
+    <div class="hm-tiles">
+      @foreach (var t in Tiles)
+      {
+        <a class="hm-tile reveal-on-scroll" href="/shop">
+          <img src="@t.Image" alt="" loading="lazy" />
+          <div class="hm-tile-shade"></div>
+          <div class="hm-tile-text"><span>@t.Tag</span><h3>@t.Title</h3><em>Shop now <Icon Name="ArrowRight" Size="14" /></em></div>
+        </a>
+      }
+    </div>
+  </div>
+</section>
+
+@code {
+    private record Tile(string Tag, string Title, string Image);
+    private static readonly Tile[] Tiles =
+    {
+        new("Energy", "All-day stamina", Media.Incred1),
+        new("Focus", "Clarity & drive", Media.Incred2),
+        new("Recovery", "Rest & restore", Media.Incred3),
+        new("Vitality", "Everyday strength", Media.Incred4),
+    };
+}

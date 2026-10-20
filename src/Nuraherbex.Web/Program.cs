@@ -8,7 +8,7 @@ builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
 // API address comes from wwwroot/appsettings.json (and appsettings.{Environment}.json).
-var apiBase = builder.Configuration["ApiBaseUrl"] ?? "http://localhost:5118/";
+var apiBase = builder.Configuration["ApiBaseUrl"] ?? "https://nuraapi.apmiot.com/";
 builder.Services.AddNuraherbexUI(apiBase);
 
 await builder.Build().RunAsync();

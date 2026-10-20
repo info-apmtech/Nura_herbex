@@ -9,7 +9,7 @@ using Nuraherbex.Shared.Models;
 
 namespace Nuraherbex.Api.Services;
 
-public class PayUService(NuraDbContext db, OrderService orders, IOptions<PayUOptions> payu, IOptions<StoreOptions> store, ILogger<PayUService> log)
+public class PayUService(NuraDbContext db, OrderService orders, OrderOperationLock operationLock, IOptions<PayUOptions> payu, IOptions<StoreOptions> store, ILogger<PayUService> log)
 {
     private readonly PayUOptions _p = payu.Value;
 
@@ -33,7 +33,7 @@ public class PayUService(NuraDbContext db, OrderService orders, IOptions<PayUOpt
 
     public async Task<PayUInitiateResponse> InitiateAsync(string orderId, string callbackBase)
     {
-        // The order is either already saved (admin-created) or held as a snapshot until payment succeeds (public checkout).
+        // New orders are saved before payment; snapshots support legacy checkout recovery.
         var saved = await orders.GetAsync(orderId);
         if (saved?.PaymentStatus == "PAID") throw new InvalidOperationException($"Order {orderId} is already paid");
 
@@ -86,7 +86,7 @@ public class PayUService(NuraDbContext db, OrderService orders, IOptions<PayUOpt
 
     /// <summary>
     /// Verifies the PayU callback/webhook (reverse hash, status, amount). Success creates the order and settles it;
-    /// anything else is stored as a failure record and no order is created.
+    /// failures remain recorded against the pending order.
     /// </summary>
     public async Task<Order> ProcessResponseAsync(IReadOnlyDictionary<string, string> p)
     {
@@ -97,14 +97,16 @@ public class PayUService(NuraDbContext db, OrderService orders, IOptions<PayUOpt
         if (string.IsNullOrEmpty(orderId) && txnid.Contains('_')) orderId = txnid.Split('_')[1];
         if (string.IsNullOrEmpty(orderId)) throw new InvalidOperationException("Order identifier missing in PayU response");
 
+        await using var lease = await operationLock.AcquireAsync(orderId);
+        db.ChangeTracker.Clear();
         var raw = JsonSerializer.Serialize(p);
         var attempt = (string.IsNullOrEmpty(txnid) ? null : await db.PaymentAttempts.FirstOrDefaultAsync(a => a.TxnId == txnid))
             ?? await orders.FindHeldAttemptAsync(orderId);
         var saved = await orders.GetAsync(orderId);
-        if (attempt is null && saved is null) throw new InvalidOperationException($"Order {orderId} not found");
+        if (attempt is null) throw new InvalidOperationException("Payment transaction was not initiated by this application.");
 
-        // PayU also calls this as a webhook, so a repeat of an already-settled payment is a no-op.
-        if (attempt is { Status: "SUCCESS" } && saved is not null) return saved;
+        if (attempt is not null && (attempt.OrderId != orderId || attempt.TxnId != txnid))
+            throw new InvalidOperationException("Payment transaction does not match the order.");
 
         if (!_p.IsConfigured && _p.AllowSimulation && G("simulated") == "true")
         {
@@ -120,6 +122,8 @@ public class PayUService(NuraDbContext db, OrderService orders, IOptions<PayUOpt
             throw new InvalidOperationException("PayU reverse hash verification failed. Potential tampering detected.");
         }
 
+        if (G("key") != _p.MerchantKey) throw new InvalidOperationException("Payment merchant does not match.");
+        if (attempt is { Status: "SUCCESS" } && saved is not null) return saved;
         var status = G("status");
         if (!string.Equals(status, "success", StringComparison.OrdinalIgnoreCase))
         {
@@ -134,7 +138,7 @@ public class PayUService(NuraDbContext db, OrderService orders, IOptions<PayUOpt
 
         var expected = saved?.TotalAmount ?? attempt!.Amount;
         if (!decimal.TryParse(G("amount"), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var paid)
-            || Math.Abs(paid - expected) > 1m)
+            || paid != expected)
         {
             var msg = $"Payment amount mismatch: Expected ₹{expected}, received ₹{G("amount")}";
             await RecordFailureAsync(attempt, orderId, "FAILED", msg, raw, p);
