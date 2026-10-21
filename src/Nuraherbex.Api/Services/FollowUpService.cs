@@ -18,6 +18,8 @@ public static class JourneyPlan
             "Hi {name}, welcome to the Nura Herbex family 🌿 Your order {orderId} has been delivered. Please follow the usage instructions printed on the pack. Reply here any time if you have a question about how to use it."),
         new("day3-usage", 3, FollowUpTypes.WhatsApp, "Day 3 · Usage check",
             "Hi {name}, it has been a few days since your Stamix arrived. Are you finding the routine easy to follow? Reply here if you need any help."),
+        new("day5-progress", 5, FollowUpTypes.WhatsApp, "Day 5 · Progress check",
+            "Hi {name}, you are five days into your Stamix routine. Many customers start noticing steadier energy around now. How are you finding it? Reply here if you would like any tips."),
         new("day7-experience", 7, FollowUpTypes.WhatsApp, "Day 7 · Experience check",
             "Hi {name}, how has your first week with Stamix been? We would love to hear your experience, and our team is here if you have any questions."),
         new("day8-review", 8, FollowUpTypes.Review, "Day 8 · Ask for a review",
@@ -28,6 +30,8 @@ public static class JourneyPlan
             "Hi {name}, your Stamix pack will be finishing soon. Reorder now to continue without a break: {storeLink}"),
         new("day14-reorder-followup", 14, FollowUpTypes.Reorder, "Day 14-15 · Reorder follow-up",
             "Hi {name}, just checking whether you would like to reorder Stamix. Reply here and we will arrange it for you."),
+        new("day15-wrapup", 15, FollowUpTypes.WhatsApp, "Day 15 · Journey wrap-up",
+            "Hi {name}, it has been 15 days since your Stamix arrived. Thank you for trusting Nura Herbex 🌿 Tell us how it went, and reorder any time here: {storeLink}"),
     ];
 
     public static Step? Find(string? key) => Steps.FirstOrDefault(s => s.Key == key);
@@ -53,6 +57,7 @@ public class FollowUpService(
 
     public static DateTime IstNow => TimeZoneInfo.ConvertTimeFromUtc(Clock(), Ist);
     public static DateTime ToUtc(DateTime istLocal) => TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(istLocal, DateTimeKind.Unspecified), Ist);
+    public static DateTime ToIst(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(AsUtc(utc), Ist);
     public static DateTime TodayStartUtc() => ToUtc(IstNow.Date);
 
     /// <summary>The given instant moved to "day N at 10:00 IST".</summary>
@@ -267,11 +272,29 @@ public class FollowUpService(
             sent = await whatsapp.SendTemplateAsync(lead.Phone, t.Name, TemplateParams(t, lead, item.OrderId), item.OrderId, actor);
         else return (false, "The 24-hour reply window is closed and no approved template is set for this step. Call the customer or wait for them to message.");
 
-        if (!sent) return (false, "WhatsApp could not send the message. Check the WhatsApp credentials in the server configuration.");
+        if (!sent) return (false, whatsapp.LastError ?? "WhatsApp could not send the message. Check the WhatsApp credentials in the server configuration.");
         item.Status = "done"; item.CompletedAt = Clock(); item.CompletedBy = actor; item.Outcome = "Sent on WhatsApp";
         await db.SaveChangesAsync();
         await CloseJourneyIfFinishedAsync(item);
         return (true, "Message sent and task completed.");
+    }
+
+    /// <summary>Sends every message in <paramref name="pending"/> one by one, stopping as soon as the monthly WhatsApp limit is reached.</summary>
+    public async Task<(int Sent, int Failed, int Skipped, string Message)> SendDueAsync(IQueryable<FollowUp> pending, string actor, int max = 50)
+    {
+        var items = await pending.Where(f => f.Status == "pending" && f.SuggestedMessage != null && f.SuggestedMessage != "").OrderBy(f => f.DueAt).Take(max).ToListAsync();
+        int sent = 0, failed = 0, skipped = 0;
+        string? firstProblem = null;
+        foreach (var item in items)
+        {
+            var (ok, message) = await SendNowAsync(item, actor);
+            if (ok) { sent++; continue; }
+            if (whatsapp.LimitReached) { firstProblem = message; skipped = items.Count - sent - failed; break; }
+            failed++; firstProblem ??= message;
+        }
+        var text = items.Count == 0 ? "There are no messages waiting to be sent."
+            : $"Sent {sent} message{(sent == 1 ? "" : "s")}." + (failed > 0 ? $" {failed} could not be sent." : "") + (skipped > 0 ? $" {skipped} not attempted because the monthly limit was reached." : "") + (firstProblem is not null && sent < items.Count ? $" {firstProblem}" : "");
+        return (sent, failed, skipped, text);
     }
 
     // ---------------------------------------------------------------------
@@ -283,6 +306,7 @@ public class FollowUpService(
         var started = await EnsureStartedAtAsync();
         var settings = await GetSettingsAsync();
         await SyncOrdersAsync(settings, started);
+        await AddMissingJourneyStepsAsync();
         await SendRemindersAsync();
         if (settings.AutoSend) await AutoSendAsync();
         await EscalateAsync();
@@ -373,6 +397,40 @@ public class FollowUpService(
         log.LogInformation("[FollowUp] Journey started for lead {Lead} order {Order}", lead.Id, order.Id);
     }
 
+    /// <summary>
+    /// Journeys that started before a step was added (for example Day 5 and Day 15) get that step too, as long as its day has not already passed.
+    /// </summary>
+    private async Task AddMissingJourneyStepsAsync()
+    {
+        var since = Clock().AddDays(-20);
+        var active = await db.JourneyEnrollments.Where(e => e.Status == "active" && e.AnchorAt >= since).Take(200).ToListAsync();
+        if (active.Count == 0) return;
+        var ids = active.Select(e => e.Id).ToList();
+        var have = (await db.FollowUps.AsNoTracking().Where(f => f.EnrollmentId != null && ids.Contains(f.EnrollmentId.Value)).Select(f => f.EnrollmentId + "|" + f.StepKey).ToListAsync()).ToHashSet();
+        var days = await ReminderDaysAsync();
+        var now = Clock();
+        var added = 0;
+        foreach (var e in active)
+        {
+            var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == e.LeadId);
+            if (lead is null) continue;
+            foreach (var step in JourneyPlan.Steps)
+            {
+                if (have.Contains(e.Id + "|" + step.Key)) continue;
+                var due = AtTenAm(e.AnchorAt, step.Day);
+                if (due < now.AddDays(-1)) continue; // that moment is long gone; do not create a stale task
+                var item = NewItem(lead, step.Type, step.Title, step.Type == FollowUpTypes.Call ? step.Message : null, due, lead.AssignedToEmployeeId, "journey", "journey");
+                item.OrderId = e.OrderId; item.EnrollmentId = e.Id; item.StepKey = step.Key;
+                item.SuggestedMessage = step.Type == FollowUpTypes.Call ? null : Fill(step.Message, lead, e.OrderId);
+                var remind = due.AddDays(-days);
+                item.RemindAt = days > 0 && remind > now.AddMinutes(5) ? remind : null;
+                db.FollowUps.Add(item);
+                added++;
+            }
+        }
+        if (added > 0) { await SaveQuietlyAsync(); log.LogInformation("[FollowUp] Added {Count} missing journey step(s) to running journeys", added); }
+    }
+
     private async Task SendRemindersAsync()
     {
         var now = Clock();
@@ -417,6 +475,7 @@ public class FollowUpService(
     {
         var hour = IstNow.Hour;
         if (hour < 9 || hour >= 20) return;
+        if (await whatsapp.IsLimitReachedAsync()) return; // nothing is sent once the monthly allowance is used; the tasks stay in the list
         var now = Clock();
         var items = await db.FollowUps.Where(f => f.Status == "pending" && f.Source == "journey" && f.DueAt <= now
             && (f.Type == FollowUpTypes.WhatsApp || f.Type == FollowUpTypes.Review || f.Type == FollowUpTypes.Reorder)).OrderBy(f => f.DueAt).Take(25).ToListAsync();
@@ -428,6 +487,7 @@ public class FollowUpService(
             if (!await whatsapp.SendTemplateAsync(lead.Phone, t.Name, TemplateParams(t, lead, f.OrderId), f.OrderId))
             {
                 log.LogWarning("[FollowUp] Auto-send of {Step} to lead {Lead} failed; left as a task", key, lead.Id);
+                if (whatsapp.LimitReached) return;
                 continue;
             }
             f.Status = "done"; f.CompletedAt = now; f.CompletedBy = "auto"; f.Outcome = $"Sent automatically ({t.Name})";

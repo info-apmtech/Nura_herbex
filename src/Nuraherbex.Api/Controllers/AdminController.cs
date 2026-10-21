@@ -362,11 +362,25 @@ public class AdminController(
         OutboundCount = await db.WhatsAppMessages.CountAsync(m => m.Direction == "outbound"),
     };
 
+    /// <summary>Monthly sending allowance and usage. Changing it needs "change" access to the WhatsApp page.</summary>
+    [HttpGet("whatsapp/limit"), Authorize(Roles = "admin,sales")]
+    public Task<WhatsAppLimitDto> WhatsAppLimit() => whatsapp.GetLimitStatusAsync();
+
+    [HttpPut("whatsapp/limit"), Authorize(Roles = "admin,sales")]
+    public async Task<IActionResult> SaveWhatsAppLimit(WhatsAppLimitRequest r)
+    {
+        if (r.Limit < 0) return BadRequest(new ApiResult { Success = false, Message = "The limit cannot be negative. Use 0 for no limit." });
+        await whatsapp.SaveLimitAsync(r);
+        var s = await whatsapp.GetLimitStatusAsync();
+        s.Message = s.Limit == 0 && s.Budget == 0 ? "Saved. WhatsApp messages are not capped." : $"Saved. {(s.Limit > 0 ? $"Limit {s.Limit:N0} messages. " : "")}{(s.Budget > 0 ? $"Budget ₹{s.Budget:N2}. " : "")}{s.Used:N0} sent so far in {s.Month} (₹{s.Spent:N2} estimated).";
+        return Ok(s);
+    }
+
     [HttpGet("whatsapp/messages"), Authorize(Roles = "admin,sales")]
     public async Task<WhatsAppMessageListResponse> WhatsAppMessages([FromQuery] int take = 100) => new()
     {
         Success = true,
-        Messages = (await db.WhatsAppMessages.AsNoTracking().OrderByDescending(m => m.CreatedAt).Take(Math.Clamp(take, 1, 500)).ToListAsync()).Select(m => m.ToDto(mediaSigner)).ToList(),
+        Messages = (await db.WhatsAppMessages.AsNoTracking().OrderByDescending(m => m.CreatedAt).Take(Math.Clamp(take, 1, 2000)).ToListAsync()).Select(m => m.ToDto(mediaSigner)).ToList(),
     };
 
     [HttpPost("whatsapp/send"), Authorize(Roles = "admin,sales")]
@@ -375,6 +389,6 @@ public class AdminController(
         if (string.IsNullOrWhiteSpace(r.Phone) || string.IsNullOrWhiteSpace(r.Text))
             return BadRequest(new ApiResult { Success = false, Message = "Phone and text are required" });
         var ok = await whatsapp.SendTextAsync(r.Phone, r.Text, r.OrderId, User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "admin");
-        return Ok(new ApiResult { Success = ok, Message = ok ? "Message sent" : "Message could not be sent. Check WhatsApp credentials, and that the customer messaged you in the last 24h (or use a template)." });
+        return Ok(new ApiResult { Success = ok, Message = ok ? "Message sent" : whatsapp.LastError ?? "Message could not be sent. Check WhatsApp credentials, and that the customer messaged you in the last 24h (or use a template)." });
     }
 }

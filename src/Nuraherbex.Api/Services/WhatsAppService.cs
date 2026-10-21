@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nuraherbex.Api.Data;
 using Nuraherbex.Api.Options;
+using Nuraherbex.Shared.Models;
 
 namespace Nuraherbex.Api.Services;
 
@@ -299,7 +300,10 @@ public partial class WhatsAppService(
         if (msg is null) return;
         msg.Status = status; // sent | delivered | read | failed
         if (status == "failed" && s.TryGetProperty("errors", out var errs) && errs.GetArrayLength() > 0)
+        {
             log.LogWarning("[WhatsApp] Message {Id} failed: {Err}", id, errs[0].GetRawText());
+            await NotifyFailureAsync("WhatsApp message could not be delivered", $"WhatsApp reported a delivery failure to +{msg.Phone}. Open the WhatsApp log to see which messages failed.");
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -381,13 +385,149 @@ public partial class WhatsAppService(
             },
         }, "template", $"[template:{template}] {string.Join(" | ", bodyParams)}", orderId, sentBy);
 
+    // ---------------------------------------------------------------------
+    // Monthly sending limit (admin-controlled)
+    // ---------------------------------------------------------------------
+
+    private const string KeyCostTemplate = "whatsapp.costTemplate", KeyCostText = "whatsapp.costText", KeyBudget = "whatsapp.monthlyBudget";
+    private const string KeyLimit = "whatsapp.monthlyLimit", KeyWarnPercent = "whatsapp.warnPercent", KeyWarnedMonth = "whatsapp.warnedMonth", KeyReachedMonth = "whatsapp.reachedMonth";
+
+    /// <summary>Why the last send did not go out, when the reason is something staff can act on (for example the monthly limit).</summary>
+    public string? LastError { get; private set; }
+
+    /// <summary>True when the last send was refused because the monthly limit is used up.</summary>
+    public bool LimitReached { get; private set; }
+
+    private async Task<string?> GetSettingAsync(string key) => (await db.SiteSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == key))?.Value;
+
+    private async Task SetSettingAsync(string key, string value)
+    {
+        var row = await db.SiteSettings.FirstOrDefaultAsync(s => s.Key == key);
+        if (row is null) db.SiteSettings.Add(new SiteSetting { Key = key, Value = value });
+        else { row.Value = value; row.UpdatedAt = DateTime.UtcNow; }
+    }
+
+    /// <summary>The current Indian calendar month as UTC bounds plus a label such as "October 2026".</summary>
+    private static (DateTime Start, DateTime End, string Label) MonthRange()
+    {
+        var ist = FollowUpService.IstNow;
+        var start = new DateTime(ist.Year, ist.Month, 1);
+        return (FollowUpService.ToUtc(start), FollowUpService.ToUtc(start.AddMonths(1)), ist.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    public async Task<WhatsAppLimitDto> GetLimitStatusAsync()
+    {
+        var (start, end, label) = MonthRange();
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var limit = int.TryParse(await GetSettingAsync(KeyLimit), out var l) ? Math.Max(0, l) : 0;
+        var warn = int.TryParse(await GetSettingAsync(KeyWarnPercent), out var w) ? Math.Clamp(w, 1, 100) : 80;
+        var costTemplate = decimal.TryParse(await GetSettingAsync(KeyCostTemplate), System.Globalization.NumberStyles.Number, inv, out var ct) ? Math.Max(0, ct) : 0m;
+        var costText = decimal.TryParse(await GetSettingAsync(KeyCostText), System.Globalization.NumberStyles.Number, inv, out var cx) ? Math.Max(0, cx) : 0m;
+        var budget = decimal.TryParse(await GetSettingAsync(KeyBudget), System.Globalization.NumberStyles.Number, inv, out var b) ? Math.Max(0, b) : 0m;
+
+        var rows = await db.WhatsAppMessages.AsNoTracking().Where(m => m.Direction == "outbound" && m.CreatedAt >= start && m.CreatedAt < end)
+            .Select(m => new { m.Type, m.Status }).ToListAsync();
+        // Failed attempts never reached the customer, so they use neither the allowance nor the budget.
+        var delivered = rows.Where(r => r.Status != "failed").ToList();
+        var used = delivered.Count;
+        var templates = delivered.Count(r => r.Type == "template");
+        var texts = used - templates;
+        var spent = templates * costTemplate + texts * costText;
+
+        var msgPct = limit == 0 ? 0 : (int)Math.Min(100, Math.Round(100.0 * used / limit));
+        var spendPct = budget == 0 ? 0 : (int)Math.Min(100, Math.Round(100.0 * (double)spent / (double)budget));
+        var percent = Math.Max(msgPct, spendPct);
+        var reached = (limit > 0 && used >= limit) || (budget > 0 && spent >= budget);
+        return new WhatsAppLimitDto
+        {
+            Success = true, Limit = limit, Used = used, Remaining = limit == 0 ? 0 : Math.Max(0, limit - used), Percent = percent, WarnPercent = warn, Month = label,
+            Reached = reached, Warning = !reached && ((limit > 0 && msgPct >= warn) || (budget > 0 && spendPct >= warn)),
+            CostTemplate = costTemplate, CostText = costText, Budget = budget, Spent = spent, SpentPercent = spendPct,
+            BudgetRemaining = budget == 0 ? 0 : Math.Max(0, budget - spent), TemplateCount = templates, TextCount = texts,
+            DeliveredCount = rows.Count(r => r.Status is "delivered" or "read"), ReadCount = rows.Count(r => r.Status == "read"), FailedCount = rows.Count(r => r.Status == "failed"),
+            LimitHit = limit > 0 && used >= limit, BudgetHit = budget > 0 && spent >= budget,
+        };
+    }
+
+    public async Task SaveLimitAsync(WhatsAppLimitRequest r)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        await SetSettingAsync(KeyLimit, Math.Clamp(r.Limit, 0, 10_000_000).ToString(inv));
+        await SetSettingAsync(KeyWarnPercent, Math.Clamp(r.WarnPercent, 1, 100).ToString(inv));
+        await SetSettingAsync(KeyCostTemplate, Math.Clamp(r.CostTemplate, 0m, 10_000m).ToString(inv));
+        await SetSettingAsync(KeyCostText, Math.Clamp(r.CostText, 0m, 10_000m).ToString(inv));
+        await SetSettingAsync(KeyBudget, Math.Clamp(r.Budget, 0m, 100_000_000m).ToString(inv));
+        // New allowances start a fresh round of warnings.
+        await SetSettingAsync(KeyWarnedMonth, "");
+        await SetSettingAsync(KeyReachedMonth, "");
+        await db.SaveChangesAsync();
+    }
+
+    public async Task<bool> IsLimitReachedAsync() => (await GetLimitStatusAsync()).Reached;
+
+    private void NotifyAdmins(string title, string body) =>
+        db.Notifications.Add(new Notification { EmployeeId = null, Kind = "warning", Title = title, Body = body, Link = "/admin/whatsapp" });
+
+    private static string UsageText(WhatsAppLimitDto s)
+    {
+        var parts = new List<string>();
+        if (s.Limit > 0) parts.Add($"{s.Used} of {s.Limit} messages");
+        if (s.Budget > 0) parts.Add($"₹{s.Spent:N2} of ₹{s.Budget:N2} budget");
+        return string.Join(" and ", parts) + $" used for {s.Month}";
+    }
+
+    /// <summary>Tells every administrator once per month when usage (messages or rupees) passes the warning level, and once when a limit is hit.</summary>
+    private async Task RaiseLimitNoticesAsync(WhatsAppLimitDto s)
+    {
+        if (s.Limit <= 0 && s.Budget <= 0) return;
+        if (s.Reached && await GetSettingAsync(KeyReachedMonth) != s.Month)
+        {
+            var what = s.BudgetHit && s.LimitHit ? "message limit and budget reached" : s.BudgetHit ? "monthly budget reached" : "monthly limit reached";
+            NotifyAdmins($"WhatsApp {what}", $"{UsageText(s)}. Sending is paused until next month or until you raise the allowance.");
+            await SetSettingAsync(KeyReachedMonth, s.Month);
+            await SetSettingAsync(KeyWarnedMonth, s.Month);
+            await db.SaveChangesAsync();
+        }
+        else if (s.Warning && await GetSettingAsync(KeyWarnedMonth) != s.Month)
+        {
+            NotifyAdmins($"WhatsApp usage at {s.Percent}%", $"{UsageText(s)}. Sending pauses when the allowance runs out.");
+            await SetSettingAsync(KeyWarnedMonth, s.Month);
+            await db.SaveChangesAsync();
+        }
+    }
+
+    /// <summary>One notification per ten minutes is enough when several messages fail together.</summary>
+    private async Task NotifyFailureAsync(string title, string body)
+    {
+        var since = DateTime.UtcNow.AddMinutes(-10);
+        if (await db.Notifications.AnyAsync(n => n.EmployeeId == null && n.Kind == "warning" && n.Title == title && n.CreatedAt >= since)) return;
+        NotifyAdmins(title, body);
+        await db.SaveChangesAsync();
+    }
+
+    private async Task<bool> WithinLimitAsync()
+    {
+        var s = await GetLimitStatusAsync();
+        if (!s.Reached) return true;
+        LimitReached = true;
+        LastError = s.BudgetHit && !s.LimitHit
+            ? $"The monthly WhatsApp budget of ₹{s.Budget:N2} has been used for {s.Month}. Sending resumes next month, or an administrator can raise the budget."
+            : $"The monthly WhatsApp limit of {s.Limit} messages has been reached for {s.Month}. Sending resumes next month, or an administrator can raise the limit.";
+        log.LogWarning("[WhatsApp] Monthly allowance reached ({Used} messages, ₹{Spent}); outbound skipped", s.Used, s.Spent);
+        await RaiseLimitNoticesAsync(s);
+        return false;
+    }
+
     private async Task<bool> SendAsync(string phone, object payload, string type, string logBody, string? orderId, string? sentBy)
     {
+        LastError = null; LimitReached = false;
         if (!_o.CanSend)
         {
             log.LogWarning("[WhatsApp] Access token / phone number id not configured — outbound skipped");
+            LastError = "WhatsApp is not configured on the server (access token or phone number id missing).";
             return false;
         }
+        if (!await WithinLimitAsync()) return false;
 
         using var req = new HttpRequestMessage(HttpMethod.Post, $"https://graph.facebook.com/{_o.ApiVersion}/{_o.PhoneNumberId}/messages")
         {
@@ -414,11 +554,18 @@ public partial class WhatsAppService(
                 Type = type, Body = logBody, Status = res.IsSuccessStatusCode ? "sent" : "failed", OrderId = orderId, LeadId = leadId, SentBy = sentBy ?? "system",
             });
             await db.SaveChangesAsync();
+            if (res.IsSuccessStatusCode) await RaiseLimitNoticesAsync(await GetLimitStatusAsync());
+            else
+            {
+                LastError = $"WhatsApp rejected the message (HTTP {(int)res.StatusCode}). The customer may need to message you first, or use an approved template.";
+                await NotifyFailureAsync("WhatsApp message failed to send", $"A message to +{NormalizePhone(phone)} was rejected by WhatsApp (HTTP {(int)res.StatusCode}). Open the WhatsApp log to see the details.");
+            }
             return res.IsSuccessStatusCode;
         }
         catch (Exception ex)
         {
             log.LogWarning(ex, "[WhatsApp] Send exception");
+            LastError = "WhatsApp could not be reached. Check the server connection and try again.";
             return false;
         }
     }

@@ -61,6 +61,10 @@ public class FollowUpCounts
     public int Today { get; set; }
     public int Upcoming { get; set; }
     public int Done { get; set; }
+    /// <summary>Pending WhatsApp messages due today or earlier that can be sent straight from the list.</summary>
+    public int Messages { get; set; }
+    /// <summary>Messages sent from follow-ups in the last 30 days.</summary>
+    public int Sent { get; set; }
 }
 
 public class FollowUpListResponse : ApiResult
@@ -196,4 +200,83 @@ public class FollowUpTrendPoint
     public string Day { get; set; } = "";
     public int Due { get; set; }
     public int Done { get; set; }
+}
+
+/// <summary>Monthly WhatsApp sending allowance and how much of it has been used (Indian calendar month).</summary>
+public class WhatsAppLimitDto : ApiResult
+{
+    /// <summary>Messages allowed per month; 0 means no limit.</summary>
+    public int Limit { get; set; }
+    public int Used { get; set; }
+    public int Remaining { get; set; }
+    public int Percent { get; set; }
+    /// <summary>Admins are warned when usage passes this percentage.</summary>
+    public int WarnPercent { get; set; } = 80;
+    public string Month { get; set; } = "";
+    public bool Reached { get; set; }
+    public bool Warning { get; set; }
+    /// <summary>Estimated cost in rupees of one approved-template message.</summary>
+    public decimal CostTemplate { get; set; }
+    /// <summary>Estimated cost in rupees of one free-form message (usually 0 inside the 24-hour reply window).</summary>
+    public decimal CostText { get; set; }
+    /// <summary>Monthly spend cap in rupees; 0 means no budget.</summary>
+    public decimal Budget { get; set; }
+    public decimal Spent { get; set; }
+    public decimal BudgetRemaining { get; set; }
+    public int SpentPercent { get; set; }
+    public int TemplateCount { get; set; }
+    public int TextCount { get; set; }
+    public int DeliveredCount { get; set; }
+    public int ReadCount { get; set; }
+    public int FailedCount { get; set; }
+    /// <summary>True when the message count limit is what stopped sending.</summary>
+    public bool LimitHit { get; set; }
+    /// <summary>True when the rupee budget is what stopped sending.</summary>
+    public bool BudgetHit { get; set; }
+}
+
+public class WhatsAppLimitRequest
+{
+    public int Limit { get; set; }
+    public int WarnPercent { get; set; } = 80;
+    public decimal CostTemplate { get; set; }
+    public decimal CostText { get; set; }
+    public decimal Budget { get; set; }
+}
+
+// ---------------------------------------------------------------------------
+// Reports (one generic shape so every report is a data table that can be exported)
+// ---------------------------------------------------------------------------
+public class ReportStat
+{
+    public string Label { get; set; } = "";
+    public string Value { get; set; } = "";
+    public string? Hint { get; set; }
+    /// <summary>neutral | good | warn | bad</summary>
+    public string Tone { get; set; } = "neutral";
+}
+
+public class ReportInfo
+{
+    public string Key { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Description { get; set; } = "";
+}
+
+public class ReportListResponse : ApiResult
+{
+    public List<ReportInfo> Reports { get; set; } = new();
+}
+
+public class ReportResponse : ApiResult
+{
+    public string Key { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string Period { get; set; } = "";
+    public List<string> Columns { get; set; } = new();
+    public List<List<string>> Rows { get; set; } = new();
+    public List<ReportStat> Summary { get; set; } = new();
+    /// <summary>True when more records matched than are shown; narrow the dates for the rest.</summary>
+    public bool Truncated { get; set; }
 }

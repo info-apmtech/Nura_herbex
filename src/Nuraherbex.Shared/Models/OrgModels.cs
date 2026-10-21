@@ -36,6 +36,7 @@ public static class PageCatalog
         new("batches", "Batch reports", "Store", Admin, "Product batch / lab reports."),
         new("formulation", "Formulation", "Store", Admin, "Ingredient and metric content."),
         new("content", "Store content", "Store", Admin, "Website text and images."),
+        new("reports", "Reports", "Admin", Admin, "Orders, leads, follow-ups, WhatsApp, tasks, customers and payments reports with CSV, Excel and PDF export."),
         new("whatsapp", "WhatsApp log", "Admin", Admin, "Raw WhatsApp message log and manual sending."),
         new("team", "Team & organisation", "Admin", Admin, "People, departments, designations and page rights, plus assistant and journey settings."),
     ];
@@ -84,9 +85,11 @@ public static class PageCatalog
     public static readonly (string Name, string Hint, Dictionary<string, int> Rights)[] Presets =
     [
         ("Sales executive", "Works own leads, follow-ups and tasks", new() { ["crm"] = 1, ["leads"] = 1, ["followups"] = 1, ["tasks"] = 1 }),
-        ("Sales manager", "Sees and manages the whole sales team", new() { ["crm"] = 2, ["leads"] = 2, ["followups"] = 2, ["tasks"] = 2, ["customers"] = 1, ["orders"] = 1, ["team"] = 1 }),
+        ("Sales manager", "Sees and manages the whole sales team", new() { ["crm"] = 2, ["leads"] = 2, ["followups"] = 2, ["tasks"] = 2, ["customers"] = 1, ["orders"] = 1, ["team"] = 1, ["reports"] = 1 }),
         ("Customer support", "Helps customers, checks orders and reviews", new() { ["leads"] = 1, ["followups"] = 1, ["tasks"] = 1, ["customers"] = 1, ["orders"] = 1, ["reviews"] = 2 }),
         ("Operations", "Packs and ships orders, manages stock", new() { ["tasks"] = 1, ["overview"] = 1, ["orders"] = 2, ["payments"] = 1, ["customers"] = 1, ["products"] = 2, ["batches"] = 2, ["coupons"] = 1 }),
+        ("Marketing", "Runs campaigns, coupons, reviews and website content", new() { ["leads"] = 1, ["followups"] = 1, ["tasks"] = 1, ["customers"] = 1, ["reviews"] = 2, ["coupons"] = 2, ["content"] = 2, ["whatsapp"] = 1 }),
+        ("Designer", "Creates banners, creatives and product visuals", new() { ["tasks"] = 1, ["products"] = 1, ["content"] = 2, ["formulation"] = 1 }),
         ("Read-only", "Can look but not change anything", new() { ["crm"] = 1, ["leads"] = 1, ["followups"] = 1, ["tasks"] = 1, ["overview"] = 1, ["orders"] = 1, ["customers"] = 1, ["products"] = 1 }),
         ("Everything", "Full access to every page", AllFull()),
     ];

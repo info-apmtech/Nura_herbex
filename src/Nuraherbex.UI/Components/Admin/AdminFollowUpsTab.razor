@@ -9,6 +9,7 @@
         <div>
             <p>@(AdminAuth.CanAll("followups") ? "Every call, message and order check across the team: what is late, what is due today, and what is coming." : "Your calls and messages to do. Late ones come first.")</p>
         </div>
+        <ExportButton Title="Follow-ups" FileName="nura-followups" Columns="@(new[] { "Due", "Lead", "Phone", "Type", "Task", "Owner", "Status", "Completed", "Completed by", "Outcome", "Order" })" Rows="ExportRows" Disabled="@(_items.Count == 0)" />
         <button type="button" class="ld-btn primary" @onclick="() => _composer = true"><Icon Name="Plus" Size="14" /> New follow-up</button>
     </div>
 
@@ -34,12 +35,27 @@
     else
     {
         @* Status chips double as the filter *@
-        <div class="fu-chips">
+        <WhatsAppUsageBar @ref="_usageBar" />
+
+        <div class="fu-chips five">
             <button type="button" class="@ChipClass("overdue", "late")" @onclick='() => SetScopeAsync("overdue")'><b>@_counts.Overdue</b><span>Overdue</span></button>
             <button type="button" class="@ChipClass("today", "today")" @onclick='() => SetScopeAsync("today")'><b>@_counts.Today</b><span>Due today</span></button>
+            <button type="button" class="@ChipClass("messages", "msg")" @onclick='() => SetScopeAsync("messages")' title="WhatsApp messages ready to send now"><b>@_counts.Messages</b><span>Messages to send</span></button>
             <button type="button" class="@ChipClass("upcoming", "")" @onclick='() => SetScopeAsync("upcoming")'><b>@_counts.Upcoming</b><span>Coming up</span></button>
-            <button type="button" class="@ChipClass("done", "")" @onclick='() => SetScopeAsync("done")'><b>@_counts.Done</b><span>Done (30 days)</span></button>
+            <button type="button" class="@ChipClass("sent", "")" @onclick='() => SetScopeAsync("sent")' title="Messages sent from follow-ups, last 30 days"><b>@_counts.Sent</b><span>Sent (30 days)</span></button>
         </div>
+        <div class="fu-chips-more"><button type="button" class="fu-skip" @onclick='() => SetScopeAsync("done")'>Show everything completed in the last 30 days (@_counts.Done)</button></div>
+
+        @if (_scope == "messages")
+        {
+            <div class="fu-sendbar">
+                <p>@(_counts.Messages == 0 ? "No messages are waiting." : $"{_counts.Messages} message{(_counts.Messages == 1 ? "" : "s")} due today or earlier. Review them below, send one at a time with Send, or send them all at once.")</p>
+                @if (_counts.Messages > 0)
+                {
+                    <button type="button" class="ld-btn primary" disabled="@_sendingAll" @onclick="SendAllAsync"><Icon Name="Send" Size="14" /> @(_sendingAll ? "Sending…" : $"Send all {_counts.Messages} on WhatsApp")</button>
+                }
+            </div>
+        }
 
         @if (AdminAuth.CanAll("followups"))
         {
@@ -72,7 +88,7 @@
             }
             else if (_scope == "upcoming")
             {
-                @foreach (var g in _items.GroupBy(i => FuFmt.Local(i.DueAt).Date))
+                @foreach (var g in PageItems.GroupBy(i => FuFmt.Local(i.DueAt).Date))
                 {
                     <h4 class="fu-day">@FuFmt.DayHeading(g.First().DueAt) <small>@g.Count()</small></h4>
                     @foreach (var i in g) { <FollowUpCard @key="i.Id" Item="i" IsAdmin="Everyone" Team="_team" OnChanged="OnChanged" OnOpenLead="OpenLead" /> }
@@ -80,9 +96,10 @@
             }
             else
             {
-                @foreach (var i in _items) { <FollowUpCard @key="i.Id" Item="i" IsAdmin="Everyone" Team="_team" OnChanged="OnChanged" OnOpenLead="OpenLead" /> }
+                @foreach (var i in PageItems) { <FollowUpCard @key="i.Id" Item="i" IsAdmin="Everyone" Team="_team" OnChanged="OnChanged" OnOpenLead="OpenLead" /> }
             }
         </div>
+        <Pager Total="@_items.Count" @bind-Page="_page" @bind-PageSize="_size" Label="follow-ups" />
     }
 </div>
 
@@ -95,6 +112,9 @@
     private bool Everyone => AdminAuth.CanAll("followups");
     private readonly CancellationTokenSource _cts = new();
     private List<FollowUpDto> _items = new();
+    private int _page = 1, _size = 10;
+    private IEnumerable<FollowUpDto> PageItems => _items.Skip((_page - 1) * _size).Take(_size);
+    private IEnumerable<IReadOnlyList<string>> ExportRows() => _items.Select(i => (IReadOnlyList<string>)new[] { FuFmt.Local(i.DueAt).ToString("yyyy-MM-dd HH:mm"), i.LeadName, i.LeadPhone, i.Type, i.Title, i.AssignedToName ?? "Unassigned", i.Status, i.CompletedAt is { } c ? FuFmt.Local(c).ToString("yyyy-MM-dd HH:mm") : "", i.CompletedBy ?? "", i.Outcome ?? "", i.OrderId ?? "" });
     private List<EmployeeDto> _team = new();
     private FollowUpCounts _counts = new();
     private string _view = "tasks";
@@ -105,6 +125,8 @@
     private string? _error;
     private bool _loading = true;
     private bool _composer;
+    private bool _sendingAll;
+    private WhatsAppUsageBar? _usageBar;
 
     private string EmptyTitle => _scope switch
     {
@@ -112,6 +134,8 @@
         "today" => "You are all caught up for today",
         "upcoming" => "Nothing scheduled ahead",
         "done" => "Nothing completed yet",
+        "messages" => "No messages are waiting",
+        "sent" => "No messages sent yet",
         _ => "No follow-ups",
     };
 
@@ -121,6 +145,8 @@
         "today" => "New work appears here when a task falls due.",
         "upcoming" => "Schedule a follow-up from a lead, or wait for the 15-day journey of a delivered order to be created.",
         "done" => "Finished follow-ups from the last 30 days are listed here.",
+        "messages" => "Welcome, thank-you and reorder messages appear here when they are due. Nothing is sent until you press Send.",
+        "sent" => "Every message sent from this list, by you or automatically, is kept here for 30 days.",
         _ => "",
     };
 
@@ -166,11 +192,22 @@
         StateHasChanged();
     }
 
-    private async Task SetScopeAsync(string scope) { _scope = scope; _loading = true; await LoadAsync(false); }
+    private async Task SendAllAsync()
+    {
+        _sendingAll = true; _error = null;
+        var res = await Api.AdminSendDueFollowUpsAsync();
+        _sendingAll = false;
+        _toast = res.Message;
+        if (!res.Success) _error = res.Message;
+        await LoadAsync(false);
+        if (_usageBar is not null) await _usageBar.RefreshAsync();
+    }
 
-    private async Task OnFilter(ChangeEventArgs e, Action<string> set) { set(e.Value?.ToString() ?? ""); _loading = true; await LoadAsync(false); }
+    private async Task SetScopeAsync(string scope) { _scope = scope; _page = 1; _loading = true; await LoadAsync(false); }
 
-    private async Task OnChanged(string? message) { _toast = message; await LoadAsync(false); }
+    private async Task OnFilter(ChangeEventArgs e, Action<string> set) { set(e.Value?.ToString() ?? ""); _page = 1; _loading = true; await LoadAsync(false); }
+
+    private async Task OnChanged(string? message) { _toast = message; await LoadAsync(false); if (_usageBar is not null) await _usageBar.RefreshAsync(); }
 
     private async Task OnCreated(string? message) { _composer = false; _toast = message; await LoadAsync(false); }
 

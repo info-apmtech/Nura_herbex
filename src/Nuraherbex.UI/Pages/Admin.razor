@@ -35,7 +35,7 @@ else
         else if (_activeTab == "overview") { <AdminDashboard Orders="_orders" Customers="_customers" Loading="@(_ordersLoading || _customersLoading)" OnNavigate="Navigate" /> }
         else
         {
-            @if (_activeTab is not ("team" or "tasks")) {<div class="admin-section-heading"><div><span class="admin-eyebrow">STORE OPERATIONS</span><h2>@PageName</h2><p>Manage your @PageName.ToLowerInvariant() in one place.</p></div></div>}
+            @if (_activeTab is not ("team" or "tasks" or "reports" or "crm" or "whatsapp")) {<div class="admin-section-heading"><div><span class="admin-eyebrow">STORE OPERATIONS</span><h2>@PageName</h2><p>Manage your @PageName.ToLowerInvariant() in one place.</p></div></div>}
             <div class="admin-legacy">
             @if (_activeTab == "orders") { <AdminOrdersTab Orders="_orders" Loading="_ordersLoading" OnReload="LoadOrdersAsync" /> }
             else if (_activeTab == "payments") { <AdminPaymentsTab Attempts="_payments" Loading="_paymentsLoading" OnReload="LoadPaymentsAsync" /> }
@@ -49,6 +49,7 @@ else
             else if (_activeTab == "whatsapp") { <AdminWhatsAppTab /> }
             else if (_activeTab == "team") { <AdminOrganisation /> }
             else if (_activeTab == "tasks") { <AdminTasksTab /> }
+            else if (_activeTab == "reports") { <AdminReportsTab /> }
             </div>
         }
         <footer class="admin-footer"><span>Nura Herbex · Store administration</span><span>Made for your everyday operations</span></footer>
@@ -65,7 +66,7 @@ else
         new("overview", "Overview", "TrendingUp", "MANAGE"), new("orders", "Orders", "ShoppingBag", "MANAGE"), new("payments", "Payments", "CreditCard", "MANAGE"), new("customers", "Customers", "Users", "MANAGE"),
         new("products", "Products", "Package", "MANAGE"), new("coupons", "Coupons", "Tag", "MANAGE"), new("reviews", "Reviews", "MessageSquare", "MANAGE"),
         new("crm", "Sales dashboard", "BarChart3", "SALES & WORK"), new("leads", "Leads", "Phone", "SALES & WORK"), new("followups", "Follow-ups", "Clock", "SALES & WORK"), new("tasks", "Tasks", "CheckCircle2", "SALES & WORK"),
-        new("whatsapp", "WhatsApp log", "MessageCircle", "ADMIN"), new("team", "Team & organisation", "KeyRound", "ADMIN"),
+        new("reports", "Reports", "BarChart3", "ADMIN"), new("whatsapp", "WhatsApp log", "MessageCircle", "ADMIN"), new("team", "Team & organisation", "KeyRound", "ADMIN"),
         new("batches", "Batch reports", "ShieldCheck", "STOREFRONT & SUPPORT"), new("formulation", "Formulation", "FlaskConical", "STOREFRONT & SUPPORT"), new("content", "Store content", "FileText", "STOREFRONT & SUPPORT"),
     };
     /// <summary>Only the pages this person's designation allows. People who only see their own records get "My" wording.</summary>

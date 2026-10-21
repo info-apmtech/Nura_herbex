@@ -11,7 +11,8 @@
                 </button>
             }
         </div>
-        <button @onclick="() => OnReload.InvokeAsync()" disabled="@Loading"
+        <ExportButton Title="Payment attempts" FileName="nura-payment-attempts" Columns="@(new[] { "When", "Order", "Customer", "Phone", "Email", "Amount (Rs)", "Status", "Mode", "PayU ID", "Transaction", "Reason" })" Rows="ExportRows" Disabled="@(Visible.Count == 0)" />
+            <button @onclick="() => OnReload.InvokeAsync()" disabled="@Loading"
                 class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 self-end sm:self-auto">
             <Icon Name="RefreshCw" Size="12" Class="@(Loading ? "animate-spin" : "")" />
             <span>Sync DB</span>
@@ -37,8 +38,8 @@
                 {
                     <tr><td colspan="9" class="px-3 py-8 text-center text-zinc-500">@(Loading ? "Loading payments..." : "No payment attempts yet.")</td></tr>
                 }
-                @{ _sn = 0; }
-                @foreach (var a in Visible)
+                @{ _sn = (_page - 1) * _size; }
+                @foreach (var a in Visible.Skip((_page - 1) * _size).Take(_size))
                 {
                     <tr class="hover:bg-zinc-900/40"><td class="px-3 py-2 font-mono text-zinc-500">@(++_sn)</td>
                         <td class="px-3 py-2 whitespace-nowrap font-mono text-zinc-400">@a.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</td>
@@ -57,9 +58,13 @@
             </tbody>
         </table>
     </div>
+    <Pager Total="@Visible.Count" @bind-Page="_page" @bind-PageSize="_size" Label="attempts" />
 </div>
 
 @code {
+    private int _page = 1, _size = 10;
+    private IEnumerable<IReadOnlyList<string>> ExportRows() => Visible.Select(a => (IReadOnlyList<string>)new[] { a.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"), a.OrderId, a.CustomerName, a.CustomerPhone, a.CustomerEmail, a.Amount.ToString("0.##"), a.Status, a.PaymentMode ?? "", a.PayuPaymentId ?? "", a.TxnId ?? "", a.FailureReason ?? "" });
+
     private int _sn;
     [Parameter] public List<PaymentAttemptDto> Attempts { get; set; } = new();
     [Parameter] public bool Loading { get; set; }

@@ -13,7 +13,7 @@ namespace Nuraherbex.Api.Controllers;
 [ApiController]
 [Route("api/admin")]
 [Authorize(Roles = "admin,sales")]
-public class FollowUpController(NuraDbContext db, FollowUpService followUps, RightsService rights) : StaffControllerBase(rights)
+public class FollowUpController(NuraDbContext db, FollowUpService followUps, WhatsAppService whatsapp, RightsService rights) : StaffControllerBase(rights)
 {
     private readonly NuraDbContext _db = db;
 
@@ -41,6 +41,8 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Rig
             Today = await q.CountAsync(f => f.Status == "pending" && f.DueAt >= today && f.DueAt < tomorrow),
             Upcoming = await q.CountAsync(f => f.Status == "pending" && f.DueAt >= tomorrow),
             Done = await q.CountAsync(f => f.Status != "pending" && f.CompletedAt >= recentDone),
+            Messages = await q.CountAsync(f => f.Status == "pending" && f.DueAt < tomorrow && f.SuggestedMessage != null && f.SuggestedMessage != ""),
+            Sent = await q.CountAsync(f => f.Status == "done" && f.CompletedAt >= recentDone && f.Outcome != null && f.Outcome.StartsWith("Sent")),
         };
 
         var filtered = scope switch
@@ -49,6 +51,8 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Rig
             "today" => q.Where(f => f.Status == "pending" && f.DueAt >= today && f.DueAt < tomorrow).OrderBy(f => f.DueAt),
             "upcoming" => q.Where(f => f.Status == "pending" && f.DueAt >= tomorrow).OrderBy(f => f.DueAt),
             "done" => q.Where(f => f.Status != "pending" && f.CompletedAt >= recentDone).OrderByDescending(f => f.CompletedAt),
+            "messages" => q.Where(f => f.Status == "pending" && f.DueAt < tomorrow && f.SuggestedMessage != null && f.SuggestedMessage != "").OrderBy(f => f.DueAt),
+            "sent" => q.Where(f => f.Status == "done" && f.CompletedAt >= recentDone && f.Outcome != null && f.Outcome.StartsWith("Sent")).OrderByDescending(f => f.CompletedAt),
             _ => q.Where(f => f.Status == "pending").OrderBy(f => f.DueAt),
         };
         var rows = await filtered.Take(Math.Clamp(take, 1, 500)).ToListAsync();
@@ -127,6 +131,21 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Rig
         var (ok, message) = await followUps.SendNowAsync(item, MyName);
         return ok ? Ok(new ApiResult { Success = true, Message = message }) : BadRequest(new ApiResult { Success = false, Message = message });
     }
+
+    /// <summary>Sends every WhatsApp message that is due today or earlier (the caller's own, or everyone's with full access). Stops when the monthly limit is reached.</summary>
+    [HttpPost("followups/send-due")]
+    public async Task<IActionResult> SendDue()
+    {
+        var tomorrow = FollowUpService.TodayStartUtc().AddDays(1);
+        var q = _db.FollowUps.Where(f => f.Status == "pending" && f.DueAt < tomorrow);
+        if (!CanAll("followups")) q = q.Where(f => f.AssignedToEmployeeId == MyId);
+        var (sent, failed, skipped, message) = await followUps.SendDueAsync(q, MyName);
+        return Ok(new ApiResult { Success = sent > 0 || (failed == 0 && skipped == 0), Message = message });
+    }
+
+    /// <summary>Usage of the monthly WhatsApp allowance, shown above the follow-up list so staff know before sending.</summary>
+    [HttpGet("followups/whatsapp-usage")]
+    public Task<WhatsAppLimitDto> WhatsAppUsage() => whatsapp.GetLimitStatusAsync();
 
     // ---- Settings & journey plan ----------------------------------------------------------
 

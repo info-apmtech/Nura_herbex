@@ -17,6 +17,7 @@
         </div>
 
         <div class="flex items-center gap-2">
+            <ExportButton Title="Batch reports" FileName="nura-batches" Columns="@(new[] { "Batch no", "Product", "Pack size", "Manufactured", "Expires", "Status", "Lab", "Quality checks", "Documents", "Published" })" Rows="ExportRows" Disabled="@(Batches.Count == 0)" />
             <button type="button" @onclick="() => _showSample = true"
                     class="px-3.5 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700/70 font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer">
                 <Icon Name="Eye" Size="14" />
@@ -65,7 +66,7 @@
         }
         else
         {
-            @foreach (var batch in Batches)
+            @foreach (var batch in Batches.Skip((_page - 1) * _size).Take(_size))
             {
                 var docName = string.IsNullOrEmpty(batch.DocumentName) ? "No report uploaded" : batch.DocumentName;
                 var docSize = string.IsNullOrEmpty(batch.FileSize) ? "—" : batch.FileSize;
@@ -163,6 +164,7 @@
             }
         }
     </div>
+    <Pager Total="@Batches.Count" @bind-Page="_page" @bind-PageSize="_size" Label="batches" />
 
 </div>
 
@@ -549,6 +551,9 @@
 }
 
 @code {
+    private int _page = 1, _size = 10;
+    private IEnumerable<IReadOnlyList<string>> ExportRows() => Batches.Select(b => (IReadOnlyList<string>)new[] { b.BatchNo, b.ProductName, b.PackSize, b.MfgDate, b.ExpDate, b.Status, b.LabName ?? "", b.QualityChecks.Count.ToString(), b.Documents.Count.ToString(), b.IsActive ? "Yes" : "No" });
+
     private const string FileInputId = "admin-batch-cert-input";
     private const long MaxDocumentBytes = 8 * 1024 * 1024;
     private const string DocumentError = "Choose a PDF, PNG, JPG, JPEG or WebP report smaller than 8 MB.";

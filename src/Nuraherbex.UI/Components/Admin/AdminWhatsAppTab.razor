@@ -1,288 +1,190 @@
 @implements IDisposable
+@using System.Globalization
 @inject ApiClient Api
 @inject BrowserInterop Browser
+@inject AdminSession AdminAuth
 
-<div class="space-y-4">
+<div class="ld wl">
 
-    @* Header *@
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-lg bg-zinc-900/40 border border-zinc-800">
-        <div class="space-y-0.5">
-            <div class="flex items-center gap-2">
-                <h3 class="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-                    <Icon Name="MessageCircle" Size="16" Class="text-emerald-400" />
-                    <span>WhatsApp Business Messaging</span>
-                </h3>
-                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950/60 border border-emerald-800/60 text-emerald-300">
-                    Cloud API
-                </span>
+    <header class="wl-head">
+        <div class="wl-title">
+            <span class="wl-ico"><Icon Name="MessageCircle" Size="20" /></span>
+            <div>
+                <h3>WhatsApp Business</h3>
+                <p>Customer conversations, order updates and delivery receipts. Refreshes every 15 seconds.</p>
             </div>
-            <p class="text-xs text-zinc-400">
-                Inbound customer messages, outbound order updates and delivery receipts. The log refreshes automatically every 15 seconds.
-            </p>
         </div>
+        <div class="wl-head-actions">
+            <span class="@($"wl-conn {(_status?.Configured == true ? "ok" : "off")}")"><i></i> @(_status?.Configured == true ? "Connected" : "Not connected")</span>
+            <button type="button" class="dt-btn" @onclick="() => RefreshAsync(true)" disabled="@_loading" title="Reload messages"><Icon Name="RefreshCw" Size="14" Class="@(_loading ? "animate-spin" : "")" /> Refresh</button>
+        </div>
+    </header>
 
-        <button type="button" @onclick="() => RefreshAsync(true)" disabled="@_loading"
-                class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
-                title="Reload status and messages">
-            <Icon Name="RefreshCw" Size="12" Class="@(_loading ? "animate-spin" : "")" />
-            <span>Refresh</span>
-        </button>
-    </div>
+    @if (!string.IsNullOrEmpty(_loadError)) { <div class="em-note bad" role="alert"><Icon Name="AlertCircle" Size="15" /><span>@_loadError</span></div> }
 
-    @if (!string.IsNullOrEmpty(_loadError))
+    <nav class="wl-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected="@(_tab == "log")" class="@(_tab == "log" ? "is-on" : "")" @onclick='() => _tab = "log"'>Message log <small>@_messages.Count.ToString("N0")</small></button>
+        <button type="button" role="tab" aria-selected="@(_tab == "send")" class="@(_tab == "send" ? "is-on" : "")" @onclick='() => _tab = "send"'>Send a message</button>
+        <button type="button" role="tab" aria-selected="@(_tab == "usage")" class="@(_tab == "usage" ? "is-on" : "")" @onclick='() => _tab = "usage"'>Usage &amp; budget</button>
+        <button type="button" role="tab" aria-selected="@(_tab == "setup")" class="@(_tab == "setup" ? "is-on" : "")" @onclick='() => _tab = "setup"'>Connection setup</button>
+    </nav>
+
+    @if (_tab == "log")
     {
-        <div class="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 flex items-center gap-2">
-            <Icon Name="AlertCircle" Size="14" Class="shrink-0 text-red-400" />
-            <span>@_loadError</span>
+        <div class="wl-kpis">
+            <div class="wl-kpi"><span>Total messages</span><b>@_messages.Count.ToString("N0")</b><small>latest @_messages.Count.ToString("N0") loaded</small></div>
+            <div class="wl-kpi"><span>Received</span><b>@Received.ToString("N0")</b><small>from customers</small></div>
+            <div class="wl-kpi"><span>Sent</span><b>@SentCount.ToString("N0")</b><small>accepted by WhatsApp</small></div>
+            <div class="wl-kpi good"><span>Delivered</span><b>@DeliveredPct%</b><small>of sent messages reached the phone</small></div>
+            <div class="@($"wl-kpi {(Failed > 0 ? "bad" : "")}")"><span>Failed</span><b>@Failed.ToString("N0")</b><small>could not be sent or delivered</small></div>
+            <div class="wl-kpi"><span>Today</span><b>@Today.ToString("N0")</b><small>messages since midnight</small></div>
         </div>
+
+        <FilterPanel T="WhatsAppMessageDto" Items="_messages" Defs="_defs" Noun="messages" OnFiltered="OnFiltered" />
+
+        <DataTable TItem="WhatsAppMessageDto" Items="_view" Columns="_cols" Loading="@(_loading && _messages.Count == 0)" Title="WhatsApp message log" FileName="nura-whatsapp-log"
+                   SearchPlaceholder="Quick search" EmptyText="No WhatsApp messages match. Customer messages and your replies will appear here." PageSize="25" OnRowClick="OpenDetail" RowClass="@(_ => "dt-click")" />
     }
-
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-        @* Connection status card *@
-        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5">
-            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
-                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
-                    Connection Status
-                </h3>
-            </div>
-
-            <div class="grid grid-cols-3 gap-3">
-                <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800 space-y-1">
-                    <span class="text-[10px] text-zinc-400 uppercase tracking-wider font-mono font-medium block">Configured</span>
-                    @if (_status?.Configured == true)
-                    {
-                        <div class="text-sm font-semibold text-emerald-400 font-mono flex items-center gap-1.5">
-                            <Icon Name="CheckCircle2" Size="14" />
-                            <span>Yes</span>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="text-sm font-semibold text-amber-400 font-mono flex items-center gap-1.5">
-                            <Icon Name="AlertCircle" Size="14" />
-                            <span>No</span>
-                        </div>
-                    }
+    else if (_tab == "send")
+    {
+        <section class="wl-card wl-narrow">
+            <h4>Send a WhatsApp message</h4>
+            <p class="wl-sub">Free-text messages only reach a customer who wrote to you in the last 24 hours. For anyone else, use an approved template from a follow-up.</p>
+            @if (!string.IsNullOrEmpty(_sendMessage)) { <div class="@($"em-note {(_sendOk ? "ok" : "bad")}")" role="status"><Icon Name="@(_sendOk ? "CheckCircle2" : "AlertCircle")" Size="15" /><span>@_sendMessage</span></div> }
+            <form class="wl-form" @onsubmit="SendAsync" @onsubmit:preventDefault>
+                <div class="wl-two">
+                    <label>Phone number <small>with country code</small><input type="tel" required placeholder="+91 98765 43210" @bind="_send.Phone" @bind:event="oninput" /></label>
+                    <label>Order ID <small>optional</small><input type="text" placeholder="NH-123456" @bind="_orderId" @bind:event="oninput" /></label>
                 </div>
-                <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800 space-y-1">
-                    <span class="text-[10px] text-zinc-400 uppercase tracking-wider font-mono font-medium block">Inbound</span>
-                    <div class="text-xl font-semibold text-zinc-100 font-mono">@(_status?.InboundCount ?? 0)</div>
-                </div>
-                <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800 space-y-1">
-                    <span class="text-[10px] text-zinc-400 uppercase tracking-wider font-mono font-medium block">Outbound</span>
-                    <div class="text-xl font-semibold text-zinc-100 font-mono">@(_status?.OutboundCount ?? 0)</div>
-                </div>
-            </div>
-
-            @if (_status?.Configured != true)
-            {
-                <p class="text-[11px] text-amber-300/90 leading-relaxed">
-                    Outgoing messages are disabled until the WhatsApp credentials (access token and phone number ID) are set in the API configuration.
-                </p>
-            }
-
-            <div class="space-y-1.5 pt-1">
-                <span class="text-[11px] font-semibold text-zinc-300 uppercase tracking-wider font-mono block">Webhook Setup</span>
-                <ol class="list-decimal list-inside space-y-1 text-[11px] text-zinc-400 leading-relaxed">
-                    <li>
-                        In Meta App Dashboard open <span class="text-zinc-200">WhatsApp → Configuration → Webhook</span>.
-                    </li>
-                    <li>
-                        <span class="text-zinc-300">Callback URL:</span>
-                        <span class="font-mono text-emerald-300 break-all select-all">@(string.IsNullOrEmpty(_status?.WebhookUrlHint) ? "https://<your-api-host>/api/webhooks/whatsapp" : _status!.WebhookUrlHint)</span>
-                        @if (!string.IsNullOrEmpty(_status?.WebhookUrlHint))
-                        {
-                            <button type="button" @onclick="() => CopyAsync(_status!.WebhookUrlHint!)"
-                                    class="inline-flex align-middle ml-1 text-zinc-500 hover:text-zinc-300 transition-colors" title="Copy callback URL">
-                                @if (_copied)
-                                {
-                                    <Icon Name="Check" Size="12" Class="text-emerald-400" />
-                                }
-                                else
-                                {
-                                    <Icon Name="Copy" Size="12" />
-                                }
-                            </button>
-                        }
-                    </li>
-                    <li>
-                        <span class="text-zinc-300">Verify token:</span>
-                        <span class="font-mono text-zinc-200">the value of WhatsApp:VerifyToken</span> in the API configuration.
-                    </li>
-                    <li>
-                        Subscribe to the <span class="font-mono text-zinc-200">messages</span> field.
-                    </li>
-                </ol>
-            </div>
-        </div>
-
-        @* Send message form *@
-        <div class="p-5 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-3.5">
-            <div class="flex items-center gap-2 pb-2 border-b border-zinc-800">
-                <h3 class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">
-                    Send Message
-                </h3>
-            </div>
-
-            @if (!string.IsNullOrEmpty(_sendMessage))
-            {
-                <div class="@($"p-2.5 rounded-lg text-xs flex items-center gap-2 {(_sendOk ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border border-red-500/20 text-red-400")}")">
-                    <Icon Name="@(_sendOk ? "CheckCircle2" : "AlertCircle")" Size="14" Class="shrink-0" />
-                    <span>@_sendMessage</span>
-                </div>
-            }
-
-            <form @onsubmit="SendAsync" @onsubmit:preventDefault class="space-y-3 text-xs">
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="space-y-1">
-                        <label class="text-[11px] font-medium text-zinc-400 block">Phone (with country code)</label>
-                        <input type="tel" required placeholder="+91 98765 43210"
-                               @bind="_send.Phone" @bind:event="oninput"
-                               class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs font-mono outline-none focus:border-zinc-500 transition-colors" />
-                    </div>
-                    <div class="space-y-1">
-                        <label class="text-[11px] font-medium text-zinc-400 block">Order ID (optional)</label>
-                        <input type="text" placeholder="ORD-123456"
-                               @bind="_orderId" @bind:event="oninput"
-                               class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs font-mono outline-none focus:border-zinc-500 transition-colors" />
-                    </div>
-                </div>
-
-                <div class="space-y-1">
-                    <label class="text-[11px] font-medium text-zinc-400 block">Message</label>
-                    <textarea rows="4" required placeholder="Type your message..."
-                              @bind="_send.Text" @bind:event="oninput"
-                              class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs outline-none focus:border-zinc-500 transition-colors"></textarea>
-                </div>
-
-                <div class="flex justify-end">
-                    <button type="submit" disabled="@_sending"
-                            class="px-3.5 py-1.5 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm disabled:opacity-60">
-                        @if (_sending)
-                        {
-                            <Icon Name="RefreshCw" Size="13" Class="animate-spin" />
-                        }
-                        else
-                        {
-                            <Icon Name="Send" Size="13" />
-                        }
-                        <span>@(_sending ? "Sending..." : "Send Message")</span>
-                    </button>
-                </div>
+                <label>Message<textarea rows="5" required placeholder="Type your message…" @bind="_send.Text" @bind:event="oninput"></textarea></label>
+                <div class="wl-form-foot"><span>@(_send.Text?.Length ?? 0) characters</span><button type="submit" class="ld-btn primary" disabled="@_sending"><Icon Name="Send" Size="14" /> @(_sending ? "Sending…" : "Send message")</button></div>
             </form>
-        </div>
-
-    </div>
-
-    @* Message log *@
-    <div class="rounded-lg border border-zinc-800 bg-zinc-900/30 overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs border-collapse">
-                <thead>
-                    <tr class="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono text-[11px] font-medium tracking-wider uppercase"><th class="px-3 py-3 w-12">S.No</th>
-                        <th class="px-4 py-3">Direction</th>
-                        <th class="px-4 py-3">Phone</th>
-                        <th class="px-4 py-3">Profile Name</th>
-                        <th class="px-4 py-3">Message</th>
-                        <th class="px-4 py-3">Status</th>
-                        <th class="px-4 py-3">Order ID</th>
-                        <th class="px-4 py-3">Time</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-zinc-800/60">
-                    @if (_loading && _messages.Count == 0)
-                    {
-                        <tr>
-                            <td colspan="8" class="p-8 text-center text-zinc-500">
-                                <Icon Name="RefreshCw" Size="20" Class="animate-spin mx-auto mb-2 text-zinc-400" />
-                                <span>Loading WhatsApp messages...</span>
-                            </td>
-                        </tr>
-                    }
-                    else if (_messages.Count == 0)
-                    {
-                        <tr>
-                            <td colspan="8" class="p-8 text-center text-zinc-500">
-                                No WhatsApp messages yet. Customer messages and your replies will appear here.
-                            </td>
-                        </tr>
-                    }
-                    else
-                    {
-                        _sn = 0;
-                        @foreach (var m in _messages)
-                        {
-                            <tr @key="m.Id" class="hover:bg-zinc-800/30 transition-colors">
-                                <td class="px-3 py-3 text-zinc-500 font-mono">@(++_sn)</td>
-                                <td class="px-4 py-3 whitespace-nowrap">
-                                    <span class="@($"inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium {(m.Direction == "inbound" ? "bg-sky-500/10 text-sky-400 border border-sky-500/20" : "bg-purple-500/10 text-purple-300 border border-purple-500/20")}")">
-                                        <Icon Name="@(m.Direction == "inbound" ? "ArrowLeft" : "ArrowRight")" Size="10" />
-                                        <span>@(m.Direction == "inbound" ? "IN" : "OUT")</span>
-                                    </span>
-                                </td>
-                                <td class="px-4 py-3 font-mono text-zinc-300 whitespace-nowrap">@m.Phone</td>
-                                <td class="px-4 py-3 text-zinc-300 whitespace-nowrap">@(string.IsNullOrEmpty(m.ProfileName) ? "—" : m.ProfileName)</td>
-                                <td class="px-4 py-3 text-zinc-200 max-w-md">
-                                    @if (m.MediaUrl is not null)
-                                    {
-                                        <a href="@Api.Url(m.MediaUrl)" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-2 py-1 mb-1 rounded bg-zinc-800 border border-zinc-700 text-sky-300 hover:text-sky-200 text-[11px]">
-                                            <span>@MediaIcon(m.Type)</span><span>@(string.IsNullOrWhiteSpace(m.MediaName) ? MediaLabel(m.Type) : m.MediaName)</span><span class="text-zinc-500">Open</span>
-                                        </a>
-                                    }
-                                    <div class="line-clamp-2 break-words">@(string.IsNullOrEmpty(m.Body) ? (m.MediaUrl is not null ? "" : $"[{MediaLabel(m.Type)}]") : m.Body)</div>
-                                </td>
-                                <td class="px-4 py-3 whitespace-nowrap">
-                                    <span class="@($"inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium {StatusClass(m.Status)}")">
-                                        <span>@m.Status</span>
-                                    </span>
-                                </td>
-                                <td class="px-4 py-3 font-mono text-zinc-400 whitespace-nowrap">@(string.IsNullOrEmpty(m.OrderId) ? "—" : m.OrderId)</td>
-                                <td class="px-4 py-3 font-mono text-[11px] text-zinc-500 whitespace-nowrap">@AdminFmt.DateTimeShort(m.CreatedAt)</td>
-                            </tr>
-                        }
-                    }
-                </tbody>
-            </table>
-        </div>
-    </div>
-
+        </section>
+    }
+    else if (_tab == "usage")
+    {
+        <WhatsAppUsageBar Editable="@AdminAuth.CanAll("whatsapp")" />
+    }
+    else
+    {
+        <section class="wl-card wl-narrow">
+            <h4>Connection</h4>
+            <div class="wl-conn-grid">
+                <div><span>Status</span><b class="@(_status?.Configured == true ? "ok" : "warn")">@(_status?.Configured == true ? "Credentials set" : "Credentials missing")</b></div>
+                <div><span>Received</span><b>@((_status?.InboundCount ?? 0).ToString("N0"))</b></div>
+                <div><span>Sent</span><b>@((_status?.OutboundCount ?? 0).ToString("N0"))</b></div>
+            </div>
+            @if (_status?.Configured != true) { <p class="wl-warn">Outgoing messages are disabled until the WhatsApp access token and phone number ID are set in the API configuration.</p> }
+            <h4 class="wl-gap">Webhook setup</h4>
+            <ol class="wl-steps">
+                <li>In the Meta App Dashboard open <b>WhatsApp → Configuration → Webhook</b>.</li>
+                <li>Callback URL: <code>@(string.IsNullOrEmpty(_status?.WebhookUrlHint) ? "https://<your-api-host>/api/webhooks/whatsapp" : _status!.WebhookUrlHint)</code>
+                    @if (!string.IsNullOrEmpty(_status?.WebhookUrlHint)) { <button type="button" class="wl-copy" @onclick="() => CopyAsync(_status!.WebhookUrlHint!)">@(_copied ? "Copied" : "Copy")</button> }
+                </li>
+                <li>Verify token: the value of <code>WhatsApp:VerifyToken</code> in the API configuration.</li>
+                <li>Subscribe to the <code>messages</code> field.</li>
+            </ol>
+        </section>
+    }
 </div>
 
-@code {
-    private static string MediaLabel(string type) => type switch { "image" => "Photo", "sticker" => "Sticker", "video" => "Video", "audio" => "Voice message", "document" => "Document", "unsupported" => "Unsupported message", _ => type };
-    private static string MediaIcon(string type) => type switch { "image" or "sticker" => "🖼️", "video" => "🎬", "audio" => "🎵", _ => "📄" };
+@if (_detail is { } m)
+{
+    <div class="fu-modal-backdrop" @onclick="() => _detail = null">
+        <div class="fu-modal wl-modal" role="dialog" aria-modal="true" aria-label="Message details" @onclick:stopPropagation="true">
+            <header><h3>Message details</h3><button type="button" class="em-x" aria-label="Close" @onclick="() => _detail = null"><Icon Name="X" Size="16" /></button></header>
+            <div class="wl-detail">
+                <div class="wl-bubble @(m.Direction == "inbound" ? "in" : "out")">
+                    @if (m.MediaUrl is not null) { <a href="@Api.Url(m.MediaUrl)" target="_blank" rel="noopener" class="wl-media">@MediaIcon(m.Type) @(string.IsNullOrWhiteSpace(m.MediaName) ? MediaLabel(m.Type) : m.MediaName) <small>Open</small></a> }
+                    <p>@(string.IsNullOrEmpty(m.Body) ? (m.MediaUrl is not null ? "" : $"[{MediaLabel(m.Type)}]") : m.Body)</p>
+                </div>
+                <dl class="wl-facts">
+                    <div><dt>Contact</dt><dd>@(string.IsNullOrEmpty(m.ProfileName) ? "Unknown" : m.ProfileName)</dd></div>
+                    <div><dt>Phone</dt><dd>+@m.Phone</dd></div>
+                    <div><dt>Direction</dt><dd>@(m.Direction == "inbound" ? "Received from customer" : "Sent by us")</dd></div>
+                    <div><dt>Status</dt><dd><span class="@($"dt-pill {StatusTone(m.Status)}")">@m.Status</span></dd></div>
+                    <div><dt>Type</dt><dd>@MediaLabel(m.Type)</dd></div>
+                    <div><dt>Sent by</dt><dd>@SentBy(m)</dd></div>
+                    <div><dt>Order</dt><dd>@(string.IsNullOrEmpty(m.OrderId) ? "—" : m.OrderId)</dd></div>
+                    <div><dt>Time</dt><dd>@m.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm:ss", CultureInfo.InvariantCulture)</dd></div>
+                </dl>
+            </div>
+        </div>
+    </div>
+}
 
-    private int _sn;
+@code {
     private readonly CancellationTokenSource _cts = new();
     private WhatsAppStatusDto? _status;
     private List<WhatsAppMessageDto> _messages = new();
+    private IReadOnlyList<WhatsAppMessageDto> _view = Array.Empty<WhatsAppMessageDto>();
+    private WhatsAppMessageDto? _detail;
+    private string _tab = "log";
     private bool _loading = true;
     private string? _loadError;
 
     private readonly WhatsAppSendRequest _send = new();
     private string _orderId = "";
-    private bool _sending;
-    private bool _sendOk;
+    private bool _sending, _sendOk, _copied;
     private string? _sendMessage;
-    private bool _copied;
+
+    private int Received => _messages.Count(m => m.Direction == "inbound");
+    private int SentCount => _messages.Count(m => m.Direction == "outbound" && m.Status != "failed");
+    private int Failed => _messages.Count(m => m.Direction == "outbound" && m.Status == "failed");
+    private int Today => _messages.Count(m => m.CreatedAt.ToLocalTime().Date == DateTime.Now.Date);
+    private int DeliveredPct => SentCount == 0 ? 0 : (int)Math.Round(100.0 * _messages.Count(m => m.Direction == "outbound" && m.Status is "delivered" or "read") / SentCount);
+
+    private static string SentBy(WhatsAppMessageDto m) => m.Direction == "inbound" ? "" : string.IsNullOrWhiteSpace(m.SentBy) ? "Automatic" : m.SentBy!;
+    private static string DirectionText(WhatsAppMessageDto m) => m.Direction == "inbound" ? "Received" : "Sent";
+    private static string MessageText(WhatsAppMessageDto m) => string.IsNullOrEmpty(m.Body) ? (m.MediaUrl is not null ? MediaLabel(m.Type) : $"[{MediaLabel(m.Type)}]") : m.Body.Replace("\n", " ");
+    private static string MediaLabel(string type) => type switch { "image" => "Photo", "sticker" => "Sticker", "video" => "Video", "audio" => "Voice message", "document" => "Document", "unsupported" => "Unsupported message", "template" => "Template", "text" => "Text", _ => type };
+    private static string MediaIcon(string type) => type switch { "image" or "sticker" => "🖼️", "video" => "🎬", "audio" => "🎵", _ => "📄" };
+    private static string StatusTone(string? s) => s switch { "failed" => "bad", "read" or "delivered" => "good", "sent" => "info", "received" => "muted", _ => "warn" };
+
+    private static string Initial(WhatsAppMessageDto m) => (string.IsNullOrWhiteSpace(m.ProfileName) ? m.Phone : m.ProfileName)[..1].ToUpperInvariant();
+
+    private readonly List<FilterDef<WhatsAppMessageDto>> _defs =
+    [
+        new() { Label = "Date", Kind = FilterKind.Date, Date = m => m.CreatedAt.ToLocalTime() },
+        new() { Label = "Direction", Kind = FilterKind.Chips, Value = DirectionText },
+        new() { Label = "Status", Kind = FilterKind.Chips, Value = m => m.Status },
+        new() { Label = "Message type", Kind = FilterKind.Select, Value = m => MediaLabel(m.Type) },
+        new() { Label = "Sent by (staff)", Kind = FilterKind.Select, Value = SentBy },
+        new() { Label = "Phone number", Kind = FilterKind.Text, Phone = true, Value = m => m.Phone },
+        new() { Label = "Contact name", Kind = FilterKind.Text, Value = m => m.ProfileName },
+        new() { Label = "Message text", Kind = FilterKind.Text, Value = m => m.Body },
+        new() { Label = "Order ID", Kind = FilterKind.Text, Value = m => m.OrderId },
+    ];
+
+    private List<DataColumn<WhatsAppMessageDto>> _cols = [];
 
     protected override async Task OnInitializedAsync()
     {
+        _cols =
+        [
+            new() { Header = "When", Text = m => m.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture), SortKey = m => m.CreatedAt, Width = "130px",
+                    Cell = m => b => { b.OpenElement(0, "span"); b.AddAttribute(1, "class", "wl-when"); b.AddContent(2, m.CreatedAt.ToLocalTime().ToString("dd MMM yyyy", CultureInfo.InvariantCulture)); b.OpenElement(3, "small"); b.AddContent(4, m.CreatedAt.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture)); b.CloseElement(); b.CloseElement(); } },
+            new() { Header = "Contact", Text = m => $"{(string.IsNullOrWhiteSpace(m.ProfileName) ? "Unknown" : m.ProfileName)} +{m.Phone}",
+                    Cell = m => b => { b.OpenElement(0, "span"); b.AddAttribute(1, "class", "wl-contact"); b.OpenElement(2, "i"); b.AddContent(3, Initial(m)); b.CloseElement(); b.OpenElement(4, "span"); b.OpenElement(5, "b"); b.AddContent(6, string.IsNullOrWhiteSpace(m.ProfileName) ? "Unknown" : m.ProfileName); b.CloseElement(); b.OpenElement(7, "small"); b.AddContent(8, "+" + m.Phone); b.CloseElement(); b.CloseElement(); b.CloseElement(); } },
+            new() { Header = "Direction", Text = DirectionText, Tone = m => m.Direction == "inbound" ? "info" : "muted", Width = "100px" },
+            new() { Header = "Message", Text = MessageText, Sortable = false, Class = "wl-msgcell",
+                    Cell = m => b => { b.OpenElement(0, "span"); b.AddAttribute(1, "class", "wl-msg"); if (m.MediaUrl is not null) { b.OpenElement(2, "em"); b.AddContent(3, MediaIcon(m.Type) + " " + (string.IsNullOrWhiteSpace(m.MediaName) ? MediaLabel(m.Type) : m.MediaName)); b.CloseElement(); } b.AddContent(4, string.IsNullOrEmpty(m.Body) ? (m.MediaUrl is not null ? "" : $"[{MediaLabel(m.Type)}]") : m.Body); b.CloseElement(); } },
+            new() { Header = "Status", Text = m => m.Status, Tone = m => StatusTone(m.Status), Width = "100px" },
+            new() { Header = "Sent by", Text = SentBy },
+            new() { Header = "Order", Text = m => m.OrderId ?? "" },
+        ];
+        _view = _messages;
         await RefreshAsync(true);
         _ = PollAsync();
     }
 
+    private Task OnFiltered(IReadOnlyList<WhatsAppMessageDto> v) { _view = v; StateHasChanged(); return Task.CompletedTask; }
+    private void OpenDetail(WhatsAppMessageDto m) => _detail = m;
+
     private async Task PollAsync()
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
-        try
-        {
-            while (await timer.WaitForNextTickAsync(_cts.Token))
-            {
-                await InvokeAsync(async () => { await RefreshAsync(false); });
-            }
-        }
+        try { while (await timer.WaitForNextTickAsync(_cts.Token)) await InvokeAsync(async () => { await RefreshAsync(false); }); }
         catch (OperationCanceledException) { }
         catch (ObjectDisposedException) { }
     }
@@ -291,13 +193,13 @@
     {
         if (showSpinner) { _loading = true; StateHasChanged(); }
         var statusTask = Api.AdminWhatsAppStatusAsync();
-        var msgTask = Api.AdminWhatsAppMessagesAsync(100);
+        var msgTask = Api.AdminWhatsAppMessagesAsync(1000);
         await Task.WhenAll(statusTask, msgTask);
         if (_cts.IsCancellationRequested) return;
         var status = await statusTask;
         var msgs = await msgTask;
         if (status.Success) _status = status;
-        if (msgs.Success) _messages = msgs.Messages;
+        if (msgs.Success && (msgs.Messages.Count != _messages.Count || msgs.Messages.FirstOrDefault()?.Id != _messages.FirstOrDefault()?.Id || msgs.Messages.Zip(_messages).Any(p => p.First.Status != p.Second.Status))) _messages = msgs.Messages;
         _loadError = (!status.Success || !msgs.Success) ? (msgs.Message ?? status.Message ?? "Could not load WhatsApp data.") : null;
         _loading = false;
         StateHasChanged();
@@ -312,32 +214,17 @@
         _sending = false;
         _sendOk = res.Success;
         _sendMessage = res.Message ?? (res.Success ? "Message sent" : "Message could not be sent.");
-        if (res.Success) { _send.Text = ""; }
+        if (res.Success) _send.Text = "";
         await RefreshAsync(false);
     }
 
     private async Task CopyAsync(string text)
     {
         await Browser.CopyToClipboardAsync(text);
-        _copied = true;
-        StateHasChanged();
+        _copied = true; StateHasChanged();
         await Task.Delay(2000);
-        _copied = false;
-        StateHasChanged();
+        _copied = false; StateHasChanged();
     }
 
-    private static string StatusClass(string? status) => status switch
-    {
-        "failed" => "bg-red-500/10 text-red-400 border border-red-500/20",
-        "read" => "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
-        "delivered" => "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
-        "sent" => "bg-zinc-800 text-zinc-300 border border-zinc-700/60",
-        _ => "bg-amber-500/10 text-amber-400 border border-amber-500/20",
-    };
-
-    public void Dispose()
-    {
-        _cts.Cancel();
-        _cts.Dispose();
-    }
+    public void Dispose() { _cts.Cancel(); _cts.Dispose(); }
 }

@@ -1,0 +1,63 @@
+@* Pagination for admin lists and tables: first / previous / numbered pages / next / last, plus a "rows per page" choice. *@
+@if (Total > 0)
+{
+    <div class="dt-foot pg">
+        <span>Showing @(((Page - 1) * PageSize) + 1) to @Math.Min(Page * PageSize, Total) of @Total.ToString("N0")@(string.IsNullOrEmpty(Label) ? "" : " " + Label)</span>
+        <label class="dt-size">Rows <select value="@PageSize" @onchange="OnSize">@foreach (var s in Sizes) { <option value="@s">@s</option> }</select></label>
+        <nav class="dt-pages" aria-label="Pagination">
+            <button type="button" aria-label="First page" disabled="@(Page <= 1)" @onclick="() => GoTo(1)">«</button>
+            <button type="button" aria-label="Previous page" disabled="@(Page <= 1)" @onclick="() => GoTo(Page - 1)">‹</button>
+            @foreach (var p in Window)
+            {
+                var n = p;
+                if (n == 0) { <span class="dt-gap">…</span> }
+                else { <button type="button" class="@(n == Page ? "is-on" : "")" aria-current="@(n == Page ? "page" : null)" @onclick="() => GoTo(n)">@(n)</button> }
+            }
+            <button type="button" aria-label="Next page" disabled="@(Page >= Pages)" @onclick="() => GoTo(Page + 1)">›</button>
+            <button type="button" aria-label="Last page" disabled="@(Page >= Pages)" @onclick="() => GoTo(Pages)">»</button>
+        </nav>
+    </div>
+}
+
+@code {
+    [Parameter] public int Total { get; set; }
+    [Parameter] public int Page { get; set; } = 1;
+    [Parameter] public EventCallback<int> PageChanged { get; set; }
+    [Parameter] public int PageSize { get; set; } = 10;
+    [Parameter] public EventCallback<int> PageSizeChanged { get; set; }
+    /// <summary>Noun shown after the count, such as "orders".</summary>
+    [Parameter] public string Label { get; set; } = "";
+
+    private static readonly int[] Sizes = [10, 25, 50, 100];
+    private int Pages => Math.Max(1, (int)Math.Ceiling(Total / (double)Math.Max(1, PageSize)));
+
+    private IEnumerable<int> Window
+    {
+        get
+        {
+            var total = Pages;
+            if (total <= 7) return Enumerable.Range(1, total);
+            var set = new SortedSet<int> { 1, total, Page - 1, Page, Page + 1 };
+            if (Page <= 3) { set.Add(2); set.Add(3); set.Add(4); }
+            if (Page >= total - 2) { set.Add(total - 1); set.Add(total - 2); set.Add(total - 3); }
+            var result = new List<int>(); var prev = 0;
+            foreach (var p in set.Where(p => p >= 1 && p <= total)) { if (p - prev > 1) result.Add(0); result.Add(p); prev = p; }
+            return result;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // A smaller list (after a search or a delete) can leave the current page past the end.
+        if (Total > 0 && Page > Pages) await PageChanged.InvokeAsync(Pages);
+    }
+
+    private Task GoTo(int p) => PageChanged.InvokeAsync(Math.Clamp(p, 1, Pages));
+
+    private async Task OnSize(ChangeEventArgs e)
+    {
+        var size = int.TryParse(e.Value?.ToString(), out var s) ? s : 10;
+        await PageSizeChanged.InvokeAsync(size);
+        await PageChanged.InvokeAsync(1);
+    }
+}

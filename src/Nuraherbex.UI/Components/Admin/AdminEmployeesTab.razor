@@ -9,6 +9,7 @@
             <p>Each employee signs in at <strong>/admin</strong> with their own email and password. What each person can open is decided by their <strong>designation</strong> (see Designations &amp; rights).</p>
         </div>
         <div class="em-head-actions">
+            <ExportButton Title="Employees" FileName="nura-employees" Columns="@(new[] { "Name", "Email", "Phone", "Role", "Designation", "Department", "Status", "Open leads", "Open tasks", "Last sign-in", "Created" })" Rows="ExportRows" Disabled="@(_employees.Count == 0)" />
             <label class="em-switch" title="When on, every new lead goes to the next active sales executive in turn.">
                 <input type="checkbox" checked="@_autoAssign" disabled="@_busy" @onchange="OnAutoAssignChanged" />
                 <span class="em-track"><span class="em-knob"></span></span>
@@ -85,8 +86,8 @@
                     {
                         <tr><td colspan="9" class="em-empty"><strong>No employees yet</strong>Add your first sales executive so new leads can be assigned and followed up.</td></tr>
                     }
-                    @{ var sn = 0; }
-                    @foreach (var e in _employees)
+                    @{ var sn = (_page - 1) * _size; }
+                    @foreach (var e in _employees.Skip((_page - 1) * _size).Take(_size))
                     {
                         var emp = e;
                         <tr @key="emp.Id" class="@(emp.IsActive ? "" : "is-off")">
@@ -133,11 +134,15 @@
                 </tbody>
             </table>
         </div>
+    <Pager Total="@_employees.Count" @bind-Page="_page" @bind-PageSize="_size" Label="employees" />
     </div>
     <AdminReplyAssistantCard />
 </div>
 
 @code {
+    private int _page = 1, _size = 10;
+    private IEnumerable<IReadOnlyList<string>> ExportRows() => _employees.Select(e => (IReadOnlyList<string>)new[] { e.Name, e.Email, e.Phone, e.Role, e.DesignationName ?? "", e.DepartmentName ?? "", e.IsActive ? "Active" : "Inactive", e.OpenLeads.ToString(), e.OpenTasks.ToString(), e.LastLoginAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "Never", e.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd") });
+
     private static readonly string[] Palette = ["#235b40", "#2f6f8f", "#7a5aa6", "#b5792a", "#a24b5a", "#3f7d7a", "#5b6f2c"];
 
     private List<EmployeeDto> _employees = new();

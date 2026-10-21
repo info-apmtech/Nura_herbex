@@ -16,6 +16,7 @@
         </div>
 
         <div class="flex items-center gap-2 self-end sm:self-auto">
+            <ExportButton Title="Customers" FileName="nura-customers" Columns="@(new[] { "Customer ID", "Name", "Email", "Phone", "City", "State", "Orders", "Total spent (Rs)", "Last order", "Joined" })" Rows="ExportRows" Disabled="@(FilteredCustomers.Count == 0)" />
             <button @onclick="() => OnReload.InvokeAsync()"
                     disabled="@Loading"
                     class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
@@ -120,8 +121,8 @@
                     }
                     else
                     {
-                        _sn = 0;
-                        @foreach (var cust in FilteredCustomers)
+                        _sn = (_page - 1) * _size;
+                        @foreach (var cust in FilteredCustomers.Skip((_page - 1) * _size).Take(_size))
                         {
                             var name = string.IsNullOrEmpty(cust.FullName) ? "Vitality Customer" : cust.FullName;
                             var initial = char.ToUpperInvariant(name.Length > 0 ? name[0] : 'C');
@@ -225,6 +226,7 @@
                 </tbody>
             </table>
         </div>
+    <Pager Total="@FilteredCustomers.Count" @bind-Page="_page" @bind-PageSize="_size" Label="customers" />
     </div>
 
 </div>
@@ -391,6 +393,9 @@
 }
 
 @code {
+    private int _page = 1, _size = 10;
+    private IEnumerable<IReadOnlyList<string>> ExportRows() => FilteredCustomers.Select(c => (IReadOnlyList<string>)new[] { c.Id, c.FullName, c.Email, c.Phone, c.ShippingAddress?.City ?? "", c.ShippingAddress?.State ?? "", OrderCount(c).ToString(), c.TotalSpent.ToString("0.##"), c.LastOrderDate?.ToLocalTime().ToString("yyyy-MM-dd") ?? "", c.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd") });
+
     private int _sn;
     [Parameter] public List<AdminCustomerDto> Customers { get; set; } = new();
     [Parameter] public bool Loading { get; set; }

@@ -1,0 +1,187 @@
+@typeparam T
+@using System.Globalization
+
+@* Advanced filters for a list of records. Reports its filtered result through OnFiltered. Options for drop-downs and chips come from the data itself, with counts. *@
+<section class="fp" aria-label="Filters">
+    <header class="fp-head">
+        <button type="button" class="fp-title" aria-expanded="@_open" @onclick="() => _open = !_open">
+            <Icon Name="SlidersHorizontal" Size="16" /> Filters
+            @if (ActiveCount > 0) { <span class="fp-badge">@ActiveCount</span> }
+            <Icon Name="ChevronDown" Size="14" Class="@(_open ? "fp-rot" : "")" />
+        </button>
+        <span class="fp-result"><b>@_result.Count.ToString("N0")</b> of @Items.Count.ToString("N0") @Noun</span>
+        <span class="fp-spacer"></span>
+        @if (ActiveCount > 0) { <button type="button" class="fp-reset" @onclick="ResetAsync"><Icon Name="RotateCcw" Size="13" /> Reset all</button> }
+    </header>
+
+    @if (ActiveCount > 0)
+    {
+        <div class="fp-active" aria-label="Active filters">
+            @foreach (var a in Active())
+            {
+                var key = a.Key;
+                <span class="fp-tag"><em>@a.Label</em> @a.Text<button type="button" aria-label="Remove @a.Label filter" @onclick="() => ClearAsync(key)"><Icon Name="X" Size="11" /></button></span>
+            }
+        </div>
+    }
+
+    @if (_open)
+    {
+        <div class="fp-grid">
+            @foreach (var d in Defs)
+            {
+                var def = d;
+                <div class="@($"fp-field fpk-{FieldKind(def).ToString().ToLowerInvariant()}")">
+                    <label>@def.Label</label>
+                    @switch (FieldKind(def))
+                    {
+                        case FilterKind.Text:
+                            <div class="fp-input"><Icon Name="Search" Size="14" /><input type="search" placeholder="@(string.IsNullOrEmpty(def.Placeholder) ? "Contains…" : def.Placeholder)" aria-label="@def.Label" value="@Get(_text, def.Label)" @oninput="e => SetTextAsync(def.Label, e.Value?.ToString())" /></div>
+                            break;
+                        case FilterKind.Select:
+                            <select aria-label="@def.Label" value="@Get(_text, def.Label)" @onchange="e => SetTextAsync(def.Label, e.Value?.ToString())">
+                                <option value="">All</option>
+                                @foreach (var o in Options(def)) { <option value="@o.Value">@o.Value (@o.Count)</option> }
+                            </select>
+                            break;
+                        case FilterKind.Chips:
+                            <div class="fp-chips">
+                                @foreach (var o in Options(def))
+                                {
+                                    var value = o.Value;
+                                    <button type="button" class="@($"fp-chip {(IsPicked(def.Label, value) ? "is-on" : "")}")" aria-pressed="@IsPicked(def.Label, value)" @onclick="() => ToggleAsync(def.Label, value)">@value <small>@o.Count</small></button>
+                                }
+                            </div>
+                            break;
+                        case FilterKind.Range:
+                            <div class="fp-pair"><input type="number" inputmode="decimal" placeholder="Min" aria-label="@def.Label minimum" value="@Get(_min, def.Label)" @oninput="e => SetRangeAsync(def.Label, e.Value?.ToString(), true)" /><span>to</span><input type="number" inputmode="decimal" placeholder="Max" aria-label="@def.Label maximum" value="@Get(_max, def.Label)" @oninput="e => SetRangeAsync(def.Label, e.Value?.ToString(), false)" /></div>
+                            break;
+                        case FilterKind.Date:
+                            <div class="fp-pair"><input type="date" aria-label="@def.Label from" value="@Get(_min, def.Label)" @onchange="e => SetRangeAsync(def.Label, e.Value?.ToString(), true)" /><span>to</span><input type="date" aria-label="@def.Label to" value="@Get(_max, def.Label)" @onchange="e => SetRangeAsync(def.Label, e.Value?.ToString(), false)" /></div>
+                            break;
+                    }
+                </div>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<T> Items { get; set; } = Array.Empty<T>();
+    [Parameter, EditorRequired] public IReadOnlyList<FilterDef<T>> Defs { get; set; } = Array.Empty<FilterDef<T>>();
+    [Parameter] public EventCallback<IReadOnlyList<T>> OnFiltered { get; set; }
+    [Parameter] public string Noun { get; set; } = "records";
+    [Parameter] public bool StartOpen { get; set; } = true;
+
+    private const int MaxChips = 10;
+    private readonly Dictionary<string, string> _text = new(), _min = new(), _max = new();
+    private readonly Dictionary<string, HashSet<string>> _picked = new();
+    private readonly Dictionary<string, List<(string Value, int Count)>> _options = new();
+    private IReadOnlyList<T> _result = Array.Empty<T>();
+    private IReadOnlyList<T>? _seen;
+    private IReadOnlyList<FilterDef<T>>? _seenDefs;
+    private int _seenCount = -1;
+    private bool _open;
+
+    protected override void OnInitialized() => _open = StartOpen;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ReferenceEquals(_seen, Items) && ReferenceEquals(_seenDefs, Defs) && _seenCount == Items.Count) return;
+        if (!ReferenceEquals(_seenDefs, Defs))
+        {
+            // A different report: start from clean filters.
+            _text.Clear(); _min.Clear(); _max.Clear(); _picked.Clear();
+        }
+        _seen = Items; _seenDefs = Defs; _seenCount = Items.Count;
+        BuildOptions();
+        await ApplyAsync();
+    }
+
+    private void BuildOptions()
+    {
+        _options.Clear();
+        foreach (var d in Defs.Where(d => d.Kind is FilterKind.Select or FilterKind.Chips && d.Value is not null))
+            _options[d.Label] = Items.Select(i => (d.Value!(i) ?? "").Trim()).Where(v => v.Length > 0).GroupBy(v => v)
+                .Select(g => (g.Key, g.Count())).OrderByDescending(x => x.Item2).ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase).Take(300).ToList();
+    }
+
+    private IReadOnlyList<(string Value, int Count)> Options(FilterDef<T> d) => _options.TryGetValue(d.Label, out var o) ? o : [];
+
+    /// <summary>Chips only work for a handful of values; anything bigger becomes a drop-down.</summary>
+    private FilterKind FieldKind(FilterDef<T> d) => d.Kind == FilterKind.Chips && Options(d).Count > MaxChips ? FilterKind.Select : d.Kind;
+
+    private static string Get(Dictionary<string, string> m, string key) => m.TryGetValue(key, out var v) ? v : "";
+    private bool IsPicked(string label, string value) => _picked.TryGetValue(label, out var s) && s.Contains(value);
+
+    private Task SetTextAsync(string label, string? v) { _text[label] = v ?? ""; return ApplyAsync(); }
+    private Task SetRangeAsync(string label, string? v, bool isMin) { (isMin ? _min : _max)[label] = v ?? ""; return ApplyAsync(); }
+
+    private Task ToggleAsync(string label, string value)
+    {
+        if (!_picked.TryGetValue(label, out var set)) _picked[label] = set = new();
+        if (!set.Remove(value)) set.Add(value);
+        return ApplyAsync();
+    }
+
+    private Task ResetAsync() { _text.Clear(); _min.Clear(); _max.Clear(); _picked.Clear(); return ApplyAsync(); }
+
+    private Task ClearAsync(string label) { _text.Remove(label); _min.Remove(label); _max.Remove(label); _picked.Remove(label); return ApplyAsync(); }
+
+    private static string Digits(string? s) => new string((s ?? "").Where(char.IsDigit).ToArray());
+    private static bool TryDecimal(string? s, out decimal n) => decimal.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out n);
+    private static bool TryDate(string? s, out DateTime d) => DateTime.TryParseExact(s, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out d);
+
+    private IReadOnlyList<T> Run()
+    {
+        IEnumerable<T> q = Items;
+        foreach (var d in Defs)
+        {
+            var kind = FieldKind(d);
+            switch (kind)
+            {
+                case FilterKind.Text when d.Value is not null && Get(_text, d.Label).Trim() is { Length: > 0 } term:
+                    if (d.Phone && Digits(term).Length > 0) { var digits = Digits(term); q = q.Where(i => Digits(d.Value(i)).Contains(digits)); }
+                    else q = q.Where(i => (d.Value(i) ?? "").Contains(term, StringComparison.OrdinalIgnoreCase));
+                    break;
+                case FilterKind.Select when d.Value is not null && Get(_text, d.Label) is { Length: > 0 } exact:
+                    q = q.Where(i => string.Equals((d.Value(i) ?? "").Trim(), exact, StringComparison.OrdinalIgnoreCase));
+                    break;
+                case FilterKind.Chips when d.Value is not null && _picked.TryGetValue(d.Label, out var set) && set.Count > 0:
+                    q = q.Where(i => set.Contains((d.Value(i) ?? "").Trim()));
+                    break;
+                case FilterKind.Range when d.Number is not null:
+                    if (TryDecimal(Get(_min, d.Label), out var lo)) q = q.Where(i => d.Number(i) is { } n && n >= lo);
+                    if (TryDecimal(Get(_max, d.Label), out var hi)) q = q.Where(i => d.Number(i) is { } n && n <= hi);
+                    break;
+                case FilterKind.Date when d.Date is not null:
+                    if (TryDate(Get(_min, d.Label), out var from)) q = q.Where(i => d.Date(i) is { } x && x.Date >= from.Date);
+                    if (TryDate(Get(_max, d.Label), out var to)) q = q.Where(i => d.Date(i) is { } x && x.Date <= to.Date);
+                    break;
+            }
+        }
+        return q.ToList();
+    }
+
+    private async Task ApplyAsync()
+    {
+        _result = Run();
+        await OnFiltered.InvokeAsync(_result);
+    }
+
+    private sealed record ActiveFilter(string Key, string Label, string Text);
+
+    private IEnumerable<ActiveFilter> Active()
+    {
+        foreach (var d in Defs)
+        {
+            var l = d.Label;
+            if (Get(_text, l).Trim() is { Length: > 0 } t) yield return new(l, l, t);
+            if (_picked.TryGetValue(l, out var set) && set.Count > 0) yield return new(l, l, string.Join(", ", set));
+            var lo = Get(_min, l); var hi = Get(_max, l);
+            if (lo.Length > 0 || hi.Length > 0) yield return new(l, l, lo.Length > 0 && hi.Length > 0 ? $"{lo} to {hi}" : lo.Length > 0 ? $"from {lo}" : $"up to {hi}");
+        }
+    }
+
+    private int ActiveCount => Active().Count();
+}

@@ -207,6 +207,12 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<ApiResult> AdminRescheduleFollowUpAsync(long id, FollowUpRescheduleRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/followups/{id}/reschedule", r, Who.Admin);
     public Task<ApiResult> AdminSkipFollowUpAsync(long id) => Call<ApiResult>(HttpMethod.Put, $"api/admin/followups/{id}/skip", new { }, Who.Admin);
     public Task<ApiResult> AdminSendFollowUpAsync(long id) => Call<ApiResult>(HttpMethod.Post, $"api/admin/followups/{id}/send", new { }, Who.Admin);
+    public Task<ApiResult> AdminSendDueFollowUpsAsync() => Call<ApiResult>(HttpMethod.Post, "api/admin/followups/send-due", new { }, Who.Admin);
+    public Task<WhatsAppLimitDto> AdminFollowUpWhatsAppUsageAsync() => Call<WhatsAppLimitDto>(HttpMethod.Get, "api/admin/followups/whatsapp-usage", null, Who.Admin);
+    public Task<ReportListResponse> AdminReportsAsync() => Call<ReportListResponse>(HttpMethod.Get, "api/admin/reports", null, Who.Admin);
+    public Task<ReportResponse> AdminReportAsync(string key, string from, string to) => Call<ReportResponse>(HttpMethod.Get, $"api/admin/reports/{Uri.EscapeDataString(key)}?from={Uri.EscapeDataString(from)}&to={Uri.EscapeDataString(to)}", null, Who.Admin);
+    public Task<WhatsAppLimitDto> AdminWhatsAppLimitAsync() => Call<WhatsAppLimitDto>(HttpMethod.Get, "api/admin/whatsapp/limit", null, Who.Admin);
+    public Task<WhatsAppLimitDto> AdminSaveWhatsAppLimitAsync(WhatsAppLimitRequest r) => Call<WhatsAppLimitDto>(HttpMethod.Put, "api/admin/whatsapp/limit", r, Who.Admin);
     public Task<FollowUpSettingsDto> AdminFollowUpSettingsAsync() => Call<FollowUpSettingsDto>(HttpMethod.Get, "api/admin/followups/settings", null, Who.Admin);
     public Task<ApiResult> AdminSaveFollowUpSettingsAsync(FollowUpSettingsRequest r) => Call<ApiResult>(HttpMethod.Put, "api/admin/followups/settings", r, Who.Admin);
     public Task<FollowUpReportResponse> AdminFollowUpReportAsync(int days) => Call<FollowUpReportResponse>(HttpMethod.Get, $"api/admin/followups/report?days={days}", null, Who.Admin);

@@ -1,0 +1,249 @@
+@using System.Globalization
+@inject ApiClient Api
+
+<div class="ld rp">
+    <header class="rp-head">
+        <div>
+            <span class="rp-eyebrow">Business intelligence</span>
+            <h3>Reports</h3>
+            <p>Choose a report and a period, narrow it down with filters, then export exactly what you see as CSV, Excel or PDF.</p>
+        </div>
+    </header>
+
+    <nav class="rp-cards" role="tablist" aria-label="Reports">
+        @foreach (var r in _catalog)
+        {
+            var key = r.Key;
+            <button type="button" role="tab" aria-selected="@(_key == key)" class="rp-card @(_key == key ? "is-on" : "")" @onclick="() => SelectAsync(key)">
+                <span class="rp-card-ico"><Icon Name="@IconFor(key)" Size="18" /></span>
+                <span><b>@r.Title</b><small>@r.Description</small></span>
+            </button>
+        }
+    </nav>
+
+    <section class="rp-range" aria-label="Period">
+        <div class="rp-quick">
+            @foreach (var q in Quicks)
+            {
+                var code = q.Code;
+                <button type="button" class="@(_quick == code ? "rp-q is-on" : "rp-q")" @onclick="() => SetRangeAsync(code)">@q.Label</button>
+            }
+        </div>
+        <form class="rp-dates" @onsubmit="ApplyAsync" @onsubmit:preventDefault>
+            <label>From <input type="date" max="@_toDate" value="@_fromDate" @onchange="e => _fromDate = e.Value?.ToString() ?? _fromDate" /></label>
+            <label>To <input type="date" max="@Today" value="@_toDate" @onchange="e => _toDate = e.Value?.ToString() ?? _toDate" /></label>
+            <button type="submit" class="ld-btn primary" disabled="@_loading">@(_loading ? "Loading…" : "Apply period")</button>
+        </form>
+    </section>
+
+    @if (!string.IsNullOrEmpty(_error)) { <div class="em-note bad" role="alert"><Icon Name="AlertCircle" Size="15" /><span>@_error</span></div> }
+
+    @if (_report is { } rep)
+    {
+        <div class="rp-title"><h4>@rep.Title</h4><span>@rep.Period</span></div>
+
+        <div class="rp-stats">
+            @foreach (var s in rep.Summary)
+            {
+                <div class="@($"rp-stat {s.Tone}")"><span>@s.Label</span><b>@s.Value</b>@if (!string.IsNullOrEmpty(s.Hint)) { <small>@s.Hint</small> }</div>
+            }
+        </div>
+        @if (rep.Truncated) { <div class="em-note bad" role="status"><Icon Name="AlertCircle" Size="15" /><span>This period has more than @rep.Rows.Count.ToString("N0") records, so only the newest are shown. Choose a shorter period to see the rest.</span></div> }
+
+        <FilterPanel T="List<string>" Items="_rows" Defs="_defs" Noun="@rep.Title.ToLowerInvariant()" OnFiltered="OnFiltered" />
+
+        @if (_money is not null && _view.Count > 0)
+        {
+            <div class="rp-selection"><span><b>@_view.Count.ToString("N0")</b> selected</span><span>Total value <b>@FormatMoney(_view.Sum(r => Num(r, _money.Index)))</b></span><span>Average <b>@FormatMoney(_view.Average(r => Num(r, _money.Index)))</b></span></div>
+        }
+
+        @if (_facets.Count > 0 && _view.Count > 0)
+        {
+            <section class="rp-break" aria-label="Breakdown">
+                <header>
+                    <h5>Breakdown</h5>
+                    <label>by <select value="@_facet" @onchange="e => _facet = e.Value?.ToString() ?? _facet">@foreach (var f in _facets) { <option value="@f.Header">@f.Label</option> }</select></label>
+                </header>
+                <div class="rp-break-list">
+                    @foreach (var g in Breakdown())
+                    {
+                        <div class="rp-bar"><span title="@g.Key">@g.Key</span><div><i style="width:@(g.Pct.ToString("0.#", CultureInfo.InvariantCulture))%"></i></div><b>@g.Count.ToString("N0")</b><small>@(g.Pct.ToString("0", CultureInfo.InvariantCulture))%@(g.Sum is { } sum ? " · " + FormatMoney(sum) : "")</small></div>
+                    }
+                </div>
+            </section>
+        }
+
+        <DataTable TItem="List<string>" Items="_view" Columns="_cols" Loading="_loading" Title="@($"{rep.Title} report")" FileName="@($"nura-{rep.Key}-report")"
+                   ExportMeta="@ExportMeta" SearchPlaceholder="@($"Quick search in {rep.Title.ToLowerInvariant()}")" EmptyText="No records match these filters." PageSize="25" />
+    }
+    else if (_loading) { <div class="ld-card ld-empty">Loading report…</div> }
+</div>
+
+@code {
+    private sealed record Spec(string Header, FilterKind Kind, string? Label = null, bool Phone = false, bool Number = false, bool Facet = false);
+    private sealed record Facet(string Header, string Label, int Index);
+    private sealed record Money(string Header, int Index);
+    private sealed record Group(string Key, int Count, double Pct, decimal? Sum);
+
+    private static readonly (string Code, string Label)[] Quicks =
+        [("today", "Today"), ("7", "Last 7 days"), ("30", "Last 30 days"), ("month", "This month"), ("last", "Last month"), ("90", "Last 90 days")];
+
+    // Which filters each report offers. Header names match the report's column names.
+    private static readonly Dictionary<string, Spec[]> Specs = new()
+    {
+        ["orders"] = [new("Customer", FilterKind.Text, "Customer name"), new("Phone", FilterKind.Text, "Phone number", Phone: true), new("Order ID", FilterKind.Text, "Order ID"),
+            new("State", FilterKind.Select, Facet: true), new("City", FilterKind.Select, "City / district", Facet: true), new("Payment", FilterKind.Chips, "Payment method", Facet: true),
+            new("Payment status", FilterKind.Chips, Facet: true), new("Delivery status", FilterKind.Select, Facet: true), new("Courier", FilterKind.Select, Facet: true),
+            new("Items", FilterKind.Text, "Product"), new("Total", FilterKind.Range, "Order total (₹)", Number: true)],
+        ["leads"] = [new("Owner", FilterKind.Select, "Staff", Facet: true), new("Lead ID", FilterKind.Text, "Lead number"), new("Name", FilterKind.Text, "Lead name"), new("Phone", FilterKind.Text, "Phone number", Phone: true),
+            new("Source", FilterKind.Chips, Facet: true), new("Status", FilterKind.Chips, Facet: true), new("Consent", FilterKind.Chips, "WhatsApp consent", Facet: true), new("Campaign / detail", FilterKind.Text, "Campaign")],
+        ["followups"] = [new("Owner", FilterKind.Select, "Staff", Facet: true), new("Type", FilterKind.Chips, Facet: true), new("Status", FilterKind.Chips, Facet: true), new("Source", FilterKind.Chips, Facet: true),
+            new("Lead", FilterKind.Text, "Lead name"), new("Phone", FilterKind.Text, "Phone number", Phone: true), new("Order", FilterKind.Text, "Order ID"), new("Completed by", FilterKind.Select, Facet: true)],
+        ["whatsapp"] = [new("Direction", FilterKind.Chips, Facet: true), new("Status", FilterKind.Chips, Facet: true), new("Type", FilterKind.Select, "Message type", Facet: true), new("Sent by", FilterKind.Select, "Sent by (staff)", Facet: true),
+            new("Phone", FilterKind.Text, "Phone number", Phone: true), new("Name", FilterKind.Text, "Contact name"), new("Message", FilterKind.Text, "Message text"), new("Order", FilterKind.Text, "Order ID")],
+        ["tasks"] = [new("Assigned to", FilterKind.Select, "Assigned to", Facet: true), new("Department", FilterKind.Select, Facet: true), new("Priority", FilterKind.Chips, Facet: true), new("Status", FilterKind.Chips, Facet: true),
+            new("Late", FilterKind.Chips, "Overdue"), new("Title", FilterKind.Text, "Task title"), new("Created by", FilterKind.Select, Facet: true)],
+        ["customers"] = [new("Name", FilterKind.Text, "Customer name"), new("Email", FilterKind.Text), new("Phone", FilterKind.Text, "Phone number", Phone: true), new("State", FilterKind.Select, Facet: true),
+            new("City", FilterKind.Select, "City / district", Facet: true), new("Orders", FilterKind.Range, "Orders placed", Number: true), new("Total spent", FilterKind.Range, "Total spent (₹)", Number: true)],
+        ["payments"] = [new("Status", FilterKind.Chips, Facet: true), new("Mode", FilterKind.Select, "Payment mode", Facet: true), new("Customer", FilterKind.Text, "Customer name"), new("Phone", FilterKind.Text, "Phone number", Phone: true),
+            new("Order ID", FilterKind.Text), new("Amount", FilterKind.Range, "Amount (₹)", Number: true)],
+    };
+
+    private static readonly Dictionary<string, string[]> HiddenByDefault = new()
+    {
+        ["orders"] = ["Subtotal", "Discount", "Shipping", "Fulfilment", "Courier", "AWB"],
+        ["leads"] = ["Email", "Consent", "First message", "Last contact"],
+        ["followups"] = ["Step", "Source", "Order", "Completed by"],
+        ["whatsapp"] = ["Order"],
+        ["tasks"] = ["Created by", "Completed"],
+        ["payments"] = ["Transaction"],
+    };
+
+    private static readonly HashSet<string> RightAligned = new(StringComparer.OrdinalIgnoreCase)
+        { "Qty", "Subtotal", "Discount", "Shipping", "Total", "Amount", "Orders", "Total spent", "Est. cost" };
+    private static readonly HashSet<string> PillColumns = new(StringComparer.OrdinalIgnoreCase)
+        { "Status", "Payment status", "Delivery status", "Fulfilment", "Priority", "Late", "Direction", "Consent" };
+    private static readonly string[] MoneyColumns = ["Total", "Amount", "Total spent"];
+
+    private List<ReportInfo> _catalog = new();
+    private ReportResponse? _report;
+    private List<List<string>> _rows = new(), _viewList = new();
+    private IReadOnlyList<List<string>> _view = Array.Empty<List<string>>();
+    private List<DataColumn<List<string>>> _cols = new();
+    private List<FilterDef<List<string>>> _defs = new();
+    private List<Facet> _facets = new();
+    private Money? _money;
+    private string _key = "orders", _quick = "30", _fromDate = "", _toDate = "", _facet = "";
+    private bool _loading;
+    private string? _error;
+
+    private static string Today => FormatDate(DateTime.Now);
+    private static string FormatDate(DateTime d) => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    private IEnumerable<string> ExportMeta => new[] { "Period: " + (_report?.Period ?? "") };
+
+    private static string IconFor(string key) => key switch
+    {
+        "orders" => "ShoppingBag", "leads" => "Users", "followups" => "Clock", "whatsapp" => "MessageCircle", "tasks" => "CheckCircle2", "customers" => "User", "payments" => "CreditCard", _ => "BarChart3",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var res = await Api.AdminReportsAsync();
+        if (res.Success) _catalog = res.Reports;
+        await SetRangeAsync("30");
+    }
+
+    private async Task SelectAsync(string key) { _key = key; await LoadAsync(); }
+
+    private async Task SetRangeAsync(string q)
+    {
+        _quick = q;
+        var today = DateTime.Now.Date;
+        (var from, var to) = q switch
+        {
+            "today" => (today, today),
+            "7" => (today.AddDays(-6), today),
+            "month" => (new DateTime(today.Year, today.Month, 1), today),
+            "last" => (new DateTime(today.Year, today.Month, 1).AddMonths(-1), new DateTime(today.Year, today.Month, 1).AddDays(-1)),
+            "90" => (today.AddDays(-89), today),
+            _ => (today.AddDays(-29), today),
+        };
+        _fromDate = FormatDate(from); _toDate = FormatDate(to);
+        await LoadAsync();
+    }
+
+    private async Task ApplyAsync() { _quick = ""; await LoadAsync(); }
+
+    private async Task LoadAsync()
+    {
+        _loading = true; _error = null;
+        var res = await Api.AdminReportAsync(_key, _fromDate, _toDate);
+        _loading = false;
+        if (!res.Success) { _error = res.Message ?? "The report could not be loaded."; return; }
+        BuildReport(res);
+    }
+
+    private void BuildReport(ReportResponse res)
+    {
+        var hidden = HiddenByDefault.GetValueOrDefault(res.Key) ?? [];
+        _cols = res.Columns.Select((name, i) => new DataColumn<List<string>>
+        {
+            Header = name, Text = r => i < r.Count ? r[i] : "", Align = RightAligned.Contains(name) ? "right" : "left",
+            Class = name is "Order ID" or "Task ID" or "Lead ID" ? "rp-id" : "",
+            Hidden = hidden.Contains(name),
+            Tone = PillColumns.Contains(name) ? (r => ToneFor(i < r.Count ? r[i] : "")) : null,
+        }).ToList();
+
+        var index = res.Columns.Select((c, i) => (c, i)).ToDictionary(x => x.c, x => x.i);
+        _defs = new();
+        _facets = new();
+        foreach (var s in Specs.GetValueOrDefault(res.Key) ?? [])
+        {
+            if (!index.TryGetValue(s.Header, out var i)) continue;
+            var label = s.Label ?? s.Header;
+            _defs.Add(new FilterDef<List<string>>
+            {
+                Label = label, Kind = s.Kind, Phone = s.Phone,
+                Value = r => i < r.Count ? r[i] : "",
+                Number = s.Number ? (r => (decimal?)Num(r, i)) : null,
+            });
+            if (s.Facet) _facets.Add(new Facet(s.Header, label, i));
+        }
+        _facet = _facets.FirstOrDefault()?.Header ?? "";
+        var m = MoneyColumns.FirstOrDefault(index.ContainsKey);
+        _money = m is null ? null : new Money(m, index[m]);
+
+        _report = res;
+        _rows = res.Rows;
+        _view = _rows;
+    }
+
+    private Task OnFiltered(IReadOnlyList<List<string>> view) { _view = view; StateHasChanged(); return Task.CompletedTask; }
+
+    private static decimal Num(List<string> r, int i)
+    {
+        if (i >= r.Count) return 0;
+        var t = new string(r[i].Where(ch => char.IsDigit(ch) || ch is '.' or '-').ToArray());
+        return decimal.TryParse(t, NumberStyles.Number, CultureInfo.InvariantCulture, out var n) ? n : 0;
+    }
+
+    private string FormatMoney(decimal v) => (_report?.Key is "whatsapp" ? "₹" + v.ToString("N2", CultureInfo.InvariantCulture) : "₹" + v.ToString("N0", CultureInfo.InvariantCulture));
+
+    private IEnumerable<Group> Breakdown()
+    {
+        var f = _facets.FirstOrDefault(x => x.Header == _facet) ?? _facets.First();
+        var total = Math.Max(1, _view.Count);
+        return _view.GroupBy(r => f.Index < r.Count && !string.IsNullOrWhiteSpace(r[f.Index]) ? r[f.Index] : "Not set")
+            .Select(g => new Group(g.Key, g.Count(), 100.0 * g.Count() / total, _money is null ? null : g.Sum(r => Num(r, _money.Index))))
+            .OrderByDescending(g => g.Count).Take(8);
+    }
+
+    private static string ToneFor(string v) => v.Trim().ToLowerInvariant() switch
+    {
+        "delivered" or "done" or "converted" or "paid" or "cod_collected" or "success" or "read" or "completed" or "opted_in" or "order confirmed" => "good",
+        "failed" or "cancelled" or "rto" or "overdue" or "not-interested" or "opted_out" or "urgent" or "yes" or "returned" => "bad",
+        "pending" or "cod_pending" or "in_progress" or "interested" or "follow-up" or "blocked" or "high" or "skipped" or "unknown" => "warn",
+        "new" or "sent" or "received" or "in" or "out" or "normal" or "todo" or "initiated" => "info",
+        _ => "muted",
+    };
+}

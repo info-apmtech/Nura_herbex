@@ -8,10 +8,10 @@
             <h3>Tasks</h3>
             <p>@(AdminAuth.CanAll("tasks") ? "Every task across the team: who owns it, what is late and what is done." : "Tasks assigned to you or created by you.")</p>
         </div>
-        <div class="em-head-actions"><button type="button" class="ld-btn primary" @onclick="StartCreate"><Icon Name="Plus" Size="14" /> New task</button></div>
+        <div class="em-head-actions"><ExportButton Title="Tasks" FileName="nura-tasks" Columns="@(new[] { "Task", "Department", "Assigned to", "Created by", "Priority", "Status", "Due", "Late", "Created", "Completed", "Repeat" })" Rows="ExportRows" Disabled="@(_items.Count == 0)" /><button type="button" class="ld-btn primary" @onclick="StartCreate"><Icon Name="Plus" Size="14" /> New task</button></div>
     </div>
 
-    <details class="tk-help" open>
+    <details class="tk-help">
         <summary><Icon Name="Sparkles" Size="14" /> How tasks work</summary>
         <ol>
             <li><b>Create</b> a task: say what must be done, who does it, by when and how important it is.</li>
@@ -42,6 +42,9 @@
             <option value="unassigned">Unassigned (@_counts.Unassigned)</option>
             @foreach (var p in _team) { <option value="@p.Id">@p.Name</option> }
         </select>
+        <button type="button" class="tk-more @(_more ? "is-on" : "")" aria-expanded="@_more" @onclick="() => _more = !_more"><Icon Name="SlidersHorizontal" Size="14" /> More filters@(_department != "" || _priority != "" ? " (on)" : "")</button>
+        @if (_more || _department != "" || _priority != "")
+        {
         <select aria-label="Department" @bind="_department" @bind:after="LoadAsync">
             <option value="">All departments</option>
             @foreach (var d in _departments) { <option value="@d.Id">@d.Name</option> }
@@ -50,6 +53,7 @@
             <option value="">Any priority</option>
             @foreach (var p in TaskPriorities.All) { <option value="@p">@Cap(p)</option> }
         </select>
+        }
         @if (_leadFilter is not null) { <button type="button" class="ld-tab is-active" title="Show all tasks" @onclick="ClearLead">Lead #@_leadFilter <Icon Name="X" Size="12" /></button> }
         <div class="tk-view" role="group" aria-label="View">
             <button type="button" class="@(_board ? "" : "is-on")" @onclick="() => SetBoard(false)">List</button>
@@ -93,31 +97,32 @@
     }
     else
     {
-        <div class="ld-card tk-list">
-            <div class="tk-row tk-headrow" aria-hidden="true"><span>S.No</span><span>Task</span><span>Priority</span><span>Status</span><span>Due</span><span>Assigned to</span><span>Progress</span><span>Action</span></div>
-            @{ var sn = 0; }
-            @foreach (var t in _items)
+        <div class="tk-rows">
+            @foreach (var t in _items.Skip((_page - 1) * _size).Take(_size))
             {
                 var task = t;
-                <div class="tk-row @(task.Status == "done" ? "is-done" : "")" @key="task.Id">
-                    <span class="tk-sn">@(++sn)</span>
-                    <button type="button" class="tk-main" @onclick="() => OpenAsync(task.Id)">
+                var due = DueInfo(task);
+                var isDone = task.Status == "done";
+                <article class="@($"tk-r p-{task.Priority} {(isDone ? "is-done" : "")}")" @key="task.Id">
+                    <button type="button" class="@($"tk-tick {(isDone ? "on" : "")}")" disabled="@(!task.CanEdit)" title="@(!task.CanEdit ? "You can only view this task" : isDone ? "Reopen this task" : "Mark as done")" aria-label="@(isDone ? "Reopen task" : "Mark task as done")" @onclick="() => ToggleDoneAsync(task)"><Icon Name="Check" Size="14" /></button>
+                    <button type="button" class="tk-r-main" @onclick="() => OpenAsync(task.Id)">
                         <strong>@task.Title</strong>
                         <small>@string.Join(" · ", new[] { task.DepartmentName, task.LeadName is { } ln ? "Lead: " + ln : null, task.Repeat != "none" ? "Repeats " + task.Repeat : null }.Where(x => x is not null))</small>
                     </button>
-                    <span class="@($"tk-pri {task.Priority}")">@Cap(task.Priority)</span>
-                    <span class="tk-st @task.Status">@TaskStatuses.Label(task.Status)</span>
-                    <span class="@($"tk-due {(task.IsOverdue ? "late" : "")}")">@(task.DueAt is { } du ? AdminFmt.DateTimeShort(du) : "No due date")</span>
-                    <span class="tk-who">@(task.AssignedToName ?? "Unassigned")@if (task.DepartmentName is { } dn) { <small>@dn</small> }</span>
-                    <span class="tk-sm">@if (task.ChecklistTotal > 0) { <span title="Checklist steps done"><Icon Name="Check" Size="11" /> @task.ChecklistDone/@task.ChecklistTotal</span> } else { <span>—</span> }</span>
-                    <span class="tk-act">
-                        @if (!task.CanEdit) { <span class="tk-muted">View only</span> }
-                        else if (task.Status == "done") { <button type="button" class="ld-btn" title="Move it back to To do" @onclick="() => ToggleDoneAsync(task)">Reopen</button> }
-                        else { <button type="button" class="ld-btn tk-donebtn" title="Finish this task" @onclick="() => ToggleDoneAsync(task)"><Icon Name="Check" Size="13" /> Mark done</button> }
-                    </span>
-                </div>
+                    <div class="tk-r-tags">
+                        <span class="@($"tk-pill pri-{task.Priority}")">@Cap(task.Priority)</span>
+                        <span class="@($"tk-pill st-{task.Status}")">@TaskStatuses.Label(task.Status)</span>
+                        @if (task.ChecklistTotal > 0)
+                        {
+                            <span class="tk-prog" title="@task.ChecklistDone of @task.ChecklistTotal steps done"><i style="width:@(100 * task.ChecklistDone / task.ChecklistTotal)%"></i><em>@task.ChecklistDone/@task.ChecklistTotal</em></span>
+                        }
+                    </div>
+                    <span class="@($"tk-due2 {due.Tone}")"><Icon Name="Clock" Size="13" /> @due.Text</span>
+                    <span class="tk-person"><i>@Initial(task.AssignedToName)</i><span>@(task.AssignedToName ?? "Unassigned")</span></span>
+                </article>
             }
         </div>
+        <Pager Total="@_items.Count" @bind-Page="_page" @bind-PageSize="_size" Label="tasks" />
     }
 </div>
 
@@ -127,6 +132,24 @@
         <div class="fu-modal lo" role="dialog" aria-modal="true" aria-label="@(_editingId is null ? "New task" : "Edit task")" @onclick:stopPropagation="true">
             <header><h3>@(_editingId is null ? "New task" : "Edit task")</h3><button type="button" class="em-x" aria-label="Close" @onclick="() => _form = null"><Icon Name="X" Size="16" /></button></header>
             <form class="fu-form" @onsubmit="SaveAsync" @onsubmit:preventDefault>
+                @if (_editingId is null)
+                {
+                    <div class="tk-tpl">
+                        <div class="tk-tpl-head">
+                            <span><Icon Name="Sparkles" Size="14" /> Start from a ready-made task</span>
+                            <select aria-label="Team role" @bind="_tplRole">
+                                @foreach (var r in TaskTemplates.Roles) { <option value="@r">@r</option> }
+                            </select>
+                        </div>
+                        <div class="tk-tpl-list">
+                            @foreach (var t in TaskTemplates.For(_tplRole))
+                            {
+                                var tpl = t;
+                                <button type="button" class="tk-tpl-chip @(_tplKey == tpl.Key ? "is-on" : "")" title="@tpl.Description" @onclick="() => ApplyTemplate(tpl)">@tpl.Title</button>
+                            }
+                        </div>
+                    </div>
+                }
                 <label class="fu-field">What needs to be done<input class="fu-input" type="text" required maxlength="200" @bind="_form.Title" @bind:event="oninput" placeholder="e.g. Call back the Chennai bulk enquiry" /></label>
                 <label class="fu-field">Details<textarea class="fu-input tk-text" maxlength="4000" rows="3" @bind="_form.Description" @bind:event="oninput" placeholder="Optional"></textarea></label>
                 <div class="tk-two">
@@ -258,6 +281,21 @@
 
 @code {
     private List<TaskDto> _items = new();
+    private int _page = 1, _size = 10;
+    private bool _more;
+    private static string Initial(string? name) => string.IsNullOrWhiteSpace(name) ? "?" : name.Trim()[..1].ToUpperInvariant();
+    private static (string Text, string Tone) DueInfo(TaskDto t)
+    {
+        if (t.DueAt is not { } d) return ("No due date", "muted");
+        var local = d.ToLocalTime();
+        var days = (local.Date - DateTime.Now.Date).Days;
+        if (t.Status == "done") return (local.ToString("dd MMM"), "muted");
+        if (t.IsOverdue || days < 0) return (days >= 0 ? "Overdue today" : $"Overdue {-days} day{(-days == 1 ? "" : "s")}", "late");
+        if (days == 0) return ("Today " + local.ToString("h:mm tt"), "today");
+        if (days == 1) return ("Tomorrow", "soon");
+        return (local.ToString("ddd, dd MMM"), "ok");
+    }
+    private IEnumerable<IReadOnlyList<string>> ExportRows() => _items.Select(t => (IReadOnlyList<string>)new[] { t.Title, t.DepartmentName ?? "", t.AssignedToName ?? "Unassigned", t.CreatedByName, t.Priority, TaskStatuses.Label(t.Status), t.DueAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "", t.IsOverdue ? "Yes" : "", t.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd"), t.CompletedAt?.ToLocalTime().ToString("yyyy-MM-dd") ?? "", t.Repeat });
     private TaskCounts _counts = new();
     private List<EmployeeDto> _team = new();
     private List<DepartmentDto> _departments = new();
@@ -353,9 +391,28 @@
     private async Task ClearLead() { _leadFilter = null; _scope = "open"; Nav.NavigateTo("/admin/tasks"); await LoadAsync(); }
 
     // ---- create / edit
+    private string _tplRole = "Sales";
+    private string? _tplKey;
+
+    /// <summary>Fills the new-task form from a role template: title, details, priority, repeat, a due date and the checklist.</summary>
+    private void ApplyTemplate(TaskTemplates.Template t)
+    {
+        if (_form is null) return;
+        _tplKey = t.Key;
+        _form.Title = t.Title;
+        _form.Description = t.Description;
+        _form.Priority = t.Priority;
+        _form.Repeat = t.Repeat;
+        _due = DateTime.Today.AddDays(t.DueInDays).AddHours(10);
+        _checklistText = string.Join("\n", t.Checklist);
+        var dept = _departments.FirstOrDefault(d => TaskTemplates.RoleFor(d.Name) == t.Role);
+        if (dept is not null) { _form.DepartmentId = dept.Id; SyncDepartment(_picked); }
+    }
+
     private void StartCreate()
     {
-        _editingId = null; _checklistText = ""; _due = null;
+        _editingId = null; _checklistText = ""; _due = null; _tplKey = null;
+        _tplRole = TaskTemplates.RoleFor(AdminAuth.Designation) ?? TaskTemplates.RoleFor(AdminAuth.Department) ?? "Sales";
         _picked.Clear();
         if (AdminAuth.EmployeeId is { } me && _team.Any(p => p.Id == me)) _picked.Add(me);
         _form = new TaskSaveRequest();

@@ -67,6 +67,7 @@ public static class ServiceRegistration
         services.AddScoped<AdminSession>();
         services.AddScoped<ContentState>();
         services.AddScoped<ModalState>();
+        services.AddScoped<ExportService>();
         return services;
     }
 }

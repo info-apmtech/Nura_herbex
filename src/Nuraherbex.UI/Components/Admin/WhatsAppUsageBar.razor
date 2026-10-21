@@ -1,0 +1,136 @@
+@implements IDisposable
+@inject ApiClient Api
+
+@* Monthly WhatsApp allowance: messages sent, estimated rupees spent, and (for admins) where to set the limit, the budget and the message rates. *@
+@if (_usage is { } u)
+{
+    var tone = u.Reached ? "bad" : u.Warning ? "warn" : "ok";
+    var capped = u.Limit > 0 || u.Budget > 0;
+    <section class="@($"wa-usage {tone}")" aria-label="WhatsApp monthly usage">
+        <div class="wa-usage-top">
+            <div>
+                <span class="wa-usage-label"><Icon Name="MessageCircle" Size="14" /> WhatsApp messages · @u.Month</span>
+                <strong>@u.Used.ToString("N0")@if (u.Limit > 0) { <small> of @u.Limit.ToString("N0")</small> } else { <small> sent, no message limit</small> }</strong>
+            </div>
+            @if (u.Budget > 0 || u.Spent > 0)
+            {
+                <div class="wa-usage-money">
+                    <span class="wa-usage-label">Estimated spend</span>
+                    <strong>₹@u.Spent.ToString("N2")@if (u.Budget > 0) { <small> of ₹@u.Budget.ToString("N2")</small> }</strong>
+                </div>
+            }
+            @if (capped)
+            {
+                <span class="wa-usage-pill">@(u.Reached ? (u.BudgetHit && !u.LimitHit ? "Budget used up" : "Limit reached") : u.Warning ? "Running low" : u.Limit > 0 ? $"{u.Remaining:N0} left" : $"₹{u.BudgetRemaining:N2} left")</span>
+            }
+        </div>
+
+        @if (u.Limit > 0)
+        {
+            <div class="wa-bar-row"><span>Messages</span><div class="wa-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@MsgPercent(u)" aria-label="Messages used this month"><i style="width:@MsgPercent(u)%"></i></div><b>@MsgPercent(u)%</b></div>
+        }
+        @if (u.Budget > 0)
+        {
+            <div class="wa-bar-row"><span>Budget</span><div class="wa-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@u.SpentPercent" aria-label="Budget used this month"><i style="width:@u.SpentPercent%"></i></div><b>@u.SpentPercent%</b></div>
+        }
+
+        <dl class="wa-facts">
+            <div><dt>Templates</dt><dd>@u.TemplateCount.ToString("N0")</dd></div>
+            <div><dt>Free text</dt><dd>@u.TextCount.ToString("N0")</dd></div>
+            <div><dt>Delivered</dt><dd>@u.DeliveredCount.ToString("N0")</dd></div>
+            <div><dt>Read</dt><dd>@u.ReadCount.ToString("N0")</dd></div>
+            <div class="@(u.FailedCount > 0 ? "bad" : "")"><dt>Failed</dt><dd>@u.FailedCount.ToString("N0")</dd></div>
+        </dl>
+
+        @if (u.Reached)
+        {
+            <p class="wa-usage-msg"><Icon Name="AlertCircle" Size="14" /> The monthly @(u.BudgetHit && !u.LimitHit ? "budget" : "limit") is used up, so no WhatsApp messages are being sent. Follow-ups stay in the list and can still be done by phone. Sending resumes next month@(Editable ? ", or raise the allowance below." : ".")</p>
+        }
+        else if (u.Warning)
+        {
+            <p class="wa-usage-msg"><Icon Name="AlertCircle" Size="14" /> @u.Percent% of this month's allowance is used. @(u.Limit > 0 ? $"Only {u.Remaining:N0} messages can still be sent." : "")@(u.Budget > 0 ? $" ₹{u.BudgetRemaining:N2} of the budget is left." : "")</p>
+        }
+
+        @if (Editable)
+        {
+            <form class="wa-limit-form" @onsubmit="SaveAsync" @onsubmit:preventDefault>
+                <label>Messages allowed per month <small>0 = no limit</small>
+                    <input type="number" min="0" max="10000000" step="50" @bind="_limit" />
+                </label>
+                <label>Monthly budget (₹) <small>0 = no budget</small>
+                    <input type="number" min="0" step="100" @bind="_budget" />
+                </label>
+                <label>Cost per template message (₹) <small>marketing, utility</small>
+                    <input type="number" min="0" step="0.01" @bind="_costTemplate" />
+                </label>
+                <label>Cost per free-text message (₹) <small>inside 24-hour replies, usually 0</small>
+                    <input type="number" min="0" step="0.01" @bind="_costText" />
+                </label>
+                <label>Warn admins at <small>% used</small>
+                    <input type="number" min="1" max="100" @bind="_warn" />
+                </label>
+                <button type="submit" class="wa-save" disabled="@_saving">@(_saving ? "Saving…" : "Save settings")</button>
+            </form>
+            <p class="wa-hint">Spend is an estimate: templates sent multiplied by the template rate, plus free-text messages multiplied by their rate. Check the current rates on your Meta billing page. When usage (messages or rupees) reaches the warning level every administrator is notified; at the limit or budget a notification is sent once and all outgoing WhatsApp messages (replies, order updates and follow-ups) pause until next month. Failed sends also notify administrators. Incoming messages are never affected.</p>
+            @if (!string.IsNullOrEmpty(_message)) { <p class="@($"wa-flash {(_ok ? "ok" : "bad")}")" role="status">@_message</p> }
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public bool Editable { get; set; }
+    /// <summary>Raised after a save so the page can refresh anything that depends on the limit.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private readonly CancellationTokenSource _cts = new();
+    private WhatsAppLimitDto? _usage;
+    private int _limit, _warn = 80;
+    private decimal _budget, _costTemplate, _costText;
+    private bool _saving, _ok;
+    private string? _message;
+
+    private static int MsgPercent(WhatsAppLimitDto u) => u.Limit == 0 ? 0 : (int)Math.Min(100, Math.Round(100.0 * u.Used / u.Limit));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(true);
+        _ = PollAsync();
+    }
+
+    private async Task LoadAsync(bool fillForm)
+    {
+        var res = Editable ? await Api.AdminWhatsAppLimitAsync() : await Api.AdminFollowUpWhatsAppUsageAsync();
+        if (_cts.IsCancellationRequested || !res.Success) return;
+        _usage = res;
+        if (fillForm) Fill(res);
+        StateHasChanged();
+    }
+
+    private void Fill(WhatsAppLimitDto r) { _limit = r.Limit; _warn = r.WarnPercent; _budget = r.Budget; _costTemplate = r.CostTemplate; _costText = r.CostText; }
+
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(45));
+        try { while (await timer.WaitForNextTickAsync(_cts.Token)) await InvokeAsync(() => LoadAsync(false)); }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+
+    /// <summary>Lets the page ask for a fresh count right after it sent messages.</summary>
+    public Task RefreshAsync() => LoadAsync(false);
+
+    private async Task SaveAsync()
+    {
+        _saving = true; _message = null;
+        var res = await Api.AdminSaveWhatsAppLimitAsync(new WhatsAppLimitRequest
+        {
+            Limit = Math.Max(0, _limit), WarnPercent = Math.Clamp(_warn, 1, 100), Budget = Math.Max(0, _budget),
+            CostTemplate = Math.Max(0, _costTemplate), CostText = Math.Max(0, _costText),
+        });
+        _ok = res.Success; _message = res.Message;
+        if (res.Success) { _usage = res; Fill(res); await OnChanged.InvokeAsync(); }
+        _saving = false;
+    }
+
+    public void Dispose() { _cts.Cancel(); _cts.Dispose(); }
+}

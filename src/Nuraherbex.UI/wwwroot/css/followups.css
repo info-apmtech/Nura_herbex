@@ -252,3 +252,51 @@ textarea.fu-input{height:auto;padding:9px 12px!important;resize:vertical;font-fa
 .ld-bub.has-reaction{margin-bottom:12px}
 .ld-react{position:absolute;bottom:-12px;right:10px;background:#fff;border:1px solid #e0e6e0;border-radius:999px;padding:0 6px;font-size:15px;line-height:22px;height:24px;box-shadow:0 1px 3px #0002}
 .ld-bub.in .ld-react{right:auto;left:10px}
+
+/* WhatsApp monthly usage */
+.wa-usage{background:#fff;color:#1e3329;border:1px solid #e2e9e2;border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;text-align:left;box-shadow:0 2px 6px #263f2808}
+.wa-usage-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.wa-usage-label{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#6f8175}
+.wa-usage-top strong{display:block;font-size:26px;font-weight:700;letter-spacing:-.5px;line-height:1.2;margin-top:2px}
+.wa-usage-top strong small{font-size:13px;font-weight:600;color:#6f8175;letter-spacing:0}
+.wa-usage-pill{font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;background:#e7f3ea;color:#235b40}
+.wa-bar{height:9px;border-radius:999px;background:#e8eee8;overflow:hidden}
+.wa-bar i{display:block;height:100%;border-radius:999px;background:#2f8f5f;transition:width .5s}
+.wa-usage.warn .wa-bar i{background:#d89a1d}.wa-usage.warn .wa-usage-pill{background:#fdf1d6;color:#8a5b00}
+.wa-usage.bad .wa-bar i{background:#c9493c}.wa-usage.bad .wa-usage-pill{background:#fbe5e1;color:#a3281c}
+.wa-usage.warn{border-color:#efd9a3}.wa-usage.bad{border-color:#efc0b9}
+.wa-usage-msg{display:flex;align-items:flex-start;gap:8px;margin:0;font-size:13px;line-height:1.5;padding:10px 12px;border-radius:10px;background:#fdf6e4;color:#6b4b00}
+.wa-usage.bad .wa-usage-msg{background:#fdecea;color:#8c2217}
+.wa-usage-msg svg{flex:none;margin-top:2px}
+.wa-limit-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;padding-top:12px;border-top:1px solid #e8eee8}
+.wa-limit-form label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:650;color:#1e3329}
+.wa-limit-form label small{font-weight:500;color:#6f8175}
+.wa-limit-form input{width:170px;padding:9px 12px;border:1px solid #d3ddd4;border-radius:9px;font-size:14px;color:#1e3329;background:#fff}
+.wa-limit-form input:focus{outline:2px solid #235b4033;border-color:#235b40}
+.wa-save{padding:10px 20px;border-radius:9px;background:#235b40;color:#fff;font-size:13px;font-weight:700;cursor:pointer}
+.wa-save:hover:not(:disabled){background:#1a4631}.wa-save:disabled{opacity:.6;cursor:wait}
+.wa-hint{margin:0;font-size:12px;line-height:1.55;color:#6f8175}
+.wa-flash{margin:0;font-size:13px;font-weight:600;padding:8px 12px;border-radius:9px}
+.wa-flash.ok{background:#e7f3ea;color:#235b40}.wa-flash.bad{background:#fdecea;color:#a3281c}
+.bell-item.k-warning .bell-dot{background:#d89a1d}
+
+/* Follow-up list: send-all bar */
+.fu-sendbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#f3f6f2;border:1px solid #e2e9e2;border-radius:12px;padding:12px 16px}
+.fu-sendbar p{margin:0;font-size:13px;color:#4c6054;line-height:1.5}
+.fu-sendbar strong{color:#1e3329}
+.fu-chips.five{grid-template-columns:repeat(5,minmax(0,1fr))}
+.fu-chip-card.msg b{color:#235b40}
+@media(max-width:900px){.fu-chips.five{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.fu-chips-more{margin-top:-6px}.fu-chips-more .fu-skip{font-size:12px;color:#6f8175;text-decoration:underline;background:none;cursor:pointer}.fu-chips-more .fu-skip:hover{color:#235b40}
+
+.wa-usage-money{text-align:right}
+.wa-usage-money strong{display:block;font-size:22px;font-weight:700;letter-spacing:-.4px;margin-top:2px}
+.wa-usage-money strong small{font-size:12px;font-weight:600;color:#6f8175;letter-spacing:0}
+.wa-bar-row{display:grid;grid-template-columns:70px 1fr 42px;align-items:center;gap:10px;font-size:12px;color:#6f8175;font-weight:650}
+.wa-bar-row b{color:#1e3329;text-align:right}
+.wa-facts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:0}
+.wa-facts div{background:#f3f6f2;border-radius:10px;padding:8px 10px}
+.wa-facts dt{font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#6f8175}
+.wa-facts dd{margin:2px 0 0;font-size:16px;font-weight:700}
+.wa-facts .bad{background:#fdecea}.wa-facts .bad dd{color:#a3281c}
+@media(max-width:700px){.wa-facts{grid-template-columns:repeat(3,minmax(0,1fr))}.wa-usage-money{text-align:left}}

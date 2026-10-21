@@ -1,151 +1,168 @@
+@using System.Globalization
 @inject ApiClient Api
 @inject AdminSession AdminAuth
 @inject NavigationManager Nav
 
-<div class="ld fr">
-    <div class="fr-bar">
-        <p>@(AdminAuth.CanAll("crm") ? "How leads turn into customers, how fast the team replies, and what needs a person right now." : "Your leads, your replies and your sales.")</p>
-        <div class="fr-range" role="group" aria-label="Period">
+<div class="ld sd">
+    <header class="sd-head">
+        <div>
+            <span class="sd-eyebrow">@(AdminAuth.CanAll("crm") ? "Sales performance" : "My performance")</span>
+            <h3>Sales dashboard</h3>
+            <p>@(AdminAuth.CanAll("crm") ? "How leads turn into customers, how fast the team replies, and what needs a person right now." : "Your leads, your replies and your sales.")</p>
+        </div>
+        <div class="sd-period" role="group" aria-label="Period">
             @foreach (var d in new[] { 7, 30, 90 })
             {
                 var days = d;
-                <button type="button" class="@($"fu-chip {(_days == days ? "is-picked" : "")}")" @onclick="() => LoadAsync(days)">Last @days days</button>
+                <button type="button" class="@(_days == days ? "is-on" : "")" aria-pressed="@(_days == days)" @onclick="() => LoadAsync(days)">@(days)D</button>
             }
+            @if (_r is not null) { <span class="sd-range">@_r.From.ToLocalTime().ToString("d MMM", CultureInfo.InvariantCulture) – @DateTime.Now.ToString("d MMM yyyy", CultureInfo.InvariantCulture)</span> }
         </div>
-    </div>
+    </header>
 
     @if (_r is null)
     {
-        <div class="ld-empty">@(_error ?? "Loading dashboard…")</div>
+        <div class="ld-card ld-empty">@(_error ?? "Loading dashboard…")</div>
     }
     else
     {
-        <div class="fr-kpis">
-            <div class="fr-kpi"><span>New leads</span><strong>@_r.NewLeads</strong><small>@_r.ConvertedLeads became customers in this period</small></div>
-            <div class="fr-kpi"><span>Conversion</span><strong>@_r.ConversionRate%</strong><small>of new leads are now customers</small><i style="width:@_r.ConversionRate%"></i></div>
-            <div class="fr-kpi"><span>Sales from leads</span><strong>₹@AdminFmt.Inr(_r.Revenue)</strong><small>@_r.Orders order@(_r.Orders == 1 ? "" : "s")@(_r.Orders > 0 ? $" · average ₹{AdminFmt.Inr(_r.AverageOrderValue)}" : "")</small></div>
-            <div class="@($"fr-kpi {(_r.AwaitingFirstReply > 0 ? "bad" : "")}")">
-                <span>First reply</span><strong>@(_r.MedianFirstReplyMinutes is { } m ? Mins(m) : "—")</strong>
-                <small>@(_r.AwaitingFirstReply > 0 ? $"{_r.AwaitingFirstReply} waiting over an hour · " : "")@_r.RepliedWithinHourPercent% answered within an hour</small>
-            </div>
-        </div>
+        @* Headline numbers *@
+        <section class="sd-kpis" aria-label="Headline numbers">
+            <article class="sd-kpi">
+                <span class="sd-kpi-ico blue"><Icon Name="Users" Size="18" /></span>
+                <div><span>New leads</span><strong>@_r.NewLeads.ToString("N0")</strong><small>@_r.ConvertedLeads.ToString("N0") became customers</small></div>
+            </article>
+            <article class="sd-kpi">
+                <span class="sd-kpi-ico green"><Icon Name="TrendingUp" Size="18" /></span>
+                <div><span>Conversion rate</span><strong>@_r.ConversionRate%</strong><div class="sd-meter"><i style="width:@_r.ConversionRate%"></i></div></div>
+            </article>
+            <article class="sd-kpi">
+                <span class="sd-kpi-ico gold"><Icon Name="ShoppingBag" Size="18" /></span>
+                <div><span>Sales from leads</span><strong>₹@AdminFmt.Inr(_r.Revenue)</strong><small>@_r.Orders order@(_r.Orders == 1 ? "" : "s")@(_r.Orders > 0 ? $" · average ₹{AdminFmt.Inr(_r.AverageOrderValue)}" : "")</small></div>
+            </article>
+            <article class="@($"sd-kpi {(_r.AwaitingFirstReply > 0 ? "alert" : "")}")">
+                <span class="sd-kpi-ico @(_r.AwaitingFirstReply > 0 ? "red" : "violet")"><Icon Name="Clock" Size="18" /></span>
+                <div><span>Median first reply</span><strong>@(_r.MedianFirstReplyMinutes is { } m ? Mins(m) : "—")</strong><small>@_r.RepliedWithinHourPercent% answered within an hour@(_r.AwaitingFirstReply > 0 ? $" · {_r.AwaitingFirstReply} waiting over an hour" : "")</small></div>
+            </article>
+        </section>
 
-        <div class="fr-kpis">
-            <div class="fr-kpi"><span>Open leads</span><strong>@_r.OpenLeads</strong><small>still being worked</small></div>
+        @* Work in progress *@
+        <section class="sd-tiles" aria-label="Work in progress">
+            <div class="sd-tile"><b>@_r.OpenLeads.ToString("N0")</b><span>Open leads</span><small>still being worked</small></div>
             @if (AdminAuth.CanAll("crm"))
             {
-                <div class="@($"fr-kpi {(_r.Unassigned > 0 ? "bad" : "")}")"><span>Unassigned</span><strong>@_r.Unassigned</strong><small>nobody owns these yet</small></div>
+                <div class="@($"sd-tile {(_r.Unassigned > 0 ? "warn" : "")}")"><b>@_r.Unassigned.ToString("N0")</b><span>Unassigned</span><small>nobody owns these yet</small></div>
             }
-            <div class="@($"fr-kpi {(_r.FollowUpsOverdue > 0 ? "bad" : "")}")"><span>Follow-ups overdue</span><strong>@_r.FollowUpsOverdue</strong><small><button type="button" class="fu-link" @onclick='() => Nav.NavigateTo("/admin/followups")'>Open follow-ups</button></small></div>
-            <div class="fr-kpi"><span>Due today</span><strong>@_r.FollowUpsToday</strong><small>calls and messages to do today</small></div>
-        </div>
+            <button type="button" class="@($"sd-tile sd-link {(_r.FollowUpsOverdue > 0 ? "bad" : "")}")" @onclick='() => Nav.NavigateTo("/admin/followups")'><b>@_r.FollowUpsOverdue.ToString("N0")</b><span>Follow-ups overdue</span><small>open follow-ups →</small></button>
+            <button type="button" class="sd-tile sd-link" @onclick='() => Nav.NavigateTo("/admin/followups")'><b>@_r.FollowUpsToday.ToString("N0")</b><span>Due today</span><small>calls and messages to do</small></button>
+        </section>
 
         @if (_r.NeedsAttention.Count > 0)
         {
-            <div class="ld-card">
-                <h4>Needs attention now</h4>
-                <ul class="cd-attn">
+            <section class="sd-card sd-attn" aria-label="Needs attention">
+                <header><h4><Icon Name="AlertCircle" Size="16" /> Needs attention now <span class="sd-count">@_r.NeedsAttention.Count</span></h4></header>
+                <ul>
                     @foreach (var a in _r.NeedsAttention)
                     {
                         var row = a;
                         <li>
-                            <button type="button" class="fu-link" @onclick='() => Nav.NavigateTo("/admin/leads?open=" + row.LeadId)'>@row.Name</button>
-                            <span>@row.Reason</span>
-                            <small>@(row.Owner is null ? "Unassigned" : row.Owner) · since @FuFmt.Due(row.Since)</small>
+                            <i class="sd-av">@Initial(row.Name)</i>
+                            <div><b>@row.Name</b><small>@(row.Owner is null ? "Unassigned" : row.Owner) · since @FuFmt.Due(row.Since)</small></div>
+                            <span class="sd-reason">@row.Reason</span>
+                            <button type="button" class="ld-btn" @onclick='() => Nav.NavigateTo("/admin/leads?open=" + row.LeadId)'>Open lead</button>
                         </li>
                     }
                 </ul>
-            </div>
+            </section>
         }
 
-        <div class="cd-two">
-            <div class="ld-card">
-                <h4>Lead funnel</h4>
-                @{ var max = Math.Max(1, _r.Funnel.Max(f => f.Count)); }
-                @foreach (var f in _r.Funnel)
-                {
-                    <div class="cd-bar">
-                        <span>@StatusLabel(f.Status)</span>
-                        <div><i class="@($"s-{f.Status}")" style="width:@(100.0 * f.Count / max)%"></i></div>
-                        <b>@f.Count</b>
-                    </div>
-                }
-                <p class="fu-hint">Where the leads created in this period are now.</p>
-            </div>
+        <div class="sd-two">
+            <section class="sd-card" aria-label="Lead funnel">
+                <header><h4>Lead funnel</h4><span>Where this period's leads are now</span></header>
+                @{ var max = Math.Max(1, _r.Funnel.Max(f => f.Count)); var total = Math.Max(1, _r.Funnel.Sum(f => f.Count)); }
+                <div class="sd-funnel">
+                    @foreach (var f in _r.Funnel)
+                    {
+                        <div class="sd-frow">
+                            <span>@StatusLabel(f.Status)</span>
+                            <div><i class="@($"s-{f.Status}")" style="width:@((100.0 * f.Count / max).ToString("0.#", CultureInfo.InvariantCulture))%"></i></div>
+                            <b>@f.Count.ToString("N0")</b><small>@((100.0 * f.Count / total).ToString("0", CultureInfo.InvariantCulture))%</small>
+                        </div>
+                    }
+                </div>
+            </section>
 
-            <div class="ld-card">
-                <h4>New leads by day</h4>
+            <section class="sd-card" aria-label="Lead trend">
+                <header><h4>Leads per day</h4><span class="sd-legend"><i class="a"></i> New <i class="b"></i> Became customers</span></header>
                 @if (_r.Trend.All(t => t.NewLeads == 0 && t.Converted == 0))
                 {
-                    <p class="fu-hint">No new leads in this period yet.</p>
+                    <p class="sd-empty">No new leads in this period yet.</p>
                 }
                 else
                 {
                     var tmax = Math.Max(1, _r.Trend.Max(t => Math.Max(t.NewLeads, t.Converted)));
-                    <div class="fr-chart" role="img" aria-label="New leads and conversions per day">
-                        @foreach (var t in _r.Trend)
-                        {
-                            <div class="fr-col" title="@t.Day: @t.NewLeads new, @t.Converted converted">
-                                <div class="fr-bars"><span class="due" style="height:@(100.0 * t.NewLeads / tmax)%"></span><span class="done" style="height:@(100.0 * t.Converted / tmax)%"></span></div>
-                                <small>@(_r.Trend.Count <= 14 || _r.Trend.IndexOf(t) % 4 == 0 ? t.Day : "")</small>
-                            </div>
-                        }
+                    <div class="sd-chart" role="img" aria-label="New leads and conversions per day">
+                        <div class="sd-grid"><span>@tmax</span><span>@(tmax / 2)</span><span>0</span></div>
+                        <div class="sd-cols">
+                            @foreach (var t in _r.Trend)
+                            {
+                                <div class="sd-col" title="@t.Day: @t.NewLeads new, @t.Converted converted">
+                                    <div class="sd-bars"><span class="a" style="height:@((100.0 * t.NewLeads / tmax).ToString("0.#", CultureInfo.InvariantCulture))%"></span><span class="b" style="height:@((100.0 * t.Converted / tmax).ToString("0.#", CultureInfo.InvariantCulture))%"></span></div>
+                                    <small>@(_r.Trend.Count <= 14 || _r.Trend.IndexOf(t) % 4 == 0 ? t.Day : "")</small>
+                                </div>
+                            }
+                        </div>
                     </div>
-                    <div class="fr-legend"><span><i class="due"></i> New leads</span><span><i class="done"></i> Became customers</span></div>
                 }
-            </div>
+            </section>
         </div>
 
-        <div class="ld-card em-table-card">
-            <h4 class="fr-pad">Where leads come from</h4>
-            <div class="em-scroll">
-                <table class="em-table">
-                    <thead><tr><th class="sn">S.No</th><th>Source</th><th class="num">Leads</th><th class="num">Customers</th><th class="num">Conversion</th><th class="num">Sales</th></tr></thead>
-                    <tbody>
-                        @{ _sn = 0; }
-                        @foreach (var s in _r.BySource)
-                        {
-                            <tr><td class="sn">@(++_sn)</td><td><strong>@SourceLabel(s.Source)</strong></td><td class="num">@s.Leads</td><td class="num">@s.Converted</td><td class="num">@(s.Leads == 0 ? "—" : s.ConversionPercent + "%")</td><td class="num">₹@AdminFmt.Inr(s.Revenue)</td></tr>
-                        }
-                        @if (_r.BySource.Count == 0) { <tr><td colspan="6" class="em-empty">No leads in this period yet.</td></tr> }
-                    </tbody>
-                </table>
-            </div>
-        </div>
+        <section class="sd-card sd-table" aria-label="Lead sources">
+            <header><h4>Where leads come from</h4><span>Sorted by volume. Click a heading to re-sort, or export the table.</span></header>
+            <DataTable TItem="CrmSourceRow" Items="_r.BySource" Columns="_sourceCols" Searchable="false" PageSize="10" Title="Lead sources" FileName="nura-lead-sources" EmptyText="No leads in this period yet." />
+        </section>
 
         @if (AdminAuth.CanAll("crm"))
         {
-            <div class="ld-card em-table-card">
-                <h4 class="fr-pad">Team</h4>
-                <div class="em-scroll">
-                    <table class="em-table">
-                        <thead><tr><th class="sn">S.No</th><th>Employee</th><th class="num">New leads</th><th class="num">Customers</th><th class="num">Sales</th><th class="num">First reply</th><th class="num">Open leads</th><th class="num">Overdue</th></tr></thead>
-                        <tbody>
-                            @{ _sn = 0; }
-                            @foreach (var e in _r.ByEmployee)
-                            {
-                                <tr>
-                                    <td class="sn">@(++_sn)</td><td><strong>@e.Name</strong></td><td class="num">@e.Leads</td><td class="num">@e.Converted</td><td class="num">₹@AdminFmt.Inr(e.Revenue)</td>
-                                    <td class="num">@(e.MedianFirstReplyMinutes is { } em ? Mins(em) : "—")</td><td class="num">@e.OpenLeads</td>
-                                    <td class="num @(e.OverdueFollowUps > 0 ? "ld-bad" : "")">@e.OverdueFollowUps</td>
-                                </tr>
-                            }
-                            @if (_r.ByEmployee.Count == 0) { <tr><td colspan="8" class="em-empty"><strong>No employees yet</strong>Add your sales team in the Team tab.</td></tr> }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            <section class="sd-card sd-table" aria-label="Team performance">
+                <header><h4>Team performance</h4><span>Leads owned, customers won, sales and reply speed per person.</span></header>
+                <DataTable TItem="CrmEmployeeRow" Items="_r.ByEmployee" Columns="_teamCols" Searchable="false" PageSize="10" Title="Team performance" FileName="nura-team-performance" EmptyText="No employees yet. Add your sales team in the Team tab." />
+            </section>
         }
     }
 </div>
 
 @code {
-    private int _sn;
     private CrmDashboardResponse? _r;
     private int _days = 30;
     private string? _error;
+    private List<DataColumn<CrmSourceRow>> _sourceCols = [];
+    private List<DataColumn<CrmEmployeeRow>> _teamCols = [];
 
-    protected override Task OnInitializedAsync() => LoadAsync(30);
+    protected override async Task OnInitializedAsync()
+    {
+        _sourceCols =
+        [
+            new() { Header = "Source", Text = s => SourceLabel(s.Source), Cell = s => b => { b.OpenElement(0, "strong"); b.AddContent(1, SourceLabel(s.Source)); b.CloseElement(); } },
+            new() { Header = "Leads", Text = s => s.Leads.ToString(), SortKey = s => s.Leads, Align = "right" },
+            new() { Header = "Customers", Text = s => s.Converted.ToString(), SortKey = s => s.Converted, Align = "right" },
+            new() { Header = "Conversion", Text = s => s.Leads == 0 ? "—" : s.ConversionPercent + "%", SortKey = s => s.ConversionPercent, Align = "right" },
+            new() { Header = "Sales (Rs)", Text = s => s.Revenue.ToString("N0", CultureInfo.InvariantCulture), SortKey = s => s.Revenue, Align = "right",
+                    Cell = s => b => b.AddContent(0, "₹" + s.Revenue.ToString("N0", CultureInfo.InvariantCulture)) },
+        ];
+        _teamCols =
+        [
+            new() { Header = "Employee", Text = e => e.Name, Cell = e => b => { b.OpenElement(0, "span"); b.AddAttribute(1, "class", "sd-person"); b.OpenElement(2, "i"); b.AddContent(3, Initial(e.Name)); b.CloseElement(); b.OpenElement(4, "b"); b.AddContent(5, e.Name); b.CloseElement(); b.CloseElement(); } },
+            new() { Header = "New leads", Text = e => e.Leads.ToString(), SortKey = e => e.Leads, Align = "right" },
+            new() { Header = "Customers", Text = e => e.Converted.ToString(), SortKey = e => e.Converted, Align = "right" },
+            new() { Header = "Sales (Rs)", Text = e => e.Revenue.ToString("N0", CultureInfo.InvariantCulture), SortKey = e => e.Revenue, Align = "right",
+                    Cell = e => b => b.AddContent(0, "₹" + e.Revenue.ToString("N0", CultureInfo.InvariantCulture)) },
+            new() { Header = "First reply", Text = e => e.MedianFirstReplyMinutes is { } m ? Mins(m) : "—", SortKey = e => e.MedianFirstReplyMinutes ?? int.MaxValue, Align = "right" },
+            new() { Header = "Open leads", Text = e => e.OpenLeads.ToString(), SortKey = e => e.OpenLeads, Align = "right" },
+            new() { Header = "Overdue follow-ups", Text = e => e.OverdueFollowUps.ToString(), SortKey = e => e.OverdueFollowUps, Align = "right", Tone = e => e.OverdueFollowUps > 0 ? "bad" : "good" },
+        ];
+        await LoadAsync(30);
+    }
 
     private async Task LoadAsync(int days)
     {
@@ -154,6 +171,8 @@
         if (res.Success) { _r = res; _error = null; }
         else _error = res.Message ?? "Could not load the dashboard.";
     }
+
+    private static string Initial(string? n) => string.IsNullOrWhiteSpace(n) ? "?" : n.Trim()[..1].ToUpperInvariant();
 
     private static string Mins(int m) => m < 1 ? "under a minute" : m < 60 ? $"{m} min" : m < 1440 ? $"{m / 60} h {m % 60} m" : $"{m / 1440} d {m % 1440 / 60} h";
 

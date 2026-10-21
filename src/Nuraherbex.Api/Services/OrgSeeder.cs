@@ -12,6 +12,12 @@ public static class OrgSeeder
 {
     public static async Task RunAsync(NuraDbContext db, ILogger log)
     {
+        await FirstRunAsync(db, log);
+        await AddMarketingAndDesignAsync(db, log);
+    }
+
+    private static async Task FirstRunAsync(NuraDbContext db, ILogger log)
+    {
         try
         {
             if (await db.Designations.AnyAsync() || await db.Departments.AnyAsync()) return;
@@ -45,5 +51,44 @@ public static class OrgSeeder
             log.LogInformation("[Org] Starter departments and designations created");
         }
         catch (Exception ex) { log.LogWarning(ex, "[Org] Starter set skipped"); }
+    }
+
+    private const string RoleTeamsFlag = "org.marketingDesignAdded";
+
+    /// <summary>
+    /// Adds Marketing and Design departments with a Marketing Executive and a Graphic Designer designation, once, so those roles can be given
+    /// their own tasks and rights. Skipped when the company already has departments by those names, and never repeated after an admin edits or deletes them.
+    /// </summary>
+    private static async Task AddMarketingAndDesignAsync(NuraDbContext db, ILogger log)
+    {
+        try
+        {
+            if (await db.SiteSettings.AnyAsync(s => s.Key == RoleTeamsFlag)) return;
+            if (!await db.Departments.AnyAsync()) return; // nothing seeded yet; the first-run set decides
+
+            async Task<Department> Ensure(string name, string text)
+            {
+                var d = await db.Departments.FirstOrDefaultAsync(x => x.Name == name);
+                if (d is null) { d = new Department { Name = name, Description = text }; db.Departments.Add(d); await db.SaveChangesAsync(); }
+                return d;
+            }
+            async Task EnsureDesignation(string name, string text, Department dep, int level, string preset)
+            {
+                if (await db.Designations.AnyAsync(x => x.Name == name)) return;
+                var p = PageCatalog.Presets.First(x => x.Name == preset);
+                db.Designations.Add(new Designation { Name = name, Description = text, DepartmentId = dep.Id, Level = level, RightsJson = PageCatalog.ToJson(p.Rights) });
+                await db.SaveChangesAsync();
+            }
+
+            var marketing = await Ensure("Marketing", "Campaigns, offers, reviews, content and brand reach.");
+            var design = await Ensure("Design", "Creatives, banners, packaging and video.");
+            await EnsureDesignation("Marketing Executive", "Runs campaigns and keeps content and offers fresh.", marketing, 3, "Marketing");
+            await EnsureDesignation("Graphic Designer", "Creates the visuals for campaigns, the website and packaging.", design, 3, "Designer");
+
+            db.SiteSettings.Add(new SiteSetting { Key = RoleTeamsFlag, Value = "true" });
+            await db.SaveChangesAsync();
+            log.LogInformation("[Org] Marketing and Design departments added");
+        }
+        catch (Exception ex) { log.LogWarning(ex, "[Org] Marketing and Design setup skipped"); }
     }
 }

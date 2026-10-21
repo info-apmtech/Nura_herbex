@@ -22,7 +22,8 @@
             </select>
         </div>
 
-        <button @onclick="OpenAddOrder"
+        <ExportButton Title="Orders" FileName="nura-orders" Columns="@(new[] { "Order ID", "Date", "Customer", "Phone", "Email", "City", "State", "Items", "Subtotal (Rs)", "Discount (Rs)", "Shipping (Rs)", "Total (Rs)", "Payment", "Payment status", "Delivery status", "Courier", "AWB" })" Rows="ExportRows" Disabled="@(FilteredOrders.Count == 0)" />
+            <button @onclick="OpenAddOrder"
                 class="px-3.5 py-1.5 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm">
             <Icon Name="Plus" Size="14" />
             <span>Create Test Order</span>
@@ -66,8 +67,8 @@
                     }
                     else
                     {
-                        _sn = 0;
-                        @foreach (var order in FilteredOrders)
+                        _sn = (_page - 1) * _size;
+                        @foreach (var order in FilteredOrders.Skip((_page - 1) * _size).Take(_size))
                         {
                             <tr @key="order.Id" class="hover:bg-zinc-800/30 transition-colors">
                                 <td class="px-3 py-4 text-zinc-500 font-mono align-top">@(++_sn)</td>
@@ -169,6 +170,7 @@
                 </tbody>
             </table>
         </div>
+    <Pager Total="@FilteredOrders.Count" @bind-Page="_page" @bind-PageSize="_size" Label="orders" />
     </div>
 
 </div>
@@ -473,6 +475,9 @@
 }
 
 @code {
+    private int _page = 1, _size = 10;
+    private IEnumerable<IReadOnlyList<string>> ExportRows() => FilteredOrders.Select(o => (IReadOnlyList<string>)new[] { o.Id, o.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"), o.CustomerName, o.CustomerPhone, o.CustomerEmail, o.ShippingAddress.City, o.ShippingAddress.State, string.Join("; ", o.Items.Select(i => $"{i.Name} x{i.Quantity}")), o.Subtotal.ToString("0.##"), o.DiscountAmount.ToString("0.##"), o.ShippingFee.ToString("0.##"), o.TotalAmount.ToString("0.##"), o.PaymentMethod, o.PaymentStatus, o.DeliveryStatus, o.ShiprocketCourier ?? "", o.ShiprocketAwb ?? "" });
+
     private int _sn;
     [Parameter] public List<OrderDto> Orders { get; set; } = new();
     [Parameter] public bool Loading { get; set; }

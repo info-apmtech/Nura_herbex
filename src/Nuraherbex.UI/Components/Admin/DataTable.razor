@@ -1,0 +1,246 @@
+@typeparam TItem
+@using System.Globalization
+@inject ExportService Exporter
+
+@* Reusable data table: search, click-to-sort headers, page size, pagination and CSV / Excel / PDF export of everything that matches the search. *@
+<div class="dt">
+    <div class="dt-bar">
+        @if (Searchable)
+        {
+            <label class="dt-search"><Icon Name="Search" Size="15" /><input type="search" placeholder="@SearchPlaceholder" aria-label="Search this table" value="@_q" @oninput="OnSearch" /></label>
+        }
+        @Toolbar
+        @if (Columns.Count > 4)
+        {
+            <div class="dt-export">
+                <button type="button" class="dt-btn" aria-haspopup="true" aria-expanded="@_colMenu" @onclick="() => _colMenu = !_colMenu"><Icon Name="Layers" Size="14" /> Columns</button>
+                @if (_colMenu)
+                {
+                    <div class="dt-menu dt-cols" role="menu">
+                        <p>Show or hide columns. Exports include only the columns you can see.</p>
+                        @for (var ci = 0; ci < Columns.Count; ci++)
+                        {
+                            var cidx = ci;
+                            <label class="dt-col"><input type="checkbox" checked="@(!_hidden.Contains(cidx))" @onchange="e => ToggleColumn(cidx, e.Value is true)" /> @Columns[ci].Header</label>
+                        }
+                        <button type="button" class="dt-col-reset" @onclick="ResetColumns">Restore defaults</button>
+                    </div>
+                    <button type="button" class="dt-menu-bg" aria-label="Close columns menu" @onclick="() => _colMenu = false"></button>
+                }
+            </div>
+        }
+        <span class="dt-spacer"></span>
+        <span class="dt-count">@Filtered.Count.ToString("N0") @(Filtered.Count == 1 ? "record" : "records")@(Filtered.Count != Items.Count ? $" of {Items.Count:N0}" : "")</span>
+        @if (Exportable)
+        {
+            <div class="dt-export">
+                <button type="button" class="dt-btn" aria-haspopup="true" aria-expanded="@_menu" disabled="@(Filtered.Count == 0 || _exporting)" @onclick="() => _menu = !_menu"><Icon Name="Download" Size="14" /> @(_exporting ? "Preparing…" : "Export")</button>
+                @if (_menu)
+                {
+                    <div class="dt-menu" role="menu">
+                        @foreach (var f in ExportService.Formats)
+                        {
+                            var format = f.Format;
+                            <button type="button" role="menuitem" @onclick="() => ExportAsync(format)">@f.Label <small>@(format == "csv" ? "spreadsheet text" : format == "xlsx" ? "Microsoft Excel" : "print-ready")</small></button>
+                        }
+                    </div>
+                    <button type="button" class="dt-menu-bg" aria-label="Close export menu" @onclick="() => _menu = false"></button>
+                }
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(_notice)) { <div class="dt-notice" role="status">@_notice</div> }
+
+    <div class="dt-wrap">
+        <table class="dt-table">
+            <thead>
+                <tr>
+                    <th class="dt-sn" scope="col">#</th>
+                    @foreach (var v in Vis)
+                    {
+                        var idx = v.Idx; var c = v.C;
+                        <th scope="col" class="@($"{(c.Align == "right" ? "is-right" : "")} {c.Class}")" style="@(c.Width is null ? "" : $"width:{c.Width}")" aria-sort="@(_sort == idx ? (_desc ? "descending" : "ascending") : "none")">
+                            @if (c.Sortable)
+                            {
+                                <button type="button" class="dt-sort @(_sort == idx ? "is-on" : "")" @onclick="() => SortBy(idx)">@c.Header<span aria-hidden="true">@(_sort == idx ? (_desc ? "▼" : "▲") : "↕")</span></button>
+                            }
+                            else { @c.Header }
+                        </th>
+                    }
+                    @if (RowActions is not null) { <th scope="col" class="is-right">@ActionsHeader</th> }
+                </tr>
+            </thead>
+            <tbody>
+                @if (Loading)
+                {
+                    <tr><td colspan="@(Vis.Count + 1 + (RowActions is null ? 0 : 1))" class="dt-empty">Loading…</td></tr>
+                }
+                else if (Filtered.Count == 0)
+                {
+                    <tr><td colspan="@(Vis.Count + 1 + (RowActions is null ? 0 : 1))" class="dt-empty">@(string.IsNullOrWhiteSpace(_q) ? EmptyText : "Nothing matches your search.")</td></tr>
+                }
+                else
+                {
+                    var n = (_page - 1) * _size;
+                    foreach (var item in PageItems)
+                    {
+                        n++;
+                        <tr class="@(RowClass?.Invoke(item))" @onclick="() => OnRowClick.InvokeAsync(item)">
+                            <td class="dt-sn">@n</td>
+                            @foreach (var v in Vis)
+                            {
+                                var c = v.C;
+                                <td class="@($"{(c.Align == "right" ? "is-right" : "")} {c.Class}")" data-label="@c.Header">@(c.Cell is not null ? c.Cell(item) : c.Tone is not null ? PillFor(c.Text(item), c.Tone(item)) : (RenderFragment)(b => b.AddContent(0, c.Text(item))))</td>
+                            }
+                            @if (RowActions is not null) { <td class="is-right dt-actions" @onclick:stopPropagation="true">@RowActions(item)</td> }
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (Filtered.Count > 0)
+    {
+        <div class="dt-foot">
+            <span>Showing @(((_page - 1) * _size) + 1) to @Math.Min(_page * _size, Filtered.Count) of @Filtered.Count.ToString("N0")</span>
+            <label class="dt-size">Rows <select value="@_size" @onchange="OnSize">@foreach (var s in SizeOptions) { <option value="@s">@s</option> }</select></label>
+            <nav class="dt-pages" aria-label="Pagination">
+                <button type="button" aria-label="First page" disabled="@(_page == 1)" @onclick="() => GoTo(1)">«</button>
+                <button type="button" aria-label="Previous page" disabled="@(_page == 1)" @onclick="() => GoTo(_page - 1)">‹</button>
+                @foreach (var p in PageWindow)
+                {
+                    var page = p;
+                    if (page == 0) { <span class="dt-gap">…</span> }
+                    else { <button type="button" class="@(page == _page ? "is-on" : "")" aria-current="@(page == _page ? "page" : null)" @onclick="() => GoTo(page)">@(page)</button> }
+                }
+                <button type="button" aria-label="Next page" disabled="@(_page == TotalPages)" @onclick="() => GoTo(_page + 1)">›</button>
+                <button type="button" aria-label="Last page" disabled="@(_page == TotalPages)" @onclick="() => GoTo(TotalPages)">»</button>
+            </nav>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TItem> Items { get; set; } = Array.Empty<TItem>();
+    [Parameter, EditorRequired] public IReadOnlyList<DataColumn<TItem>> Columns { get; set; } = Array.Empty<DataColumn<TItem>>();
+    [Parameter] public string Title { get; set; } = "Report";
+    [Parameter] public string FileName { get; set; } = "report";
+    [Parameter] public IEnumerable<string>? ExportMeta { get; set; }
+    [Parameter] public bool Searchable { get; set; } = true;
+    [Parameter] public bool Exportable { get; set; } = true;
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public int PageSize { get; set; } = 25;
+    [Parameter] public string SearchPlaceholder { get; set; } = "Search";
+    [Parameter] public string EmptyText { get; set; } = "No records yet.";
+    [Parameter] public string ActionsHeader { get; set; } = "Actions";
+    [Parameter] public RenderFragment? Toolbar { get; set; }
+    [Parameter] public RenderFragment<TItem>? RowActions { get; set; }
+    [Parameter] public Func<TItem, string>? RowClass { get; set; }
+    [Parameter] public EventCallback<TItem> OnRowClick { get; set; }
+
+    private static readonly int[] SizeOptions = [10, 25, 50, 100, 250];
+    private string _q = "";
+    private int _page = 1, _size = 25, _sort = -1;
+    private bool _desc, _menu, _exporting;
+    private string? _notice;
+    private IReadOnlyList<TItem>? _lastItems;
+    private int _lastCount = -1;
+    private List<TItem> _filtered = new();
+    private bool _dirty = true;
+    private bool _colMenu;
+    private readonly HashSet<int> _hidden = new();
+    private IReadOnlyList<DataColumn<TItem>>? _colsSeen;
+    private List<(int Idx, DataColumn<TItem> C)> Vis => Columns.Select((c, i) => (i, c)).Where(x => !_hidden.Contains(x.i)).ToList();
+    private void ToggleColumn(int i, bool on) { if (on) _hidden.Remove(i); else if (_hidden.Count < Columns.Count - 1) _hidden.Add(i); }
+    private void ResetColumns() { _hidden.Clear(); for (var i = 0; i < Columns.Count; i++) if (Columns[i].Hidden) _hidden.Add(i); }
+    private static RenderFragment PillFor(string text, string tone) => b => { b.OpenElement(0, "span"); b.AddAttribute(1, "class", "dt-pill " + tone); b.AddContent(2, text); b.CloseElement(); };
+
+    protected override void OnInitialized() => _size = SizeOptions.Contains(PageSize) ? PageSize : 25;
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_colsSeen, Columns)) { _colsSeen = Columns; ResetColumns(); }
+        // New data (a reload, a changed date range) starts again from the first page.
+        if (!ReferenceEquals(_lastItems, Items) || _lastCount != Items.Count) { _lastItems = Items; _lastCount = Items.Count; _page = 1; _dirty = true; }
+    }
+
+    private List<TItem> Filtered
+    {
+        get
+        {
+            if (!_dirty) return _filtered;
+            IEnumerable<TItem> q = Items;
+            var term = _q.Trim();
+            if (term.Length > 0)
+            {
+                var words = term.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                q = q.Where(i => { var hay = string.Join(" ", Columns.Select(c => c.Text(i))); return words.All(w => hay.Contains(w, StringComparison.OrdinalIgnoreCase)); });
+            }
+            var list = q.ToList();
+            if (_sort >= 0 && _sort < Columns.Count)
+            {
+                var c = Columns[_sort];
+                Comparison<TItem> cmp = (a, b) => Compare(c, a, b);
+                list = _desc ? list.OrderByDescending(x => x, Comparer<TItem>.Create(cmp)).ToList() : list.OrderBy(x => x, Comparer<TItem>.Create(cmp)).ToList();
+            }
+            _filtered = list; _dirty = false;
+            return _filtered;
+        }
+    }
+
+    private static int Compare(DataColumn<TItem> c, TItem a, TItem b)
+    {
+        if (c.SortKey is not null) return Comparer<IComparable?>.Default.Compare(c.SortKey(a), c.SortKey(b));
+        var x = c.Text(a); var y = c.Text(b);
+        if (TryNumber(x, out var nx) && TryNumber(y, out var ny)) return nx.CompareTo(ny);
+        return string.Compare(x, y, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryNumber(string s, out decimal n)
+    {
+        // "₹1,899" and "12 items" sort as numbers; "NH-100001" sorts by its digits; dates and words fall back to text order.
+        var t = new string(s.Where(ch => char.IsDigit(ch) || ch == '.').ToArray());
+        if (s.TrimStart().StartsWith('-')) t = "-" + t;
+        n = 0;
+        return t.Length > 0 && s.Length - t.Length <= 5 && decimal.TryParse(t, NumberStyles.Number, CultureInfo.InvariantCulture, out n);
+    }
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(Filtered.Count / (double)_size));
+    private IEnumerable<TItem> PageItems => Filtered.Skip((_page - 1) * _size).Take(_size);
+
+    private IEnumerable<int> PageWindow
+    {
+        get
+        {
+            var total = TotalPages;
+            if (total <= 7) return Enumerable.Range(1, total);
+            var set = new SortedSet<int> { 1, total, _page - 1, _page, _page + 1 };
+            if (_page <= 3) { set.Add(2); set.Add(3); set.Add(4); }
+            if (_page >= total - 2) { set.Add(total - 1); set.Add(total - 2); set.Add(total - 3); }
+            var result = new List<int>(); var prev = 0;
+            foreach (var p in set.Where(p => p >= 1 && p <= total)) { if (p - prev > 1) result.Add(0); result.Add(p); prev = p; }
+            return result;
+        }
+    }
+
+    private void OnSearch(ChangeEventArgs e) { _q = e.Value?.ToString() ?? ""; _page = 1; _dirty = true; }
+    private void OnSize(ChangeEventArgs e) { _size = int.TryParse(e.Value?.ToString(), out var s) ? s : 25; _page = 1; }
+    private void GoTo(int p) => _page = Math.Clamp(p, 1, TotalPages);
+    private void SortBy(int idx) { if (_sort == idx) _desc = !_desc; else { _sort = idx; _desc = false; } _page = 1; _dirty = true; }
+
+    private async Task ExportAsync(string format)
+    {
+        _menu = false; _exporting = true; _notice = null;
+        StateHasChanged();
+        var cols = Vis.Select(v => v.C).Where(c => c.Export).ToList();
+        var rows = Filtered.Select(i => (IReadOnlyList<string>)cols.Select(c => c.Text(i)).ToList()).ToList();
+        var meta = new List<string>();
+        if (ExportMeta is not null) meta.AddRange(ExportMeta);
+        if (!string.IsNullOrWhiteSpace(_q)) meta.Add($"Filtered by: {_q.Trim()}");
+        var ok = await Exporter.RunAsync(format, FileName, Title, cols.Select(c => c.Header).ToList(), rows, meta);
+        _notice = ok ? $"Exported {rows.Count:N0} record{(rows.Count == 1 ? "" : "s")} as {format.ToUpperInvariant()}." : "The export could not be created in this browser.";
+        _exporting = false;
+    }
+}

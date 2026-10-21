@@ -1,0 +1,49 @@
+@inject ExportService Exporter
+
+@* Export button for any admin list: CSV, Excel or PDF of exactly the rows the page supplies (usually everything that matches the current search and filters). *@
+<div class="dt-export xb">
+    <button type="button" class="dt-btn" aria-haspopup="true" aria-expanded="@_open" disabled="@(Disabled || _busy)" @onclick="() => _open = !_open"><Icon Name="Download" Size="14" /> @(_busy ? "Preparing…" : "Export")</button>
+    @if (_open)
+    {
+        <div class="dt-menu" role="menu">
+            @foreach (var f in ExportService.Formats)
+            {
+                var format = f.Format;
+                <button type="button" role="menuitem" @onclick="() => RunAsync(format)">@f.Label <small>@(format == "csv" ? "spreadsheet text" : format == "xlsx" ? "Microsoft Excel" : "print-ready")</small></button>
+            }
+        </div>
+        <button type="button" class="dt-menu-bg" aria-label="Close export menu" @onclick="() => _open = false"></button>
+    }
+    @if (!string.IsNullOrEmpty(_notice)) { <span class="xb-note" role="status">@_notice</span> }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "Report";
+    [Parameter] public string FileName { get; set; } = "export";
+    [Parameter, EditorRequired] public IReadOnlyList<string> Columns { get; set; } = Array.Empty<string>();
+    /// <summary>Called when the user picks a format, so the rows always match the page as it is at that moment.</summary>
+    [Parameter, EditorRequired] public Func<IEnumerable<IReadOnlyList<string>>> Rows { get; set; } = () => [];
+    [Parameter] public IEnumerable<string>? Meta { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    private bool _open, _busy;
+    private string? _notice;
+
+    private async Task RunAsync(string format)
+    {
+        _open = false; _busy = true; _notice = null;
+        StateHasChanged();
+        var rows = Rows().ToList();
+        var ok = await Exporter.RunAsync(format, FileName, Title, Columns, rows, Meta);
+        _notice = ok ? $"Exported {rows.Count:N0} as {format.ToUpperInvariant()}" : "Export failed";
+        _busy = false;
+        _ = ClearNoticeAsync();
+    }
+
+    private async Task ClearNoticeAsync()
+    {
+        await Task.Delay(4000);
+        _notice = null;
+        await InvokeAsync(StateHasChanged);
+    }
+}

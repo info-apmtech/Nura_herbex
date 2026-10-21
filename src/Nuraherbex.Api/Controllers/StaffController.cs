@@ -315,7 +315,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
 
         var ok = await whatsapp.SendTextAsync(lead.Phone, r.Text.Trim(), sentBy: MyName);
         if (ok) log.LogInformation("[Lead] {Who} replied to lead {Id}", MyName, id);
-        return Ok(new ApiResult { Success = ok, Message = ok ? "Message sent" : "Message could not be sent. Check the WhatsApp credentials in the server configuration." });
+        return Ok(new ApiResult { Success = ok, Message = ok ? "Message sent" : whatsapp.LastError ?? "Message could not be sent. Check the WhatsApp credentials in the server configuration." });
     }
 
     // ---- Reply assistant ------------------------------------------------------------------------

@@ -7,6 +7,7 @@
             <h2>Review moderation <span class="admin-count">@PendingCount pending</span></h2>
             <p>Customer submissions stay off the storefront until you approve them.</p>
         </div>
+        <ExportButton Title="Customer reviews" FileName="nura-reviews" Columns="@(new[] { "Date", "Name", "City", "Rating", "Title", "Review", "Published" })" Rows="ExportRows" Disabled="@(!Filtered.Any())" />
         <button class="admin-btn" disabled="@_loading" @onclick="LoadAsync"><Icon Name="RefreshCw" Size="16" /> Refresh</button>
     </div>
 
@@ -37,7 +38,7 @@
     else
     {
         <div class="admin-review-list">
-            @foreach (var review in Filtered)
+            @foreach (var review in Filtered.Skip((_page - 1) * _size).Take(_size))
             {
                 <article @key="review.Id" class="admin-card admin-review-card">
                     <div class="admin-review-top">
@@ -64,6 +65,7 @@
                 </article>
             }
         </div>
+        <Pager Total="@Filtered.Count()" @bind-Page="_page" @bind-PageSize="_size" Label="reviews" />
     }
 </section>
 
@@ -84,6 +86,8 @@
     private string _filter = "pending", _search = "";
     private string? _error, _message, _workingId;
     private bool _loading = true;
+    private int _page = 1, _size = 10;
+    private IEnumerable<IReadOnlyList<string>> ExportRows() => Filtered.Select(r => (IReadOnlyList<string>)new[] { r.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd"), r.Name, r.City ?? "", r.Rating.ToString(), r.Title ?? "", (r.Body ?? "").Replace("\n", " "), r.Approved ? "Yes" : "No" });
 
     private int PendingCount => _reviews.Count(r => !r.Approved);
     private int ApprovedCount => _reviews.Count(r => r.Approved);

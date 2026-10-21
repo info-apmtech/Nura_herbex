@@ -66,6 +66,7 @@ builder.Services.AddScoped<FollowUpService>();
 builder.Services.AddScoped<CrmDashboardService>();
 builder.Services.AddScoped<RightsService>();
 builder.Services.AddScoped<TaskService>();
+builder.Services.AddScoped<ReportService>();
 builder.Services.Configure<AiOptions>(o => { cfg.GetSection(AiOptions.Section).Bind(o); if (string.IsNullOrWhiteSpace(o.ApiKey)) o.ApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? ""; });
 builder.Services.AddScoped<ReplyAssistantService>();
 builder.Services.AddHostedService<FollowUpWorker>();
