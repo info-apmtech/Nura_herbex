@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Nuraherbex.UI</RootNamespace>
+    <RuntimeIdentifier></RuntimeIdentifier>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Nuraherbex.Shared\Nuraherbex.Shared.csproj" />
+    <ProjectReference Include="..\Nuraherbex.Shared\Nuraherbex.Shared.csproj" UndefineProperties="RuntimeIdentifier" />
   </ItemGroup>
 
 </Project>

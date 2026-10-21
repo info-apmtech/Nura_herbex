@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Nuraherbex.UI\Nuraherbex.UI.csproj" />
+    <ProjectReference Include="..\Nuraherbex.UI\Nuraherbex.UI.csproj" UndefineProperties="RuntimeIdentifier" />
   </ItemGroup>
 
 </Project>
