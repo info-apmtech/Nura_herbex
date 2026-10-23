@@ -1,0 +1,32 @@
+@inject NavigationManager Nav
+
+<section id="our-story" class="nh-story">
+    <div class="nh-story-overlay"></div>
+
+    @* Right Sky Floating Script Quote *@
+    <div class="nh-story-script">
+        <span>Healthier</span><br />
+        <span>People</span><br />
+        <span style="color:#732dbd; font-weight:600;">Brighter Tomorrows</span>
+    </div>
+
+    <div class="nh-story-inner">
+        <div class="nh-story-box">
+            <span class="nh-story-kicker">OUR STORY</span>
+            
+            <h2 class="nh-story-title">
+                Ancient Wisdom<br />
+                for Modern Living
+            </h2>
+
+            <p class="nh-story-text">
+                At Nuraherbex, we blend time-tested herbal knowledge with modern science to create natural wellness solutions for a healthier, brighter tomorrow.
+            </p>
+
+            <button @onclick='() => Nav.NavigateTo("/formulation")' class="nh-story-btn" aria-label="Read our story">
+                <span>Our Story</span>
+                <span style="font-size: 15px; font-weight: 800;">→</span>
+            </button>
+        </div>
+    </div>
+</section>

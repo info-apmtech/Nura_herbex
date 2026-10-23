@@ -1,0 +1,61 @@
+@inject NavigationManager Nav
+
+<footer class="nh-newsletter">
+    
+    @* Decorative Leaf Accents on Left & Right Edges *@
+    <img src="_content/Nuraherbex.UI/images/newsletter-leaf-left.png" alt="" class="nh-newsletter-leaf-l" aria-hidden="true" />
+    <img src="_content/Nuraherbex.UI/images/newsletter-leaf-right.png" alt="" class="nh-newsletter-leaf-r" aria-hidden="true" />
+
+    <div class="nh-newsletter-inner">
+        
+        <h2 class="nh-newsletter-title">Join Our Wellness Community</h2>
+
+        <p class="nh-newsletter-sub">
+            Get exclusive offers, wellness tips and new product updates.
+        </p>
+
+        @if (_isSubscribed)
+        {
+            <div class="nh-newsletter-success">
+                <Icon Name="CheckCircle2" Size="18" />
+                <span>Thank you! You're subscribed to Nura Herbex updates.</span>
+            </div>
+        }
+        else
+        {
+            <form @onsubmit="HandleSubscribe" @onsubmit:preventDefault class="nh-newsletter-form">
+                <div class="nh-newsletter-input-wrap">
+                    <div class="nh-newsletter-input-icon">
+                        <Icon Name="Mail" Size="18" />
+                    </div>
+                    <input type="email" required @bind="_email" placeholder="Enter your email" class="nh-newsletter-input" />
+                    <button type="submit" class="nh-newsletter-btn">
+                        <span>Subscribe</span>
+                        <span style="font-weight: 800; font-size: 15px;">→</span>
+                    </button>
+                </div>
+            </form>
+        }
+
+        <div class="nh-newsletter-legal">
+            <p style="margin: 0 0 4px; color: rgba(255,255,255,0.7);">© 2026 Nura Herbex. All rights reserved.</p>
+            <p style="margin: 0; color: rgba(255,255,255,0.45); font-size: 10px;">
+                01 / 24 • Concept mockup — verify imagery, pricing, claims and policy text before launch
+            </p>
+        </div>
+
+    </div>
+</footer>
+
+@code {
+    private string _email = "";
+    private bool _isSubscribed;
+
+    private void HandleSubscribe()
+    {
+        if (!string.IsNullOrWhiteSpace(_email) && _email.Contains('@'))
+        {
+            _isSubscribed = true;
+        }
+    }
+}

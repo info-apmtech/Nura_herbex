@@ -138,3 +138,44 @@
 .hm-qty span{min-width:1.6rem;text-align:center;color:#fff;font-weight:700}
 .hm-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
 @media(max-width:520px){.hm-spot-list{grid-template-columns:1fr}}
+
+/* Light storefront home overrides */
+.home-storefront {
+  background-color: #ffffff !important;
+  color: #1f2937 !important;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+.home-storefront h1,
+.home-storefront h2,
+.home-storefront h3,
+.home-storefront h4 {
+  color: #111827;
+  letter-spacing: -0.015em;
+}
+.home-storefront h1.text-white,
+.home-storefront h2.text-white,
+.home-storefront h3.text-white,
+.home-storefront h4.text-white,
+.home-storefront .text-white {
+  color: #ffffff !important;
+}
+.home-storefront p {
+  color: #4b5563;
+}
+.home-storefront .font-serif {
+  font-family: 'EB Garamond', Garamond, Georgia, serif !important;
+}
+.home-storefront .font-sans {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif !important;
+}
+
+/* Brand Color Utilities for New Storefront */
+.bg-brand-purple { background-color: #732dbd !important; }
+.bg-brand-purple:hover { background-color: #6020a1 !important; }
+.text-brand-purple { color: #732dbd !important; }
+.border-brand-purple { border-color: #732dbd !important; }
+.bg-brand-lavender { background-color: #ede4f6 !important; }
+.text-brand-green { color: #2d7a46 !important; }
+.bg-brand-green-light { background-color: #e4f2e6 !important; }
+
+

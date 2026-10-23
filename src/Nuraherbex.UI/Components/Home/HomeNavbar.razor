@@ -1,0 +1,181 @@
+@implements IDisposable
+@inject NavigationManager Nav
+@inject CartState Cart
+@inject BrowserInterop Browser
+
+<header class="nh-navbar">
+    <div class="nh-nav-inner">
+        
+        @* Brand Logo *@
+        <button @onclick="GoHome" class="nh-nav-brand" aria-label="Nura Herbex Home">
+            <img src="_content/Nuraherbex.UI/images/logo-mark.png" alt="Nura Herbex Emblem" class="nh-nav-logo" />
+            <div class="nh-nav-brand-text">
+                <span class="nh-nav-brand-title">
+                    NURA <span>HERBEX</span><sup>®</sup>
+                </span>
+                <span class="nh-nav-brand-sub">Ayurvedic Wellness</span>
+            </div>
+        </button>
+
+        @* Right Actions: Search, Cart with purple badge, Hamburger Menu *@
+        <div class="nh-nav-actions">
+            
+            @* Search Button *@
+            <button @onclick="ToggleSearch" aria-label="Search Store" class="nh-nav-btn">
+                <Icon Name="Search" Size="20" StrokeWidth="2" />
+            </button>
+
+            @* Cart Button with Purple Item Count Badge *@
+            <button @onclick="OpenCart" aria-label="Shopping Cart" class="nh-nav-btn">
+                <Icon Name="ShoppingBag" Size="20" StrokeWidth="2" />
+                <span class="nh-cart-badge">
+                    @(Cart.ItemCount > 0 ? Cart.ItemCount : 1)
+                </span>
+            </button>
+
+            @* Hamburger Menu Button *@
+            <button @onclick="ToggleMenu" aria-label="Open Navigation Menu" class="nh-nav-btn">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+
+        </div>
+    </div>
+
+    @* Expandable Search Bar Overlay *@
+    @if (_isSearchOpen)
+    {
+        <div style="background:#fdfbf8; border-top:1px solid #ebdff5; padding:12px 24px; box-shadow:inset 0 2px 6px rgba(0,0,0,0.03);">
+            <div style="max-width:600px; margin:0 auto; display:flex; align-items:center; gap:12px;">
+                <Icon Name="Search" Size="18" Class="text-purple-600" />
+                <input @bind="_searchQuery" @bind:event="oninput" @onkeydown="HandleSearchKey" placeholder="Search products (e.g. GUT 365, STAMIX)..." style="flex:1; border:none; outline:none; background:transparent; font-size:14px; padding:6px 0;" autofocus />
+                <button @onclick="PerformSearch" style="background:#732dbd; color:#fff; border:none; border-radius:9999px; padding:6px 16px; font-weight:700; font-size:12px; cursor:pointer;">Search</button>
+                <button @onclick="ToggleSearch" style="background:none; border:none; cursor:pointer; color:#888;">
+                    <Icon Name="X" Size="16" />
+                </button>
+            </div>
+        </div>
+    }
+</header>
+
+@* Slide-over Drawer Backdrop *@
+@if (_isMenuOpen)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:999; backdrop-filter:blur(3px);" @onclick="CloseMenu"></div>
+
+    <aside style="position:fixed; top:0; right:0; height:100%; width:82%; max-width:360px; background:#ffffff; z-index:1000; box-shadow:-6px 0 24px rgba(0,0,0,0.15); display:flex; flex-direction:column; justify-content:space-between;">
+        <div>
+            <div style="padding:20px; border-bottom:1px solid #f0ecf4; display:flex; align-items:center; justify-content:space-between; background:#faf8fc;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <img src="_content/Nuraherbex.UI/images/logo-mark.png" alt="Nura Herbex" style="width:32px; height:32px; object-fit:contain;" />
+                    <span style="font-weight:800; font-size:14px; letter-spacing:0.06em; color:#123d37;">NURA HERBEX</span>
+                </div>
+                <button @onclick="CloseMenu" aria-label="Close menu" style="background:none; border:none; cursor:pointer; padding:6px;">
+                    <Icon Name="X" Size="18" />
+                </button>
+            </div>
+
+            <nav style="padding:20px 16px; display:flex; flex-direction:column; gap:6px;">
+                <button @onclick="GoHome" style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
+                    <span>Home</span>
+                    <Icon Name="ArrowRight" Size="16" />
+                </button>
+                <button @onclick='() => GoPage("/shop")' style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
+                    <span>All Products</span>
+                    <Icon Name="ArrowRight" Size="16" />
+                </button>
+                <button @onclick='() => GoScroll("featured-products")' style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
+                    <span>GUT 365 &amp; STAMIX</span>
+                    <Icon Name="ArrowRight" Size="16" />
+                </button>
+                <button @onclick='() => GoScroll("wellness-goals")' style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
+                    <span>Wellness Goals</span>
+                    <Icon Name="ArrowRight" Size="16" />
+                </button>
+                <button @onclick='() => GoScroll("our-story")' style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
+                    <span>Our Story</span>
+                    <Icon Name="ArrowRight" Size="16" />
+                </button>
+                <button @onclick='() => GoPage("/formulation")' style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
+                    <span>Formulation</span>
+                    <Icon Name="ArrowRight" Size="16" />
+                </button>
+                <button @onclick='() => GoPage("/track")' style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
+                    <span>Track Order</span>
+                    <Icon Name="ArrowRight" Size="16" />
+                </button>
+                <button @onclick='() => GoPage("/account")' style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
+                    <span>My Account</span>
+                    <Icon Name="ArrowRight" Size="16" />
+                </button>
+            </nav>
+        </div>
+
+        <div style="padding:20px; border-top:1px solid #f0ecf4; background:#faf8fc;">
+            <button @onclick='() => { CloseMenu(); Cart.SetOpen(true); }' style="width:100%; background:#732dbd; color:#fff; font-weight:800; font-size:13px; text-transform:uppercase; letter-spacing:0.08em; padding:14px; border-radius:9999px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <Icon Name="ShoppingBag" Size="16" />
+                <span>View Cart (@Cart.ItemCount)</span>
+            </button>
+        </div>
+    </aside>
+}
+
+@code {
+    private bool _isSearchOpen;
+    private bool _isMenuOpen;
+    private string _searchQuery = "";
+
+    protected override void OnInitialized()
+    {
+        Cart.Changed += OnCartChanged;
+    }
+
+    private void OnCartChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void ToggleSearch() => _isSearchOpen = !_isSearchOpen;
+    private void ToggleMenu() => _isMenuOpen = !_isMenuOpen;
+    private void CloseMenu() => _isMenuOpen = false;
+    private void OpenCart() => Cart.SetOpen(true);
+
+    private async Task GoHome()
+    {
+        CloseMenu();
+        Nav.NavigateTo("/");
+        await Browser.ScrollToTopAsync();
+    }
+
+    private async Task GoPage(string route)
+    {
+        CloseMenu();
+        Nav.NavigateTo(route);
+        await Browser.ScrollToTopAsync();
+    }
+
+    private async Task GoScroll(string id)
+    {
+        CloseMenu();
+        await Browser.ScrollToIdAsync(id);
+    }
+
+    private void HandleSearchKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") PerformSearch();
+    }
+
+    private void PerformSearch()
+    {
+        if (!string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            _isSearchOpen = false;
+            Nav.NavigateTo($"/shop?q={Uri.EscapeDataString(_searchQuery)}");
+        }
+    }
+
+    public void Dispose()
+    {
+        Cart.Changed -= OnCartChanged;
+    }
+}

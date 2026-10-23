@@ -1,17 +1,19 @@
 @page "/"
+@using Nuraherbex.UI.Components.Home
 @inject BrowserInterop Browser
 
-<main class="w-full relative hm-home">
-  <HomeHero />
-  <HomeTrustBar />
-  <HomeProducts />
-  <HomeSpotlight />
-  <HomeIngredients />
-  <HomeVideoFeature />
-  <HomeSteps />
-  <HomeReviews />
-  <StamixAssistant />
-</main>
+<PageTitle>Nura Herbex — Better Digestion, Brighter Living | Ayurvedic Wellness</PageTitle>
+
+<div class="nh-storefront">
+    <HomeNavbar />
+    <HomeHeroSection />
+    <HomeBenefitsBar />
+    <HomeFeaturedProducts />
+    <HomeWellnessGoals />
+    <HomeOurStory />
+    <HomeTrustBadges />
+    <HomeNewsletterFooter />
+</div>
 
 @code {
     protected override async Task OnAfterRenderAsync(bool firstRender)

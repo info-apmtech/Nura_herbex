@@ -7,23 +7,30 @@
 @page "/product"
 @page "/shop/stamix"
 @using Nuraherbex.UI.Components.Shop
+@using Nuraherbex.UI.Components.Home
 @implements IDisposable
 @inject NavigationManager Nav
 @inject ApiClient Api
 @inject BrowserInterop Browser
 
-<div class="sp-page text-left text-slate-200 min-h-screen relative overflow-hidden">
-  <div class="sp-container relative z-10">
-    @if (IsPdp)
-    {
+<PageTitle>Shop All Products — Nura Herbex | Ayurvedic Wellness</PageTitle>
+
+@if (IsPdp)
+{
+  <div class="sp-page text-left text-slate-200 min-h-screen relative overflow-hidden">
+    <div class="sp-container relative z-10">
       <ShopPdpView Products="_products" />
-    }
-    else
-    {
-      @if (_loading) { <div class="sc-empty" role="status"><span class="sc-spinner"></span><p>Loading products…</p></div> } else if (_loadError is not null) { <div class="sc-empty" role="alert"><Icon Name="AlertCircle" Size="40" /><h2>We couldn't load the shop</h2><p>@_loadError</p><button class="sc-btn sc-btn-primary" @onclick="LoadProductsAsync">Try again</button></div> } else { <StoreCatalog Products="_products" ProductId="@CatalogProductId" /> }
-    }
+    </div>
   </div>
-</div>
+}
+else
+{
+  <div class="nh-storefront">
+    <HomeNavbar />
+    <StoreCatalog Products="_products" ProductId="@CatalogProductId" />
+    <HomeNewsletterFooter />
+  </div>
+}
 
 @code {
     [Parameter] public string? ProductId { get; set; }
