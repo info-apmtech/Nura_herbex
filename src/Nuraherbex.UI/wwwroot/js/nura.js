@@ -175,6 +175,7 @@
         const front = slide.querySelector('.nhx-fx-front');
         const stage = slide.querySelector('.nhx-stage');
         const flash = slide.querySelector('.nhx-flash');
+        const mouth = slide.querySelector('.nhx-mouth');
         if (!back || !front || !stage) return;
         const bctx = back.getContext('2d');
         const fctx = front.getContext('2d');
@@ -184,10 +185,10 @@
         const rand = (a, b) => a + Math.random() * (b - a);
         const pick = () => pal[(Math.random() * pal.length) | 0];
 
-        let W = 0, H = 0, dpr = 1, cx = 0, baseY = 0, jarW = 0, jarH = 0, pileW = 0, x0 = 0, hMax = 1;
+        let W = 0, H = 0, stageH = 1, dpr = 1, cx = 0, baseY = 0, jarW = 0, jarH = 0, pileW = 0, x0 = 0, hMax = 1;
         const h = new Float32Array(BINS);
         const jit = new Float32Array(BINS).map(() => Math.random() * 2.2); // static surface roughness
-        const cap = new Float32Array(BINS); // per-bin ceiling: a rounded mound, not a flat slab
+        const cap = new Float32Array(BINS); // per-bin ceiling for a centered, peaked heap
         let parts = [], t0 = 0, last = 0, raf = 0, running = false, visible = true, splitting = false, splitStart = 0, splitDone = false;
 
         const resize = () => {
@@ -199,13 +200,14 @@
           bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           cx = s.left - r.left + s.width / 2;
+          stageH = s.height;
           jarW = s.width * 0.62;               // visible jar body is ~60% of the image width
           jarH = s.height;
           baseY = s.top - r.top + s.height * baseRatio;
           pileW = jarW * 1.7;
           x0 = cx - pileW / 2;
           hMax = jarH * 0.17;
-          for (let i = 0; i < BINS; i++) { const d = Math.abs((i + 0.5) / BINS - 0.5) * 2; cap[i] = hMax * Math.pow(Math.max(0, 1 - Math.pow(d, 2.4)), 0.85); }
+          for (let i = 0; i < BINS; i++) { const d = Math.abs((i + 0.5) / BINS - 0.5) * 2; cap[i] = hMax * Math.max(0, 1 - d); }
         };
 
         const surface = (x) => {
@@ -325,6 +327,27 @@
           fctx.restore();
         };
 
+        // Box animation timeline (ms): lid lifts away, powder is sprayed in from above and heaps up inside, lid settles back.
+        const ease = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+        const easeOut = (x) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+        const lidAt = (t) => t < 1700 ? 0 : t < 2300 ? easeOut((t - 1700) / 600) : t < 5600 ? 1 : t < 6200 ? 1 - ease((t - 5600) / 600) : 0;
+        // Once poured, powder remains in the jar as the lid closes and through the idle beat.
+        const fillAt = (t) => t < 2300 ? 0 : t < 5000 ? ease((t - 2300) / 2700) : 1;
+        let mouthPos = null;
+        // Powder is sprayed from the top of the hero straight down into the open jar; the front canvas draws it until it reaches the heap surface.
+        const spray = (f, t) => {
+          if (!mouth) return;
+          const mr = mouth.getBoundingClientRect(), sr = slide.getBoundingClientRect();
+          mouthPos = { x: mr.left - sr.left + mr.width / 2, y: mr.top - sr.top + mr.height / 2, w: mr.width };
+          if (t > 2300 && t < 5000) {
+            const n = Math.max(1, Math.round(9 * f));
+            for (let k = 0; k < n; k++) {
+              emit({ x: mouthPos.x + rand(-mouthPos.w * 0.12, mouthPos.w * 0.12), y: -10, vx: rand(-0.05, 0.05), vy: rand(7, 12), r: rand(1, 3), g: 0.3, drag: 0.999,
+                layer: 1, kind: 'spray', life: 4000, c: pick() });
+            }
+          }
+        };
+
         const frame = (now) => {
           if (!running) return;
           const dt = Math.min(50, now - (last || now)); last = now;
@@ -333,7 +356,18 @@
           let t = now - t0;
           if (t >= CYCLE) { resetCycle(now); t = 0; }
 
+          // Keep the decorative outer powder fall and base mound alongside the pour into the jar.
           if (t > POUR_FROM && t < POUR_TO) pour(f);
+          const fill = fillAt(t);
+          const lid = lidAt(t);
+          stage.style.setProperty('--lid', lid.toFixed(3));
+          stage.style.setProperty('--lr', ease(lid * 2).toFixed(3));          // rise first
+          stage.style.setProperty('--ls', ease(lid * 2 - 1).toFixed(3));      // then slide and tilt away
+          stage.style.setProperty('--fill', fill.toFixed(3));
+          // A restrained turn keeps the label legible; only the jar and its fitted lid move.
+          stage.style.setProperty('--spin', (10 * Math.sin(2 * Math.PI * t / 6000)).toFixed(1));
+          spray(f, t);
+          // Split the decorative outer mound; the in-jar fill is a separate visual and remains in place.
           if (t >= SPLIT_AT && !splitting && !splitDone) startSplit(now);
           if (splitting && !splitDone) erode(f);
           settle();
@@ -353,7 +387,15 @@
             const p = parts[i];
             p.age += dt;
             if (p.age > p.life) { parts.splice(i, 1); continue; }
-            if (p.kind === 'fall') {
+            if (p.kind === 'spray') {
+              p.vy = Math.min(16, p.vy + p.g * f);
+              p.x += p.vx * f; p.y += p.vy * f;
+              if (mouthPos && p.y >= mouthPos.y - fill * 0.07 * stageH) {
+                if (Math.random() < 0.08) emit({ x: p.x, y: p.y, vx: rand(-1.4, 1.4), vy: -rand(0.6, 2.2), r: p.r * 0.6, g: 0.1, drag: 0.97, life: rand(400, 800), layer: 1, c: p.c });
+                parts.splice(i, 1);
+                continue;
+              }
+            } else if (p.kind === 'fall') {
               p.vy = Math.min(15, p.vy + p.g * f);
               p.x += p.vx * f; p.y += p.vy * f;
               if (p.x > x0 && p.x < x0 + pileW && p.y >= baseY - surface(p.x)) {
@@ -411,6 +453,7 @@
         };
         const stop = () => {
           running = false; cancelAnimationFrame(raf); parts = []; h.fill(0);
+          stage.style.setProperty('--lid', '0'); stage.style.setProperty('--lr', '0'); stage.style.setProperty('--ls', '0'); stage.style.setProperty('--fill', '0'); stage.style.setProperty('--spin', '0');
           bctx.clearRect(0, 0, back.width, back.height); fctx.clearRect(0, 0, front.width, front.height);
         };
         const sync = () => { if (isActive() && visible && !document.hidden) start(); else if (running) stop(); };
@@ -418,7 +461,7 @@
         new MutationObserver(() => { if (isActive()) setTimeout(sync, 60); else setTimeout(() => { if (!isActive()) stop(); }, 700); })
           .observe(slide, { attributes: true, attributeFilter: ['class'] });
         new IntersectionObserver((es) => { es.forEach((e) => { visible = e.isIntersecting; sync(); }); }, { threshold: 0.15 }).observe(slide);
-        new ResizeObserver(() => { if (running) resize(); }).observe(slide);
+        new ResizeObserver(() => { if (running) resize(); else sync(); }).observe(slide); // also starts the show once the slide first has a size
         document.addEventListener('visibilitychange', sync);
         setTimeout(sync, 400);
       };

@@ -1,18 +1,16 @@
 @inject NavigationManager Nav
 @inject CartState Cart
 
-<section id="featured-products" class="nh-products">
-    
-    @* Decorative Leaf Accents on Left & Right Borders *@
-    <img src="_content/Nuraherbex.UI/images/wellness-leaf-left.png" alt="" class="nh-products-leaf-l" aria-hidden="true" />
-    <img src="_content/Nuraherbex.UI/images/wellness-leaf-left.png" alt="" class="nh-products-leaf-r" aria-hidden="true" />
+<section id="featured-products" class="nhp">
+    <span class="nhp-orb o1" aria-hidden="true"></span>
+    <span class="nhp-orb o2" aria-hidden="true"></span>
 
-    <div class="nh-products-inner">
-        
-        @* Title Row: Heading & View All link *@
-        <div class="nh-products-header">
+    <div class="nhp-inner">
+        <div class="nhp-head" data-nh-reveal>
             <div>
-                <h2 class="nh-products-title">Our Featured Products</h2>
+                <span class="nh-eyebrow">OUR BESTSELLERS</span>
+                <h2 class="nhp-title">Featured <em>Products</em></h2>
+                <p class="nhp-sub">Two Ayurvedic formulas, one promise — pure whole-botanical wellness you can feel every day.</p>
             </div>
             <button @onclick='() => Nav.NavigateTo("/shop")' class="nh-view-all">
                 <span>View All</span>
@@ -20,85 +18,109 @@
             </button>
         </div>
 
-        @* Product Cards Grid *@
-        <div class="nh-product-grid">
-            
-            @* Card 1: GUT 365 *@
-            <div class="nh-product-card">
-                <div class="nh-product-img-wrap">
-                    <span class="nh-bestseller-badge">BESTSELLER</span>
-                    <img src="_content/Nuraherbex.UI/images/product-1.png" alt="GUT 365 Product Jar" class="nh-product-img" />
-                </div>
-                <div class="nh-product-body">
-                    <h3 class="nh-product-name">GUT 365</h3>
-                    <p class="nh-product-category">Gut &amp; Liver Enhancement</p>
-                    <p class="nh-product-desc">Gut balance, digestive stimulant, natural energiser, antioxidant rich.</p>
-                    <div class="nh-product-foot">
-                        <span class="nh-product-price">₹1,299</span>
-                        <button @onclick="AddGut365ToCart" class="nh-add-cart-btn" aria-label="Add GUT 365 to cart">
-                            <svg class="nh-cart-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="8" cy="21" r="1.5"/>
-                                <circle cx="19" cy="21" r="1.5"/>
-                                <path d="M2 2h3l2.6 12.3a2 2 0 0 0 2 1.7h9.8a2 2 0 0 0 2-1.6L23 6H6"/>
-                            </svg>
-                            <span>Add to Cart</span>
-                        </button>
+        <div class="nhp-grid">
+            @for (var i = 0; i < Products.Length; i++)
+            {
+                var idx = i;
+                var p = Products[idx];
+                <article class="nhp-card @p.Theme" data-nh-reveal style="--d:@(idx * 140)ms">
+                    <div class="nhp-media">
+                        <span class="nhp-badge">@p.Badge</span>
+                        <span class="nhp-glow" aria-hidden="true"></span>
+                        <span class="nhp-ring" aria-hidden="true"></span>
+                        <img src="@p.Image" alt="@p.Name jar" class="nhp-jar" loading="lazy" />
+                        <span class="nhp-pill"><Icon Name="@p.PillIcon" Size="14" /> @p.Pill</span>
                     </div>
-                </div>
-            </div>
 
-            @* Card 2: STAMIX *@
-            <div class="nh-product-card">
-                <div class="nh-product-img-wrap">
-                    <img src="_content/Nuraherbex.UI/images/product-2.png" alt="STAMIX Product Jar" class="nh-product-img" />
-                </div>
-                <div class="nh-product-body">
-                    <h3 class="nh-product-name">STAMIX</h3>
-                    <p class="nh-product-category">Built For Men Who Run On Empty</p>
-                    <p class="nh-product-desc">Natural energy, stamina, focus and recovery.</p>
-                    <div class="nh-product-foot">
-                        <span class="nh-product-price">₹1,299</span>
-                        <button @onclick="AddStamixToCart" class="nh-add-cart-btn-outline" aria-label="Add STAMIX to cart">
-                            <svg class="nh-cart-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="8" cy="21" r="1.5"/>
-                                <circle cx="19" cy="21" r="1.5"/>
-                                <path d="M2 2h3l2.6 12.3a2 2 0 0 0 2 1.7h9.8a2 2 0 0 0 2-1.6L23 6H6"/>
-                            </svg>
-                            <span>Add to Cart</span>
-                        </button>
+                    <div class="nhp-body">
+                        <span class="nhp-cat">@p.Category</span>
+                        <h3 class="nhp-name">@p.Name</h3>
+                        <p class="nhp-desc">@p.Desc</p>
+
+                        <ul class="nhp-points">
+                            @foreach (var pt in p.Points)
+                            {
+                                <li><Icon Name="CheckCircle2" Size="16" /> @pt</li>
+                            }
+                        </ul>
+
+                        <div class="nhp-meta">@p.Serving</div>
+
+                        <div class="nhp-buy">
+                            <div class="nhp-price">
+                                <strong>₹@p.Price.ToString("N0")</strong>
+                                <small>Free shipping above ₹@SiteConfig.FreeShippingThreshold.ToString("N0")</small>
+                            </div>
+                            <div class="nhp-qty" role="group" aria-label="Quantity for @p.Name">
+                                <button type="button" @onclick="() => Step(idx, -1)" aria-label="Decrease quantity" disabled="@(_qty[idx] <= 1)">−</button>
+                                <span aria-live="polite">@_qty[idx]</span>
+                                <button type="button" @onclick="() => Step(idx, 1)" aria-label="Increase quantity">+</button>
+                            </div>
+                        </div>
+
+                        <div class="nhp-actions">
+                            <button type="button" class="nhp-add @(_added == idx ? "done" : "")" @onclick="() => AddAsync(idx)" aria-label="Add @p.Name to cart">
+                                @if (_added == idx)
+                                {
+                                    <Icon Name="CheckCircle2" Size="18" /><span>Added to cart</span>
+                                }
+                                else
+                                {
+                                    <Icon Name="ShoppingBag" Size="18" /><span>Add to Cart</span>
+                                }
+                            </button>
+                            <button type="button" class="nhp-details" @onclick="() => Nav.NavigateTo(p.DetailsUrl)">
+                                <span>Details</span><Icon Name="ArrowRight" Size="15" />
+                            </button>
+                        </div>
                     </div>
-                </div>
-            </div>
-
+                </article>
+            }
         </div>
-
     </div>
 </section>
 
 @code {
-    private async Task AddGut365ToCart()
-    {
-        await Cart.AddToCartAsync(new CartItem
-        {
-            Id = "gut-365",
-            Name = "GUT 365 — Gut & Liver Enhancement",
-            Price = 1299m,
-            Image = "_content/Nuraherbex.UI/images/product-1.png",
-            ServingsText = "60 capsules · 30 days",
-            Quantity = 1
-        });
-    }
+    private sealed record Product(string Id, string Name, string Category, string Desc, string[] Points, string Serving, decimal Price,
+        string Image, string Theme, string Badge, string Pill, string PillIcon, string CartName, string CartServing, string DetailsUrl);
 
-    private async Task AddStamixToCart()
+    private static readonly Product[] Products =
     {
+        new("gut-365", "GUT 365", "Gut & Liver Enhancement",
+            "Gut balance, digestive stimulant, natural energiser, antioxidant rich.",
+            new[] { "Supports healthy digestion", "Natural daily energiser", "Antioxidant-rich botanicals" },
+            "60 capsules · 30-day supply", 1299m,
+            "_content/Nuraherbex.UI/images/product-1.png", "nhp-gut", "Bestseller", "100% natural", "Leaf",
+            "GUT 365 — Gut & Liver Enhancement", "60 capsules · 30 days", "/shop"),
+        new("stamix-single", "STAMIX", "Built for Men Who Run on Empty",
+            "Natural energy, stamina, focus and recovery.",
+            new[] { "Sustained energy through the day", "Mental focus and clarity", "Support for recovery and resilience" },
+            "500 g jar · 25-day ritual", 1299m,
+            "_content/Nuraherbex.UI/images/product-2.png", "nhp-stamix", "For Men", "17 botanicals", "Zap",
+            "STAMIX — Botanical Vitality Formula", "500 g · 25-day ritual", "/products/stamix"),
+    };
+
+    private readonly int[] _qty = { 1, 1 };
+    private int _added = -1;
+
+    private void Step(int i, int delta) => _qty[i] = Math.Clamp(_qty[i] + delta, 1, 10);
+
+    private async Task AddAsync(int i)
+    {
+        var p = Products[i];
         await Cart.AddToCartAsync(new CartItem
         {
-            Id = "stamix-single",
-            Name = "STAMIX — Botanical Vitality Formula",
-            Price = 1299m,
-            Image = "_content/Nuraherbex.UI/images/product-2.png",
-            ServingsText = "500 g · 25-day ritual",
+            Id = p.Id,
+            Name = p.CartName,
+            Price = p.Price,
+            Image = p.Image,
+            ServingsText = p.CartServing,
             Quantity = 1
-        });
+        }, _qty[i]);
+
+        _added = i;
+        StateHasChanged();
+        await Task.Delay(1800);
+        if (_added == i) { _added = -1; StateHasChanged(); }
     }
 }
