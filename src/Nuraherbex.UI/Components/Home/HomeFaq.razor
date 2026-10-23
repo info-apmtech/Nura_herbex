@@ -1,0 +1,37 @@
+<section id="faq" class="nh-faq">
+    <div class="nh-faq-inner">
+        <div class="nh-section-head" data-nh-reveal>
+            <span class="nh-eyebrow">GOT QUESTIONS?</span>
+            <h2 class="nh-section-title">Frequently <em>asked</em></h2>
+        </div>
+
+        <div class="nh-faq-list">
+            @foreach (var (q, i) in Items.Select((q, i) => (q, i)))
+            {
+                var idx = i;
+                var open = _open == idx;
+                <div class="nh-faq-item @(open ? "open" : "")" data-nh-reveal style="--d:@(idx * 70)ms">
+                    <button class="nh-faq-q" aria-expanded="@(open ? "true" : "false")" @onclick="() => _open = open ? -1 : idx">
+                        <span>@q.Q</span>
+                        <span class="nh-faq-chev"><Icon Name="Plus" Size="18" /></span>
+                    </button>
+                    <div class="nh-faq-a"><div><p>@q.A</p></div></div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private int _open = 0;
+    private record Faq(string Q, string A);
+
+    private static readonly Faq[] Items =
+    {
+        new("How do I take STAMIX?", "Mix one serving into warm milk or water once a day, as directed on the label. A 500 g jar is a 25-day ritual."),
+        new("Are your products 100% natural?", "Yes. Our formulas are made from whole botanicals with no added preservatives."),
+        new("How long until I notice a difference?", "Herbal support builds with consistency. Most people follow the full 25-day ritual; individual results vary."),
+        new("Can I verify the quality of my batch?", "Every jar carries a batch code. Enter it on our Verify page to view the quality checks for that batch."),
+        new("How fast is delivery and can I track it?", "Orders ship quickly across India and you can follow every update on the Track Order page."),
+    };
+}

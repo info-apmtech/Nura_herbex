@@ -1,0 +1,74 @@
+@inject NavigationManager Nav
+@inject CartState Cart
+
+<section id="stamina-power" class="nh-power">
+    <div class="nh-power-bg" aria-hidden="true">
+        <span class="nh-power-glow"></span>
+        @for (var i = 0; i < 14; i++)
+        {
+            <span class="nh-spark" style="--i:@i"></span>
+        }
+    </div>
+
+    <div class="nh-power-inner">
+        <div class="nh-power-visual" data-nh-reveal="left">
+            <div class="nh-power-rings" aria-hidden="true">
+                <span class="nh-ring r1"></span>
+                <span class="nh-ring r2"></span>
+                <span class="nh-ring r3"></span>
+            </div>
+            <span class="nh-bolt" aria-hidden="true"><Icon Name="Zap" Size="34" Fill="currentColor" /></span>
+            <img src="_content/Nuraherbex.UI/images/product-2.png" alt="STAMIX stamina formula jar" class="nh-power-jar" loading="lazy" />
+        </div>
+
+        <div class="nh-power-copy">
+            <span class="nh-eyebrow light" data-nh-reveal>STAMIX · STAMINA POWER</span>
+            <h2 class="nh-power-title" data-nh-reveal>Fuel the strength<br />you were <em>born</em> with.</h2>
+            <p class="nh-power-text" data-nh-reveal>
+                A whole-botanical blend built on Ashwagandha and time-honoured Ayurvedic herbs, made for men who
+                run on empty — steady energy through the day, a clear head and a body that bounces back.
+            </p>
+
+            <ul class="nh-power-pillars">
+                <li data-nh-reveal style="--d:0ms">
+                    <span class="nh-pillar-icon"><Icon Name="Zap" Size="20" /></span>
+                    <div><strong>Sustained Energy</strong><span>No crash — steady drive from morning to night.</span></div>
+                </li>
+                <li data-nh-reveal style="--d:120ms">
+                    <span class="nh-pillar-icon"><Icon Name="Sparkles" Size="20" /></span>
+                    <div><strong>Mental Focus</strong><span>Calm, clear thinking when work gets demanding.</span></div>
+                </li>
+                <li data-nh-reveal style="--d:240ms">
+                    <span class="nh-pillar-icon"><Icon Name="HeartPulse" Size="20" /></span>
+                    <div><strong>Recovery &amp; Resilience</strong><span>Support for stress response and everyday vitality.</span></div>
+                </li>
+            </ul>
+
+            <div class="nh-power-cta" data-nh-reveal>
+                <button class="nh-btn-light" @onclick="AddStamix">
+                    <Icon Name="ShoppingBag" Size="18" /> <span>Add STAMIX — ₹1,299</span>
+                </button>
+                <button class="nh-btn-ghost" @onclick='() => Nav.NavigateTo("/products/stamix")'>
+                    <span>Explore the formula</span> <Icon Name="ArrowRight" Size="16" />
+                </button>
+            </div>
+            <p class="nh-power-note" data-nh-reveal>These statements have not been evaluated by FSSAI. Not intended to diagnose, treat or cure any disease.</p>
+        </div>
+    </div>
+</section>
+
+@code {
+    private async Task AddStamix()
+    {
+        await Cart.AddToCartAsync(new CartItem
+        {
+            Id = "stamix-single",
+            Name = "STAMIX — Botanical Vitality Formula",
+            Price = 1299m,
+            Image = "_content/Nuraherbex.UI/images/product-2.png",
+            ServingsText = "500 g · 25-day ritual",
+            Quantity = 1
+        });
+        Cart.SetOpen(true);
+    }
+}

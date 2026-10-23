@@ -1,0 +1,22 @@
+@inject NavigationManager Nav
+
+<section class="nh-perks" aria-label="Shopping benefits">
+    <div class="nh-perks-inner">
+        <div class="nh-perk" data-nh-reveal style="--d:0ms">
+            <span class="nh-perk-icon"><Icon Name="Truck" Size="24" /></span>
+            <div><strong>Free Shipping</strong><span>On orders above ₹@SiteConfig.FreeShippingThreshold.ToString("N0")</span></div>
+        </div>
+        <div class="nh-perk" data-nh-reveal style="--d:100ms">
+            <span class="nh-perk-icon"><Icon Name="Lock" Size="24" /></span>
+            <div><strong>Secure Payments</strong><span>Encrypted, trusted checkout</span></div>
+        </div>
+        <button class="nh-perk nh-perk-link" data-nh-reveal style="--d:200ms" @onclick='() => Nav.NavigateTo("/verify")'>
+            <span class="nh-perk-icon"><Icon Name="ShieldCheck" Size="24" /></span>
+            <div><strong>Verify Your Batch</strong><span>Check the quality data</span></div>
+        </button>
+        <button class="nh-perk nh-perk-link" data-nh-reveal style="--d:300ms" @onclick='() => Nav.NavigateTo("/track")'>
+            <span class="nh-perk-icon"><Icon Name="RefreshCw" Size="24" /></span>
+            <div><strong>Track Your Order</strong><span>Live delivery updates</span></div>
+        </button>
+    </div>
+</section>

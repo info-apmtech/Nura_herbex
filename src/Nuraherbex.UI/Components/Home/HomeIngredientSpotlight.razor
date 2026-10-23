@@ -1,0 +1,43 @@
+@inject NavigationManager Nav
+
+<section id="ingredients" class="nh-ing">
+    <div class="nh-section-inner">
+        <div class="nh-section-head" data-nh-reveal>
+            <span class="nh-eyebrow">FROM NATURE'S PHARMACY</span>
+            <h2 class="nh-section-title">Ingredients you can <em>trust</em></h2>
+            <p class="nh-section-sub">Whole roots, seeds and flowers — chosen for tradition, sourced with care and shown on the label.</p>
+        </div>
+
+        <div class="nh-ing-grid">
+            @foreach (var (it, i) in Items.Select((it, i) => (it, i)))
+            {
+                <article class="nh-ing-card" data-nh-reveal style="--d:@(i * 110)ms">
+                    <div class="nh-ing-img"><img src="@it.Image" alt="@it.Name" loading="lazy" /></div>
+                    <div class="nh-ing-body">
+                        <small>@it.Tag</small>
+                        <h3>@it.Name</h3>
+                        <p>@it.Desc</p>
+                    </div>
+                </article>
+            }
+        </div>
+
+        <div class="nh-center" data-nh-reveal>
+            <button class="nh-btn-outline" @onclick='() => Nav.NavigateTo("/formulation")'>
+                <Icon Name="FlaskConical" Size="16" /> <span>See the full formulation</span> <Icon Name="ArrowRight" Size="16" />
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Ing(string Name, string Tag, string Desc, string Image);
+
+    private static readonly Ing[] Items =
+    {
+        new("Whole Ashwagandha Root", "Adaptogen", "Traditionally used to support the stress response, restful sleep and steady everyday energy.", Media.Incred2),
+        new("Kaunch Beej (Mucuna)", "Vitality seed", "A revered Unani seed traditionally used to support vigor, stamina and nervous-system tone.", Media.Incred4),
+        new("Drumstick Flower, Bark & Seed", "Mineral-rich", "A botanical powerhouse of naturally occurring minerals, iron and plant antioxidants.", Media.Incred1),
+        new("Watermelon Seed", "Whole seed", "A whole-food source of amino acids and micronutrients, cold-pressed and gently processed.", Media.Incred3),
+    };
+}

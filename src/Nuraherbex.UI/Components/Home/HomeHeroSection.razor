@@ -1,187 +1,132 @@
 @implements IDisposable
-@inject NavigationManager Nav
-@inject CartState Cart
 
-<section class="nh-hero" @onmouseenter="PauseAutoPlay" @onmouseleave="ResumeAutoPlay" aria-label="Hero Showcase Slider">
-    <div class="nh-hero-slider-wrap">
-        
-        @* Slider Track with CSS Grid Stacking for seamless cross-fade *@
-        <div class="nh-hero-slider-track">
-            
-            @* Slide 1: GUT 365 *@
-            <div class="nh-hero-slide nh-hero-slide-1 @(currentSlide == 0 ? "active" : "")" 
-                 role="tabpanel" 
-                 aria-label="Slide 1 of 2: GUT 365"
-                 aria-hidden="@(currentSlide != 0)">
-                @* Decorative lid-opening / powder animation canvas (drawn by nura.js; purely visual) *@
-                <canvas class="nh-hero-powder" aria-hidden="true"></canvas>
-                <div class="nh-hero-content">
-                    <span class="nh-hero-kicker">
-                        NATURAL WELLNESS FOR A BRIGHTER YOU
-                    </span>
+<section class="nhx-hero" aria-label="Featured products" aria-roledescription="carousel">
+    <div class="nhx-track">
 
-                    <h1 class="nh-hero-title">
-                        Better Digestion<br />
-                        Brighter Living
+        @* Slide 1: GUT 365 *@
+        <div class="nhx-slide nhx-gut @(currentSlide == 0 ? "active" : "")"
+             data-powder="#dfe9b0,#b9d18a,#f1ecc9,#9fc183" data-base="0.8"
+             role="group" aria-roledescription="slide" aria-label="Slide 1 of 2: GUT 365"
+             aria-hidden="@(currentSlide != 0 ? "true" : "false")">
+            <div class="nhx-bg" aria-hidden="true">
+                <span class="nhx-orb o1"></span><span class="nhx-orb o2"></span><span class="nhx-orb o3"></span>
+                <span class="nhx-word">GUT 365</span>
+            </div>
+            <canvas class="nhx-fx nhx-fx-back" aria-hidden="true"></canvas>
+
+            <div class="nhx-grid">
+                <div class="nhx-copy">
+                    <span class="nhx-kicker">Natural wellness for a brighter you</span>
+                    <h1 class="nhx-title">
+                        <span class="nhx-line"><span>Better Digestion</span></span>
+                        <span class="nhx-line"><span>Brighter <em>Living</em></span></span>
                     </h1>
-
-                    <p class="nh-hero-sub">
-                        Gut health. More energy.<br />
-                        A healthier, happier you.
-                    </p>
-
-                    <button @onclick="ShopGut365" class="nh-hero-btn" aria-label="Shop Gut 365">
-                        <span>SHOP GUT 365</span>
-                        <span style="font-size: 16px; font-weight: 800;">→</span>
-                    </button>
+                    <p class="nhx-sub">Gut &amp; liver enhancement made from time-honoured herbs — more balance, more energy, a healthier you.</p>
+                    <ul class="nhx-chips">
+                        <li><Icon Name="Leaf" Size="14" /> 100% natural</li>
+                        <li><Icon Name="ShieldCheck" Size="14" /> Batch verified</li>
+                        <li><Icon Name="Truck" Size="14" /> Free shipping ₹@SiteConfig.FreeShippingThreshold.ToString("N0")+</li>
+                    </ul>
                 </div>
 
-                @* Mobile-only visual fallback *@
-                <div class="nh-hero-mobile-media">
-                    <img src="_content/Nuraherbex.UI/images/hero-jar-rock.png" alt="GUT 365 Gut &amp; Liver Enhancement" class="nh-hero-mobile-img" />
+                <div class="nhx-stage">
+                    <span class="nhx-flash"></span>
+                    <span class="nhx-halo"></span>
+                    <div class="nhx-tilt"><div class="nhx-float">
+                        <img class="nhx-jar" src="_content/Nuraherbex.UI/images/product-1.png" alt="GUT 365 Gut and Liver Enhancement jar" />
+                    </div></div>
+                    <span class="nhx-ground"></span>
+                    <div class="nhx-glass g1"><Icon Name="Sparkles" Size="16" /><div><strong>Gut &amp; Liver</strong><span>Enhancement</span></div></div>
+                    <div class="nhx-glass g2"><Icon Name="Leaf" Size="16" /><div><strong>60 capsules</strong><span>30-day supply</span></div></div>
                 </div>
             </div>
+            <canvas class="nhx-fx nhx-fx-front" aria-hidden="true"></canvas>
+        </div>
 
-            @* Slide 2: STAMIX *@
-            <div class="nh-hero-slide nh-hero-slide-2 @(currentSlide == 1 ? "active" : "")" 
-                 role="tabpanel" 
-                 aria-label="Slide 2 of 2: STAMIX"
-                 aria-hidden="@(currentSlide != 1)">
-                @* Decorative lid-opening / powder animation canvas (drawn by nura.js; purely visual) *@
-                <canvas class="nh-hero-powder" aria-hidden="true"></canvas>
-                <div class="nh-hero-content">
-                    <span class="nh-hero-kicker">
-                        BUILT FOR MEN WHO RUN ON EMPTY
-                    </span>
+        @* Slide 2: STAMIX *@
+        <div class="nhx-slide nhx-stamix @(currentSlide == 1 ? "active" : "")"
+             data-powder="#ecc98f,#d2a661,#f8e3b9,#c48c4a" data-base="0.8"
+             role="group" aria-roledescription="slide" aria-label="Slide 2 of 2: STAMIX"
+             aria-hidden="@(currentSlide != 1 ? "true" : "false")">
+            <div class="nhx-bg" aria-hidden="true">
+                <span class="nhx-orb o1"></span><span class="nhx-orb o2"></span><span class="nhx-orb o3"></span>
+                <span class="nhx-word">STAMIX</span>
+            </div>
+            <canvas class="nhx-fx nhx-fx-back" aria-hidden="true"></canvas>
 
-                    <h1 class="nh-hero-title">
-                        Peak Stamina<br />
-                        Natural Vitality
+            <div class="nhx-grid">
+                <div class="nhx-copy">
+                    <span class="nhx-kicker">Built for men who run on empty</span>
+                    <h1 class="nhx-title">
+                        <span class="nhx-line"><span>Peak Stamina</span></span>
+                        <span class="nhx-line"><span>Natural <em>Vitality</em></span></span>
                     </h1>
-
-                    <p class="nh-hero-sub">
-                        Ancient Ashwagandha &amp; botanical blend.<br />
-                        Sustained energy, mental focus &amp; recovery.
-                    </p>
-
-                    <button @onclick="ShopStamix" class="nh-hero-btn" aria-label="Shop STAMIX">
-                        <span>SHOP STAMIX</span>
-                        <span style="font-size: 16px; font-weight: 800;">→</span>
-                    </button>
+                    <p class="nhx-sub">Ashwagandha and a 17-botanical blend for sustained energy, mental focus and everyday recovery.</p>
+                    <ul class="nhx-chips">
+                        <li><Icon Name="Zap" Size="14" /> Sustained energy</li>
+                        <li><Icon Name="Leaf" Size="14" /> No preservatives</li>
+                        <li><Icon Name="ShieldCheck" Size="14" /> Batch verified</li>
+                    </ul>
                 </div>
 
-                @* Mobile-only visual fallback *@
-                <div class="nh-hero-mobile-media">
-                    <img src="_content/Nuraherbex.UI/images/hero-stamix-rock.png" alt="STAMIX Botanical Vitality Formula" class="nh-hero-mobile-img" />
+                <div class="nhx-stage">
+                    <span class="nhx-flash"></span>
+                    <span class="nhx-halo"></span>
+                    <div class="nhx-tilt"><div class="nhx-float">
+                        <img class="nhx-jar" src="_content/Nuraherbex.UI/images/product-2.png" alt="STAMIX Botanical Vitality Formula jar" />
+                    </div></div>
+                    <span class="nhx-ground"></span>
+                    <div class="nhx-glass g1"><Icon Name="Zap" Size="16" /><div><strong>17 botanicals</strong><span>Whole-herb blend</span></div></div>
+                    <div class="nhx-glass g2"><Icon Name="Sparkles" Size="16" /><div><strong>500 g jar</strong><span>25-day ritual</span></div></div>
                 </div>
             </div>
-
+            <canvas class="nhx-fx nhx-fx-front" aria-hidden="true"></canvas>
         </div>
+    </div>
 
-        @* Navigation Arrows *@
-        <button class="nh-hero-arrow nh-hero-arrow-prev" @onclick="PrevSlide" aria-label="Previous slide">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="15 18 9 12 15 6"></polyline>
-            </svg>
+    <button class="nhx-arrow nhx-arrow-prev" @onclick="PrevSlide" aria-label="Previous slide">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+    </button>
+    <button class="nhx-arrow nhx-arrow-next" @onclick="NextSlide" aria-label="Next slide">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+    </button>
+
+    <div class="nhx-progress @(currentSlide == 1 ? "on-dark" : "")" role="tablist" aria-label="Choose slide">
+        <button role="tab" class="nhx-tab @(currentSlide == 0 ? "active" : "")" aria-selected="@(currentSlide == 0 ? "true" : "false")" @onclick="() => SetSlide(0)">
+            <span class="nhx-tab-no">01</span><span class="nhx-tab-name">GUT 365</span><span class="nhx-tab-bar"><i></i></span>
         </button>
-        <button class="nh-hero-arrow nh-hero-arrow-next" @onclick="NextSlide" aria-label="Next slide">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
+        <button role="tab" class="nhx-tab @(currentSlide == 1 ? "active" : "")" aria-selected="@(currentSlide == 1 ? "true" : "false")" @onclick="() => SetSlide(1)">
+            <span class="nhx-tab-no">02</span><span class="nhx-tab-name">STAMIX</span><span class="nhx-tab-bar"><i></i></span>
         </button>
-
-        @* Pagination Dots *@
-        <div class="nh-hero-dots" role="tablist" aria-label="Hero carousel pagination">
-            <button class="nh-hero-dot @(currentSlide == 0 ? "active" : "")" 
-                    @onclick="() => SetSlide(0)" 
-                    role="tab" 
-                    aria-selected="@(currentSlide == 0 ? "true" : "false")"
-                    aria-label="Slide 1 - GUT 365"></button>
-            <button class="nh-hero-dot @(currentSlide == 1 ? "active" : "")" 
-                    @onclick="() => SetSlide(1)" 
-                    role="tab" 
-                    aria-selected="@(currentSlide == 1 ? "true" : "false")"
-                    aria-label="Slide 2 - STAMIX"></button>
-        </div>
-
     </div>
 </section>
 
 @code {
-    private int currentSlide = 0;
     private const int TotalSlides = 2;
+    private static readonly TimeSpan SlideDuration = TimeSpan.FromSeconds(10);   // keep in sync with --nhx-ms in home-v3.css
+    private int currentSlide;
     private System.Threading.Timer? _timer;
-    private bool _isPaused = false;
 
-    protected override void OnInitialized()
-    {
-        _timer = new System.Threading.Timer(OnTimerCallback, null, TimeSpan.FromSeconds(6), TimeSpan.FromSeconds(6));
-    }
+    protected override void OnInitialized() => RestartTimer();
 
-    private void OnTimerCallback(object? state)
-    {
-        if (_isPaused) return;
+    private void RestartTimer() => (_timer ??= new System.Threading.Timer(OnTick)).Change(SlideDuration, SlideDuration);
 
-        InvokeAsync(() =>
-        {
-            currentSlide = (currentSlide + 1) % TotalSlides;
-            StateHasChanged();
-        });
-    }
-
-    private void NextSlide()
+    private void OnTick(object? state) => InvokeAsync(() =>
     {
         currentSlide = (currentSlide + 1) % TotalSlides;
-    }
+        StateHasChanged();
+    });
 
-    private void PrevSlide()
-    {
-        currentSlide = (currentSlide - 1 + TotalSlides) % TotalSlides;
-    }
+    private void NextSlide() { currentSlide = (currentSlide + 1) % TotalSlides; RestartTimer(); }
+    private void PrevSlide() { currentSlide = (currentSlide - 1 + TotalSlides) % TotalSlides; RestartTimer(); }
 
     private void SetSlide(int index)
     {
-        if (index >= 0 && index < TotalSlides)
-        {
-            currentSlide = index;
-        }
+        if (index < 0 || index >= TotalSlides) return;
+        currentSlide = index;
+        RestartTimer();
     }
 
-    private void PauseAutoPlay()
-    {
-        _isPaused = true;
-    }
-
-    private void ResumeAutoPlay()
-    {
-        _isPaused = false;
-    }
-
-    private async Task ShopGut365()
-    {
-        await Cart.AddToCartAsync(new CartItem
-        {
-            Id = "gut-365",
-            Name = "GUT 365 — Gut & Liver Enhancement",
-            Price = 1299m,
-            Image = "_content/Nuraherbex.UI/images/product-1.png",
-            ServingsText = "60 capsules · 30 days",
-            Quantity = 1
-        });
-    }
-
-    private async Task ShopStamix()
-    {
-        await Cart.AddToCartAsync(new CartItem
-        {
-            Id = "stamix-single",
-            Name = "STAMIX — Botanical Vitality Formula",
-            Price = 1299m,
-            Image = "_content/Nuraherbex.UI/images/product-2.png",
-            ServingsText = "500 g · 25-day ritual",
-            Quantity = 1
-        });
-    }
 
     public void Dispose()
     {

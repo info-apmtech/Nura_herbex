@@ -1,0 +1,17 @@
+<div class="nh-announce" role="region" aria-label="Store announcements">
+    <div class="nh-announce-track">
+        @for (var loop = 0; loop < 2; loop++)
+        {
+            <div class="nh-announce-set" aria-hidden="@(loop == 1 ? "true" : "false")">
+                <span><Icon Name="Truck" Size="14" /> Free shipping on orders above ₹@SiteConfig.FreeShippingThreshold.ToString("N0")</span>
+                <span class="nh-announce-dot"></span>
+                <span><Icon Name="Leaf" Size="14" /> 100% natural Ayurvedic formulations</span>
+                <span class="nh-announce-dot"></span>
+                <span><Icon Name="ShieldCheck" Size="14" /> Batch-verified quality</span>
+                <span class="nh-announce-dot"></span>
+                <span><Icon Name="Zap" Size="14" /> STAMIX — natural stamina, every day</span>
+                <span class="nh-announce-dot"></span>
+            </div>
+        }
+    </div>
+</div>

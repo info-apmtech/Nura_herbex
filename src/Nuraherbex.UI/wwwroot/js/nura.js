@@ -147,292 +147,314 @@
       };
       initCards();
 
-      // Hero slides: product opening sequence (GUT 365 on slide 1, STAMIX on slide 2). Each hero photo is split into independent layers:
-      // background patch, lid cut-out (badge-free), sticker, and a procedurally drawn interior. The lid lifts away, fine herbal powder is
-      // simulated (drag, gravity, swirl) from the powder inside the jar, then the lid settles back. Canvas only draws while animating and
-      // only while its own slide is showing.
-      const HEROES = [
-        ['.nh-hero-slide-1', {
-          d: { name: 'hero', iw: 1448, ih: 680, hull: [750, 128, 432, 164], lidTop: 139, rim: [966, 253, 200, 23], badge: [1114, 28], lift: 60, drift: 115, rot: -2.5 },
-          m: { name: 'hero-m', iw: 451, ih: 316, hull: [34, 26, 268, 94], lidTop: 37, rim: [167.5, 97.5, 119, 8.5], badge: null, lift: 40, drift: 8, rot: -2.5 },
-        }],
-        ['.nh-hero-slide-2', {
-          d: { name: 'stamix', iw: 1448, ih: 680, hull: [848, 126, 422, 166], lidTop: 140, rim: [1059, 258, 199, 19], badge: [1180, 29], lift: 60, drift: 115, rot: -2.5 },
-          m: { name: 'stamix-m', iw: 500, ih: 401, hull: [141, 78, 259, 94], lidTop: 83, rim: [270.4, 153, 117.6, 9], badge: [341, 18], lift: 40, drift: 8, rot: -2.5 },
-        }],
-      ];
-
-      const setupHero = (slideSel, MODES) => {
-        const box = document.querySelector(slideSel);
-        if (!box) return;
-        let cv = box.querySelector('.nh-hero-powder');
-        if (!cv) { // markup normally ships the canvas; add it (at the end, so Blazor's child indexes are untouched) if the build predates it
-          cv = document.createElement('canvas'); cv.className = 'nh-hero-powder'; cv.setAttribute('aria-hidden', 'true'); box.appendChild(cv);
-        }
-        if (cv.dataset.powder) return;
-        cv.dataset.powder = '1';
-        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-        const ctx = cv.getContext('2d');
-        const base = '_content/Nuraherbex.UI/images/';
-        const assets = {};
-        const load = (mode) => assets[mode] || (assets[mode] = Promise.all(['-lid.png', '-lid-patch.png'].concat(MODES[mode].badge ? ['-badge.png'] : []).map((s) => new Promise((res, rej) => {
-          const im = new Image(); im.onload = () => res(im); im.onerror = rej;
-          im.src = new URL(base + MODES[mode].name + s, document.baseURI).href;
-        }))));
-
-        const mkSprite = (rgb, soft) => {
-          const c = document.createElement('canvas'); c.width = c.height = 32;
-          const g = c.getContext('2d'), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
-          gr.addColorStop(0, `rgba(${rgb},1)`); gr.addColorStop(soft ? 0.25 : 0.55, `rgba(${rgb},${soft ? 0.7 : 0.9})`); gr.addColorStop(1, `rgba(${rgb},0)`);
-          g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return c;
-        };
-        // herbal tones: olive, moss, ochre, dried-leaf brown, pale cream
-        const TONES = ['104,120,58', '132,128,64', '176,150,84', '140,104,62', '92,108,62', '226,208,158'];
-        const sprites = TONES.map((t) => mkSprite(t, false)), spritesSoft = TONES.map((t) => mkSprite(t, true));
-        const WEIGHTS = [0.24, 0.2, 0.2, 0.12, 0.12, 0.12];
-        const pickTone = () => { let r = Math.random(); for (let i = 0; i < WEIGHTS.length; i++) { if ((r -= WEIGHTS[i]) < 0) return i; } return 0; };
-
-        const clamp01 = (v) => Math.min(1, Math.max(0, v));
-        const easeIO = (v) => { v = clamp01(v); return v < 0.5 ? 4 * v * v * v : 1 - Math.pow(-2 * v + 2, 3) / 2; };
-        const easeO = (v) => 1 - Math.pow(1 - clamp01(v), 3);
-        const smooth = (a, b, v) => { v = clamp01((v - a) / (b - a)); return v * v * (3 - 2 * v); };
-
-        // timeline (s). Sized to fit inside the 6s the slider keeps a slide on screen.
-        const T_RISE0 = 0.2, T_RISE = 1.25, T_EMIT0 = 0.85, T_EMIT1 = 2.7, T_RET0 = 3.9, T_RET = 1.3, T_END = 5.35;
-        const lowPower = (navigator.hardwareConcurrency || 4) <= 4 || window.innerWidth < 900;
-
-        let G = null, parts = [], raf = 0, last = 0, t0 = 0, running = false, visible = true, loopTimer = 0, interior = null, emitCarry = 0;
-        let W = 0, H = 0, dpr = 1, imgs = null;
-        const isActive = () => box.classList.contains('active');
-
-        const geometry = () => {
-          const m = window.innerWidth > 900 ? 'd' : 'm', M = MODES[m];
-          let s, ox, oy, minTop;
-          if (m === 'd') {
-            s = Math.max(W / M.iw, H / M.ih); ox = W - M.iw * s; oy = (H - M.ih * s) / 2; minTop = 6;
-          } else {
-            const img = box.querySelector('.nh-hero-mobile-img');
-            if (!img) return null;
-            const r = img.getBoundingClientRect(), b = box.getBoundingClientRect();
-            if (!r.width) return null;
-            s = r.width / M.iw; ox = r.left - b.left; oy = r.top - b.top; minTop = Math.max(4, oy - 14);
+      // Generic storefront reveal: [data-nh-reveal] fades/slides in once scrolled into view (hidden state only applied by JS via nh-rv-pre).
+      const rvObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('nh-rv-in');
+            rvObserver.unobserve(entry.target);
           }
-          // keep the lifted lid inside the hero
-          const hw = M.hull[2], rad = Math.abs(M.rot) * Math.PI / 180;
-          const headroom = (oy + M.lidTop * s - minTop) / s - (hw / 2) * Math.sin(rad) - 8 - 4;
-          return { m, M, s, ox, oy, lift: Math.max(8, Math.min(M.lift, headroom)) };
-        };
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+      const rvSeen = new WeakSet();
+      const initReveal = () => {
+        document.querySelectorAll('[data-nh-reveal]').forEach((el) => {
+          if (rvSeen.has(el)) return;
+          rvSeen.add(el);
+          el.classList.add('nh-rv-pre');
+          rvObserver.observe(el);
+        });
+      };
+      initReveal();
+
+      // Hero: pointer-driven 3D tilt + powder simulation. Per slide: powder pours in twin streams, piles up around the jar base, then the
+      // pile splits apart into drifting dust with a shock ring. Two canvases per slide (behind / in front of the jar) give real depth.
+      // Canvases only run while their slide is active and the hero is on screen.
+      const setupPowder = (slide) => {
+        const back = slide.querySelector('.nhx-fx-back');
+        const front = slide.querySelector('.nhx-fx-front');
+        const stage = slide.querySelector('.nhx-stage');
+        const flash = slide.querySelector('.nhx-flash');
+        if (!back || !front || !stage) return;
+        const bctx = back.getContext('2d');
+        const fctx = front.getContext('2d');
+        const pal = (slide.dataset.powder || '#e6d3a3,#d2b57e,#f3e7c6').split(',');
+        const baseRatio = parseFloat(slide.dataset.base || '0.8');
+        const CYCLE = 10000, POUR_FROM = 600, POUR_TO = 4600, SPLIT_AT = 4800, BINS = 110;
+        const rand = (a, b) => a + Math.random() * (b - a);
+        const pick = () => pal[(Math.random() * pal.length) | 0];
+
+        let W = 0, H = 0, dpr = 1, cx = 0, baseY = 0, jarW = 0, jarH = 0, pileW = 0, x0 = 0, hMax = 1;
+        const h = new Float32Array(BINS);
+        const jit = new Float32Array(BINS).map(() => Math.random() * 2.2); // static surface roughness
+        const cap = new Float32Array(BINS); // per-bin ceiling: a rounded mound, not a flat slab
+        let parts = [], t0 = 0, last = 0, raf = 0, running = false, visible = true, splitting = false, splitStart = 0, splitDone = false;
 
         const resize = () => {
+          const r = slide.getBoundingClientRect(), s = stage.getBoundingClientRect();
+          if (!r.width || !s.width) return;
           dpr = Math.min(window.devicePixelRatio || 1, 2);
-          W = box.clientWidth; H = box.clientHeight;
-          cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
-          G = geometry();
+          W = r.width; H = r.height;
+          [back, front].forEach((c) => { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); });
+          bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          cx = s.left - r.left + s.width / 2;
+          jarW = s.width * 0.62;               // visible jar body is ~60% of the image width
+          jarH = s.height;
+          baseY = s.top - r.top + s.height * baseRatio;
+          pileW = jarW * 1.7;
+          x0 = cx - pileW / 2;
+          hMax = jarH * 0.17;
+          for (let i = 0; i < BINS; i++) { const d = Math.abs((i + 0.5) / BINS - 0.5) * 2; cap[i] = hMax * Math.pow(Math.max(0, 1 - Math.pow(d, 2.4)), 0.85); }
         };
 
-        // The jar's interior, drawn once per play at 3x source resolution and matched to the rim ellipse of the photo:
-        // rim with thickness, shaded inner wall, and a matte, granular powder surface sitting just below the rim
-        // (domed, with clumps, grain, contact shadow and ambient occlusion). Never moves with the lid.
-        const buildInterior = (M) => {
-          const [cx, cy, rx, ry] = M.rim, K = 3, pad = 4;
-          const lipT = rx * 0.03, rxi = rx - lipT, ryi = ry * 0.9, oyi = 0.3, depth = ry * 0.22;
-          const c = document.createElement('canvas'); c.width = Math.ceil((rx * 2 + pad * 2) * K); c.height = Math.ceil((ry * 2 + pad * 2) * K);
-          const g = c.getContext('2d'); g.scale(K, K); g.translate(rx + pad, ry + pad);
-          const ell = (x, y, a, b) => { g.beginPath(); g.ellipse(x, y, a, b, 0, 0, Math.PI * 2); };
-          const rnd = (a, b) => a + Math.random() * (b - a);
-
-          // rim: warm white lip with a fine gold bead on the outer edge
-          ell(0, 0, rx, ry); const lip = g.createLinearGradient(0, -ry, 0, ry); lip.addColorStop(0, '#fdfaf5'); lip.addColorStop(1, '#e6ddd0'); g.fillStyle = lip; g.fill();
-
-          // inner wall (only a narrow band shows above the powder): shadowed under the lip, left-lit
-          ell(0, oyi, rxi, ryi);
-          const wall = g.createLinearGradient(0, -ryi, 0, -ryi + depth * 2.2);
-          wall.addColorStop(0, '#6c6180'); wall.addColorStop(1, '#a9a1b7'); g.fillStyle = wall; g.fill();
-          g.save(); ell(0, oyi, rxi, ryi); g.clip();
-
-          // powder surface, just below the rim
-          const py = oyi + depth, prx = rxi * 0.998, pry = ryi * 0.985;
-          g.save(); ell(0, py, prx, pry); g.clip();
-          const surf = g.createRadialGradient(-prx * 0.2, py - pry * 0.2, 2, 0, py, prx);
-          surf.addColorStop(0, '#dccaa0'); surf.addColorStop(0.55, '#c2ac80'); surf.addColorStop(1, '#a08d64'); g.fillStyle = surf; g.fillRect(-prx, py - pry, prx * 2, pry * 2);
-          g.save(); g.translate(-prx * 0.18, py - pry * 0.3); g.scale(1, pry / (prx * 0.7)); // soft dome: powder heaped slightly toward the middle
-          const dome = g.createRadialGradient(0, 0, 0, 0, 0, prx * 0.7); dome.addColorStop(0, 'rgba(252,242,212,0.4)'); dome.addColorStop(1, 'rgba(252,242,212,0)');
-          g.fillStyle = dome; g.beginPath(); g.arc(0, 0, prx * 0.7, 0, 6.283); g.fill(); g.restore();
-          for (let i = 0; i < 90; i++) { // clumps: a lit crest and a soft shadow side, so the surface has relief
-            const lx = rnd(-prx * 0.92, prx * 0.92), ly = py + rnd(-pry * 0.8, pry * 0.85), lw = rnd(rx * 0.015, rx * 0.085), lh = lw * rnd(0.2, 0.45);
-            for (const [ox, oy2, col] of [[-lw * 0.25, -lh * 0.3, 'rgba(244,230,194,0.36)'], [lw * 0.3, lh * 0.35, 'rgba(88,68,44,0.26)']]) {
-              const x = lx + ox, y = ly + oy2, lg = g.createRadialGradient(x, y, 0, x, y, lw);
-              lg.addColorStop(0, col); lg.addColorStop(1, 'rgba(0,0,0,0)');
-              g.save(); g.translate(x, y); g.scale(1, lh / lw); g.translate(-x, -y); g.fillStyle = lg; g.beginPath(); g.arc(x, y, lw, 0, 6.283); g.fill(); g.restore();
+        const surface = (x) => {
+          const i = Math.max(0, Math.min(BINS - 1, ((x - x0) / pileW * BINS) | 0));
+          return h[i];
+        };
+        const addPile = (x, amt) => {
+          const c = ((x - x0) / pileW * BINS) | 0;
+          for (let k = -2; k <= 2; k++) {
+            const i = c + k;
+            if (i < 0 || i >= BINS) continue;
+            h[i] = Math.min(cap[i], h[i] + amt * (k === 0 ? 0.5 : Math.abs(k) === 1 ? 0.2 : 0.05) * 2);
+          }
+        };
+        const settle = () => { // angle of repose: spill steep columns onto neighbours
+          for (let pass = 0; pass < 2; pass++) {
+            for (let i = 0; i < BINS - 1; i++) {
+              const d = h[i] - h[i + 1];
+              if (d > 1.3) { const m = (d - 1.3) * 0.5; h[i] -= m; h[i + 1] += m; }
+              else if (d < -1.3) { const m = (-d - 1.3) * 0.5; h[i] += m; h[i + 1] -= m; }
             }
           }
-          const grains = Math.round(rx * 36); // fine grain: cream, brown, golden and a few green flecks, each with a tiny shadow
-          for (let i = 0; i < grains; i++) {
-            const a = Math.random() * 6.283, r = Math.sqrt(Math.random()), u = Math.random(), gx = Math.cos(a) * r * prx, gy = py + Math.sin(a) * r * pry, sz = rnd(0.35, 0.95);
-            if (Math.random() < 0.3) { g.fillStyle = 'rgba(60,44,28,0.22)'; g.fillRect(gx + 0.35, gy + 0.35, sz, sz * 0.8); }
-            g.fillStyle = u < 0.4 ? `rgba(246,234,198,${rnd(0.25, 0.65)})` : u < 0.7 ? `rgba(86,66,40,${rnd(0.22, 0.55)})` : u < 0.88 ? `rgba(196,164,96,${rnd(0.25, 0.55)})` : `rgba(96,110,54,${rnd(0.25, 0.5)})`;
-            g.fillRect(gx, gy, sz, sz * 0.8);
-          }
-          g.restore();
-
-          // contact shadow where the powder meets the wall, rim shadow fading into the powder, soft darkening toward the edges
-          g.save(); g.lineWidth = 1.6; g.strokeStyle = 'rgba(46,34,24,0.38)'; g.beginPath(); g.ellipse(0, py, prx, pry, 0, Math.PI * 1.02, Math.PI * 1.98); g.stroke(); g.restore();
-          const top = g.createLinearGradient(0, -ryi, 0, -ryi + depth * 1.8 + ry * 0.2); top.addColorStop(0, 'rgba(30,20,40,0.34)'); top.addColorStop(1, 'rgba(30,20,40,0)');
-          g.fillStyle = top; g.fillRect(-rxi, -ryi - 1, rxi * 2, depth * 1.8 + ry * 0.2 + 1);
-          g.save(); g.translate(0, oyi); g.scale(1, ryi / rxi);
-          const ao = g.createRadialGradient(0, 0, rxi * 0.6, 0, 0, rxi); ao.addColorStop(0, 'rgba(34,24,28,0)'); ao.addColorStop(1, 'rgba(34,24,28,0.22)');
-          g.fillStyle = ao; g.fillRect(-rxi, -rxi, rxi * 2, rxi * 2); g.restore();
-          g.restore(); // end inner clip
-
-          // edges: dark inner lip line, bright top of the rim, gold bead
-          ell(0, oyi, rxi, ryi); g.lineWidth = 0.9; g.strokeStyle = 'rgba(70,52,64,0.5)'; g.stroke();
-          g.beginPath(); g.ellipse(0, 0, rx - 0.6, ry - 0.5, 0, Math.PI * 1.02, Math.PI * 1.98); g.lineWidth = 1.2; g.strokeStyle = 'rgba(255,255,255,0.9)'; g.stroke();
-          g.beginPath(); g.ellipse(0, 0, rx, ry, 0, Math.PI * 1.0, Math.PI * 2.0); g.lineWidth = 0.9; g.strokeStyle = 'rgba(204,160,62,0.5)'; g.stroke();
-          return { c, x: cx - rx - pad, y: cy - ry - pad, w: c.width / K, h: c.height / K, inner: [cx, cy + oyi, rxi, ryi], rxi, ryi };
         };
 
-        const spawn = (n) => {
-          const [cx, cy] = G.M.rim, I = interior;
-          const yMid = cy + 3, yR = I.ryi * 0.5;
-          for (let i = 0; i < n; i++) {
-            const ang = Math.random() * 6.283, rr = Math.sqrt(Math.random());
-            const z = Math.random(), cloud = Math.random() < 0.06, size = cloud ? 8 + Math.random() * 9 : (0.8 + Math.random() * 1.7) * (0.65 + 0.75 * z) * (Math.random() < 0.05 ? 1.7 : 1);
-            const px = cx + Math.cos(ang) * rr * I.rxi * 0.84, py = yMid + Math.sin(ang) * rr * yR;
-            const jet = (110 + Math.random() * 330) * (0.55 + 0.45 * (1 - rr * 0.6)) * (G.m === 'm' ? 0.42 : 1);
-            parts.push({
-              x: px, y: py, vx: ((px - cx) / I.rxi) * 70 + (Math.random() - 0.5) * 80, vy: -jet,
-              z, size, tone: cloud ? (Math.random() < 0.5 ? 5 : 1) : pickTone(), soft: cloud || Math.random() < 0.18, seed: Math.random() * 6.283,
-              age: 0, life: 2.2 + Math.random() * 1.2 + (1 - z) * 0.3, base: cloud ? 0.05 + Math.random() * 0.06 : 0.5 + Math.random() * 0.45, mass: cloud ? 0.5 : 0.7 + size * 0.25, a: 0, sz: 0,
-            });
+        const emit = (o) => parts.push(Object.assign({ x: 0, y: 0, vx: 0, vy: 0, r: 1.5, a: 1, age: 0, life: 4000, g: 0.3, drag: 1, layer: 1, c: pick(), kind: 'free', sw: 0 }, o));
+
+        const resetCycle = (now) => {
+          t0 = now; parts = []; h.fill(0); splitting = false; splitDone = false;
+        };
+
+        const pour = (f) => {
+          const per = Math.max(1, Math.round(11 * f));
+          for (const side of [-1, 1]) {
+            for (let k = 0; k < per; k++) {
+              const sx = cx + side * jarW * 0.6 + rand(-16, 16);
+              emit({
+                x: sx, y: -12, vx: -side * rand(0.2, 0.75), vy: rand(2, 6), r: rand(1.2, 3.4), g: 0.34, drag: 0.998,
+                layer: 0, kind: 'fall', life: 6000, c: pick(),
+              });
+            }
           }
         };
 
-        // lid: straight up out of the jar, then a little further back (smaller, tilted away) and hovering
-        const pose = (t) => {
-          const rise = easeIO((t - T_RISE0) / T_RISE), ret = easeIO((t - T_RET0) / T_RET), p = rise * (1 - ret);
-          const A = easeO(p / 0.5), B = easeIO((p - 0.35) / 0.65);
-          const bob = Math.sin(t * 1.9) * 1.6 * B * (1 - ret);
-          let dy = -G.lift * A - 8 * B + bob;
-          const st = t - (T_RET0 + T_RET);
-          if (st > 0 && st < 0.9) dy += 1.6 * Math.exp(-st * 8) * Math.sin(st * 24); // settles back with a soft click
-          return { p, dx: G.M.drift * B, dy, rot: G.M.rot * B * Math.PI / 180, sc: 1 - 0.04 * B, sq: 1 - 0.14 * B };
+        const startSplit = (now) => {
+          splitting = true; splitDone = false; splitStart = now;
+          if (flash) { flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go'); }
+        };
+
+        const erode = (f) => {
+          let left = 0;
+          for (let i = 0; i < BINS; i++) {
+            const e = h[i] * 0.16 * f;
+            if (e < 0.02) { left += h[i]; h[i] = Math.max(0, h[i] - e); continue; }
+            h[i] -= e; left += h[i];
+            const n = Math.min(4, Math.ceil(e / 1.6));
+            const x = x0 + (i + Math.random()) * pileW / BINS;
+            const dx = x - cx;
+            const dir = dx === 0 ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(dx);
+            const d = Math.min(1, Math.abs(dx) / (pileW / 2));
+            for (let k = 0; k < n; k++) {
+              emit({
+                x, y: baseY - h[i] - rand(0, 6), vx: dir * (1.6 + d * 6.5) * rand(0.6, 1.3), vy: -rand(2.5, 9) * (1.15 - d * 0.55),
+                r: rand(0.9, 3.2), g: 0.045, drag: 0.987, life: rand(2600, 4600), layer: Math.random() < 0.55 ? 1 : 0, kind: 'free', sw: rand(0, 6.28),
+              });
+            }
+          }
+          if (left < 0.5) { h.fill(0); splitDone = true; }
+        };
+
+        const rgba = (hex, al) => {
+          const n = parseInt(hex.replace('#', ''), 16);
+          return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + al + ')';
+        };
+        // The mound is drawn into a small offscreen canvas and softly blurred so its silhouette reads as loose powder, then grain is sprinkled on top.
+        const PAD = 12;
+        let pcv = null, pctx = null;
+        const drawPile = () => {
+          let max = 0;
+          for (let i = 0; i < BINS; i++) if (h[i] > max) max = h[i];
+          if (max < 0.6) return;
+          const step = pileW / BINS;
+          const bot = baseY + jarH * 0.04;
+          const top = baseY - hMax - PAD;
+          const ow = Math.ceil(pileW + PAD * 2), oh = Math.ceil(bot - top + PAD);
+          if (!pcv) { pcv = document.createElement('canvas'); pctx = pcv.getContext('2d'); }
+          if (pcv.width !== Math.round(ow * dpr) || pcv.height !== Math.round(oh * dpr)) { pcv.width = Math.round(ow * dpr); pcv.height = Math.round(oh * dpr); }
+          pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          pctx.clearRect(0, 0, ow, oh);
+          const ox = PAD - x0, oy = -top;       // world -> offscreen
+          const ty = baseY - max;
+          const g = pctx.createLinearGradient(0, ty + oy, 0, bot + oy);
+          const mid = Math.min(0.95, Math.max(0.05, (baseY - ty) / (bot - ty)));
+          g.addColorStop(0, pal[2] || pal[0]);
+          g.addColorStop(mid * 0.55, pal[0]);
+          g.addColorStop(mid, rgba(pal[1] || pal[0], 0.95));
+          g.addColorStop(1, rgba(pal[1] || pal[0], 0));
+          pctx.fillStyle = g;
+          pctx.beginPath();
+          pctx.moveTo(x0 + ox, bot + oy);
+          for (let i = 0; i < BINS; i++) pctx.lineTo(x0 + i * step + ox, baseY - h[i] - (h[i] > 1 ? jit[i] : 0) + oy);
+          pctx.lineTo(x0 + pileW + ox, bot + oy);
+          pctx.closePath();
+          pctx.fill();
+          fctx.save();
+          fctx.globalAlpha = 0.97;
+          fctx.filter = 'blur(2.2px)';
+          fctx.drawImage(pcv, 0, 0, pcv.width, pcv.height, x0 - PAD, top, ow, oh);
+          fctx.filter = 'none';
+          // grain on the surface
+          for (let k = 0; k < 240; k++) {
+            const i = (Math.random() * BINS) | 0;
+            if (h[i] < 1) continue;
+            fctx.globalAlpha = rand(0.3, 0.8);
+            fctx.fillStyle = Math.random() < 0.55 ? (pal[2] || '#fff') : pal[1];
+            fctx.fillRect(x0 + i * step + rand(-2, 2), baseY - h[i] + rand(-1, Math.min(h[i], 16)), rand(1, 2.6), rand(1, 2.2));
+          }
+          fctx.restore();
         };
 
         const frame = (now) => {
-          const dt = Math.min((now - last) / 1000, 0.05); last = now;
-          const t = (now - t0) / 1000, M = G.M, s = G.s;
-          const [hx, hy, hw, hh] = M.hull, [cx, cy, rx] = M.rim;
-          ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
-          ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * G.ox, dpr * G.oy);
-          const ps = pose(t);
+          if (!running) return;
+          const dt = Math.min(50, now - (last || now)); last = now;
+          const f = dt / 16.667;
+          if (!t0) t0 = now;
+          let t = now - t0;
+          if (t >= CYCLE) { resetCycle(now); t = 0; }
 
-          // 1. background rebuilt behind the lid, then the jar's interior
-          ctx.drawImage(imgs[1], hx, hy);
-          ctx.drawImage(interior.c, interior.x, interior.y, interior.w, interior.h);
+          if (t > POUR_FROM && t < POUR_TO) pour(f);
+          if (t >= SPLIT_AT && !splitting && !splitDone) startSplit(now);
+          if (splitting && !splitDone) erode(f);
+          settle();
 
-          // 2. shadow the lid casts into the open jar while it hovers above it
-          if (ps.p > 0.03) {
-            ctx.save(); ctx.beginPath(); ctx.ellipse(interior.inner[0], interior.inner[1], interior.inner[2], interior.inner[3], 0, 0, 6.283); ctx.clip();
-            ctx.fillStyle = `rgba(34,22,56,${0.15 * Math.min(1, ps.p * 1.6)})`; ctx.fillRect(cx - rx, cy - 40, rx * 2, 80); ctx.restore();
+          // ambient motes keep the stage alive between beats
+          if (Math.random() < 0.5 * f && parts.length < 1500) {
+            emit({
+              x: rand(0, W), y: rand(H * 0.1, H), vx: rand(-0.2, 0.2), vy: rand(-0.35, -0.05), r: rand(0.7, 2), g: 0, drag: 1,
+              life: rand(4000, 7000), layer: Math.random() < 0.5 ? 0 : 1, kind: 'mote', sw: rand(0, 6.28), c: pick(),
+            });
           }
 
-          // 3. soft light catching the plume
-          const glow = smooth(T_EMIT0 - 0.2, T_EMIT0 + 0.6, t) * (1 - smooth(T_EMIT1 + 0.3, T_EMIT1 + 2, t));
-          if (glow > 0.01) {
-            ctx.save(); ctx.translate(cx, cy - 70); ctx.scale(1, 0.62);
-            const gr = ctx.createRadialGradient(0, 0, 0, 0, 0, rx * 1.15);
-            gr.addColorStop(0, `rgba(255,247,222,${0.2 * glow})`); gr.addColorStop(0.55, `rgba(255,244,220,${0.07 * glow})`); gr.addColorStop(1, 'rgba(255,244,220,0)');
-            ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(0, 0, rx * 1.15, 0, 6.283); ctx.fill(); ctx.restore();
-          }
+          bctx.clearRect(0, 0, W, H);
+          fctx.clearRect(0, 0, W, H);
 
-          // 4. powder simulation. The lid floats in front of the plume, so particles are drawn behind it.
-          if (t > T_EMIT0 && t < T_EMIT1) {
-            const N = lowPower ? 1200 : 2600, e = Math.exp(-(t - T_EMIT0) * 1.15) / 0.82;
-            emitCarry += N * e * dt; const n = Math.floor(emitCarry); emitCarry -= n; if (n) spawn(n);
-          }
-          const minPx = 0.7 / s;
           for (let i = parts.length - 1; i >= 0; i--) {
             const p = parts[i];
             p.age += dt;
-            if (p.age >= p.life) { parts[i] = parts[parts.length - 1]; parts.pop(); continue; }
-            // air: swirling flow field + warm uplift above the mouth + faint breeze
-            const a = p.x * 0.0105 + t * 0.55 + p.seed * 0.3, b = p.y * 0.0126 - t * 0.4;
-            const core = Math.exp(-Math.pow((p.x - cx) / 230, 2)) * Math.exp(-p.age * 0.55);
-            const wx = Math.sin(a) * Math.cos(b) * 36 + 7, wy = -Math.cos(a) * Math.sin(b) * 28 - 52 * core;
-            const k = 0.85 + p.mass * 0.45;
-            p.vx += (wx - p.vx) * k * dt;
-            p.vy += (wy - p.vy) * k * dt + 20 * p.mass * dt; // gravity: settles slowly once the jet has spent
-            p.x += p.vx * dt; p.y += p.vy * dt;
-            const u = p.age / p.life;
-            p.a = p.base * (0.55 + 0.45 * p.z) * Math.min(1, p.age / 0.12) * (1 - smooth(0.5, 1, u));
-            if (p.a < 0.01) continue;
-            p.sz = Math.max(p.size * (1 + u * 0.35), minPx) * 1.15;
-            ctx.globalAlpha = p.a; ctx.drawImage((p.soft ? spritesSoft : sprites)[p.tone], p.x - p.sz, p.y - p.sz, p.sz * 2, p.sz * 2);
+            if (p.age > p.life) { parts.splice(i, 1); continue; }
+            if (p.kind === 'fall') {
+              p.vy = Math.min(15, p.vy + p.g * f);
+              p.x += p.vx * f; p.y += p.vy * f;
+              if (p.x > x0 && p.x < x0 + pileW && p.y >= baseY - surface(p.x)) {
+                addPile(p.x, p.r * 0.2);
+                if (Math.random() < 0.18) emit({ x: p.x, y: p.y, vx: rand(-1.8, 1.8), vy: -rand(0.8, 2.6), r: p.r * 0.6, g: 0.12, drag: 0.97, life: rand(500, 1000), layer: 1, c: p.c });
+                parts.splice(i, 1);
+                continue;
+              }
+              if (p.y > H + 20) { parts.splice(i, 1); continue; }
+            } else {
+              p.vy += p.g * f - (p.kind === 'free' ? 0.0016 * f : 0);
+              p.vx += Math.sin(p.age * 0.003 + p.sw) * 0.02 * f;  // gentle swirl
+              p.vx *= Math.pow(p.drag, f); p.vy *= Math.pow(p.drag, f);
+              p.x += p.vx * f; p.y += p.vy * f;
+              if (p.kind === 'mote') p.y += Math.sin(p.age * 0.002 + p.sw) * 0.15;
+            }
+            const k = p.age / p.life;
+            const alpha = p.kind === 'mote' ? Math.sin(Math.PI * k) * 0.55 : (k < 0.1 ? k * 10 : 1 - Math.pow((k - 0.1) / 0.9, 1.6));
+            if (alpha <= 0.01) continue;
+            const ctx = p.layer ? fctx : bctx;
+            ctx.globalAlpha = Math.min(1, alpha);
+            ctx.fillStyle = p.c;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+            ctx.fill();
           }
+          fctx.globalAlpha = 1; bctx.globalAlpha = 1;
 
-          // 5. the lid: cut-out of the product photo (lid pixels only), then the sticker on top so the lid passes behind it
-          const lx = hx + hw / 2, ly = hy + hh / 2;
-          ctx.globalAlpha = 1; ctx.save();
-          ctx.translate(lx + ps.dx, ly + ps.dy); ctx.rotate(ps.rot); ctx.scale(ps.sc, ps.sc * ps.sq);
-          if (ps.p > 0.02) { ctx.shadowColor = `rgba(52,30,86,${0.22 * Math.min(1, ps.p * 1.5)})`; ctx.shadowBlur = 16 * s * dpr; ctx.shadowOffsetY = 10 * s * dpr; }
-          ctx.drawImage(imgs[0], -hw / 2, -hh / 2);
-          ctx.restore();
-          if (imgs[2]) ctx.drawImage(imgs[2], M.badge[0], M.badge[1]);
+          drawPile();
 
-          if (t < T_END) raf = requestAnimationFrame(frame); else finish();
+          if (splitting) { // shock ring on the floor
+            const k = (now - splitStart) / 1100;
+            if (k < 1) {
+              const rx = jarW * (0.35 + k * 1.6);
+              fctx.save();
+              fctx.globalAlpha = 0.55 * (1 - k);
+              fctx.strokeStyle = pal[2] || pal[0];
+              fctx.lineWidth = 3 * (1 - k) + 1;
+              fctx.beginPath();
+              fctx.ellipse(cx, baseY + jarH * 0.02, rx, rx * 0.16, 0, 0, 6.2832);
+              fctx.stroke();
+              fctx.restore();
+            }
+          }
+          raf = requestAnimationFrame(frame);
         };
 
-        const schedule = (ms) => { clearTimeout(loopTimer); loopTimer = setTimeout(play, ms); };
-        const clear = () => { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); };
-
-        const finish = () => {
-          running = false; parts = [];
-          clear(); // the original photo shows again, seamlessly
-          schedule(3600);
+        const isActive = () => slide.classList.contains('active');
+        const start = () => {
+          if (running || !visible || !isActive() || document.hidden) return;
+          resize();
+          if (!W) return;
+          running = true; last = 0; t0 = 0; resetCycle(0); t0 = 0;
+          raf = requestAnimationFrame(frame);
         };
-
-        const play = () => {
-          if (running) return;
-          if (document.hidden || !visible || !isActive()) { schedule(1000); return; }
-          resize(); if (!G) { schedule(1500); return; }
-          const m = G.m;
-          load(m).then((ims) => {
-            if (running || !isActive()) return;
-            imgs = ims; G = geometry() || G;
-            interior = buildInterior(G.M); parts = []; emitCarry = 0;
-            running = true; t0 = last = performance.now(); cv.dataset.t0 = String(t0);
-            raf = requestAnimationFrame(frame);
-          }).catch(() => { });
+        const stop = () => {
+          running = false; cancelAnimationFrame(raf); parts = []; h.fill(0);
+          bctx.clearRect(0, 0, back.width, back.height); fctx.clearRect(0, 0, front.width, front.height);
         };
+        const sync = () => { if (isActive() && visible && !document.hidden) start(); else if (running) stop(); };
 
-        const halt = () => { cancelAnimationFrame(raf); clearTimeout(loopTimer); running = false; parts = []; clear(); };
-
-        setTimeout(play, 700);
-        // restart when the slide comes back into view, stop (after the cross-fade) when the slider moves on
-        new MutationObserver(() => {
-          if (isActive()) { if (!running) schedule(450); }
-          else { clearTimeout(loopTimer); setTimeout(() => { if (!isActive() && running) halt(); }, 750); }
-        }).observe(box, { attributes: true, attributeFilter: ['class'] });
-        new IntersectionObserver((es) => {
-          es.forEach((e) => {
-            visible = e.isIntersecting;
-            if (!visible && running) halt();
-            else if (visible && !running && isActive()) schedule(500);
-          });
-        }, { threshold: 0.5 }).observe(box);
-        new ResizeObserver(() => { if (running) resize(); }).observe(box);
-        document.addEventListener('visibilitychange', () => {
-          if (document.hidden && running) halt(); else if (!document.hidden && !running) schedule(800);
-        });
+        new MutationObserver(() => { if (isActive()) setTimeout(sync, 60); else setTimeout(() => { if (!isActive()) stop(); }, 700); })
+          .observe(slide, { attributes: true, attributeFilter: ['class'] });
+        new IntersectionObserver((es) => { es.forEach((e) => { visible = e.isIntersecting; sync(); }); }, { threshold: 0.15 }).observe(slide);
+        new ResizeObserver(() => { if (running) resize(); }).observe(slide);
+        document.addEventListener('visibilitychange', sync);
+        setTimeout(sync, 400);
       };
-      const initHeroPowder = () => HEROES.forEach(([sel, modes]) => setupHero(sel, modes));
-      initHeroPowder();
+
+      const initHero = () => {
+        const hero = document.querySelector('.nhx-hero');
+        if (!hero || hero.dataset.fx) return;
+        hero.dataset.fx = '1';
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+        let tx = 0, ty = 0, cx = 0, cy = 0, raf = 0;
+        const tick = () => {
+          cx += (tx - cx) * 0.08; cy += (ty - cy) * 0.08;
+          hero.style.setProperty('--rx', (-cy * 8).toFixed(2) + 'deg');
+          hero.style.setProperty('--ry', (cx * 12).toFixed(2) + 'deg');
+          hero.style.setProperty('--mx', cx.toFixed(3));
+          hero.style.setProperty('--my', cy.toFixed(3));
+          raf = (Math.abs(tx - cx) > 0.001 || Math.abs(ty - cy) > 0.001) ? requestAnimationFrame(tick) : 0;
+        };
+        hero.addEventListener('pointermove', (e) => {
+          const r = hero.getBoundingClientRect();
+          tx = ((e.clientX - r.left) / r.width - 0.5) * 2;
+          ty = ((e.clientY - r.top) / r.height - 0.5) * 2;
+          if (!raf) raf = requestAnimationFrame(tick);
+        });
+        hero.addEventListener('pointerleave', () => { tx = 0; ty = 0; if (!raf) raf = requestAnimationFrame(tick); });
+
+        hero.querySelectorAll('.nhx-slide').forEach(setupPowder);
+      };
+      initHero();
+
 
       let timer = null;
       new MutationObserver(() => {
         if (timer) clearTimeout(timer);
-        timer = setTimeout(() => { initElements(); initCards(); initHeroPowder(); }, 100);
+        timer = setTimeout(() => { initElements(); initCards(); initReveal(); initHero(); }, 100);
       }).observe(document.body, { childList: true, subtree: true });
     },
 
