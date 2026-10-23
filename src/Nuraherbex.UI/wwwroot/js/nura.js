@@ -388,10 +388,11 @@
             p.age += dt;
             if (p.age > p.life) { parts.splice(i, 1); continue; }
             if (p.kind === 'spray') {
+              // Discard any powder still in flight as soon as the lid begins closing.
+              if (t >= 5600) { parts.splice(i, 1); continue; }
               p.vy = Math.min(16, p.vy + p.g * f);
               p.x += p.vx * f; p.y += p.vy * f;
               if (mouthPos && p.y >= mouthPos.y - fill * 0.07 * stageH) {
-                if (Math.random() < 0.08) emit({ x: p.x, y: p.y, vx: rand(-1.4, 1.4), vy: -rand(0.6, 2.2), r: p.r * 0.6, g: 0.1, drag: 0.97, life: rand(400, 800), layer: 1, c: p.c });
                 parts.splice(i, 1);
                 continue;
               }
