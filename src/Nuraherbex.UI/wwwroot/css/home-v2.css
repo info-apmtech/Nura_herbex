@@ -3,7 +3,7 @@
    High-fidelity, responsive vanilla CSS matching the e-commerce mockup.
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 :root {
   --nh-purple: #732dbd;
@@ -1371,5 +1371,628 @@
   .nh-newsletter-btn {
     width: 100%;
     justify-content: center;
+  }
+}
+
+/* ==========================================================================
+   SHOP ALL PRODUCTS PAGE (EXACT DESIGN MATCHING 4 SCREENSHOTS)
+   ========================================================================== */
+
+.nh-shop-page {
+  width: 100%;
+  background-color: #ffffff;
+}
+
+/* Breadcrumb / PDP Detail Container */
+.nh-shop-detail-wrap {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+}
+.nh-shop-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6b637d;
+  margin-bottom: 24px;
+}
+.nh-shop-crumbs a {
+  color: #732dbd;
+  text-decoration: none;
+  font-weight: 600;
+}
+.nh-shop-crumbs a:hover {
+  text-decoration: underline;
+}
+.nh-crumb-sep {
+  color: #c4b9d4;
+}
+.nh-crumb-active {
+  color: #1e192f;
+  font-weight: 600;
+}
+
+/* 1. Hero Banner */
+.nh-shop-hero {
+  width: 100%;
+  background: linear-gradient(135deg, #f7f2fc 0%, #ebe2f7 50%, #f6f0fc 100%);
+  border-bottom: 1px solid #ebdff5;
+  position: relative;
+  overflow: hidden;
+}
+.nh-shop-hero-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  position: relative;
+}
+.nh-shop-hero-content {
+  flex: 0 0 auto;
+  max-width: 440px;
+  z-index: 2;
+}
+.nh-shop-hero-kicker {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #5d4e77;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.nh-shop-hero-title {
+  font-family: var(--nh-font-serif);
+  font-size: 52px;
+  font-weight: 700;
+  line-height: 1.06;
+  color: #151138;
+  margin: 0 0 14px 0;
+  letter-spacing: -0.015em;
+}
+.nh-shop-hero-sub {
+  font-size: 16px;
+  color: #4b415e;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 440px;
+}
+.nh-shop-hero-visual {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 440px;
+  z-index: 1;
+}
+.nh-shop-hero-sprig {
+  max-height: 310px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 10px 24px rgba(0,0,0,0.06));
+  transform: translateX(-15px);
+}
+.nh-shop-hero-script {
+  position: absolute;
+  right: 20px;
+  top: 28px;
+  font-family: 'Caveat', cursive, sans-serif;
+  font-size: 32px;
+  line-height: 1.05;
+  font-weight: 700;
+  color: #381c62;
+  transform: rotate(-7deg);
+  text-shadow: 0 1px 3px rgba(255,255,255,0.9);
+  pointer-events: none;
+  user-select: none;
+  text-align: right;
+  z-index: 2;
+}
+
+/* 2. Category Filter Tabs & Toolbar */
+.nh-shop-catalog-section {
+  width: 100%;
+  background: #ffffff;
+  padding: 36px 20px 48px;
+}
+.nh-shop-catalog-inner {
+  max-width: 1140px;
+  margin: 0 auto;
+}
+.nh-shop-tabs {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  align-items: center;
+  scrollbar-width: thin;
+}
+.nh-shop-tabs::-webkit-scrollbar {
+  height: 4px;
+}
+.nh-shop-tabs::-webkit-scrollbar-thumb {
+  background: #e2d9ec;
+  border-radius: 4px;
+}
+.nh-shop-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1.5px solid #ece4f2;
+  background: #ffffff;
+  color: #2b1f40;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+.nh-shop-tab:hover {
+  border-color: #732dbd;
+  color: #732dbd;
+  background: #faf6fd;
+}
+.nh-shop-tab.active {
+  background: #732dbd !important;
+  color: #ffffff !important;
+  border-color: #732dbd !important;
+  box-shadow: 0 4px 14px rgba(115, 45, 189, 0.28);
+}
+.nh-tab-icon {
+  flex-shrink: 0;
+}
+
+/* Toolbar */
+.nh-shop-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 0 18px;
+  border-bottom: 1px solid #f0ebf5;
+  margin-bottom: 28px;
+}
+.nh-shop-count {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a142c;
+}
+.nh-shop-sort-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #4b4458;
+}
+.nh-sort-select-box {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.nh-sort-select-box select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 6px 26px 6px 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a142c;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.nh-sort-select-box select:focus {
+  outline: none;
+  border-color: #732dbd;
+}
+.nh-sort-caret {
+  position: absolute;
+  right: 6px;
+  pointer-events: none;
+  color: #4b4458;
+}
+
+/* 3. Product Cards Grid */
+.nh-shop-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 28px;
+  margin-bottom: 24px;
+}
+.nh-shop-card {
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid #ece6e0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.02);
+}
+.nh-shop-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 30px rgba(115, 45, 189, 0.08);
+  border-color: #d6cae6;
+}
+.nh-shop-card-img-wrap {
+  position: relative;
+  width: 100%;
+  height: 290px;
+  background: #fbf9f6;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.nh-shop-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+.nh-shop-bestseller-badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: #732dbd;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  box-shadow: 0 2px 8px rgba(115, 45, 189, 0.35);
+  z-index: 2;
+}
+.nh-shop-card-body {
+  padding: 22px 24px 26px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.nh-shop-card-name {
+  font-family: var(--nh-font-serif);
+  font-size: 26px;
+  font-weight: 700;
+  color: #121035;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+.nh-shop-card-sub {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #371353;
+  margin: 0 0 10px;
+}
+.nh-shop-card-desc {
+  font-size: 13.5px;
+  color: #554e63;
+  line-height: 1.45;
+  margin: 0 0 16px;
+  min-height: 40px;
+}
+.nh-shop-rating-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.nh-shop-stars {
+  display: flex;
+  gap: 2px;
+}
+.nh-shop-rating-score {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a142c;
+  margin-left: 2px;
+}
+.nh-shop-rating-count {
+  font-size: 13.5px;
+  color: #584c73;
+  font-weight: 600;
+}
+.nh-shop-price-row {
+  margin-bottom: 18px;
+}
+.nh-shop-price {
+  font-size: 26px;
+  font-weight: 800;
+  color: #121035;
+}
+
+/* Add to Cart Buttons */
+.nh-shop-btn-solid {
+  width: 100%;
+  padding: 13px 20px;
+  border-radius: 9999px;
+  background: #732dbd;
+  color: #ffffff;
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px rgba(115, 45, 189, 0.25);
+}
+.nh-shop-btn-solid:hover {
+  background: #5e209e;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(115, 45, 189, 0.35);
+}
+.nh-shop-btn-outline {
+  width: 100%;
+  padding: 13px 20px;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #732dbd;
+  border: 1.8px solid #732dbd;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.nh-shop-btn-outline:hover {
+  background: #732dbd;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(115, 45, 189, 0.2);
+}
+.nh-shop-btn-cart-icon {
+  flex-shrink: 0;
+}
+
+/* Empty State */
+.nh-shop-empty {
+  padding: 60px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.nh-shop-empty h3 {
+  font-family: var(--nh-font-serif);
+  font-size: 22px;
+  color: #1a142c;
+  margin: 0;
+}
+
+/* 4. Shop by Category Section */
+.nh-shop-cat-section {
+  width: 100%;
+  background: #faf8f5;
+  padding: 44px 20px 54px;
+}
+.nh-shop-cat-inner {
+  max-width: 1140px;
+  margin: 0 auto;
+}
+.nh-shop-cat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+.nh-shop-cat-title {
+  font-family: var(--nh-font-serif);
+  font-size: 30px;
+  font-weight: 700;
+  color: #121035;
+  margin: 0;
+}
+.nh-shop-view-all {
+  background: none;
+  border: none;
+  color: #732dbd;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 0.2s ease;
+}
+.nh-shop-view-all:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+.nh-shop-cat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+.nh-cat-card {
+  background: #ffffff;
+  border: 1px solid #ece5de;
+  border-radius: 18px;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+}
+.nh-cat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 22px rgba(115, 45, 189, 0.08);
+  border-color: #d6cae6;
+}
+.nh-cat-icon-circle {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.nh-cat-icon-circle.digestive {
+  background: #f0e8f8;
+  color: #732dbd;
+}
+.nh-cat-icon-circle.energy {
+  background: #e2f6ea;
+  color: #2d7a46;
+}
+.nh-cat-icon-circle.immunity {
+  background: #faeaf2;
+  color: #732dbd;
+}
+.nh-cat-icon-circle.mens {
+  background: #e0f5f5;
+  color: #007a78;
+}
+.nh-cat-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #121035;
+  text-align: center;
+  line-height: 1.25;
+}
+
+/* 5. Bottom Story Banner */
+.nh-shop-story-section {
+  width: 100%;
+  background: #ffffff;
+  padding: 44px 20px 60px;
+}
+.nh-shop-story-inner {
+  max-width: 1140px;
+  margin: 0 auto;
+}
+.nh-shop-story-banner {
+  position: relative;
+  border-radius: 24px;
+  overflow: hidden;
+  padding: 48px 60px;
+  background: #f4ecfb url('/_content/Nuraherbex.UI/images/shop-bottom-banner.png') center/cover no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  box-shadow: 0 6px 20px rgba(115, 45, 189, 0.08);
+  border: 1px solid rgba(115, 45, 189, 0.12);
+  min-height: 220px;
+}
+.nh-shop-story-content {
+  flex: 0 0 auto;
+  max-width: 520px;
+  z-index: 2;
+  margin-left: 40px;
+}
+.nh-shop-story-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #5d4e77;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: block;
+}
+.nh-shop-story-title {
+  font-family: var(--nh-font-serif);
+  font-size: 34px;
+  font-weight: 700;
+  color: #121035;
+  line-height: 1.15;
+  margin: 0 0 8px;
+}
+.nh-shop-story-desc {
+  font-size: 14.5px;
+  color: #4b415e;
+  margin: 0;
+}
+.nh-shop-story-btn {
+  background: #ffffff;
+  color: #121035;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 14px 28px;
+  border-radius: 9999px;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  transition: all 0.2s ease;
+}
+.nh-shop-story-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(115, 45, 189, 0.18);
+  color: #732dbd;
+}
+
+/* Responsive Media Queries */
+@media (max-width: 900px) {
+  .nh-shop-hero-inner {
+    padding: 36px 20px;
+  }
+  .nh-shop-hero-title {
+    font-size: 40px;
+  }
+  .nh-shop-hero-visual {
+    min-width: 260px;
+  }
+  .nh-shop-hero-sprig {
+    max-height: 220px;
+  }
+  .nh-shop-hero-script {
+    font-size: 26px;
+    top: 24px;
+    right: 12px;
+  }
+  .nh-shop-story-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 32px 24px;
+  }
+  .nh-shop-story-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 768px) {
+  .nh-shop-hero-inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .nh-shop-hero-visual {
+    min-width: unset;
+    width: 100%;
+    justify-content: center;
+  }
+  .nh-shop-grid {
+    grid-template-columns: 1fr;
+  }
+  .nh-shop-cat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .nh-shop-hero-title {
+    font-size: 34px;
+  }
+  .nh-shop-story-title {
+    font-size: 28px;
   }
 }

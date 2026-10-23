@@ -1,120 +1,517 @@
 @inject CartState Cart
 @inject NavigationManager Nav
+@inject BrowserInterop Browser
 
-<div class="sc">
+<div class="nh-shop-page">
 @if (ProductId is not null)
 {
-    <nav class="sc-crumbs" aria-label="Breadcrumb"><a href="/">Home</a><Icon Name="ChevronRight" Size="12" /><a href="/shop">Shop</a><Icon Name="ChevronRight" Size="12" />@(Selected?.Name ?? "Product")</nav>
-    @if (Selected is { } p)
-    {
-        var soldOut = p.StockQuantity <= 0;
-        var onSale = p.CompareAtPrice > p.Price;
-        <div class="sc-detail">
-          <div class="sc-detail-img">
-            @if (!string.IsNullOrEmpty(p.ImageUrl)) { <img src="@p.ImageUrl" alt="@p.Name" /> } else { <Icon Name="Package" Size="80" /> }
-            @if (onSale) { <span class="sc-badge">@Math.Round((1 - p.Price / p.CompareAtPrice!.Value) * 100)% OFF</span> }
-          </div>
-          <div class="sc-detail-info">
-            <span class="sc-eyebrow">Nura Herbex</span>
-            <h1>@p.Name</h1>
-            @if (!string.IsNullOrWhiteSpace(p.Subtitle)) { <p class="sc-sub">@p.Subtitle</p> }
-            <div class="sc-rating"><span class="sc-stars"><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /></span><span>Loved by our customers</span></div>
-            <div class="sc-price">@SiteConfig.Money(p.Price)@if (onSale) { <del>@SiteConfig.Money(p.CompareAtPrice!.Value)</del> }<small>Inclusive of applicable taxes</small></div>
-            @if (!string.IsNullOrWhiteSpace(p.Description)) { <p class="sc-desc">@p.Description</p> }
+    <div class="nh-shop-detail-wrap">
+        <nav class="nh-shop-crumbs" aria-label="Breadcrumb">
+            <a href="/">Home</a>
+            <span class="nh-crumb-sep">/</span>
+            <a href="/shop">Shop</a>
+            <span class="nh-crumb-sep">/</span>
+            <span class="nh-crumb-active">@(Selected?.Name ?? "Product")</span>
+        </nav>
 
-            <dl class="sc-specs">
-              <div><dt>Availability</dt><dd class="@(soldOut ? "is-out" : p.StockQuantity <= 10 ? "is-low" : "is-in")">@(soldOut ? "Out of stock" : p.StockQuantity <= 10 ? $"Only {p.StockQuantity} left" : "In stock")</dd></div>
-              @if (p.WeightKg > 0) { <div><dt>Net weight</dt><dd>@(Math.Round(p.WeightKg * 1000)) g</dd></div> }
-              <div><dt>SKU</dt><dd>@p.Sku</dd></div>
-            </dl>
+        @if (Selected is { } p)
+        {
+            var soldOut = p.StockQuantity <= 0;
+            var onSale = p.CompareAtPrice > p.Price;
+            <div class="sc-detail">
+              <div class="sc-detail-img">
+                @if (!string.IsNullOrEmpty(p.ImageUrl)) { <img src="@p.ImageUrl" alt="@p.Name" /> } else { <Icon Name="Package" Size="80" /> }
+                @if (onSale) { <span class="sc-badge">@Math.Round((1 - p.Price / p.CompareAtPrice!.Value) * 100)% OFF</span> }
+              </div>
+              <div class="sc-detail-info">
+                <span class="sc-eyebrow">Nura Herbex</span>
+                <h1>@p.Name</h1>
+                @if (!string.IsNullOrWhiteSpace(p.Subtitle)) { <p class="sc-sub">@p.Subtitle</p> }
+                <div class="sc-rating"><span class="sc-stars"><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /></span><span>Loved by our customers</span></div>
+                <div class="sc-price">@SiteConfig.Money(p.Price)@if (onSale) { <del>@SiteConfig.Money(p.CompareAtPrice!.Value)</del> }<small>Inclusive of applicable taxes</small></div>
+                @if (!string.IsNullOrWhiteSpace(p.Description)) { <p class="sc-desc">@p.Description</p> }
 
-            <div class="sc-buy">
-              <div class="sc-qty"><button aria-label="Decrease quantity" @onclick="() => _quantity = Math.Max(1, _quantity - 1)"><Icon Name="Minus" Size="15" /></button><span>@_quantity</span><button aria-label="Increase quantity" @onclick="() => _quantity = Math.Min(Math.Max(1, Math.Min(100, p.StockQuantity)), _quantity + 1)"><Icon Name="Plus" Size="15" /></button></div>
-              <button class="sc-btn sc-btn-primary" disabled="@(soldOut || _busy)" @onclick="() => AddAsync(p)"><Icon Name="ShoppingBag" Size="17" /> Add to cart</button>
-              <button class="sc-btn sc-btn-ghost" disabled="@(soldOut || _busy)" @onclick="() => BuyNowAsync(p)">Buy now</button>
+                <dl class="sc-specs">
+                  <div><dt>Availability</dt><dd class="@(soldOut ? "is-out" : p.StockQuantity <= 10 ? "is-low" : "is-in")">@(soldOut ? "Out of stock" : p.StockQuantity <= 10 ? $"Only {p.StockQuantity} left" : "In stock")</dd></div>
+                  @if (p.WeightKg > 0) { <div><dt>Net weight</dt><dd>@(Math.Round(p.WeightKg * 1000)) g</dd></div> }
+                  <div><dt>SKU</dt><dd>@p.Sku</dd></div>
+                </dl>
+
+                <div class="sc-buy">
+                  <div class="sc-qty"><button aria-label="Decrease quantity" @onclick="() => _quantity = Math.Max(1, _quantity - 1)"><Icon Name="Minus" Size="15" /></button><span>@_quantity</span><button aria-label="Increase quantity" @onclick="() => _quantity = Math.Min(Math.Max(1, Math.Min(100, p.StockQuantity)), _quantity + 1)"><Icon Name="Plus" Size="15" /></button></div>
+                  <button class="sc-btn sc-btn-primary" disabled="@(soldOut || _busy)" @onclick="() => AddAsync(p)"><Icon Name="ShoppingBag" Size="17" /> Add to cart</button>
+                  <button class="sc-btn sc-btn-ghost" disabled="@(soldOut || _busy)" @onclick="() => BuyNowAsync(p)">Buy now</button>
+                </div>
+                @if (_error is not null) { <p role="alert" class="sc-error">@_error</p> }
+
+                <ul class="sc-assure">
+                  <li><Icon Name="ShieldCheck" Size="18" /> GMP certified</li>
+                  <li><Icon Name="Truck" Size="18" /> Fast, tracked delivery</li>
+                  <li><Icon Name="Leaf" Size="18" /> 100% botanical</li>
+                  <li><Icon Name="Award" Size="18" /> Batch verified</li>
+                </ul>
+              </div>
             </div>
-            @if (_error is not null) { <p role="alert" class="sc-error">@_error</p> }
-
-            <ul class="sc-assure">
-              <li><Icon Name="ShieldCheck" Size="18" /> GMP certified</li>
-              <li><Icon Name="Truck" Size="18" /> Fast, tracked delivery</li>
-              <li><Icon Name="Leaf" Size="18" /> 100% botanical</li>
-              <li><Icon Name="Award" Size="18" /> Batch verified</li>
-            </ul>
-          </div>
-        </div>
-    }
-    else
-    {
-        <div class="sc-empty"><Icon Name="Package" Size="44" /><h1>Product unavailable</h1><p>This product is no longer available in the store.</p><a class="sc-btn sc-btn-primary" href="/shop">Browse our products</a></div>
-    }
+        }
+        else
+        {
+            <div class="sc-empty"><Icon Name="Package" Size="44" /><h1>Product unavailable</h1><p>This product is no longer available in the store.</p><a class="sc-btn sc-btn-primary" href="/shop">Browse our products</a></div>
+        }
+    </div>
 }
 else
 {
-    <header class="sc-hero">
-      <span class="sc-eyebrow">The Nura Herbex collection</span>
-      <h1>Find your <em>daily ritual</em></h1>
-      <p>Natural ingredients, honest formulas and everyday care, made with 17 botanicals and nothing you can't pronounce.</p>
-      <ul class="sc-hero-points"><li><Icon Name="ShieldCheck" Size="16" /> GMP certified</li><li><Icon Name="Truck" Size="16" /> Free shipping on qualifying orders</li><li><Icon Name="Leaf" Size="16" /> No synthetic fillers</li></ul>
-    </header>
-
-    <div class="sc-toolbar">
-      <label class="sc-search"><Icon Name="Search" Size="17" /><input aria-label="Search the shop" placeholder="Search products" @bind="_search" @bind:event="oninput" /></label>
-      <span class="sc-count">@Filtered.Count() @(Filtered.Count() == 1 ? "product" : "products")</span>
-      <select aria-label="Sort products" @bind="_sort"><option value="name">Sort: A to Z</option><option value="price">Price: low to high</option><option value="price-desc">Price: high to low</option></select>
-    </div>
-
-    @if (!Filtered.Any())
-    {
-        <div class="sc-empty"><Icon Name="Package" Size="44" /><h2>No products found</h2><p>Try another search or check back soon.</p></div>
-    }
-    <div class="sc-grid">
-      @foreach (var p in Filtered)
-      {
-        var soldOut = p.StockQuantity <= 0;
-        var onSale = p.CompareAtPrice > p.Price;
-        <article class="sc-card" @key="p.Id">
-          <a href="@("/catalog/" + Uri.EscapeDataString(p.Id))" class="sc-card-img" aria-label="@p.Name">
-            @if (!string.IsNullOrWhiteSpace(p.ImageUrl)) { <img src="@p.ImageUrl" alt="@p.Name" loading="lazy" /> } else { <Icon Name="Package" Size="56" /> }
-            @if (soldOut) { <span class="sc-badge sc-badge-dark">Sold out</span> } else if (onSale) { <span class="sc-badge">@Math.Round((1 - p.Price / p.CompareAtPrice!.Value) * 100)% OFF</span> }
-          </a>
-          <div class="sc-card-body">
-            <span class="sc-stars"><Icon Name="Star" Size="13" /><Icon Name="Star" Size="13" /><Icon Name="Star" Size="13" /><Icon Name="Star" Size="13" /><Icon Name="Star" Size="13" /></span>
-            <a href="@("/catalog/" + Uri.EscapeDataString(p.Id))"><h2>@p.Name</h2></a>
-            @if (!string.IsNullOrWhiteSpace(p.Subtitle)) { <p class="sc-card-sub">@p.Subtitle</p> }
-            @if (!string.IsNullOrWhiteSpace(p.Description)) { <p class="sc-card-desc">@p.Description</p> }
-            <div class="sc-card-foot">
-              <div class="sc-price">@SiteConfig.Money(p.Price)@if (onSale) { <del>@SiteConfig.Money(p.CompareAtPrice!.Value)</del> }</div>
-              <button class="sc-btn sc-btn-primary sc-btn-sm" disabled="@(soldOut || _busy)" @onclick="() => AddAsync(p)">@(soldOut ? "Out of stock" : "Add to cart")<Icon Name="ArrowRight" Size="15" /></button>
+    @* =====================================================================
+       SECTION 1: HERO BANNER (MATCHING SCREENSHOT 1)
+       ===================================================================== *@
+    <section class="nh-shop-hero">
+        <div class="nh-shop-hero-inner">
+            <div class="nh-shop-hero-content">
+                <span class="nh-shop-hero-kicker">NATURAL WELLNESS FOR A BRIGHTER YOU</span>
+                <h1 class="nh-shop-hero-title">Shop All<br />Products</h1>
+                <p class="nh-shop-hero-sub">Science-backed, plant-powered wellness solutions for a healthier, happier you.</p>
             </div>
-          </div>
-        </article>
-      }
-    </div>
+
+            <div class="nh-shop-hero-visual">
+                <img src="_content/Nuraherbex.UI/images/shop-blossom-sprig.png" alt="Natural botanical flowers" class="nh-shop-hero-sprig" />
+                <div class="nh-shop-hero-script">
+                    <span>Better</span><br />
+                    <span>Habits</span><br />
+                    <span>Brighter</span><br />
+                    <span>Days ♥</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    @* =====================================================================
+       SECTION 2: CATEGORY FILTER TABS & TOOLBAR (MATCHING SCREENSHOT 2)
+       ===================================================================== *@
+    <section class="nh-shop-catalog-section" id="products-catalog">
+        <div class="nh-shop-catalog-inner">
+            
+            @* Category Filter Tabs *@
+            <div class="nh-shop-tabs" role="tablist" aria-label="Product categories">
+                <button class="nh-shop-tab @(_activeCategory == "all" ? "active" : "")" @onclick='() => SetCategory("all")'>
+                    All Products
+                </button>
+
+                <button class="nh-shop-tab @(_activeCategory == "digestive" ? "active" : "")" @onclick='() => SetCategory("digestive")'>
+                    <svg class="nh-tab-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2v3m-3 0h6"/>
+                        <path d="M15 5c2 0 4 1.5 4 4.5 0 4-3 7-5 9-2-2-5-5-5-9 0-3 2-4.5 4-4.5"/>
+                        <path d="M10 11c1 1 3 1 4 0"/>
+                        <path d="M12 18.5V22"/>
+                    </svg>
+                    <span>Digestive Health</span>
+                </button>
+
+                <button class="nh-shop-tab @(_activeCategory == "energy" ? "active" : "")" @onclick='() => SetCategory("energy")'>
+                    <svg class="nh-tab-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                    </svg>
+                    <span>Energy &amp; Stamina</span>
+                </button>
+
+                <button class="nh-shop-tab @(_activeCategory == "immunity" ? "active" : "")" @onclick='() => SetCategory("immunity")'>
+                    <svg class="nh-tab-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        <path d="m9 12 2 2 4-4"/>
+                    </svg>
+                    <span>Immunity</span>
+                </button>
+
+                <button class="nh-shop-tab @(_activeCategory == "men" ? "active" : "")" @onclick='() => SetCategory("men")'>
+                    <svg class="nh-tab-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 4c-1.5 2.5-3.5 5.5-3.5 8.5 0 2.8 1.8 4.5 3.5 4.5s3.5-1.7 3.5-4.5C15.5 9.5 13.5 6.5 12 4z"/>
+                        <path d="M8.5 12.5C6.5 11 4 12 4 14.5c0 2.5 3 4 5 4.5"/>
+                        <path d="M15.5 12.5c2-1.5 4.5-.5 4.5 2 0 2.5-3 4-5 4.5"/>
+                        <path d="M5 20c4-1 10-1 14 0"/>
+                    </svg>
+                    <span>Men's Wellness</span>
+                </button>
+            </div>
+
+            @* Products Count and Sorting Toolbar *@
+            <div class="nh-shop-toolbar">
+                <span class="nh-shop-count">@DisplayedItems.Count() @(DisplayedItems.Count() == 1 ? "Product" : "Products")</span>
+
+                <div class="nh-shop-sort-wrap">
+                    <label for="nh-sort-select">Sort by:</label>
+                    <div class="nh-sort-select-box">
+                        <select id="nh-sort-select" @bind="_selectedSort">
+                            <option value="featured">Featured</option>
+                            <option value="price-asc">Price: Low to High</option>
+                            <option value="price-desc">Price: High to Low</option>
+                            <option value="rating">Customer Rating</option>
+                        </select>
+                        <svg class="nh-sort-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            @* =====================================================================
+               SECTION 3: PRODUCT GRID (MATCHING SCREENSHOTS 2 & 3)
+               ===================================================================== *@
+            @if (!DisplayedItems.Any())
+            {
+                <div class="nh-shop-empty">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#732dbd" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/>
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                        <line x1="12" y1="22.08" x2="12" y2="12"/>
+                    </svg>
+                    <h3>No products found in this category</h3>
+                    <button class="nh-shop-btn-solid" style="max-width:200px; margin-top:12px;" @onclick='() => SetCategory("all")'>
+                        View All Products
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="nh-shop-grid">
+                    @foreach (var prod in DisplayedItems)
+                    {
+                        <div class="nh-shop-card" @key="prod.Id">
+                            
+                            @* Product Image with Optional Bestseller Badge *@
+                            <div class="nh-shop-card-img-wrap">
+                                @if (!string.IsNullOrEmpty(prod.Badge))
+                                {
+                                    <span class="nh-shop-bestseller-badge">@prod.Badge</span>
+                                }
+                                <img src="@prod.ImageUrl" alt="@prod.Name jar" class="nh-shop-card-img" />
+                            </div>
+
+                            @* Product Card Details *@
+                            <div class="nh-shop-card-body">
+                                <h3 class="nh-shop-card-name">@prod.Name</h3>
+                                <p class="nh-shop-card-sub">@prod.Subtitle</p>
+                                <p class="nh-shop-card-desc">@prod.Description</p>
+
+                                @* Rating and Reviews *@
+                                <div class="nh-shop-rating-row">
+                                    <div class="nh-shop-stars">
+                                        @for (int s = 0; s < 5; s++)
+                                        {
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" stroke-width="1">
+                                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                                            </svg>
+                                        }
+                                    </div>
+                                    <span class="nh-shop-rating-score">@prod.Rating.ToString("0.0")</span>
+                                    <span class="nh-shop-rating-count">(@prod.ReviewCount)</span>
+                                </div>
+
+                                @* Price *@
+                                <div class="nh-shop-price-row">
+                                    <span class="nh-shop-price">₹@prod.Price.ToString("N0")</span>
+                                </div>
+
+                                @* Add to Cart Button (Solid or Outline based on design) *@
+                                <button @onclick="() => HandleAddToCart(prod)"
+                                        class="@(prod.IsSolidButton ? "nh-shop-btn-solid" : "nh-shop-btn-outline")"
+                                        aria-label="Add @prod.Name to cart">
+                                    <svg class="nh-shop-btn-cart-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="8" cy="21" r="1.5"/>
+                                        <circle cx="19" cy="21" r="1.5"/>
+                                        <path d="M2 2h3l2.6 12.3a2 2 0 0 0 2 1.7h9.8a2 2 0 0 0 2-1.6L23 6H6"/>
+                                    </svg>
+                                    <span>Add to Cart</span>
+                                </button>
+                            </div>
+
+                        </div>
+                    }
+                </div>
+            }
+
+        </div>
+    </section>
+
+    @* =====================================================================
+       SECTION 4: SHOP BY CATEGORY (MATCHING SCREENSHOT 3)
+       ===================================================================== *@
+    <section class="nh-shop-cat-section">
+        <div class="nh-shop-cat-inner">
+            
+            <div class="nh-shop-cat-header">
+                <h2 class="nh-shop-cat-title">Shop by Category</h2>
+                <button @onclick='() => SetCategory("all")' class="nh-shop-view-all">
+                    <span>View All</span>
+                    <span style="font-weight: 800; font-size: 15px;">→</span>
+                </button>
+            </div>
+
+            <div class="nh-shop-cat-grid">
+                
+                @* Category Card 1: Digestive Health *@
+                <button @onclick='() => SetCategory("digestive")' class="nh-cat-card">
+                    <div class="nh-cat-icon-circle digestive">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2v3m-3 0h6"/>
+                            <path d="M15 5c2 0 4 1.5 4 4.5 0 4-3 7-5 9-2-2-5-5-5-9 0-3 2-4.5 4-4.5"/>
+                            <path d="M10 11c1 1 3 1 4 0"/>
+                            <path d="M12 18.5V22"/>
+                        </svg>
+                    </div>
+                    <span class="nh-cat-label">Digestive<br />Health</span>
+                </button>
+
+                @* Category Card 2: Energy & Stamina *@
+                <button @onclick='() => SetCategory("energy")' class="nh-cat-card">
+                    <div class="nh-cat-icon-circle energy">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                        </svg>
+                    </div>
+                    <span class="nh-cat-label">Energy &amp;<br />Stamina</span>
+                </button>
+
+                @* Category Card 3: Immunity Support *@
+                <button @onclick='() => SetCategory("immunity")' class="nh-cat-card">
+                    <div class="nh-cat-icon-circle immunity">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            <path d="m9 12 2 2 4-4"/>
+                        </svg>
+                    </div>
+                    <span class="nh-cat-label">Immunity<br />Support</span>
+                </button>
+
+                @* Category Card 4: Men's Wellness *@
+                <button @onclick='() => SetCategory("men")' class="nh-cat-card">
+                    <div class="nh-cat-icon-circle mens">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 4c-1.5 2.5-3.5 5.5-3.5 8.5 0 2.8 1.8 4.5 3.5 4.5s3.5-1.7 3.5-4.5C15.5 9.5 13.5 6.5 12 4z"/>
+                            <path d="M8.5 12.5C6.5 11 4 12 4 14.5c0 2.5 3 4 5 4.5"/>
+                            <path d="M15.5 12.5c2-1.5 4.5-.5 4.5 2 0 2.5-3 4-5 4.5"/>
+                            <path d="M5 20c4-1 10-1 14 0"/>
+                        </svg>
+                    </div>
+                    <span class="nh-cat-label">Men's<br />Wellness</span>
+                </button>
+
+            </div>
+
+        </div>
+    </section>
+
+    @* =====================================================================
+       SECTION 5: BOTTOM STORY BANNER (MATCHING SCREENSHOT 4)
+       ===================================================================== *@
+    <section class="nh-shop-story-section">
+        <div class="nh-shop-story-inner">
+            <div class="nh-shop-story-banner">
+                <div class="nh-shop-story-content">
+                    <span class="nh-shop-story-kicker">A HEALTHIER YOU STARTS HERE</span>
+                    <h2 class="nh-shop-story-title">Natural Wellness<br />For A Brighter Tomorrow</h2>
+                    <p class="nh-shop-story-desc">Premium, plant-based formulas for everyday vitality.</p>
+                </div>
+
+                <div class="nh-shop-story-action">
+                    <button @onclick='() => Nav.NavigateTo("/formulation")' class="nh-shop-story-btn">
+                        <span>Explore Our Story</span>
+                        <span style="font-weight: 800; font-size: 16px;">→</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
 }
-@if (_error is not null && ProductId is null) { <p role="alert" class="sc-error">@_error</p> }
 </div>
 
 @code {
     [Parameter] public List<ProductDto> Products { get; set; } = new();
     [Parameter] public string? ProductId { get; set; }
-    private string _search = "", _sort = "name";
+
+    public class ShopCatalogItem
+    {
+        public string Id { get; set; } = "";
+        public string Sku { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Subtitle { get; set; } = "";
+        public string Description { get; set; } = "";
+        public decimal Price { get; set; }
+        public double Rating { get; set; }
+        public int ReviewCount { get; set; }
+        public string ImageUrl { get; set; } = "";
+        public string? Badge { get; set; }
+        public HashSet<string> Categories { get; set; } = new();
+        public bool IsSolidButton { get; set; } = true;
+    }
+
+    private string _activeCategory = "all";
+    private string _selectedSort = "featured";
     private int _quantity = 1;
     private bool _busy;
     private string? _error;
-    private ProductDto? Selected => Products.FirstOrDefault(p => p.Id == ProductId);
-    private IEnumerable<ProductDto> Filtered { get { var p = Products.Where(p => p.Status == "active" && p.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)); return _sort == "price" ? p.OrderBy(p => p.Price) : _sort == "price-desc" ? p.OrderByDescending(p => p.Price) : p.OrderBy(p => p.Name); } }
-    protected override void OnParametersSet() { _quantity = 1; _error = null; }
+
+    private readonly List<ShopCatalogItem> _defaultItems = new()
+    {
+        new ShopCatalogItem
+        {
+            Id = "gut-365",
+            Sku = "NH-GUT365-60C",
+            Name = "GUT 365",
+            Subtitle = "Gut & Liver Enhancement",
+            Description = "Gut balance, digestive stimulant, natural energizer, antioxidant rich.",
+            Price = 1299m,
+            Rating = 4.8,
+            ReviewCount = 324,
+            ImageUrl = "_content/Nuraherbex.UI/images/product-1.png",
+            Badge = "BESTSELLER",
+            Categories = new() { "all", "digestive" },
+            IsSolidButton = true
+        },
+        new ShopCatalogItem
+        {
+            Id = "stamix-single",
+            Sku = "NH-STAMIX-300G",
+            Name = "STAMIX",
+            Subtitle = "Built For Men Who Run On Empty",
+            Description = "Natural energy, stamina, focus and recovery.",
+            Price = 1299m,
+            Rating = 4.7,
+            ReviewCount = 208,
+            ImageUrl = "_content/Nuraherbex.UI/images/product-2.png",
+            Badge = null,
+            Categories = new() { "all", "energy", "men" },
+            IsSolidButton = true
+        },
+        new ShopCatalogItem
+        {
+            Id = "immunex",
+            Sku = "NH-IMMUNEX-60C",
+            Name = "IMMUNEX",
+            Subtitle = "Daily Immunity Support",
+            Description = "Plant-based nutrients for daily defense and resilience.",
+            Price = 1199m,
+            Rating = 4.6,
+            ReviewCount = 96,
+            ImageUrl = "_content/Nuraherbex.UI/images/product-3.png",
+            Badge = null,
+            Categories = new() { "all", "immunity" },
+            IsSolidButton = false
+        },
+        new ShopCatalogItem
+        {
+            Id = "calmix",
+            Sku = "NH-CALMIX-60C",
+            Name = "CALMIX",
+            Subtitle = "Stress Relief & Better Sleep",
+            Description = "Natural calm, mental clarity and restful sleep.",
+            Price = 1199m,
+            Rating = 4.5,
+            ReviewCount = 118,
+            ImageUrl = "_content/Nuraherbex.UI/images/product-4.png",
+            Badge = null,
+            Categories = new() { "all", "calm", "sleep", "digestive" },
+            IsSolidButton = false
+        }
+    };
+
+    private IEnumerable<ShopCatalogItem> DisplayedItems
+    {
+        get
+        {
+            var filtered = _activeCategory == "all"
+                ? _defaultItems
+                : _defaultItems.Where(i => i.Categories.Contains(_activeCategory));
+
+            return _selectedSort switch
+            {
+                "price-asc" => filtered.OrderBy(i => i.Price),
+                "price-desc" => filtered.OrderByDescending(i => i.Price),
+                "rating" => filtered.OrderByDescending(i => i.Rating),
+                _ => filtered
+            };
+        }
+    }
+
+    private ProductDto? Selected => Products.FirstOrDefault(p => p.Id == ProductId)
+        ?? _defaultItems.Where(d => d.Id == ProductId).Select(d => new ProductDto
+        {
+            Id = d.Id,
+            Sku = d.Sku,
+            Name = d.Name,
+            Subtitle = d.Subtitle,
+            Description = d.Description,
+            Price = d.Price,
+            StockQuantity = 100,
+            ImageUrl = d.ImageUrl
+        }).FirstOrDefault();
+
+    protected override void OnParametersSet()
+    {
+        _quantity = 1;
+        _error = null;
+
+        var uri = new Uri(Nav.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var goal = query["goal"] ?? query["category"];
+        if (!string.IsNullOrEmpty(goal))
+        {
+            _activeCategory = goal.ToLowerInvariant() switch
+            {
+                "digestive" or "digestive-health" => "digestive",
+                "energy" or "energy-stamina" => "energy",
+                "immunity" or "immunity-support" => "immunity",
+                "mens-wellness" or "men" or "mens" => "men",
+                _ => "all"
+            };
+        }
+    }
+
+    private async Task SetCategory(string category)
+    {
+        _activeCategory = category;
+        await Browser.ScrollToIdAsync("products-catalog");
+    }
+
+    private async Task HandleAddToCart(ShopCatalogItem item)
+    {
+        await Cart.AddToCartAsync(new CartItem
+        {
+            Id = item.Id,
+            Name = $"{item.Name} — {item.Subtitle}",
+            Price = item.Price,
+            Image = item.ImageUrl,
+            ServingsText = item.Subtitle,
+            Quantity = 1
+        });
+    }
 
     private async Task<bool> AddAsync(ProductDto p)
     {
         if (_busy) return false;
         var qty = ProductId is null ? 1 : _quantity;
         var existing = Cart.Items.Where(i => i.Id == p.Id).Sum(i => i.Quantity);
-        if (qty < 1 || qty + existing > p.StockQuantity) { _error = $"Only {p.StockQuantity} units are available, including quantities already in your cart."; return false; }
-        _busy = true; _error = null;
-        try { await Cart.AddToCartAsync(new CartItem { Id = p.Id, Name = p.Name, Price = p.Price, Image = p.ImageUrl, ServingsText = p.Subtitle }, qty); }
-        finally { _busy = false; }
+        if (qty < 1 || (p.StockQuantity > 0 && qty + existing > p.StockQuantity))
+        {
+            _error = $"Only {p.StockQuantity} units are available, including quantities already in your cart.";
+            return false;
+        }
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Cart.AddToCartAsync(new CartItem
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Price = p.Price,
+                Image = p.ImageUrl,
+                ServingsText = p.Subtitle
+            }, qty);
+        }
+        finally
+        {
+            _busy = false;
+        }
         return true;
     }
 
