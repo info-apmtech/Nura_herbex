@@ -1,0 +1,75 @@
+@inject NavigationManager Nav
+
+<section id="wellness-goals" class="nh-wellness">
+    
+    @* Decorative Leaf Accents on Left & Right Borders *@
+    <img src="_content/Nuraherbex.UI/images/wellness-leaf-left-tight.png" alt="" class="nh-wellness-leaf-l" aria-hidden="true" />
+    <img src="_content/Nuraherbex.UI/images/wellness-leaf-right-tight.png" alt="" class="nh-wellness-leaf-r" aria-hidden="true" />
+
+    <div class="nh-wellness-inner">
+        
+        @* Header Row: Title & View All link *@
+        <div class="nh-wellness-header">
+            <div>
+                <h2 class="nh-wellness-title">Shop by Your Wellness Goals</h2>
+            </div>
+            <button @onclick='() => Nav.NavigateTo("/shop")' class="nh-view-all">
+                <span>View All</span>
+                <span style="font-weight: 800;">→</span>
+            </button>
+        </div>
+
+        @* 4 Circular Category Icons with Labels *@
+        <div class="nh-wellness-grid">
+            
+            @* Category 1: Digestive Health *@
+            <button @onclick='() => Nav.NavigateTo("/shop?goal=digestive")' class="nh-wellness-item">
+                <div class="nh-wellness-circle digestive">
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2v3m-3 0h6"/>
+                        <path d="M15 5c2 0 4 1.5 4 4.5 0 4-3 7-5 9-2-2-5-5-5-9 0-3 2-4.5 4-4.5"/>
+                        <path d="M10 11c1 1 3 1 4 0"/>
+                        <path d="M12 18.5V22"/>
+                    </svg>
+                </div>
+                <span class="nh-wellness-label">Digestive Health</span>
+            </button>
+
+            @* Category 2: Energy & Stamina *@
+            <button @onclick='() => Nav.NavigateTo("/shop?goal=energy")' class="nh-wellness-item">
+                <div class="nh-wellness-circle energy">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                    </svg>
+                </div>
+                <span class="nh-wellness-label">Energy &amp; Stamina</span>
+            </button>
+
+            @* Category 3: Immunity Support *@
+            <button @onclick='() => Nav.NavigateTo("/shop?goal=immunity")' class="nh-wellness-item">
+                <div class="nh-wellness-circle immunity">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        <path d="m9 12 2 2 4-4"/>
+                    </svg>
+                </div>
+                <span class="nh-wellness-label">Immunity Support</span>
+            </button>
+
+            @* Category 4: Men's Wellness *@
+            <button @onclick='() => Nav.NavigateTo("/shop?goal=mens-wellness")' class="nh-wellness-item">
+                <div class="nh-wellness-circle mens">
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 4c-1.5 2.5-3.5 5.5-3.5 8.5 0 2.8 1.8 4.5 3.5 4.5s3.5-1.7 3.5-4.5C15.5 9.5 13.5 6.5 12 4z"/>
+                        <path d="M8.5 12.5C6.5 11 4 12 4 14.5c0 2.5 3 4 5 4.5"/>
+                        <path d="M15.5 12.5c2-1.5 4.5-.5 4.5 2 0 2.5-3 4-5 4.5"/>
+                        <path d="M5 20c4-1 10-1 14 0"/>
+                    </svg>
+                </div>
+                <span class="nh-wellness-label">Men's Wellness</span>
+            </button>
+
+        </div>
+
+    </div>
+</section>

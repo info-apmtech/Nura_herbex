@@ -1,0 +1,104 @@
+@inject NavigationManager Nav
+@inject CartState Cart
+
+<section id="featured-products" class="nh-products">
+    
+    @* Decorative Leaf Accents on Left & Right Borders *@
+    <img src="_content/Nuraherbex.UI/images/wellness-leaf-left.png" alt="" class="nh-products-leaf-l" aria-hidden="true" />
+    <img src="_content/Nuraherbex.UI/images/wellness-leaf-left.png" alt="" class="nh-products-leaf-r" aria-hidden="true" />
+
+    <div class="nh-products-inner">
+        
+        @* Title Row: Heading & View All link *@
+        <div class="nh-products-header">
+            <div>
+                <h2 class="nh-products-title">Our Featured Products</h2>
+            </div>
+            <button @onclick='() => Nav.NavigateTo("/shop")' class="nh-view-all">
+                <span>View All</span>
+                <span style="font-weight: 800;">→</span>
+            </button>
+        </div>
+
+        @* Product Cards Grid *@
+        <div class="nh-product-grid">
+            
+            @* Card 1: GUT 365 *@
+            <div class="nh-product-card">
+                <div class="nh-product-img-wrap">
+                    <span class="nh-bestseller-badge">BESTSELLER</span>
+                    <img src="_content/Nuraherbex.UI/images/product-1.png" alt="GUT 365 Product Jar" class="nh-product-img" />
+                </div>
+                <div class="nh-product-body">
+                    <h3 class="nh-product-name">GUT 365</h3>
+                    <p class="nh-product-category">Gut &amp; Liver Enhancement</p>
+                    <p class="nh-product-desc">Gut balance, digestive stimulant, natural energiser, antioxidant rich.</p>
+                    <div class="nh-product-foot">
+                        <span class="nh-product-price">₹1,299</span>
+                        <button @onclick="AddGut365ToCart" class="nh-add-cart-btn" aria-label="Add GUT 365 to cart">
+                            <svg class="nh-cart-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="8" cy="21" r="1.5"/>
+                                <circle cx="19" cy="21" r="1.5"/>
+                                <path d="M2 2h3l2.6 12.3a2 2 0 0 0 2 1.7h9.8a2 2 0 0 0 2-1.6L23 6H6"/>
+                            </svg>
+                            <span>Add to Cart</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            @* Card 2: STAMIX *@
+            <div class="nh-product-card">
+                <div class="nh-product-img-wrap">
+                    <img src="_content/Nuraherbex.UI/images/product-2.png" alt="STAMIX Product Jar" class="nh-product-img" />
+                </div>
+                <div class="nh-product-body">
+                    <h3 class="nh-product-name">STAMIX</h3>
+                    <p class="nh-product-category">Built For Men Who Run On Empty</p>
+                    <p class="nh-product-desc">Natural energy, stamina, focus and recovery.</p>
+                    <div class="nh-product-foot">
+                        <span class="nh-product-price">₹1,299</span>
+                        <button @onclick="AddStamixToCart" class="nh-add-cart-btn-outline" aria-label="Add STAMIX to cart">
+                            <svg class="nh-cart-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="8" cy="21" r="1.5"/>
+                                <circle cx="19" cy="21" r="1.5"/>
+                                <path d="M2 2h3l2.6 12.3a2 2 0 0 0 2 1.7h9.8a2 2 0 0 0 2-1.6L23 6H6"/>
+                            </svg>
+                            <span>Add to Cart</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private async Task AddGut365ToCart()
+    {
+        await Cart.AddToCartAsync(new CartItem
+        {
+            Id = "gut-365",
+            Name = "GUT 365 — Gut & Liver Enhancement",
+            Price = 1299m,
+            Image = "_content/Nuraherbex.UI/images/product-1.png",
+            ServingsText = "60 capsules · 30 days",
+            Quantity = 1
+        });
+    }
+
+    private async Task AddStamixToCart()
+    {
+        await Cart.AddToCartAsync(new CartItem
+        {
+            Id = "stamix-single",
+            Name = "STAMIX — Botanical Vitality Formula",
+            Price = 1299m,
+            Image = "_content/Nuraherbex.UI/images/product-2.png",
+            ServingsText = "500 g · 25-day ritual",
+            Quantity = 1
+        });
+    }
+}
