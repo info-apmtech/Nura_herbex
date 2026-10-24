@@ -1,0 +1,154 @@
+@inject NavigationManager Nav
+@inject CartState Cart
+@inject CatalogState Catalog
+
+<section id="bundles" class="nhb">
+    <div class="nhb-inner">
+        <div class="nh-section-head" data-nh-reveal>
+            <span class="nh-eyebrow">BUNDLE &amp; SAVE</span>
+            <h2 class="nhb-title">Stock up on <em>STAMIX</em>, pay less per day</h2>
+            <p class="nhb-sub">Choose the ritual length that suits you. Every pack ships free and is backed by batch verification.</p>
+        </div>
+
+        <div class="nhb-grid">
+            @for (var i = 0; i < _packs.Length; i++)
+            {
+                var idx = i;
+                var p = _packs[idx];
+                <article class="nhb-card @(p.Featured ? "is-featured" : "")" data-nh-reveal style="--d:@(idx * 120)ms">
+                    <span class="nhb-ribbon">@p.Ribbon</span>
+                    <div class="nhb-visual" aria-hidden="true">
+                        <span class="nhb-glow"></span>
+                        @for (var j = 0; j < p.Jars; j++)
+                        {
+                            <img src="_content/Nuraherbex.UI/images/product-2.png" alt="" class="nhb-jar j@(j)" style="--n:@p.Jars" loading="lazy" />
+                        }
+                        <span class="nhb-save">Save @Percent(p)%</span>
+                    </div>
+                    <div class="nhb-body">
+                        <h3>@p.Name</h3>
+                        <p class="nhb-supply">@p.Supply</p>
+                        <ul>
+                            @foreach (var perk in p.Perks)
+                            {
+                                <li><Icon Name="Check" Size="14" StrokeWidth="3" /> @perk</li>
+                            }
+                        </ul>
+                        <div class="nhb-price">
+                            <strong>@SiteConfig.Money(p.Price)</strong>
+                            <s>@SiteConfig.Money(p.Compare)</s>
+                            <small>≈ @SiteConfig.Money(Math.Round(p.Price / p.Days)) / day</small>
+                        </div>
+                        <button class="nhb-btn" @onclick="() => AddAsync(idx)">
+                            <Icon Name="@(_added == idx ? "Check" : "ShoppingBag")" Size="17" />
+                            <span>@(_added == idx ? "Added to bag" : "Add to bag")</span>
+                        </button>
+                    </div>
+                </article>
+            }
+        </div>
+
+        <div class="nhb-gut" data-nh-reveal>
+            <img src="_content/Nuraherbex.UI/images/product-1.png" alt="GUT 365 jar" loading="lazy" />
+            <div class="nhb-gut-copy">
+                <span class="nhb-gut-tag">ALSO IN THE RANGE</span>
+                <h3>@_gutName</h3>
+                <p>@_gutBlurb</p>
+            </div>
+            <div class="nhb-gut-buy">
+                <strong>@SiteConfig.Money(_gutPrice)</strong>
+                <button type="button" class="nhb-btn nhb-btn-ghost" @onclick='() => Nav.NavigateTo("/catalog/gut-365")'><span>Details</span></button>
+                <button type="button" class="nhb-btn" @onclick="AddGutAsync">
+                    <Icon Name="@(_gutAdded ? "Check" : "ShoppingBag")" Size="17" />
+                    <span>@(_gutAdded ? "Added to bag" : "Add GUT 365")</span>
+                </button>
+            </div>
+        </div>
+
+        <p class="nhb-foot" data-nh-reveal>
+            <Icon Name="Truck" Size="15" /> Free shipping on orders above ₹@SiteConfig.FreeShippingThreshold.ToString("N0")
+            <span aria-hidden="true">·</span>
+            <button type="button" @onclick='() => Nav.NavigateTo("/shop")'>Compare all packs <Icon Name="ArrowRight" Size="13" /></button>
+        </p>
+    </div>
+</section>
+
+@code {
+    private sealed record Pack(string Id, string Name, string Supply, int Jars, int Days, decimal Price, decimal Compare, string Ribbon, bool Featured, string[] Perks, string Serving);
+
+    private static readonly Pack[] Defaults =
+    {
+        new("stamix-collector", "Collector Presentation Box", "15-day ritual · 300 g canister", 1, 15, 2499m, 3299m, "Gift ready", false,
+            new[] { "Embossed presentation box", "Precision scoop included", "Daily ritual handbook" }, "300 g · 15-day ritual"),
+        new("stamix-duo", "Duo Optimizer Pack", "30-day supply · 2 × 300 g canisters", 2, 30, 3499m, 4999m, "Most popular", true,
+            new[] { "Full 30-day routine", "Free 10 g measuring scoop", "Free shipping" }, "600 g · 30-day supply"),
+        new("stamix-trio", "Master Vitality System", "45-day supply · 3 × 300 g canisters", 3, 45, 4999m, 7499m, "Best value", false,
+            new[] { "Complete 45-day reset", "Free shaker bottle", "Lowest price per day" }, "900 g · 45-day supply"),
+    };
+
+    private Pack[] _packs = Defaults;
+    private decimal _gutPrice = 1299m;
+    private string _gutName = "GUT 365 — Gut & Liver Enhancement";
+    private string _gutBlurb = "Gut balance, digestive stimulant, natural energiser. Daily powder · 30-day supply.";
+    private int _added = -1;
+
+    // Prices, compare-at prices and names come from the database; the copy above is only the fallback when the API is unreachable.
+    protected override async Task OnInitializedAsync()
+    {
+        var live = await Catalog.GetAsync();
+        if (live.Count == 0) return;
+        _packs = Defaults.Select(d =>
+        {
+            var p = live.FirstOrDefault(x => x.Id == d.Id);
+            return p is null ? d : d with { Price = p.Price, Compare = p.CompareAtPrice ?? p.Price, Serving = string.IsNullOrWhiteSpace(p.ServingInfo) ? d.Serving : p.ServingInfo };
+        }).ToArray();
+        var gut = live.FirstOrDefault(x => x.Id == "gut-365");
+        if (gut is not null)
+        {
+            _gutPrice = gut.Price;
+            _gutName = gut.Name;
+            if (!string.IsNullOrWhiteSpace(gut.Description)) _gutBlurb = $"{gut.Description} {gut.ServingInfo}".Trim();
+        }
+    }
+    private bool _gutAdded;
+
+    private async Task AddGutAsync()
+    {
+        await Cart.AddToCartAsync(new CartItem
+        {
+            Id = "gut-365",
+            Name = _gutName,
+            Price = _gutPrice,
+            Image = "_content/Nuraherbex.UI/images/product-1.png",
+            ServingsText = "Daily powder · 30 days",
+            Quantity = 1
+        }, 1);
+        Cart.SetOpen(true);
+        _gutAdded = true;
+        StateHasChanged();
+        await Task.Delay(1800);
+        _gutAdded = false;
+        StateHasChanged();
+    }
+
+    private static int Percent(Pack p) => (int)Math.Round((1 - p.Price / p.Compare) * 100);
+
+    private async Task AddAsync(int i)
+    {
+        var p = _packs[i];
+        await Cart.AddToCartAsync(new CartItem
+        {
+            Id = p.Id,
+            Name = $"STAMIX — {p.Name}",
+            Price = p.Price,
+            Image = "_content/Nuraherbex.UI/images/product-2.png",
+            ServingsText = p.Serving,
+            Quantity = 1
+        }, 1);
+        Cart.SetOpen(true);
+        _added = i;
+        StateHasChanged();
+        await Task.Delay(1800);
+        if (_added == i) { _added = -1; StateHasChanged(); }
+    }
+}

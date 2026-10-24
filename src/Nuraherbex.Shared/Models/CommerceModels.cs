@@ -47,6 +47,15 @@ public class ProductDto
     public string HsnCode { get; set; } = "21069099";
     public string ImageUrl { get; set; } = "";
     public string Status { get; set; } = "active";
+    public string? Category { get; set; }
+    public string? ShortName { get; set; }
+    public string? Badge { get; set; }
+    /// <summary>Key benefits, one per line.</summary>
+    public string? Highlights { get; set; }
+    public string? Ingredients { get; set; }
+    public string? Directions { get; set; }
+    public string? ServingInfo { get; set; }
+    public IEnumerable<string> HighlightList => (Highlights ?? "").Split(new[] { (char)10, (char)13 }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }
 
 public class ProductListResponse : ApiResult

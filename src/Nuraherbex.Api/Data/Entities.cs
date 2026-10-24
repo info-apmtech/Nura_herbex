@@ -20,6 +20,16 @@ public class Product
     public string HsnCode { get; set; } = "21069099";
     public string? FssaiLicense { get; set; } = "11223999000181";
     public string? Category { get; set; }
+    /// <summary>Short brand name used in headings (e.g. "GUT 365").</summary>
+    public string? ShortName { get; set; }
+    /// <summary>Small label on cards, e.g. "Bestseller".</summary>
+    public string? Badge { get; set; }
+    /// <summary>Key benefits, one per line.</summary>
+    public string? Highlights { get; set; }
+    public string? Ingredients { get; set; }
+    public string? Directions { get; set; }
+    /// <summary>Pack / serving line, e.g. "Daily powder · 30-day supply".</summary>
+    public string? ServingInfo { get; set; }
     public string ImageUrl { get; set; } = "";
     public string Status { get; set; } = "active";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -5,12 +5,16 @@
 @inject CartState Cart
 @inject AuthState Auth
 @inject BrowserInterop Browser
+@using Nuraherbex.UI.Components.Home
+
+<div class="nh-storefront ck-shell">
+<HomeNavbar />
 
 @if (_confirmed is not null)
 {
     var isPrepaid = _confirmed.PaymentMethod.ToLowerInvariant().Contains("prepaid") || _confirmed.PaymentStatus == "PAID";
 
-    <div class="skin ck-page min-h-screen pb-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto text-left">
+    <div class="ck-page ck-light min-h-screen pb-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto text-left">
         <div class="rounded-3xl bg-[#0c0a16] border border-emerald-500/30 p-8 sm:p-12 shadow-2xl shadow-emerald-950/40 relative overflow-hidden">
             @* Ambient Glow *@
             <div class="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -116,7 +120,7 @@ else
     var isLoggedIn = Auth.IsAuthenticated;
     var customer = Auth.Customer;
 
-    <div class="skin ck-page min-h-screen pb-20 px-4 sm:px-6 lg:px-12 max-w-7xl mx-auto text-left relative">
+    <div class="ck-page ck-light min-h-screen pb-20 px-4 sm:px-6 lg:px-12 max-w-7xl mx-auto text-left relative">
 
         @* Top Breadcrumb Header *@
         <div class="flex items-center justify-between pb-3 mb-4 sm:pb-6 sm:mb-8 border-b border-white/10 pr-12 sm:pr-0">
@@ -606,6 +610,9 @@ else
 
     </div>
 }
+
+<HomeFooter />
+</div>
 
 @code {
     // null = unknown / not checked. Advisory only: checkout is never blocked on this.

@@ -1,0 +1,73 @@
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+<section id="reviews" class="nhr">
+    <div class="nhr-inner">
+        <div class="nhr-head" data-nh-reveal>
+            <div>
+                <span class="nh-eyebrow">CUSTOMER STORIES</span>
+                <h2 class="nhr-title">Loved by people who <em>feel the difference</em></h2>
+            </div>
+            @if (_reviews.Count > 0)
+            {
+                <div class="nhr-score" aria-label="Average rating @_avg.ToString("0.0") out of 5">
+                    <strong>@_avg.ToString("0.0")</strong>
+                    <div>
+                        <span class="nhr-stars">@for (var i = 0; i < 5; i++) { <Icon Name="Star" Size="16" Fill="@(i < Math.Round(_avg) ? "currentColor" : "none")" /> }</span>
+                        <small>Based on @_reviews.Count verified @(_reviews.Count == 1 ? "review" : "reviews")</small>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (_loading)
+        {
+            <div class="nhr-grid" aria-hidden="true">
+                @for (var i = 0; i < 3; i++) { <div class="nhr-card nhr-skel"></div> }
+            </div>
+        }
+        else if (_reviews.Count == 0)
+        {
+            <div class="nhr-empty">
+                <Icon Name="MessageCircle" Size="28" />
+                <h3>Be the first to share your story</h3>
+                <p>Approved reviews from verified buyers appear here.</p>
+                <button class="nh-btn-outline" @onclick='() => Nav.NavigateTo("/account")'>Write a review</button>
+            </div>
+        }
+        else
+        {
+            <div class="nhr-grid">
+                @foreach (var r in _reviews)
+                {
+                    <figure class="nhr-card" @key="r.Id">
+                        <span class="nhr-stars">@for (var i = 0; i < 5; i++) { <Icon Name="Star" Size="15" Fill="@(i < Math.Clamp(r.Rating, 1, 5) ? "currentColor" : "none")" /> }</span>
+                        @if (!string.IsNullOrWhiteSpace(r.Title)) { <h3>@r.Title</h3> }
+                        <blockquote>@r.Body</blockquote>
+                        <figcaption>
+                            @if (!string.IsNullOrEmpty(r.ProfileImageData)) { <img src="@r.ProfileImageData" alt="@r.Name" loading="lazy" /> }
+                            else { <span class="nhr-avatar">@Initial(r.Name)</span> }
+                            <div><strong>@r.Name</strong><span>@(string.IsNullOrWhiteSpace(r.City) ? "India" : r.City) · Verified buyer</span></div>
+                        </figcaption>
+                    </figure>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private List<ReviewDto> _reviews = new();
+    private double _avg;
+    private bool _loading = true;
+
+    private static string Initial(string n) => string.IsNullOrWhiteSpace(n) ? "?" : n.Trim()[..1].ToUpperInvariant();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var list = await Api.GetReviewsAsync();
+        _reviews = list.Where(r => !string.IsNullOrWhiteSpace(r.Body)).Take(6).ToList();
+        _avg = _reviews.Count == 0 ? 0 : _reviews.Average(r => Math.Clamp(r.Rating, 1, 5));
+        _loading = false;
+    }
+}

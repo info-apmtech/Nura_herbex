@@ -1,60 +1,53 @@
 @inject NavigationManager Nav
 
-<footer class="nh-newsletter">
-    
-    @* Decorative Leaf Accents on Left & Right Edges *@
+<section class="nh-newsletter nhn" aria-label="Newsletter">
     <img src="_content/Nuraherbex.UI/images/newsletter-leaf-left.png" alt="" class="nh-newsletter-leaf-l" aria-hidden="true" />
     <img src="_content/Nuraherbex.UI/images/newsletter-leaf-right.png" alt="" class="nh-newsletter-leaf-r" aria-hidden="true" />
 
-    <div class="nh-newsletter-inner">
-        
-        <h2 class="nh-newsletter-title">Join Our Wellness Community</h2>
+    <div class="nhn-card" data-nh-reveal>
+        <div class="nhn-copy">
+            <span class="nhn-eyebrow"><i></i> THE NURA HERBEX CIRCLE</span>
+            <h2 class="nhn-title">Join our <em>wellness</em> community</h2>
+            <p class="nhn-sub">Thoughtful botanical wellness, delivered occasionally. Be the first to hear about launches, member offers and practical daily-ritual guidance.</p>
 
-        <p class="nh-newsletter-sub">
-            Get exclusive offers, wellness tips and new product updates.
-        </p>
-
-        @if (_isSubscribed)
-        {
-            <div class="nh-newsletter-success">
-                <Icon Name="CheckCircle2" Size="18" />
-                <span>Thank you! You're subscribed to Nura Herbex updates.</span>
-            </div>
-        }
-        else
-        {
-            <form @onsubmit="HandleSubscribe" @onsubmit:preventDefault class="nh-newsletter-form">
-                <div class="nh-newsletter-input-wrap">
-                    <div class="nh-newsletter-input-icon">
-                        <Icon Name="Mail" Size="18" />
-                    </div>
-                    <input type="email" required @bind="_email" placeholder="Enter your email" class="nh-newsletter-input" />
-                    <button type="submit" class="nh-newsletter-btn">
-                        <span>Subscribe</span>
-                        <span style="font-weight: 800; font-size: 15px;">→</span>
-                    </button>
-                </div>
-            </form>
-        }
-
-        <div class="nh-newsletter-legal">
-            <p>Thoughtful botanical wellness, rooted in nature.</p>
+            <ul class="nhn-perks">
+                <li><span><Icon Name="Tag" Size="18" /></span><div><strong>Member offers</strong><small>Early access to launches &amp; savings</small></div></li>
+                <li><span><Icon Name="Leaf" Size="18" /></span><div><strong>Wellness guidance</strong><small>Rituals, recipes &amp; botanical know-how</small></div></li>
+                <li><span><Icon Name="ShieldCheck" Size="18" /></span><div><strong>Respect for your inbox</strong><small>No spam — unsubscribe anytime</small></div></li>
+            </ul>
         </div>
 
+        <div class="nhn-form-wrap">
+            @if (_isSubscribed)
+            {
+                <div class="nhn-success" role="status">
+                    <span><Icon Name="CheckCircle2" Size="30" /></span>
+                    <h3>Welcome to the circle</h3>
+                    <p>Thank you — you're subscribed to Nura Herbex updates.</p>
+                </div>
+            }
+            else
+            {
+                <form @onsubmit="HandleSubscribe" @onsubmit:preventDefault class="nhn-form">
+                    <h3>Stay in the loop</h3>
+                    <p>Enter your email to subscribe.</p>
+                    <label class="nhn-field">
+                        <Icon Name="Mail" Size="18" />
+                        <input type="email" required @bind="_email" placeholder="you@example.com" aria-label="Email address" autocomplete="email" />
+                    </label>
+                    <button type="submit" class="nhn-btn"><span>Subscribe</span> <Icon Name="ArrowRight" Size="16" /></button>
+                    <small class="nhn-fine">By subscribing you agree to receive Nura Herbex emails. Read our <a href="/privacy">Privacy Policy</a>.</small>
+                </form>
+            }
+        </div>
     </div>
-    <div class="nh-footer-bar">
-        <div class="nh-footer-brand"><strong>NURA <span>HERBEX</span></strong><small>Botanical wellness for everyday life</small></div>
-        <nav aria-label="Footer navigation">
-            <a href="/shop">Shop</a>
-            <a href="/formulation">Our formulation</a>
-            <a href="/verify">Verify a batch</a>
-            <a href="/track">Track an order</a>
-        </nav>
-        <small class="nh-footer-copy">© 2026 Nura Herbex. All rights reserved.</small>
-    </div>
-</footer>
+</section>
+
+<HomeFooter />
 
 @code {
+    [Inject] private ModalState Modal { get; set; } = default!;
+
     private string _email = "";
     private bool _isSubscribed;
 

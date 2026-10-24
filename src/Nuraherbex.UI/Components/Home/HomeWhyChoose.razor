@@ -1,0 +1,65 @@
+@inject NavigationManager Nav
+
+<section id="why-nura" class="nhw">
+    <div class="nhw-inner">
+        <div class="nh-section-head" data-nh-reveal>
+            <span class="nh-eyebrow">THE NURA HERBEX DIFFERENCE</span>
+            <h2 class="nhw-title">Why customers choose <em>Nura Herbex</em></h2>
+            <p class="nhw-sub">Two focused formulas, one standard: honest ingredients, full-size servings and a batch you can verify yourself.</p>
+        </div>
+
+        <div class="nhw-matrix" role="table" aria-label="Comparison of STAMIX, GUT 365 and typical supplements" data-nh-reveal>
+            <div class="nhw-row nhw-top" role="row">
+                <span role="columnheader" class="nhw-corner">Compare</span>
+                <div role="columnheader" class="nhw-prod nhw-stamix">
+                    <img src="_content/Nuraherbex.UI/images/product-2.png" alt="" loading="lazy" />
+                    <strong>STAMIX</strong>
+                    <small>Stamina &amp; vitality</small>
+                    <button type="button" @onclick='() => Nav.NavigateTo("/products/stamix")'>Shop <Icon Name="ArrowRight" Size="13" /></button>
+                </div>
+                <div role="columnheader" class="nhw-prod nhw-gut">
+                    <img src="_content/Nuraherbex.UI/images/product-1.png" alt="" loading="lazy" />
+                    <strong>GUT 365</strong>
+                    <small>Gut &amp; liver enhancement</small>
+                    <button type="button" @onclick='() => Nav.NavigateTo("/catalog/gut-365")'>Shop <Icon Name="ArrowRight" Size="13" /></button>
+                </div>
+                <div role="columnheader" class="nhw-prod nhw-typ">
+                    <span class="nhw-typ-ic"><Icon Name="Package" Size="26" /></span>
+                    <strong>Typical supplements</strong>
+                    <small>Generic shelf products</small>
+                </div>
+            </div>
+
+            @foreach (var r in Rows)
+            {
+                <div class="nhw-row" role="row">
+                    <span role="rowheader" class="nhw-label"><i><Icon Name="@r.Icon" Size="17" /></i>@r.Label</span>
+                    <span role="cell" class="nhw-cell nhw-stamix" data-label="STAMIX"><WhyMark Ok="@r.Ok" />@r.Stamix</span>
+                    <span role="cell" class="nhw-cell nhw-gut" data-label="GUT 365"><WhyMark Ok="@r.Ok" />@r.Gut</span>
+                    <span role="cell" class="nhw-cell nhw-typ" data-label="Typical"><WhyMark Ok="false" />@r.Typical</span>
+                </div>
+            }
+        </div>
+
+        <ul class="nhw-trust" data-nh-reveal aria-label="Quality and care commitments">
+            <li><i><Icon Name="Award" Size="22" /></i><div><strong>GMP certified</strong><span>Manufacturing facility</span></div></li>
+            <li><i><Icon Name="Leaf" Size="22" /></i><div><strong>Premium herbs</strong><span>Whole-botanical sourcing</span></div></li>
+            <li><i><Icon Name="FlaskConical" Size="22" /></i><div><strong>Third-party tested</strong><span>Independent quality checks</span></div></li>
+            <li><i><Icon Name="ShieldCheck" Size="22" /></i><div><strong>Safe &amp; reliable</strong><span>Batch-verified every time</span></div></li>
+        </ul>
+    </div>
+</section>
+
+@code {
+    private sealed record Row(string Icon, string Label, string Stamix, string Gut, string Typical, bool Ok = true);
+
+    private static readonly Row[] Rows =
+    {
+        new("Sparkles", "Made for", "Stamina, focus & recovery", "Digestion & liver support", "Broad, unspecific claims"),
+        new("Leaf", "Formula", "17 whole botanicals, Ashwagandha-led", "Herbal gut-balance blend", "Single extracts and fillers"),
+        new("Package", "Format", "500 g powder · 25-day ritual", "Daily powder · 30-day supply", "Token sprinkle doses"),
+        new("ShieldCheck", "Traceability", "Batch-verified Trust Passport", "Batch-verified Trust Passport", "No batch visibility"),
+        new("FlaskConical", "Additives", "No added preservatives", "No added preservatives", "Artificial flavours and binders"),
+        new("Truck", "Delivery", "Tracked, free above ₹999", "Tracked, free above ₹999", "Paid or untracked shipping"),
+    };
+}

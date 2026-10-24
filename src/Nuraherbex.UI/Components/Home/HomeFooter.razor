@@ -1,0 +1,78 @@
+@inject NavigationManager Nav
+@inject ModalState Modal
+@inject BrowserInterop Browser
+
+<footer class="nhf" aria-label="Site footer">
+    <div class="nhf-main">
+        <div class="nhf-brand">
+            <button type="button" class="nhf-logo" @onclick="GoTop" aria-label="Nura Herbex home">
+                <img src="_content/Nuraherbex.UI/images/logo-mark.png" alt="" />
+                <span><strong>NURA <em>HERBEX</em></strong><small>Ayurvedic Wellness</small></span>
+            </button>
+            <p>Whole-botanical wellness formulated with time-honoured Ayurvedic herbs, made in small batches and verified before it reaches you.</p>
+            <ul class="nhf-contact">
+                <li><Icon Name="Phone" Size="16" /><a href="tel:@SiteConfig.ContactPhone">@SiteConfig.ContactPhone</a></li>
+                <li><Icon Name="Mail" Size="16" /><a href="mailto:@SiteConfig.ContactEmail">@SiteConfig.ContactEmail</a></li>
+                <li><Icon Name="MapPin" Size="16" /><span>@SiteConfig.ContactAddress</span></li>
+            </ul>
+            <div class="nhf-social" aria-label="Follow Nura Herbex">
+                <a href="@SiteConfig.Instagram" target="_blank" rel="noopener noreferrer" aria-label="Instagram"><Icon Name="Instagram" Size="18" /></a>
+                <a href="@SiteConfig.Facebook" target="_blank" rel="noopener noreferrer" aria-label="Facebook"><Icon Name="Facebook" Size="18" /></a>
+                <a href="@SiteConfig.YouTube" target="_blank" rel="noopener noreferrer" aria-label="YouTube"><Icon Name="Youtube" Size="18" /></a>
+            </div>
+        </div>
+
+        <nav class="nhf-col" aria-label="Shop">
+            <h4>Shop</h4>
+            <a href="/shop">All products</a>
+            <a href="/products/stamix">STAMIX</a>
+            <a href="/shop">GUT 365</a>
+            <a href="/#bundles">Bundle &amp; save</a>
+            <a href="/track">Track an order</a>
+        </nav>
+
+        <nav class="nhf-col" aria-label="Company">
+            <h4>Company</h4>
+            <a href="/#our-story">Our story</a>
+            <a href="/formulation">Our formulation</a>
+            <a href="/verify">Verify a batch</a>
+            <a href="/#reviews">Customer stories</a>
+            <a href="/#faq">FAQs</a>
+        </nav>
+
+        <nav class="nhf-col" aria-label="Policies">
+            <h4>Policies</h4>
+            <a href="/terms">Terms &amp; Conditions</a>
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/shipping-policy">Shipping Policy</a>
+            <a href="/refund-policy">Refund &amp; Returns</a>
+            <a href="/disclaimer">Disclaimer</a>
+        </nav>
+
+        <div class="nhf-col nhf-help">
+            <h4>Need help?</h4>
+            <p>Our care team replies on working days, usually within one business day.</p>
+            <a class="nhf-cta" href="mailto:@SiteConfig.ContactEmail"><Icon Name="Mail" Size="16" /> Contact support</a>
+        </div>
+    </div>
+
+    <div class="nhf-assure">
+        <span><Icon Name="Truck" Size="17" /> Free shipping above ₹@SiteConfig.FreeShippingThreshold.ToString("N0")</span>
+        <span><Icon Name="Lock" Size="17" /> Secure, encrypted checkout</span>
+        <span><Icon Name="ShieldCheck" Size="17" /> Batch-verified quality</span>
+        <span><Icon Name="Leaf" Size="17" /> 100% plant-based formulas</span>
+    </div>
+
+    <div class="nhf-bottom">
+        <small>© @DateTime.Now.Year Nura Herbex. All rights reserved.</small>
+        <ul class="nhf-pay" aria-label="Accepted payment methods">
+            <li>UPI</li><li>Cards</li><li>Net Banking</li><li>Wallets</li>
+        </ul>
+        <button type="button" class="nhf-top" @onclick="GoTop" aria-label="Back to top"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg> Top</button>
+    </div>
+
+</footer>
+
+@code {
+    private async Task GoTop() => await Browser.ScrollToTopAsync();
+}

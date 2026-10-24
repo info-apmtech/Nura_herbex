@@ -5,6 +5,47 @@ body:has(.customer-account) { background: #f5f7f3 !important; color: #233a35 !im
 .account-page-shell { background: #f5f7f3 !important; color: #233a35 !important; }
 .customer-account-loading { background: #f5f7f3 !important; color: #233a35 !important; }
 
+/* Signed-out customer portal: align the sign-in experience with the plum and
+   lavender storefront while keeping the authentication form calm and legible. */
+.customer-account-auth {
+  isolation: isolate;
+  background: radial-gradient(ellipse at 50% 8%, #eee5f4 0%, transparent 48%), #f8f6f9 !important;
+  color: #30263a !important;
+}
+.customer-account-auth > .pointer-events-none:first-child { opacity: .22; }
+.customer-account-auth > .pointer-events-none:nth-child(2) { background-color: rgba(120, 70, 150, .12) !important; }
+.customer-account-auth > .pointer-events-none:nth-child(3) { background-color: rgba(203, 174, 113, .1) !important; }
+.customer-account-auth .box-glow { background: linear-gradient(135deg, #bca6ca, #fff 48%, #d6c5a5) !important; box-shadow: 0 28px 80px rgba(53, 35, 66, .14) !important; }
+.customer-account-auth .box-glow > .cinematic-box { background: #fff !important; box-shadow: 0 18px 55px rgba(42, 27, 53, .1) !important; }
+.customer-account-auth .box-glow > .cinematic-box > div:first-child {
+  background: radial-gradient(ellipse at 88% 5%, rgba(158, 118, 179, .32), transparent 40%), linear-gradient(145deg, #38234a, #2b1939 58%, #24152f) !important;
+}
+.customer-account-auth .box-glow > .cinematic-box > div:last-child { background: linear-gradient(145deg, #fff 0%, #fbf9fc 100%) !important; }
+.customer-account-auth .text-\[\#fff3bf\] { color: #f0dfbb !important; }
+.customer-account-auth .text-\[\#cc66da\] { color: #b58acb !important; }
+.customer-account-auth .text-slate-50 { color: #30263a !important; }
+.customer-account-auth .text-slate-400 { color: #786d80 !important; }
+.customer-account-auth .text-slate-500 { color: #8d8294 !important; }
+.customer-account-auth .text-purple-100\/65,
+.customer-account-auth .text-purple-100\/55 { color: rgba(255,255,255,.74) !important; }
+.customer-account-auth .glass-pill { background: rgba(255,255,255,.08) !important; border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(12px); }
+.customer-account-auth .cinematic-box input { background: #fff !important; color: #30263a !important; border-color: #e5dce9 !important; box-shadow: inset 0 1px 2px rgba(51,32,61,.025) !important; }
+.customer-account-auth .cinematic-box input::placeholder { color: #aaa0af !important; }
+.customer-account-auth .cinematic-box input:focus { border-color: #8c64a1 !important; box-shadow: 0 0 0 3px rgba(126,83,149,.13) !important; background: #fff !important; }
+.customer-account-auth button[class*="bg-gradient-to-r"] { background: linear-gradient(110deg, #5a376f, #78518c) !important; color: #fff !important; box-shadow: 0 10px 22px rgba(75,45,92,.18) !important; }
+.customer-account-auth button[class*="bg-gradient-to-r"]:hover { filter: brightness(1.08); }
+.customer-account-auth .bg-black\/50,
+.customer-account-auth .bg-black\/40 { background: #f7f3f8 !important; }
+.customer-account-auth .border-white\/10,
+.customer-account-auth .border-white\/\[0\.08\] { border-color: #e9e1ec !important; }
+.customer-account-auth .bg-\[\#9929ea\] { background-color: #6c4780 !important; }
+.customer-account-auth .text-\[\#9929ea\] { color: #6c4780 !important; }
+.customer-account-auth .micro-footer { color: #8d8294 !important; }
+@media (max-width: 640px) {
+  .customer-account-auth { padding-top: 6.5rem !important; }
+  .customer-account-auth .box-glow { border-radius: 1.25rem !important; }
+}
+
 /* Keep the storefront controls readable when the account route switches to its light canvas. */
 .account-page-header {
   background: rgba(248, 250, 247, .96) !important;
@@ -308,3 +349,34 @@ body:has(.customer-account) { background: #f5f7f3 !important; color: #233a35 !im
 @media (prefers-reduced-motion: reduce) {
   .customer-account *, .customer-account *::before, .customer-account *::after { transition-duration: .01ms !important; }
 }
+
+
+/* ==========================================================================
+   Nura Herbex theme pass — signed-in dashboard: lavender surfaces, purple
+   accents, storefront navbar. Overrides the earlier green palette.
+   ========================================================================== */
+html:has(.customer-account) { scrollbar-color: #b97dff #faf6ff; }
+body:has(.customer-account) { background: #faf6ff !important; color: #1b1233 !important; }
+.customer-account {
+  --account-ink: #1b1233; --account-muted: #6b6280; --account-line: #ece3f6;
+  --account-green: #732dbd; --account-gold: #d9b45a; --account-bg: transparent;
+  padding-top: 40px !important; padding-bottom: 80px;
+  background: transparent !important; color: var(--account-ink) !important;
+  font-family: var(--nh-font-sans, 'Plus Jakarta Sans', system-ui, sans-serif) !important;
+}
+.nh-storefront:has(.customer-account) { background: radial-gradient(800px 380px at 90% 0%, rgba(185,125,255,.22), transparent 65%), linear-gradient(180deg, #faf6ff, #fff 55%) !important; }
+.customer-account :is(h1, h2, h3, h4, h5, h6) { font-family: var(--nh-font-serif, 'EB Garamond', Georgia, serif) !important; letter-spacing: -.01em; font-weight: 600; color: var(--account-ink) !important; }
+.customer-account [class*="text-purple-"] { color: #732dbd !important; }
+.customer-account [class*="bg-purple-950"] { background: #f5eefc !important; }
+.customer-account [class*="border-purple-"] { border-color: #e3d3f5 !important; }
+.customer-account [class*="text-amber-"] { color: #b45309 !important; }
+.customer-account-header, .customer-account-stat, .customer-account-panel, .customer-account-order {
+  border-color: #ece3f6 !important; border-radius: 22px !important; box-shadow: 0 12px 32px rgba(55,19,83,.07) !important; }
+.customer-account-header { background: radial-gradient(420px 220px at 100% 0%, rgba(185,125,255,.22), transparent 70%), #fff !important; }
+.customer-account-stat:hover, .customer-account-order:hover { border-color: #d6bdf2 !important; box-shadow: 0 20px 44px rgba(115,45,189,.14) !important; }
+.customer-account-brand-name { color: #1b1233 !important; }
+.customer-account-eyebrow { color: #732dbd !important; }
+.customer-account button[class*="bg-[#9929ea]"], .customer-account button[class*="bg-purple-6"], .customer-account button[class*="bg-purple-5"] {
+  background: linear-gradient(135deg, #7d34c9, #5e209e) !important; color: #fff !important; box-shadow: 0 10px 22px rgba(115,45,189,.3) !important; }
+.customer-account input, .customer-account textarea, .customer-account select { border-color: #e2d6f0 !important; border-radius: 12px; background: #fff !important; color: #1b1233 !important; }
+.customer-account input:focus, .customer-account textarea:focus, .customer-account select:focus { border-color: #732dbd !important; box-shadow: 0 0 0 4px rgba(115,45,189,.12) !important; outline: 0; }

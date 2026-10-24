@@ -3,7 +3,6 @@ namespace Nuraherbex.Shared.Models;
 public class AdminProductDto : ProductDto
 {
     public decimal CostPrice { get; set; }
-    public string? Category { get; set; }
     public string? FssaiLicense { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

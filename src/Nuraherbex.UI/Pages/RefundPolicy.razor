@@ -1,0 +1,93 @@
+@page "/refund-policy"
+@page "/refunds"
+@page "/returns"
+@using Nuraherbex.UI.Components.Policy
+
+<PageTitle>Refund & Returns Policy — Nura Herbex</PageTitle>
+
+<PolicyPage Slug="refund" Title="Refund & Returns" IconName="RefreshCw" Eyebrow="Our guarantee"
+            Intro="We stand behind every jar. Here is how our 60-Day Empty-Jar Guarantee works, what to do if your order arrives damaged, and how refunds reach you."
+            Sections="@_sections">
+
+    <section id="guarantee" class="pl-sec">
+        <h2><span>1</span>60-Day Empty-Jar Guarantee</h2>
+        <div class="pl-promise">
+            <Icon Name="Award" Size="28" />
+            <div>
+                <strong>Try it for 60 days. Not satisfied? Tell us.</strong>
+                <p>If your Nura Herbex product has not worked for you as you expected, contact our care team within 60 days of delivery and we will refund your purchase — you do not need to return the jar.</p>
+            </div>
+        </div>
+        <ul class="pl-list">
+            <li>The guarantee applies to purchases made directly from nuraherbex.com or the official Nura Herbex app.</li>
+            <li>Please use the product as directed on the label for a fair period of time before requesting a refund.</li>
+            <li>The guarantee is available once per customer per product and is a goodwill commitment in addition to your statutory consumer rights.</li>
+        </ul>
+    </section>
+
+    <section id="damaged" class="pl-sec">
+        <h2><span>2</span>Damaged, leaking or incorrect items</h2>
+        <p>If your parcel arrives damaged, a jar is leaking or open, or you received the wrong product, we will replace it at no cost.</p>
+        <ol class="pl-steps">
+            <li><b>1</b><div><strong>Report within 48 hours</strong><span>Email us within 48 hours of delivery with your order number.</span></div></li>
+            <li><b>2</b><div><strong>Share photos</strong><span>Attach clear photos of the outer parcel, the shipping label and the affected product (an unboxing video helps).</span></div></li>
+            <li><b>3</b><div><strong>We make it right</strong><span>After a quick check we dispatch a replacement or issue a refund, whichever you prefer — shipping is on us.</span></div></li>
+        </ol>
+    </section>
+
+    <section id="eligibility" class="pl-sec">
+        <h2><span>3</span>What can and cannot be returned</h2>
+        <table class="pl-table">
+            <thead><tr><th>Situation</th><th>Eligible?</th></tr></thead>
+            <tbody>
+                <tr><td>Product not satisfactory — within 60 days of delivery</td><td><strong class="pl-good">Yes</strong> — refund under the Empty-Jar Guarantee</td></tr>
+                <tr><td>Damaged, leaking or tampered on arrival (reported within 48 hours)</td><td><strong class="pl-good">Yes</strong> — free replacement or refund</td></tr>
+                <tr><td>Wrong item delivered</td><td><strong class="pl-good">Yes</strong> — free replacement or refund</td></tr>
+                <tr><td>Opened product after the 60-day guarantee period</td><td><strong class="pl-bad">No</strong> — for hygiene and safety reasons</td></tr>
+                <tr><td>Damage caused by misuse, storage in unsuitable conditions or tampering</td><td><strong class="pl-bad">No</strong></td></tr>
+                <tr><td>Products bought from unauthorised sellers</td><td><strong class="pl-bad">No</strong> — please contact the seller</td></tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section id="how" class="pl-sec">
+        <h2><span>4</span>How to request a refund</h2>
+        <ul class="pl-list">
+            <li>Email <a href="mailto:@SiteConfig.ContactEmail">@SiteConfig.ContactEmail</a> or call <a href="tel:@SiteConfig.ContactPhone">@SiteConfig.ContactPhone</a> with your order number and the registered email or phone number.</li>
+            <li>Tell us briefly what went wrong — it helps us improve. For damage claims, include the photos mentioned above.</li>
+            <li>We acknowledge every request within 48 hours and confirm the outcome as soon as it has been reviewed.</li>
+        </ul>
+    </section>
+
+    <section id="timeline" class="pl-sec">
+        <h2><span>5</span>Refund method &amp; timeline</h2>
+        <table class="pl-table">
+            <thead><tr><th>Paid with</th><th>Refund goes to</th><th>Typical time*</th></tr></thead>
+            <tbody>
+                <tr><td>UPI</td><td>Original UPI account</td><td>3–5 working days</td></tr>
+                <tr><td>Credit / debit card</td><td>Original card</td><td>5–7 working days</td></tr>
+                <tr><td>Net banking &amp; wallets</td><td>Original bank account / wallet</td><td>5–7 working days</td></tr>
+                <tr><td>Cash on delivery (if applicable)</td><td>Bank account you share with us</td><td>5–7 working days after verification</td></tr>
+            </tbody>
+        </table>
+        <p class="pl-fine">*Timelines start once the refund is approved and initiated by us. Your bank or wallet provider may take additional time to show the credit.</p>
+    </section>
+
+    <section id="cancel" class="pl-sec">
+        <h2><span>6</span>Order cancellation</h2>
+        <p>You can cancel an order free of charge before it is dispatched — just contact our care team. If the order has already been handed to the courier, please refuse delivery or contact us and the Refund &amp; Returns Policy will apply. If we cancel an order (for example due to stock unavailability or a pricing error) you are refunded in full.</p>
+    </section>
+
+    <section id="contact" class="pl-sec">
+        <h2><span>7</span>Still need help?</h2>
+        <p>Our care team is here for you on working days. Write to <a href="mailto:@SiteConfig.ContactEmail">@SiteConfig.ContactEmail</a> and we will take care of it.</p>
+    </section>
+</PolicyPage>
+
+@code {
+    private static readonly IReadOnlyList<PolicyPage.Section> _sections = new PolicyPage.Section[]
+    {
+        new("guarantee", "60-Day Empty-Jar Guarantee"), new("damaged", "Damaged or incorrect items"), new("eligibility", "What can be returned"),
+        new("how", "How to request a refund"), new("timeline", "Refund method & timeline"), new("cancel", "Order cancellation"), new("contact", "Still need help?"),
+    };
+}

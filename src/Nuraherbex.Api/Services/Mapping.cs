@@ -11,6 +11,7 @@ public static class Mapping
         Price = p.Price, CompareAtPrice = p.CompareAtPrice, StockQuantity = p.StockQuantity,
         WeightKg = p.WeightKg, LengthCm = p.LengthCm, BreadthCm = p.BreadthCm, HeightCm = p.HeightCm,
         HsnCode = p.HsnCode, ImageUrl = p.ImageUrl, Status = p.Status,
+        Category = p.Category, ShortName = p.ShortName, Badge = p.Badge, Highlights = p.Highlights, Ingredients = p.Ingredients, Directions = p.Directions, ServingInfo = p.ServingInfo,
     };
 
     public static OrderDto ToDto(this Order o) => new()

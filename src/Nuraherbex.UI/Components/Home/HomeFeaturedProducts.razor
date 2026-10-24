@@ -1,5 +1,6 @@
 @inject NavigationManager Nav
 @inject CartState Cart
+@inject CatalogState Catalog
 
 <section id="featured-products" class="nhp">
     <span class="nhp-orb o1" aria-hidden="true"></span>
@@ -73,6 +74,12 @@
                                 <span>Details</span><Icon Name="ArrowRight" Size="15" />
                             </button>
                         </div>
+
+                        <ul class="nhp-assure" aria-label="Purchase assurances">
+                            <li><Icon Name="ShieldCheck" Size="14" /> Batch verified</li>
+                            <li><Icon Name="Lock" Size="14" /> Secure checkout</li>
+                            <li><Icon Name="Truck" Size="14" /> Tracked delivery</li>
+                        </ul>
                     </div>
                 </article>
             }
@@ -82,26 +89,53 @@
 
 @code {
     private sealed record Product(string Id, string Name, string Category, string Desc, string[] Points, string Serving, decimal Price,
-        string Image, string Theme, string Badge, string Pill, string PillIcon, string CartName, string CartServing, string DetailsUrl);
+        string Image, string Theme, string Badge, string Pill, string PillIcon, string CartName, string CartServing, string DetailsUrl, string CartImage);
 
-    private static readonly Product[] Products =
+    // Presentation only (artwork, theme, pill). Names, prices, copy and highlights come from the database via CatalogState.
+    private static readonly Product[] Defaults =
     {
         new("gut-365", "GUT 365", "Gut & Liver Enhancement",
             "Gut balance, digestive stimulant, natural energiser, antioxidant rich.",
             new[] { "Supports healthy digestion", "Natural daily energiser", "Antioxidant-rich botanicals" },
-            "60 capsules · 30-day supply", 1299m,
+            "Daily powder · 30-day supply", 1299m,
             "_content/Nuraherbex.UI/images/product-1.png", "nhp-gut", "Bestseller", "100% natural", "Leaf",
-            "GUT 365 — Gut & Liver Enhancement", "60 capsules · 30 days", "/shop"),
+            "GUT 365 — Gut & Liver Enhancement", "Daily powder · 30 days", "/catalog/gut-365", "_content/Nuraherbex.UI/images/product-1.png"),
         new("stamix-single", "STAMIX", "Built for Men Who Run on Empty",
             "Natural energy, stamina, focus and recovery.",
             new[] { "Sustained energy through the day", "Mental focus and clarity", "Support for recovery and resilience" },
             "500 g jar · 25-day ritual", 1299m,
             "_content/Nuraherbex.UI/images/product-2.png", "nhp-stamix", "For Men", "17 botanicals", "Zap",
-            "STAMIX — Botanical Vitality Formula", "500 g · 25-day ritual", "/products/stamix"),
+            "STAMIX — Botanical Vitality Formula", "500 g · 25-day ritual", "/products/stamix", "_content/Nuraherbex.UI/images/product-2.png"),
     };
 
-    private readonly int[] _qty = { 1, 1 };
+    private Product[] Products = Defaults;
+    private int[] _qty = { 1, 1 };
     private int _added = -1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var live = await Catalog.GetAsync();
+        if (live.Count == 0) return;
+        Products = Defaults.Select(d =>
+        {
+            var p = live.FirstOrDefault(x => x.Id == d.Id);
+            if (p is null) return d;
+            var points = p.HighlightList.Take(3).ToArray();
+            return d with
+            {
+                Name = string.IsNullOrWhiteSpace(p.ShortName) ? d.Name : p.ShortName,
+                Category = string.IsNullOrWhiteSpace(p.Category) ? d.Category : p.Category,
+                Desc = string.IsNullOrWhiteSpace(p.Description) ? d.Desc : p.Description,
+                Points = points.Length > 0 ? points : d.Points,
+                Serving = string.IsNullOrWhiteSpace(p.ServingInfo) ? d.Serving : p.ServingInfo,
+                Price = p.Price,
+                Badge = string.IsNullOrWhiteSpace(p.Badge) ? d.Badge : p.Badge,
+                CartName = p.Name,
+                CartServing = string.IsNullOrWhiteSpace(p.ServingInfo) ? d.CartServing : p.ServingInfo,
+                CartImage = string.IsNullOrWhiteSpace(p.ImageUrl) ? d.CartImage : p.ImageUrl,
+            };
+        }).ToArray();
+    }
 
     private void Step(int i, int delta) => _qty[i] = Math.Clamp(_qty[i] + delta, 1, 10);
 
@@ -113,7 +147,7 @@
             Id = p.Id,
             Name = p.CartName,
             Price = p.Price,
-            Image = p.Image,
+            Image = p.CartImage,
             ServingsText = p.CartServing,
             Quantity = 1
         }, _qty[i]);

@@ -1,0 +1,5 @@
+<i class="nhw-mark @(Ok ? "yes" : "no")" aria-label="@(Ok ? "Included" : "Not included")"><Icon Name="@(Ok ? "Check" : "X")" Size="@(Ok ? 14 : 13)" StrokeWidth="3" /></i>
+
+@code {
+    [Parameter] public bool Ok { get; set; } = true;
+}

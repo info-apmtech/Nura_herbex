@@ -1,7 +1,7 @@
 @implements IDisposable
 @inject ModalState Modal
 
-@* Port of Modals.jsx (review / privacy / terms) *@
+@* Port of Modals.jsx (privacy / terms / shipping / refund / disclaimer) *@
 @if (!string.IsNullOrEmpty(Modal.Active))
 {
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/85 animate-in fade-in duration-200">
@@ -20,21 +20,22 @@
 
                 @if (Modal.Active == "privacy")
                 {
-                    <div>
+                    <div class="nh-policy">
                         <div class="flex items-center gap-2 text-purple-400 text-xs font-bold uppercase tracking-widest mb-2">
                             <Icon Name="FileText" Size="14" /> Legal &amp; Data Protection
                         </div>
-                        <h3 class="text-2xl font-extrabold text-white mb-4">
-                            Privacy Policy
-                        </h3>
-                        <div class="space-y-4 text-xs sm:text-sm text-slate-300 leading-relaxed">
-                            <p>
-                                At Nura Herbex, your privacy and health data are treated with military-grade confidentiality. We collect minimal telemetry strictly required for order fulfillment and formulation feedback.
-                            </p>
-                            <p>
-                                We never sell, broker, or lease your personal identifiers to third-party ad exchanges. All payment processing is conducted over 256-bit encrypted SSL gateways via RBI-compliant banking networks.
-                            </p>
-                        </div>
+                        <h3 class="text-2xl font-extrabold text-white mb-4">Privacy Policy</h3>
+                        <p class="nh-policy-date">Last updated: October 2026</p>
+                        <h4>Information we collect</h4>
+                        <p>We collect only what is needed to fulfil your order and support you: name, delivery address, phone number, email address and order history. Payment details are entered on our payment partner’s secure page and are never stored on our servers.</p>
+                        <h4>How we use it</h4>
+                        <p>Your information is used to process and deliver orders, send order updates, provide customer support, verify batches you scan and, if you opt in, share offers and wellness tips. You can unsubscribe from marketing messages at any time.</p>
+                        <h4>Sharing</h4>
+                        <p>We never sell or rent your personal information. We share the minimum necessary data with logistics partners, payment gateways and messaging providers solely to complete your order.</p>
+                        <h4>Security &amp; retention</h4>
+                        <p>Payments are processed over encrypted connections through RBI-compliant payment networks. We retain order records as required for accounting and warranty purposes and delete other data on request.</p>
+                        <h4>Your choices</h4>
+                        <p>Write to care@@nuraherbex.com to access, correct or delete your data, or to withdraw marketing consent.</p>
                         <div class="mt-6 pt-4 border-t border-white/10 flex justify-end">
                             <button @onclick="Close"
                                     class="px-6 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold uppercase tracking-wider cursor-pointer">
@@ -46,21 +47,97 @@
 
                 @if (Modal.Active == "terms")
                 {
-                    <div>
+                    <div class="nh-policy">
                         <div class="flex items-center gap-2 text-purple-400 text-xs font-bold uppercase tracking-widest mb-2">
                             <Icon Name="FileText" Size="14" /> Terms of Agreement
                         </div>
-                        <h3 class="text-2xl font-extrabold text-white mb-4">
-                            Terms of Service
-                        </h3>
-                        <div class="space-y-4 text-xs sm:text-sm text-slate-300 leading-relaxed">
-                            <p>
-                                Stamix by Nura Herbex is a premium botanical nutritional supplement manufactured in FSSAI-licensed, GMP-certified facilities. These statements have not been evaluated by the FDA or medical authorities to diagnose, cure, or prevent disease.
-                            </p>
-                            <p>
-                                All purchases are backed by our 60-Day Empty-Jar Guarantee. If you are not satisfied with your experience, contact customer care within 60 days of delivery for a full refund.
-                            </p>
+                        <h3 class="text-2xl font-extrabold text-white mb-4">Terms &amp; Conditions</h3>
+                        <p class="nh-policy-date">Last updated: October 2026</p>
+                        <h4>Using this site</h4>
+                        <p>By browsing or placing an order on Nura Herbex you agree to these terms. Please use the site lawfully and provide accurate information at checkout.</p>
+                        <h4>Products</h4>
+                        <p>Stamix and GUT 365 are botanical nutritional supplements manufactured in FSSAI-licensed, GMP-certified facilities. Images are illustrative; packaging may vary slightly between batches.</p>
+                        <h4>Orders &amp; pricing</h4>
+                        <p>All prices are in Indian Rupees and include applicable taxes. We may cancel an order in case of pricing errors or stock unavailability, in which case any payment is refunded in full.</p>
+                        <h4>Guarantee</h4>
+                        <p>Purchases are backed by our 60-Day Empty-Jar Guarantee. If you are not satisfied, contact customer care within 60 days of delivery for a refund, subject to our Refund &amp; Returns policy.</p>
+                        <h4>Liability</h4>
+                        <p>These statements have not been evaluated by FSSAI. Products are not intended to diagnose, treat, cure or prevent any disease. Our liability is limited to the value of the product purchased.</p>
+                        <div class="mt-6 pt-4 border-t border-white/10 flex justify-end">
+                            <button @onclick="Close"
+                                    class="px-6 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold uppercase tracking-wider cursor-pointer">
+                                Close
+                            </button>
                         </div>
+                    </div>
+                }
+
+                @if (Modal.Active == "shipping")
+                {
+                    <div class="nh-policy">
+                        <div class="flex items-center gap-2 text-purple-400 text-xs font-bold uppercase tracking-widest mb-2">
+                            <Icon Name="FileText" Size="14" /> Delivery
+                        </div>
+                        <h3 class="text-2xl font-extrabold text-white mb-4">Shipping Policy</h3>
+                        <p class="nh-policy-date">Last updated: October 2026</p>
+                        <h4>Coverage</h4>
+                        <p>We ship across India through trusted courier partners. Delivery to a few remote pin codes may take longer; availability is confirmed at checkout.</p>
+                        <h4>Charges</h4>
+                        <p>Shipping is free on orders above ₹999. A small delivery fee applies to smaller orders and is shown before you pay.</p>
+                        <h4>Dispatch &amp; tracking</h4>
+                        <p>Orders are packed and dispatched as soon as payment is confirmed. You will receive tracking details by SMS or email, and can follow progress any time from Track an order.</p>
+                        <h4>Delivery issues</h4>
+                        <p>If a parcel is delayed, damaged or lost in transit, write to care@@nuraherbex.com with your order number and we will arrange a replacement or refund.</p>
+                        <div class="mt-6 pt-4 border-t border-white/10 flex justify-end">
+                            <button @onclick="Close"
+                                    class="px-6 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold uppercase tracking-wider cursor-pointer">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                }
+
+                @if (Modal.Active == "refund")
+                {
+                    <div class="nh-policy">
+                        <div class="flex items-center gap-2 text-purple-400 text-xs font-bold uppercase tracking-widest mb-2">
+                            <Icon Name="FileText" Size="14" /> Returns
+                        </div>
+                        <h3 class="text-2xl font-extrabold text-white mb-4">Refund &amp; Returns</h3>
+                        <p class="nh-policy-date">Last updated: October 2026</p>
+                        <h4>60-Day Empty-Jar Guarantee</h4>
+                        <p>If Stamix has not worked for you as expected, contact customer care within 60 days of delivery and we will refund your purchase.</p>
+                        <h4>Damaged or incorrect items</h4>
+                        <p>Report any damaged, leaking or incorrect product within 48 hours of delivery with a photo of the parcel and item, and we will replace it at no cost.</p>
+                        <h4>How refunds work</h4>
+                        <p>Approved refunds are returned to your original payment method. Banks typically take 5–7 working days to reflect the credit.</p>
+                        <h4>Not eligible</h4>
+                        <p>For hygiene reasons, opened products outside the guarantee period and items damaged through misuse cannot be returned.</p>
+                        <div class="mt-6 pt-4 border-t border-white/10 flex justify-end">
+                            <button @onclick="Close"
+                                    class="px-6 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold uppercase tracking-wider cursor-pointer">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                }
+
+                @if (Modal.Active == "disclaimer")
+                {
+                    <div class="nh-policy">
+                        <div class="flex items-center gap-2 text-purple-400 text-xs font-bold uppercase tracking-widest mb-2">
+                            <Icon Name="FileText" Size="14" /> Important Information
+                        </div>
+                        <h3 class="text-2xl font-extrabold text-white mb-4">Disclaimer</h3>
+                        <p class="nh-policy-date">Last updated: October 2026</p>
+                        <h4>Not medical advice</h4>
+                        <p>The information on this site is for general wellness education only and is not a substitute for professional medical advice, diagnosis or treatment.</p>
+                        <h4>Regulatory statement</h4>
+                        <p>These statements have not been evaluated by FSSAI. Our products are not intended to diagnose, treat, cure or prevent any disease.</p>
+                        <h4>Before you start</h4>
+                        <p>Consult a qualified healthcare professional before use, especially if you are pregnant, nursing, under 18, or taking medication. Discontinue use and seek advice if you experience any adverse reaction.</p>
+                        <h4>Individual results</h4>
+                        <p>Results vary from person to person and depend on diet, lifestyle and consistency of use.</p>
                         <div class="mt-6 pt-4 border-t border-white/10 flex justify-end">
                             <button @onclick="Close"
                                     class="px-6 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold uppercase tracking-wider cursor-pointer">

@@ -15,7 +15,8 @@ public class AdminCatalogController(NuraDbContext db) : ControllerBase
         Price = p.Price, CompareAtPrice = p.CompareAtPrice, CostPrice = p.CostPrice,
         StockQuantity = p.StockQuantity, WeightKg = p.WeightKg, LengthCm = p.LengthCm,
         BreadthCm = p.BreadthCm, HeightCm = p.HeightCm, HsnCode = p.HsnCode,
-        ImageUrl = p.ImageUrl, Status = p.Status, Category = p.Category, FssaiLicense = p.FssaiLicense, UpdatedAt = p.UpdatedAt
+        ImageUrl = p.ImageUrl, Status = p.Status, Category = p.Category, FssaiLicense = p.FssaiLicense, UpdatedAt = p.UpdatedAt,
+        ShortName = p.ShortName, Badge = p.Badge, Highlights = p.Highlights, Ingredients = p.Ingredients, Directions = p.Directions, ServingInfo = p.ServingInfo
     };
     private static AdminCouponDto CouponDto(Coupon c, int used = 0) => new()
     {
@@ -32,7 +33,7 @@ public class AdminCatalogController(NuraDbContext db) : ControllerBase
         if (p.StockQuantity < 0 || p.StockQuantity > 1000000) return "Stock must be between 0 and 1,000,000.";
         if (p.WeightKg <= 0 || p.WeightKg > 1000 || p.LengthCm <= 0 || p.BreadthCm <= 0 || p.HeightCm <= 0 || p.LengthCm > 1000 || p.BreadthCm > 1000 || p.HeightCm > 1000) return "Enter positive parcel weight and dimensions (maximum 1,000 each).";
         if (p.Status is not ("active" or "draft" or "archived")) return "Choose Active, Draft or Archived.";
-        if ((p.Description?.Length ?? 0) > 10000 || (p.Subtitle?.Length ?? 0) > 300 || (p.Category?.Length ?? 0) > 100 || (p.HsnCode?.Length ?? 0) > 32 || (p.FssaiLicense?.Length ?? 0) > 64) return "One or more product details are too long.";
+        if ((p.Description?.Length ?? 0) > 10000 || (p.Subtitle?.Length ?? 0) > 300 || (p.Category?.Length ?? 0) > 100 || (p.HsnCode?.Length ?? 0) > 32 || (p.ShortName?.Length ?? 0) > 100 || (p.Badge?.Length ?? 0) > 60 || (p.Highlights?.Length ?? 0) > 2000 || (p.Ingredients?.Length ?? 0) > 4000 || (p.Directions?.Length ?? 0) > 4000 || (p.ServingInfo?.Length ?? 0) > 200 || (p.FssaiLicense?.Length ?? 0) > 64) return "One or more product details are too long.";
         var image = p.ImageUrl?.Trim() ?? "";
         if (image.Length > 2048 || (image.Length > 0 && !(image.StartsWith('/') && !image.StartsWith("//") && !image.Contains('\\')) && !(Uri.TryCreate(image, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http"))) return "Use an HTTPS image URL or a local path beginning with /.";
         return null;
@@ -60,6 +61,7 @@ public class AdminCatalogController(NuraDbContext db) : ControllerBase
         if (p.Price <= 0 || p.WeightKg <= 0 || p.LengthCm <= 0 || p.BreadthCm <= 0 || p.HeightCm <= 0) return BadRequest(new ApiResult { Message = "Price and parcel values are too small." });
         p.HsnCode = r.HsnCode?.Trim() ?? ""; p.FssaiLicense = r.FssaiLicense?.Trim(); p.Category = r.Category?.Trim();
         p.ImageUrl = r.ImageUrl?.Trim() ?? ""; p.Status = r.Status; p.UpdatedAt = DateTime.UtcNow;
+        p.ShortName = r.ShortName?.Trim(); p.Badge = r.Badge?.Trim(); p.Highlights = r.Highlights?.Trim(); p.Ingredients = r.Ingredients?.Trim(); p.Directions = r.Directions?.Trim(); p.ServingInfo = r.ServingInfo?.Trim();
         if (id is null) db.Products.Add(p);
         try { await db.SaveChangesAsync(); }
         catch (DbUpdateException) { return Conflict(new ApiResult { Message = "Could not save. Check that the SKU is unique and retry." }); }

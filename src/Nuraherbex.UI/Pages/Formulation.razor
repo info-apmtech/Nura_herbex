@@ -1,10 +1,13 @@
 @page "/formulation"
 @page "/ingredients"
 @page "/the-formula"
+@using Nuraherbex.UI.Components.Home
 @inject NavigationManager Nav
 @inject ApiClient Api
 @inject BrowserInterop Browser
 
+<div class="nh-storefront">
+<HomeNavbar />
 <div class="fm">
 
   @* Hero *@
@@ -117,6 +120,8 @@
     </div>
   </section>
 
+</div>
+<HomeNewsletterFooter />
 </div>
 
 @code {

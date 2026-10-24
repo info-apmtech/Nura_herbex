@@ -1,0 +1,115 @@
+@using Nuraherbex.UI.Components.Home
+@inject NavigationManager Nav
+@inject BrowserInterop Browser
+
+<div class="nh-storefront pl-page">
+    <HomeNavbar />
+
+    <header class="pl-hero">
+        <span class="pl-orb o1" aria-hidden="true"></span>
+        <span class="pl-orb o2" aria-hidden="true"></span>
+        <div class="pl-hero-inner">
+            <nav class="pl-crumbs" aria-label="Breadcrumb">
+                <a href="/">Home</a><Icon Name="ChevronRight" Size="14" /><span>Policies</span><Icon Name="ChevronRight" Size="14" /><strong>@Title</strong>
+            </nav>
+            <div class="pl-hero-row">
+                <span class="pl-hero-ic"><Icon Name="@IconName" Size="30" /></span>
+                <div>
+                    <span class="pl-eyebrow">@Eyebrow</span>
+                    <h1>@Title</h1>
+                </div>
+            </div>
+            <p class="pl-intro">@Intro</p>
+            <ul class="pl-meta">
+                <li><Icon Name="Clock" Size="15" /> Last updated: @Updated</li>
+                <li><Icon Name="ShieldCheck" Size="15" /> Applies to nuraherbex.com and the Nura Herbex app</li>
+            </ul>
+        </div>
+    </header>
+
+    <div class="pl-body">
+        <aside class="pl-aside" aria-label="Page navigation">
+            <div class="pl-toc">
+                <h2>On this page</h2>
+                <ol>
+                    @for (var i = 0; i < Sections.Count; i++)
+                    {
+                        var s = Sections[i];
+                        <li><button type="button" @onclick="() => Jump(s.Id)"><b>@(i + 1)</b><span>@s.Title</span></button></li>
+                    }
+                </ol>
+            </div>
+            <div class="pl-toc pl-others">
+                <h2>All policies</h2>
+                <ul>
+                    @foreach (var p in All)
+                    {
+                        <li><a href="@p.Path" class="@(p.Slug == Slug ? "on" : "")"><Icon Name="@p.Icon" Size="15" /> @p.Title</a></li>
+                    }
+                </ul>
+            </div>
+        </aside>
+
+        <main class="pl-main">
+            <article class="pl-card">
+                @ChildContent
+            </article>
+
+            <section class="pl-help" aria-label="Contact us">
+                <div>
+                    <h2>Questions about this policy?</h2>
+                    <p>Our care team is happy to help. We reply on working days, usually within one business day.</p>
+                </div>
+                <ul>
+                    <li><Icon Name="Mail" Size="16" /><a href="mailto:@SiteConfig.ContactEmail">@SiteConfig.ContactEmail</a></li>
+                    <li><Icon Name="Phone" Size="16" /><a href="tel:@SiteConfig.ContactPhone">@SiteConfig.ContactPhone</a></li>
+                    <li><Icon Name="MapPin" Size="16" /><span>@SiteConfig.ContactAddress</span></li>
+                </ul>
+            </section>
+        </main>
+    </div>
+
+    <section class="pl-more" aria-label="Related policies">
+        <div class="pl-more-inner">
+            <h2>Our commitments to you</h2>
+            <div class="pl-more-grid">
+                @foreach (var p in All.Where(p => p.Slug != Slug))
+                {
+                    <a href="@p.Path" class="pl-more-card">
+                        <span><Icon Name="@p.Icon" Size="22" /></span>
+                        <strong>@p.Title</strong>
+                        <small>@p.Blurb</small>
+                        <em>Read policy <Icon Name="ArrowRight" Size="14" /></em>
+                    </a>
+                }
+            </div>
+        </div>
+    </section>
+
+    <HomeNewsletterFooter />
+</div>
+
+@code {
+    public sealed record Section(string Id, string Title);
+    private sealed record Policy(string Slug, string Path, string Title, string Icon, string Blurb);
+
+    [Parameter, EditorRequired] public string Slug { get; set; } = "";
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string IconName { get; set; } = "FileText";
+    [Parameter] public string Eyebrow { get; set; } = "Legal";
+    [Parameter] public string Intro { get; set; } = "";
+    [Parameter] public string Updated { get; set; } = "24 October 2026";
+    [Parameter] public IReadOnlyList<Section> Sections { get; set; } = Array.Empty<Section>();
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private static readonly Policy[] All =
+    {
+        new("terms", "/terms", "Terms & Conditions", "FileText", "The rules for using our store and placing orders."),
+        new("privacy", "/privacy", "Privacy Policy", "Lock", "How we collect, use and protect your information."),
+        new("shipping", "/shipping-policy", "Shipping Policy", "Truck", "Coverage, charges, dispatch times and tracking."),
+        new("refund", "/refund-policy", "Refund & Returns", "RefreshCw", "Our 60-day guarantee and how refunds work."),
+        new("disclaimer", "/disclaimer", "Disclaimer", "Info", "Important health and regulatory information."),
+    };
+
+    private async Task Jump(string id) => await Browser.ScrollToIdAsync(id);
+}

@@ -38,6 +38,7 @@
 
     <CartDrawer />
     <Modals />
+    <StamixAssistant />
 </div>
 
 @code {
@@ -59,7 +60,21 @@
         }
     }
 
-    private bool IsStorefront => IsHome || IsStorefrontCatalog;
+    // The signed-out sign-in / register screen shares the light storefront shell (own navbar + footer).
+    private bool IsCheckout => new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').Equals("/checkout", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsPolicyPage
+    {
+        get
+        {
+            var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').ToLowerInvariant();
+            return path is "/terms" or "/terms-and-conditions" or "/privacy" or "/privacy-policy" or "/shipping-policy" or "/shipping"
+                or "/refund-policy" or "/refunds" or "/returns" or "/disclaimer"
+                or "/track" or "/track-order" or "/formulation" or "/ingredients" or "/the-formula";
+        }
+    }
+
+    private bool IsStorefront => IsHome || IsStorefrontCatalog || IsCheckout || IsPolicyPage || IsAccountPage;
 
     private bool IsAccountPage
     {

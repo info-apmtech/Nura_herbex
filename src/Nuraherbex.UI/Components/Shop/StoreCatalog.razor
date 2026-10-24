@@ -30,10 +30,18 @@
                 <div class="sc-rating"><span class="sc-stars"><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /><Icon Name="Star" Size="15" /></span><span>Loved by our customers</span></div>
                 <div class="sc-price">@SiteConfig.Money(p.Price)@if (onSale) { <del>@SiteConfig.Money(p.CompareAtPrice!.Value)</del> }<small>Inclusive of applicable taxes</small></div>
                 @if (!string.IsNullOrWhiteSpace(p.Description)) { <p class="sc-desc">@p.Description</p> }
+                @if (p.HighlightList.Any())
+                {
+                  <ul class="sc-highlights">
+                    @foreach (var h in p.HighlightList) { <li><Icon Name="Check" Size="14" StrokeWidth="3" /> @h</li> }
+                  </ul>
+                }
 
                 <dl class="sc-specs">
                   <div><dt>Availability</dt><dd class="@(soldOut ? "is-out" : p.StockQuantity <= 10 ? "is-low" : "is-in")">@(soldOut ? "Out of stock" : p.StockQuantity <= 10 ? $"Only {p.StockQuantity} left" : "In stock")</dd></div>
                   @if (p.WeightKg > 0) { <div><dt>Net weight</dt><dd>@(Math.Round(p.WeightKg * 1000)) g</dd></div> }
+                  @if (!string.IsNullOrWhiteSpace(p.ServingInfo)) { <div><dt>Pack</dt><dd>@p.ServingInfo</dd></div> }
+                  @if (!string.IsNullOrWhiteSpace(p.Category)) { <div><dt>Category</dt><dd>@p.Category</dd></div> }
                   <div><dt>SKU</dt><dd>@p.Sku</dd></div>
                 </dl>
 
@@ -50,6 +58,14 @@
                   <li><Icon Name="Leaf" Size="18" /> 100% botanical</li>
                   <li><Icon Name="Award" Size="18" /> Batch verified</li>
                 </ul>
+
+                @if (!string.IsNullOrWhiteSpace(p.Ingredients) || !string.IsNullOrWhiteSpace(p.Directions))
+                {
+                  <div class="sc-info">
+                    @if (!string.IsNullOrWhiteSpace(p.Ingredients)) { <section><h3><Icon Name="Leaf" Size="16" /> Ingredients</h3><p>@p.Ingredients</p></section> }
+                    @if (!string.IsNullOrWhiteSpace(p.Directions)) { <section><h3><Icon Name="Clock" Size="16" /> Directions</h3><p>@p.Directions</p></section> }
+                  </div>
+                }
               </div>
             </div>
         }
@@ -83,6 +99,9 @@ else
             </div>
         </div>
     </section>
+
+    <ShopTrustStrip />
+
 
     @* =====================================================================
        SECTION 2: CATEGORY FILTER TABS & TOOLBAR (MATCHING SCREENSHOT 2)

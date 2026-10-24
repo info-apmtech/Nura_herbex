@@ -1,25 +1,34 @@
+@implements IDisposable
 @inject NavigationManager Nav
 @inject CartState Cart
+@inject CatalogState Catalog
 
 <section id="stamina-power" class="nh-power">
     <div class="nh-power-bg" aria-hidden="true">
         <span class="nh-power-glow"></span>
-        @for (var i = 0; i < 14; i++)
-        {
-            <span class="nh-spark" style="--i:@i"></span>
-        }
     </div>
 
     <div class="nh-power-inner">
-        <div class="nh-power-visual" data-nh-reveal="left">
-            <div class="nh-power-rings" aria-hidden="true">
-                <span class="nh-ring r1"></span>
-                <span class="nh-ring r2"></span>
-                <span class="nh-ring r3"></span>
+        <div class="nh-power-visual nhs" data-nh-reveal="left">
+            <div class="nhs-stage" aria-label="STAMIX daily ritual">
+                <span class="nhs-glow" aria-hidden="true"></span>
+                <span class="nhs-ring r1" aria-hidden="true"></span>
+                <span class="nhs-ring r2" aria-hidden="true"></span>
+                <span class="nhs-floor" aria-hidden="true"></span>
+                <img class="nhs-jar" src="_content/Nuraherbex.UI/images/product-2.png" alt="STAMIX Botanical Vitality Formula jar" />
+
+                @for (var i = 0; i < Steps.Length; i++)
+                {
+                    var idx = i;
+                    <button type="button" class="nhs-card c@(idx) @(_step == idx ? "on" : "")" @onclick="() => Select(idx)" aria-label="Step @(idx + 1): @Steps[idx].Title">
+                        <span class="nhs-card-ic"><Icon Name="@Steps[idx].Icon" Size="18" /></span>
+                        <span class="nhs-card-tx"><small>STEP @(idx + 1)</small><strong>@Steps[idx].Card</strong><em>@Steps[idx].CardSub</em></span>
+                        <i class="nhs-card-bar" @key="@($"{idx}-{_step}-{_tick}")"></i>
+                    </button>
+                }
             </div>
-            <span class="nh-bolt" aria-hidden="true"><Icon Name="Zap" Size="34" Fill="currentColor" /></span>
-            <PowderPrepScene Class="nh-power-prep-scene" />
-            <button type="button" class="nh-power-other" @onclick='() => Nav.NavigateTo("/shop")' aria-label="Explore GUT 365 digestive support">
+
+            <button type="button" class="nh-power-other" @onclick='() => Nav.NavigateTo("/catalog/gut-365")' aria-label="Explore GUT 365 digestive support">
                 <img src="_content/Nuraherbex.UI/images/product-1.png" alt="" />
                 <span><strong>GUT 365</strong><small>Explore another daily blend <b>→</b></small></span>
             </button>
@@ -33,46 +42,101 @@
                 run on empty — steady energy through the day, a clear head and a body that bounces back.
             </p>
 
-            <ul class="nh-power-pillars">
-                <li data-nh-reveal style="--d:0ms">
-                    <span class="nh-pillar-icon"><Icon Name="Zap" Size="20" /></span>
-                    <div><strong>Sustained Energy</strong><span>No crash — steady drive from morning to night.</span></div>
-                </li>
-                <li data-nh-reveal style="--d:120ms">
-                    <span class="nh-pillar-icon"><Icon Name="Sparkles" Size="20" /></span>
-                    <div><strong>Mental Focus</strong><span>Calm, clear thinking when work gets demanding.</span></div>
-                </li>
-                <li data-nh-reveal style="--d:240ms">
-                    <span class="nh-pillar-icon"><Icon Name="HeartPulse" Size="20" /></span>
-                    <div><strong>Recovery &amp; Resilience</strong><span>Support for stress response and everyday vitality.</span></div>
-                </li>
+            <ul class="nh-power-tags" data-nh-reveal aria-label="Key benefits">
+                <li><Icon Name="Zap" Size="15" /> Sustained energy</li>
+                <li><Icon Name="Sparkles" Size="15" /> Mental focus</li>
+                <li><Icon Name="HeartPulse" Size="15" /> Recovery &amp; resilience</li>
             </ul>
+
+            <div class="nh-ritual-head" data-nh-reveal>
+                <span>Your daily ritual</span>
+                <i aria-hidden="true"></i>
+            </div>
+            <ol class="nh-ritual-steps nh-ritual-live">
+                @for (var i = 0; i < Steps.Length; i++)
+                {
+                    var idx = i;
+                    <li data-nh-reveal style="--d:@(idx * 120)ms" class="@(_step == idx ? "active" : "")">
+                        <button type="button" @onclick="() => Select(idx)" aria-current="@(_step == idx ? "step" : "false")">
+                            <b>@(idx + 1)</b>
+                            <div><strong>@Steps[idx].Title</strong><span>@Steps[idx].Text</span></div>
+                        </button>
+                    </li>
+                }
+            </ol>
 
             <div class="nh-power-cta" data-nh-reveal>
                 <button class="nh-btn-light" @onclick="AddStamix">
-                    <Icon Name="ShoppingBag" Size="18" /> <span>Add STAMIX — ₹1,299</span>
+                    <Icon Name="ShoppingBag" Size="18" /> <span>Add STAMIX — @SiteConfig.Money(_price)</span>
                 </button>
                 <button class="nh-btn-ghost" @onclick='() => Nav.NavigateTo("/products/stamix")'>
                     <span>Explore the formula</span> <Icon Name="ArrowRight" Size="16" />
                 </button>
             </div>
-            <p class="nh-power-note" data-nh-reveal>These statements have not been evaluated by FSSAI. Not intended to diagnose, treat or cure any disease.</p>
         </div>
     </div>
 </section>
 
 @code {
+    private sealed record RitualStep(string Title, string Text, string Icon, string Card, string CardSub);
+
+    private static readonly RitualStep[] Steps =
+    {
+        new("Scoop", "Take one serving of the powder as directed on the label.", "Package", "One 20 g serving", "A single measured scoop"),
+        new("Mix", "Stir into warm milk or water until smooth — no fuss, no prep.", "Sparkles", "Warm milk or water", "Stirs in smooth in seconds"),
+        new("Repeat daily", "Stay consistent for the full 25-day ritual and build lasting vitality.", "Leaf", "25-day ritual", "Build lasting vitality"),
+    };
+
+    private static readonly TimeSpan StepDuration = TimeSpan.FromSeconds(7);   // keep in sync with --nh-reel-ms in home-v4.css
+    private decimal _price = 1299m;
+    private string _cartName = "STAMIX — Botanical Vitality Formula";
+    private string _cartServing = "500 g · 25-day ritual";
+    private int _step;
+    private int _tick;
+    private System.Threading.Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        RestartTimer();
+        var p = await Catalog.FindAsync("stamix-single");
+        if (p is null) return;
+        _price = p.Price;
+        _cartName = p.Name;
+        if (!string.IsNullOrWhiteSpace(p.ServingInfo)) _cartServing = p.ServingInfo;
+    }
+
+    private void RestartTimer() => (_timer ??= new System.Threading.Timer(OnTick)).Change(StepDuration, StepDuration);
+
+    private void OnTick(object? state) => InvokeAsync(() =>
+    {
+        _step = (_step + 1) % Steps.Length;
+        StateHasChanged();
+    });
+
+    private void Select(int i)
+    {
+        _step = i;
+        _tick++;
+        RestartTimer();
+    }
+
     private async Task AddStamix()
     {
         await Cart.AddToCartAsync(new CartItem
         {
             Id = "stamix-single",
-            Name = "STAMIX — Botanical Vitality Formula",
-            Price = 1299m,
+            Name = _cartName,
+            Price = _price,
             Image = "_content/Nuraherbex.UI/images/product-2.png",
-            ServingsText = "500 g · 25-day ritual",
+            ServingsText = _cartServing,
             Quantity = 1
         });
         Cart.SetOpen(true);
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+        _timer = null;
     }
 }

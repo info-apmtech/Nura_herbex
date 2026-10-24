@@ -949,6 +949,9 @@ namespace Nuraherbex.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
+                    b.Property<string>("Badge")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<decimal>("BreadthCm")
                         .HasPrecision(9, 2)
                         .HasColumnType("decimal(9,2)");
@@ -970,6 +973,9 @@ namespace Nuraherbex.Api.Data.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Directions")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("FssaiLicense")
                         .HasColumnType("nvarchar(max)");
 
@@ -977,12 +983,18 @@ namespace Nuraherbex.Api.Data.Migrations
                         .HasPrecision(9, 2)
                         .HasColumnType("decimal(9,2)");
 
+                    b.Property<string>("Highlights")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("HsnCode")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ImageUrl")
                         .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Ingredients")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("LengthCm")
@@ -997,6 +1009,12 @@ namespace Nuraherbex.Api.Data.Migrations
                     b.Property<decimal>("Price")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ServingInfo")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ShortName")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Sku")
                         .IsRequired()

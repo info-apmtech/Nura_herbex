@@ -7,6 +7,66 @@ public static class DbSeeder
 {
     private const string R2 = "https://pub-8de00f4078374ac49c3851282661ae17.r2.dev/cloudflare-r2-assets";
 
+
+    private static readonly Dictionary<string, (string Short, string? Badge, string Highlights, string Ingredients, string Directions)> StamixInfo = new()
+    {
+        ["stamix-single"] = ("STAMIX", "For Men", StamixHighlights, StamixIngredients, StamixDirections),
+        ["stamix-duo"] = ("STAMIX Duo", "Most popular", StamixHighlights, StamixIngredients, StamixDirections),
+        ["stamix-trio"] = ("STAMIX Trio", "Best value", StamixHighlights, StamixIngredients, StamixDirections),
+        ["stamix-collector"] = ("STAMIX Collector Box", "Gift ready", StamixHighlights, StamixIngredients, StamixDirections),
+    };
+    private const string StamixHighlights = "Sustained energy through the day\nMental focus and clarity\nSupport for recovery and resilience\n17 whole botanicals, Ashwagandha-led";
+    private const string StamixIngredients = "17 botanicals, herbs, seeds and nuts including whole Ashwagandha root, Kaunch beej (Mucuna), drumstick flower, bark and seed, and watermelon seed. See the pack label for the complete list.";
+    private const string StamixDirections = "Mix a 20 g daily serving into warm milk or water and stir until smooth. Follow the directions on the pack label. Consult a healthcare professional if you are pregnant, nursing or on medication.";
+
+    /// <summary>
+    /// Idempotent catalogue top-up that also runs on databases that already have products: adds GUT 365 when it is missing and
+    /// back-fills the descriptive fields (highlights, ingredients, directions...) only where they are still empty, so edits made in Admin are never overwritten.
+    /// </summary>
+    private static async Task EnsureCatalogAsync(NuraDbContext db)
+    {
+        if (!await db.Products.AnyAsync(p => p.Id == "gut-365"))
+        {
+            db.Products.Add(new Product
+            {
+                Id = "gut-365", Sku = "NH-GUT365-60C", Name = "GUT 365 — Gut & Liver Enhancement",
+                Subtitle = "Daily powder · 30-day supply",
+                Description = "Gut balance, digestive stimulant, natural energiser and antioxidant-rich botanicals in an easy daily powder.",
+                Price = 1299, StockQuantity = 200, WeightKg = 0.12m, LengthCm = 8, BreadthCm = 8, HeightCm = 11,
+                Category = "Gut & Liver Enhancement", ImageUrl = "/_content/Nuraherbex.UI/images/product-1.png",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        foreach (var p in await db.Products.Where(x => x.Id.StartsWith("stamix") || x.Id == "gut-365").ToListAsync())
+        {
+            if (p.Id == "gut-365")
+            {
+                // GUT 365 is a powder: fix any earlier "capsule" wording.
+                if (p.Subtitle?.Contains("capsule", StringComparison.OrdinalIgnoreCase) == true) p.Subtitle = "Daily powder · 30-day supply";
+                if (p.ServingInfo?.Contains("capsule", StringComparison.OrdinalIgnoreCase) == true) p.ServingInfo = "Daily powder · 30-day supply";
+                if (p.Description?.Contains("capsule", StringComparison.OrdinalIgnoreCase) == true) p.Description = p.Description.Replace("daily capsule", "daily powder", StringComparison.OrdinalIgnoreCase);
+                p.ShortName ??= "GUT 365";
+                p.Badge ??= "Bestseller";
+                p.ServingInfo ??= "Daily powder · 30-day supply";
+                p.Highlights ??= "Supports healthy digestion\nNatural daily energiser\nAntioxidant-rich botanicals\nGut balance and liver support";
+                p.Ingredients ??= "A herbal gut-balance botanical blend. See the pack label for the complete ingredient list.";
+                p.Directions ??= "Follow the directions on the pack label. Consult a healthcare professional if you are pregnant, nursing or on medication.";
+            }
+            else if (StamixInfo.TryGetValue(p.Id, out var info))
+            {
+                p.ShortName ??= info.Short;
+                p.Badge ??= info.Badge;
+                p.ServingInfo ??= p.Subtitle;
+                p.Category ??= "Botanical Vitality Formula for Men";
+                p.Highlights ??= info.Highlights;
+                p.Ingredients ??= info.Ingredients;
+                p.Directions ??= info.Directions;
+            }
+        }
+        await db.SaveChangesAsync();
+    }
+
     public static async Task SeedAsync(NuraDbContext db, bool seedDemoBatch = false)
     {
         if (!await db.Products.AnyAsync())
@@ -45,6 +105,8 @@ public static class DbSeeder
                     ImageUrl = $"{R2}/f14b6700d_1a16d4a6-ec6b-4738-b677-25006baf6d71.webp",
                 });
         }
+
+        await EnsureCatalogAsync(db);
 
         if (!await db.Coupons.AnyAsync())
         {

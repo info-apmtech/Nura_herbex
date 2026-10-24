@@ -1,0 +1,98 @@
+@page "/shipping-policy"
+@page "/shipping"
+@using Nuraherbex.UI.Components.Policy
+
+<PageTitle>Shipping Policy — Nura Herbex</PageTitle>
+
+<PolicyPage Slug="shipping" Title="Shipping Policy" IconName="Truck" Eyebrow="Delivery"
+            Intro="Everything you need to know about how Nura Herbex packs, ships and delivers your order — from dispatch and charges to tracking and what to do if something goes wrong."
+            Sections="@_sections">
+
+    <section id="highlights" class="pl-sec">
+        <h2><span>1</span>Shipping at a glance</h2>
+        <div class="pl-stats">
+            <div><Icon Name="Truck" Size="22" /><strong>Free over ₹@SiteConfig.FreeShippingThreshold.ToString("N0")</strong><small>on every order above the threshold</small></div>
+            <div><Icon Name="Package" Size="22" /><strong>Careful packing</strong><small>sealed, protected and batch-labelled</small></div>
+            <div><Icon Name="MapPin" Size="22" /><strong>Pan-India delivery</strong><small>through trusted courier partners</small></div>
+            <div><Icon Name="Clock" Size="22" /><strong>Live tracking</strong><small>by SMS, email and on our site</small></div>
+        </div>
+    </section>
+
+    <section id="coverage" class="pl-sec">
+        <h2><span>2</span>Delivery coverage</h2>
+        <p>We deliver across India through reputed courier partners. Serviceability depends on your pin code and is confirmed at checkout — if we cannot deliver to your location the system will tell you before payment. A few remote or restricted pin codes may take longer, and we currently ship within India only.</p>
+    </section>
+
+    <section id="charges" class="pl-sec">
+        <h2><span>3</span>Shipping charges</h2>
+        <table class="pl-table">
+            <thead><tr><th>Order value</th><th>Shipping charge</th></tr></thead>
+            <tbody>
+                <tr><td>₹@SiteConfig.FreeShippingThreshold.ToString("N0") and above</td><td><strong class="pl-good">Free</strong></td></tr>
+                <tr><td>Below ₹@SiteConfig.FreeShippingThreshold.ToString("N0")</td><td>A small delivery fee, calculated from your pin code and shown at checkout before you pay</td></tr>
+            </tbody>
+        </table>
+        <p>Your cart shows a free-shipping progress bar so you can see how close you are to the threshold. Cash-on-delivery handling fees, where offered, are displayed at checkout.</p>
+    </section>
+
+    <section id="dispatch" class="pl-sec">
+        <h2><span>4</span>Order processing &amp; dispatch</h2>
+        <ol class="pl-steps">
+            <li><b>1</b><div><strong>Order confirmed</strong><span>You receive a confirmation by email or SMS as soon as payment is verified.</span></div></li>
+            <li><b>2</b><div><strong>Packed &amp; dispatched</strong><span>Orders are packed and handed to the courier, usually within 1–2 working days of confirmation. Orders placed on Sundays or public holidays are processed on the next working day.</span></div></li>
+            <li><b>3</b><div><strong>In transit</strong><span>Tracking details are sent to you by SMS or email once the courier picks up your parcel.</span></div></li>
+            <li><b>4</b><div><strong>Delivered</strong><span>Your parcel is delivered to the address on the order. Please keep your phone reachable for the delivery partner.</span></div></li>
+        </ol>
+    </section>
+
+    <section id="timelines" class="pl-sec">
+        <h2><span>5</span>Estimated delivery times</h2>
+        <table class="pl-table">
+            <thead><tr><th>Destination</th><th>Typical transit time*</th></tr></thead>
+            <tbody>
+                <tr><td>Metro cities</td><td>2–4 working days</td></tr>
+                <tr><td>Other major cities &amp; towns</td><td>3–6 working days</td></tr>
+                <tr><td>Remote &amp; rural locations</td><td>6–9 working days</td></tr>
+            </tbody>
+        </table>
+        <p class="pl-fine">*Transit time is counted from dispatch and is an estimate, not a guarantee. Delays can occur due to weather, strikes, festivals, regional restrictions or courier capacity.</p>
+    </section>
+
+    <section id="tracking" class="pl-sec">
+        <h2><span>6</span>Tracking your order</h2>
+        <p>Follow your parcel any time from the <a href="/track">Track an order</a> page using your order number, or through the link in your dispatch message. If tracking has not updated for more than 48 hours, contact our care team with your order number and we will chase the courier for you.</p>
+    </section>
+
+    <section id="delivery-attempts" class="pl-sec">
+        <h2><span>7</span>Delivery attempts &amp; address accuracy</h2>
+        <ul class="pl-list">
+            <li>Please make sure the address, pin code and phone number are complete and correct — we cannot be responsible for delays caused by incorrect details.</li>
+            <li>Couriers normally make multiple delivery attempts. If a parcel is returned to us after failed attempts, we will contact you to arrange re-delivery; additional shipping may be charged.</li>
+            <li>To change an address, contact us as early as possible — changes are only possible before dispatch.</li>
+        </ul>
+    </section>
+
+    <section id="issues" class="pl-sec">
+        <h2><span>8</span>Delayed, damaged or lost parcels</h2>
+        <div class="pl-note"><Icon Name="Info" Size="18" /><p>Please check the parcel at delivery. If the outer packaging looks tampered with or damaged, record a short video while opening it and contact us within 48 hours.</p></div>
+        <ul class="pl-list">
+            <li><strong>Delayed:</strong> write to us and we will escalate with the courier and keep you updated.</li>
+            <li><strong>Damaged or incorrect item:</strong> send your order number with clear photos of the parcel and product to <a href="mailto:@SiteConfig.ContactEmail">@SiteConfig.ContactEmail</a>. We will arrange a free replacement or refund as per our <a href="/refund-policy">Refund &amp; Returns Policy</a>.</li>
+            <li><strong>Lost in transit:</strong> once confirmed with the courier, we will ship a replacement or refund your order in full.</li>
+        </ul>
+    </section>
+
+    <section id="contact" class="pl-sec">
+        <h2><span>9</span>Need help with a delivery?</h2>
+        <p>Email <a href="mailto:@SiteConfig.ContactEmail">@SiteConfig.ContactEmail</a> or call <a href="tel:@SiteConfig.ContactPhone">@SiteConfig.ContactPhone</a> on working days. Please keep your order number handy.</p>
+    </section>
+</PolicyPage>
+
+@code {
+    private static readonly IReadOnlyList<PolicyPage.Section> _sections = new PolicyPage.Section[]
+    {
+        new("highlights", "Shipping at a glance"), new("coverage", "Delivery coverage"), new("charges", "Shipping charges"), new("dispatch", "Processing & dispatch"),
+        new("timelines", "Estimated delivery times"), new("tracking", "Tracking your order"), new("delivery-attempts", "Delivery attempts & addresses"),
+        new("issues", "Delayed, damaged or lost parcels"), new("contact", "Need help?"),
+    };
+}

@@ -1,0 +1,64 @@
+@page "/disclaimer"
+@using Nuraherbex.UI.Components.Policy
+
+<PageTitle>Disclaimer — Nura Herbex</PageTitle>
+
+<PolicyPage Slug="disclaimer" Title="Disclaimer" IconName="Info" Eyebrow="Important information"
+            Intro="Please read this page before using any Nura Herbex product. It explains the limits of the information on our store and how to use our products responsibly."
+            Sections="@_sections">
+
+    <section id="notice" class="pl-sec">
+        <h2><span>1</span>Regulatory statement</h2>
+        <div class="pl-note warn"><Icon Name="Info" Size="18" /><p><strong>These statements have not been evaluated by FSSAI.</strong> Nura Herbex products are dietary supplements and are not intended to diagnose, treat, cure or prevent any disease.</p></div>
+    </section>
+
+    <section id="medical" class="pl-sec">
+        <h2><span>2</span>Not medical advice</h2>
+        <p>The information on this website, app, packaging, social media and in our communications is provided for general wellness education only. It is not a substitute for professional medical advice, diagnosis or treatment. Never disregard professional advice or delay seeking it because of something you have read on our channels.</p>
+    </section>
+
+    <section id="before" class="pl-sec">
+        <h2><span>3</span>Before you start</h2>
+        <p>Please consult a qualified healthcare professional before using any supplement, especially if you:</p>
+        <ul class="pl-list">
+            <li>are pregnant, planning a pregnancy or nursing;</li>
+            <li>are under 18 years of age;</li>
+            <li>have a medical condition, or are scheduled for surgery; or</li>
+            <li>are taking prescription or over-the-counter medication.</li>
+        </ul>
+        <p>Do not exceed the recommended serving. Discontinue use and seek medical advice if you experience any adverse reaction. Check the ingredient list for anything you are allergic or sensitive to.</p>
+    </section>
+
+    <section id="results" class="pl-sec">
+        <h2><span>4</span>Individual results</h2>
+        <p>Herbal and nutritional support works gradually and differently for everyone. Results depend on factors such as diet, sleep, activity, stress levels, age and consistency of use. Customer reviews and stories reflect individual experiences and do not guarantee the same outcome for you.</p>
+    </section>
+
+    <section id="usage" class="pl-sec">
+        <h2><span>5</span>Safe use &amp; storage</h2>
+        <ul class="pl-list">
+            <li>Use only as directed on the label and keep out of reach of children.</li>
+            <li>Store in a cool, dry place away from direct sunlight, and keep the lid tightly closed.</li>
+            <li>Do not use if the safety seal is broken or missing on delivery — contact us for a replacement.</li>
+            <li>Our products are not a replacement for a varied diet and a healthy lifestyle.</li>
+        </ul>
+    </section>
+
+    <section id="accuracy" class="pl-sec">
+        <h2><span>6</span>Accuracy &amp; third-party content</h2>
+        <p>We work hard to keep product information accurate and current, but descriptions, images and pack details may change as formulations or packaging are updated; the label on your pack is always the final reference. Links to third-party sites are provided for convenience and we are not responsible for their content or practices.</p>
+    </section>
+
+    <section id="contact" class="pl-sec">
+        <h2><span>7</span>Questions?</h2>
+        <p>If you have any concern about a product or an ingredient, write to <a href="mailto:@SiteConfig.ContactEmail">@SiteConfig.ContactEmail</a> before use and our team will be glad to help.</p>
+    </section>
+</PolicyPage>
+
+@code {
+    private static readonly IReadOnlyList<PolicyPage.Section> _sections = new PolicyPage.Section[]
+    {
+        new("notice", "Regulatory statement"), new("medical", "Not medical advice"), new("before", "Before you start"), new("results", "Individual results"),
+        new("usage", "Safe use & storage"), new("accuracy", "Accuracy & third-party content"), new("contact", "Questions?"),
+    };
+}

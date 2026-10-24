@@ -1,0 +1,103 @@
+@page "/privacy"
+@page "/privacy-policy"
+@using Nuraherbex.UI.Components.Policy
+
+<PageTitle>Privacy Policy — Nura Herbex</PageTitle>
+
+<PolicyPage Slug="privacy" Title="Privacy Policy" IconName="Lock" Eyebrow="Data protection"
+            Intro="Your trust matters. This policy explains what personal information Nura Herbex collects, why we collect it, how we protect it and the choices you have."
+            Sections="@_sections">
+
+    <section id="overview" class="pl-sec">
+        <h2><span>1</span>Overview</h2>
+        <p>Nura Herbex (“we”, “us”) respects your privacy and handles personal data in accordance with the Information Technology Act, 2000, the Digital Personal Data Protection Act, 2023 and other applicable Indian law. This policy applies to our website, mobile app, customer-care channels and any communication that links to it.</p>
+        <div class="pl-note"><Icon Name="ShieldCheck" Size="18" /><p><strong>In short:</strong> we collect only what we need to deliver your order and support you, we never sell your data, and payment details are handled by our payment partner — not stored by us.</p></div>
+    </section>
+
+    <section id="collect" class="pl-sec">
+        <h2><span>2</span>Information we collect</h2>
+        <table class="pl-table">
+            <thead><tr><th>Category</th><th>Examples</th><th>Why we need it</th></tr></thead>
+            <tbody>
+                <tr><td><strong>Identity &amp; contact</strong></td><td>Name, email address, phone number</td><td>Create your account, confirm orders, provide support</td></tr>
+                <tr><td><strong>Delivery</strong></td><td>Shipping and billing address, pin code</td><td>Pack, ship and deliver your order</td></tr>
+                <tr><td><strong>Order &amp; account</strong></td><td>Items purchased, order history, reviews, saved profile photo</td><td>Fulfilment, returns, warranty and personalisation</td></tr>
+                <tr><td><strong>Payment status</strong></td><td>Transaction ID, payment status, method type</td><td>Confirm payment and process refunds (card or UPI details stay with the payment partner)</td></tr>
+                <tr><td><strong>Device &amp; usage</strong></td><td>Browser type, pages viewed, approximate location, cookies</td><td>Keep the site secure, fix errors and improve the experience</td></tr>
+                <tr><td><strong>Communications</strong></td><td>Support emails, WhatsApp messages, marketing preferences</td><td>Reply to you and respect your contact choices</td></tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section id="use" class="pl-sec">
+        <h2><span>3</span>How we use your information</h2>
+        <ul class="pl-list">
+            <li>To process, ship and deliver orders and send order, dispatch and delivery updates.</li>
+            <li>To provide customer support, handle returns and honour the 60-Day Empty-Jar Guarantee.</li>
+            <li>To verify product batches you scan and show you quality information.</li>
+            <li>To prevent fraud, secure our systems and meet legal and tax obligations.</li>
+            <li>To send offers, wellness tips and product updates — only if you have opted in, and you can opt out at any time.</li>
+            <li>To understand how the store is used and improve our products, content and service.</li>
+        </ul>
+    </section>
+
+    <section id="sharing" class="pl-sec">
+        <h2><span>4</span>Sharing &amp; disclosure</h2>
+        <p>We do not sell or rent your personal information. We share the minimum necessary data with trusted service providers who act on our instructions:</p>
+        <ul class="pl-list">
+            <li><strong>Payment gateway</strong> — to authorise payments and process refunds.</li>
+            <li><strong>Courier and logistics partners</strong> — your name, address and phone number, to deliver your parcel and share tracking updates.</li>
+            <li><strong>Messaging and email providers</strong> — to send transactional messages and, with consent, marketing communications.</li>
+            <li><strong>Technology and hosting providers</strong> — to run, secure and back up the store.</li>
+            <li><strong>Authorities</strong> — where required by law, court order or to protect rights, safety and prevent fraud.</li>
+        </ul>
+    </section>
+
+    <section id="cookies" class="pl-sec">
+        <h2><span>5</span>Cookies &amp; similar technologies</h2>
+        <p>We use cookies and local storage to keep you signed in, remember your cart, secure checkout and understand site performance. You can control cookies through your browser settings; blocking essential cookies may stop parts of the store, such as the cart or checkout, from working.</p>
+    </section>
+
+    <section id="security" class="pl-sec">
+        <h2><span>6</span>Security &amp; retention</h2>
+        <p>We use encrypted connections (HTTPS), access controls and secure infrastructure to protect your information. Payments are processed through RBI-compliant payment networks over encrypted channels. No online system is completely risk-free, so please use a strong, unique password and never share your one-time passwords.</p>
+        <p>We keep personal data only as long as needed for the purposes above. Order and invoice records are retained for the period required by tax and accounting law; other data is deleted or anonymised when it is no longer needed or when you ask us to delete it (unless the law requires us to keep it).</p>
+    </section>
+
+    <section id="rights" class="pl-sec">
+        <h2><span>7</span>Your rights &amp; choices</h2>
+        <p>Subject to applicable law, you may:</p>
+        <ul class="pl-list">
+            <li>access the personal data we hold about you and ask for a summary of how it is used;</li>
+            <li>correct or update inaccurate or incomplete data, including from your account page;</li>
+            <li>request erasure of your data and closure of your account;</li>
+            <li>withdraw consent for marketing at any time using the unsubscribe link or by writing to us; and</li>
+            <li>nominate another person to exercise your rights in the event of death or incapacity.</li>
+        </ul>
+        <p>To exercise any right, email <a href="mailto:@SiteConfig.ContactEmail">@SiteConfig.ContactEmail</a>. We may need to verify your identity first and will respond within a reasonable time.</p>
+    </section>
+
+    <section id="children" class="pl-sec">
+        <h2><span>8</span>Children’s privacy</h2>
+        <p>Our store is intended for adults. We do not knowingly collect personal data from anyone under 18 without verifiable parental consent. If you believe a child has given us information, please contact us and we will delete it.</p>
+    </section>
+
+    <section id="changes" class="pl-sec">
+        <h2><span>9</span>Changes to this policy</h2>
+        <p>We may update this policy to reflect changes in our practices or legal requirements. The “Last updated” date at the top shows the current version. For material changes we will give a prominent notice on the site or contact you directly.</p>
+    </section>
+
+    <section id="contact" class="pl-sec">
+        <h2><span>10</span>Contact &amp; grievance officer</h2>
+        <p>For privacy questions or complaints, write to our Grievance Officer at <a href="mailto:@SiteConfig.ContactEmail">@SiteConfig.ContactEmail</a> or <em>@SiteConfig.ContactAddress</em>. We acknowledge requests within 48 hours and aim to resolve them within one month.</p>
+    </section>
+</PolicyPage>
+
+@code {
+    private static readonly IReadOnlyList<PolicyPage.Section> _sections = new PolicyPage.Section[]
+    {
+        new("overview", "Overview"), new("collect", "Information we collect"), new("use", "How we use it"), new("sharing", "Sharing & disclosure"),
+        new("cookies", "Cookies"), new("security", "Security & retention"), new("rights", "Your rights & choices"),
+        new("children", "Children’s privacy"), new("changes", "Changes to this policy"), new("contact", "Contact & grievance officer"),
+    };
+}

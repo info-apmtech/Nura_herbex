@@ -28,6 +28,10 @@ else
   <div class="nh-storefront">
     <HomeNavbar />
     <StoreCatalog Products="_products" ProductId="@CatalogProductId" />
+    @if (CatalogProductId is null)
+    {
+        <ShopExtras />
+    }
     <HomeNewsletterFooter />
   </div>
 }

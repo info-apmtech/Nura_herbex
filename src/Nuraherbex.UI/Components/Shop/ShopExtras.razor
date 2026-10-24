@@ -1,0 +1,147 @@
+@inject NavigationManager Nav
+
+@* Extra storefront sections shown under the product grid on /shop *@
+
+<section class="shx-why">
+    <div class="shx-inner">
+        <div class="shx-head" data-nh-reveal>
+            <span class="nh-eyebrow">THE NURA HERBEX DIFFERENCE</span>
+            <h2>Why shop <em>with us</em></h2>
+            <p>Honest ingredients, careful manufacturing and service you can rely on — from the first click to the last scoop.</p>
+        </div>
+        <div class="shx-why-grid">
+            @for (var i = 0; i < Why.Length; i++)
+            {
+                var w = Why[i];
+                <article class="shx-why-card" data-nh-reveal style="--d:@(i * 90)ms">
+                    <span><Icon Name="@w.Icon" Size="24" /></span>
+                    <h3>@w.Title</h3>
+                    <p>@w.Text</p>
+                </article>
+            }
+        </div>
+    </div>
+</section>
+
+<section class="shx-compare">
+    <div class="shx-inner">
+        <div class="shx-head" data-nh-reveal>
+            <span class="nh-eyebrow">FIND YOUR FORMULA</span>
+            <h2>Compare our <em>blends</em></h2>
+            <p>Not sure where to begin? Here is how our two daily formulas differ.</p>
+        </div>
+        <div class="shx-table-wrap" data-nh-reveal>
+            <table class="shx-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th><img src="_content/Nuraherbex.UI/images/product-1.png" alt="" /><strong>GUT 365</strong><small>Gut &amp; Liver Enhancement</small></th>
+                        <th class="hl"><img src="_content/Nuraherbex.UI/images/product-2.png" alt="" /><strong>STAMIX</strong><small>Botanical Vitality Formula</small></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><th>Best for</th><td>Digestive comfort and everyday balance</td><td>Stamina, focus and recovery</td></tr>
+                    <tr><th>Key focus</th><td>Gut balance · liver support · antioxidants</td><td>Sustained energy · mental clarity · resilience</td></tr>
+                    <tr><th>Pack</th><td>60 capsules · 30-day supply</td><td>500 g jar · 25-day ritual</td></tr>
+                    <tr><th>How to take</th><td>As directed on the label</td><td>Mix a serving in warm milk or water</td></tr>
+                    <tr><th>Made with</th><td>Whole botanicals, no added preservatives</td><td>Ashwagandha &amp; a 17-botanical blend</td></tr>
+                    <tr class="act"><th></th>
+                        <td><button type="button" class="shx-btn" @onclick='() => Nav.NavigateTo("/catalog/gut-365")'>View GUT 365 <Icon Name="ArrowRight" Size="15" /></button></td>
+                        <td><button type="button" class="shx-btn solid" @onclick='() => Nav.NavigateTo("/products/stamix")'>View STAMIX <Icon Name="ArrowRight" Size="15" /></button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section class="shx-promise">
+    <div class="shx-inner">
+        <div class="shx-head" data-nh-reveal>
+            <span class="nh-eyebrow">SHOP WITH CONFIDENCE</span>
+            <h2>Our <em>shopping promise</em></h2>
+        </div>
+        <div class="shx-promise-grid">
+            @for (var i = 0; i < Promise.Length; i++)
+            {
+                var p = Promise[i];
+                <a href="@p.Href" class="shx-promise-card" data-nh-reveal style="--d:@(i * 90)ms">
+                    <span><Icon Name="@p.Icon" Size="22" /></span>
+                    <strong>@p.Title</strong>
+                    <small>@p.Text</small>
+                    <em>Read policy <Icon Name="ArrowRight" Size="14" /></em>
+                </a>
+            }
+        </div>
+    </div>
+</section>
+
+<section class="shx-faq">
+    <div class="shx-inner narrow">
+        <div class="shx-head" data-nh-reveal>
+            <span class="nh-eyebrow">ORDERING QUESTIONS</span>
+            <h2>Before you <em>order</em></h2>
+        </div>
+        <div class="shx-faq-list">
+            @for (var i = 0; i < Faqs.Length; i++)
+            {
+                var idx = i;
+                var open = _open == idx;
+                <div class="shx-faq-item @(open ? "open" : "")" data-nh-reveal style="--d:@(idx * 60)ms">
+                    <button type="button" class="shx-faq-q" aria-expanded="@(open ? "true" : "false")" @onclick="() => _open = open ? -1 : idx">
+                        <span>@Faqs[idx].Q</span><i><Icon Name="Plus" Size="17" /></i>
+                    </button>
+                    <div class="shx-faq-a"><div><p>@Faqs[idx].A</p></div></div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+<section class="shx-help">
+    <div class="shx-help-inner" data-nh-reveal>
+        <div>
+            <h2>Need help choosing?</h2>
+            <p>Talk to our care team — we will help you pick the right blend for your routine.</p>
+        </div>
+        <div class="shx-help-actions">
+            <a class="shx-btn solid light" href="mailto:@SiteConfig.ContactEmail"><Icon Name="Mail" Size="16" /> Email us</a>
+            <a class="shx-btn ghost" href="tel:@SiteConfig.ContactPhone"><Icon Name="Phone" Size="16" /> @SiteConfig.ContactPhone</a>
+        </div>
+    </div>
+</section>
+
+@code {
+    private sealed record WhyItem(string Icon, string Title, string Text);
+    private sealed record PromiseItem(string Icon, string Title, string Text, string Href);
+    private sealed record Faq(string Q, string A);
+
+    private static readonly WhyItem[] Why =
+    {
+        new("Leaf", "Whole-botanical formulas", "Roots, seeds and flowers used the way Ayurveda intended — no unnecessary fillers or added preservatives."),
+        new("FlaskConical", "Made with care", "Produced in licensed, GMP-compliant facilities with quality checks at every stage."),
+        new("ShieldCheck", "Batch verified", "Scan the batch code on your jar to view the quality checks for that exact batch."),
+        new("Award", "60-day guarantee", "If it is not right for you, tell us within 60 days of delivery and we will refund your purchase."),
+        new("Truck", "Fast, tracked delivery", "Careful packing, pan-India shipping and live tracking from dispatch to doorstep."),
+        new("MessageSquare", "Real human support", "Friendly help from our care team by phone and email on working days."),
+    };
+
+    private static readonly PromiseItem[] Promise =
+    {
+        new("Truck", "Shipping", "Free above ₹999, dispatched within 1–2 working days.", "/shipping-policy"),
+        new("RefreshCw", "Refunds & returns", "Our 60-Day Empty-Jar Guarantee and damage replacements.", "/refund-policy"),
+        new("Lock", "Privacy", "Your data is protected and never sold.", "/privacy"),
+        new("FileText", "Terms", "Clear, fair terms for every order.", "/terms"),
+    };
+
+    private static readonly Faq[] Faqs =
+    {
+        new("Which payment methods do you accept?", "We accept UPI, debit and credit cards, net banking and wallets. Payments are processed on our payment partner’s encrypted page — we never see or store your card details."),
+        new("How long will delivery take?", "Orders usually dispatch within 1–2 working days and arrive in 2–9 working days depending on your location. Full details are in our Shipping Policy."),
+        new("What if my order arrives damaged?", "Contact us within 48 hours with photos and your order number and we will replace it free of charge or refund you."),
+        new("Can I get a refund if the product does not suit me?", "Yes. Our 60-Day Empty-Jar Guarantee lets you request a refund within 60 days of delivery — no need to send the jar back."),
+        new("Are your products safe to take with medication?", "Please consult your doctor before starting any supplement, especially if you are pregnant, nursing, under 18 or on medication. Read our Disclaimer for details."),
+    };
+
+    private int _open = 0;
+}
