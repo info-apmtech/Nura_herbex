@@ -394,7 +394,7 @@
 
         const play = () => {
           if (running) return;
-          if (document.hidden || !visible || !isActive()) { schedule(1000); return; }
+          if (document.hidden || !visible || !isActive() || box.dataset.h3d === 'on') { schedule(1000); return; } // the 3D jar (hero3d.js) owns this slide while it is showing
           resize(); if (!G) { schedule(1500); return; }
           const m = G.m;
           load(m).then((ims) => {
@@ -426,7 +426,16 @@
           if (document.hidden && running) halt(); else if (!document.hidden && !running) schedule(800);
         });
       };
-      const initHeroPowder = () => HEROES.forEach(([sel, modes]) => setupHero(sel, modes));
+      // Real 3D jar (Three.js) on desktop; if it can't start, the 2D photo animation above keeps running.
+      const initHero3D = () => {
+        ['.nh-hero-slide-1', '.nh-hero-slide-2'].forEach((sel) => {
+          const box = document.querySelector(sel);
+          if (!box || box.dataset.h3dInit || !box.querySelector('.nh-hero-3d')) return;
+          box.dataset.h3dInit = '1';
+          import('./hero3d.js').then((m) => m.mountHero3D(box, { base: '_content/Nuraherbex.UI/images/' })).catch((e) => console.warn('hero3d unavailable for ' + sel, e));
+        });
+      };
+      const initHeroPowder = () => { HEROES.forEach(([sel, modes]) => setupHero(sel, modes)); initHero3D(); };
       initHeroPowder();
 
       let timer = null;
