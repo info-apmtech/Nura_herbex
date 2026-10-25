@@ -12,6 +12,9 @@
 
   @* Hero *@
   <section class="fm-hero">
+    <span class="fm-orb o1" aria-hidden="true"></span>
+    <span class="fm-orb o2" aria-hidden="true"></span>
+    <span class="fm-orb o3" aria-hidden="true"></span>
     <div class="fm-wrap">
       <nav class="fm-crumbs" aria-label="Breadcrumb"><button @onclick="HandleBack">Home</button><Icon Name="ChevronRight" Size="12" /><span>Formulation</span></nav>
       <span class="fm-eyebrow"><Icon Name="FlaskConical" Size="14" /> 100% label transparency</span>
@@ -26,6 +29,22 @@
       </div>
     </div>
   </section>
+
+  @* Ingredient ticker *@
+  @if (_ingredients.Count > 0)
+  {
+    <div class="fm-ticker" aria-hidden="true">
+      <div class="fm-ticker-track">
+        @for (var pass = 0; pass < 2; pass++)
+        {
+          foreach (var t in _ingredients)
+          {
+            <span>@t.Name <i></i></span>
+          }
+        }
+      </div>
+    </div>
+  }
 
   @* Matrix *@
   <section class="fm-section">
@@ -121,7 +140,7 @@
   </section>
 
 </div>
-<HomeNewsletterFooter />
+<HomeFooter />
 </div>
 
 @code {

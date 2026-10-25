@@ -8,7 +8,7 @@
             <h3>Tasks</h3>
             <p>@(AdminAuth.CanAll("tasks") ? "Every task across the team: who owns it, what is late and what is done." : "Tasks assigned to you or created by you.")</p>
         </div>
-        <div class="em-head-actions"><ExportButton Title="Tasks" FileName="nura-tasks" Columns="@(new[] { "Task", "Department", "Assigned to", "Created by", "Priority", "Status", "Due", "Late", "Created", "Completed", "Repeat" })" Rows="ExportRows" Disabled="@(_items.Count == 0)" /><button type="button" class="ld-btn primary" @onclick="StartCreate"><Icon Name="Plus" Size="14" /> New task</button></div>
+        <div class="em-head-actions"><ExportButton Title="Tasks" FileName="nura-tasks" Columns="@(new[] { "Task", "Department", "Assigned to", "Created by", "Priority", "Status", "Due", "Late", "Created", "Completed", "Repeat", "Latest comment" })" Rows="ExportRows" Disabled="@(_items.Count == 0)" /><button type="button" class="ld-btn primary" @onclick="StartCreate"><Icon Name="Plus" Size="14" /> New task</button></div>
     </div>
 
     <details class="tk-help">
@@ -82,6 +82,7 @@
                                 @if (task.ChecklistTotal > 0) { <span><Icon Name="Check" Size="11" /> @task.ChecklistDone/@task.ChecklistTotal</span> }
                                 @if (task.CommentCount > 0) { <span><Icon Name="MessageSquare" Size="11" /> @task.CommentCount</span> }
                             </div>
+                            @if (task.LastComment is not null) { <small class="tk-r-note"><b>@task.LastCommentBy</b>: @task.LastComment</small> }
                             <div class="tk-foot"><span>@(task.AssignedToName ?? "Unassigned")</span>@if (task.DepartmentName is { } dn) { <small>@dn</small> }</div>
                             @if (task.CanEdit && task.Status != "done") { <button type="button" class="ld-btn tk-donebtn" @onclick="() => ToggleDoneAsync(task)" @onclick:stopPropagation="true"><Icon Name="Check" Size="13" /> Mark done</button> }
                         </article>
@@ -108,6 +109,7 @@
                     <button type="button" class="tk-r-main" @onclick="() => OpenAsync(task.Id)">
                         <strong>@task.Title</strong>
                         <small>@string.Join(" · ", new[] { task.DepartmentName, task.LeadName is { } ln ? "Lead: " + ln : null, task.Repeat != "none" ? "Repeats " + task.Repeat : null }.Where(x => x is not null))</small>
+                        @if (task.LastComment is not null) { <small class="tk-r-note" title="@task.LastComment"><Icon Name="MessageSquare" Size="11" /> <b>@task.LastCommentBy</b>: @task.LastComment</small> }
                     </button>
                     <div class="tk-r-tags">
                         <span class="@($"tk-pill pri-{task.Priority}")">@Cap(task.Priority)</span>
@@ -218,6 +220,36 @@
     </div>
 }
 
+@if (_confirm is not null)
+{
+    <div class="fu-modal-backdrop" @onclick="() => _confirm = null">
+        <div class="fu-modal lo" role="dialog" aria-modal="true" aria-label="Confirm task completion" @onclick:stopPropagation="true">
+            <header><h3>Confirm before marking done</h3><button type="button" class="em-x" aria-label="Close" @onclick="() => _confirm = null"><Icon Name="X" Size="16" /></button></header>
+            <form class="fu-form" @onsubmit="ConfirmDoneAsync" @onsubmit:preventDefault>
+                <p><b>@_confirm.Title</b></p>
+                @if (_confirm.Items.Count == 0) { <p class="fu-hint">This task has no checklist. Press Mark done to complete it.</p> }
+                else
+                {
+                    <p class="fu-hint">Check every step. Anything not done needs a reason.</p>
+                    @foreach (var it in _confirm.Items)
+                    {
+                        var item = it;
+                        <div class="tk-check @(item.Done ? "done" : "")">
+                            <label><input type="checkbox" checked="@item.Done" @onchange="e => item.Done = e.Value is true" /> <span>@item.Text</span></label>
+                            @if (!item.Done) { <input class="fu-input" maxlength="300" placeholder="Why was this not done? (required)" aria-label="Reason for @item.Text" value="@item.Reason" @oninput="e => item.Reason = e.Value?.ToString() ?? string.Empty" /> }
+                        </div>
+                    }
+                }
+                @if (_confirmError is not null) { <p class="fu-hint" role="alert" style="color:#b3261e">@_confirmError</p> }
+                <footer>
+                    <button type="button" class="ld-btn" @onclick="() => _confirm = null">Cancel</button>
+                    <button type="submit" class="ld-btn primary" disabled="@_busy">@(_busy ? "Saving…" : "Mark done")</button>
+                </footer>
+            </form>
+        </div>
+    </div>
+}
+
 @if (_detail is { Task: { } dt })
 {
     <div class="fu-modal-backdrop tk-drawer-bg" @onclick="CloseDetail">
@@ -295,7 +327,7 @@
         if (days == 1) return ("Tomorrow", "soon");
         return (local.ToString("ddd, dd MMM"), "ok");
     }
-    private IEnumerable<IReadOnlyList<string>> ExportRows() => _items.Select(t => (IReadOnlyList<string>)new[] { t.Title, t.DepartmentName ?? "", t.AssignedToName ?? "Unassigned", t.CreatedByName, t.Priority, TaskStatuses.Label(t.Status), t.DueAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "", t.IsOverdue ? "Yes" : "", t.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd"), t.CompletedAt?.ToLocalTime().ToString("yyyy-MM-dd") ?? "", t.Repeat });
+    private IEnumerable<IReadOnlyList<string>> ExportRows() => _items.Select(t => (IReadOnlyList<string>)new[] { t.Title, t.DepartmentName ?? "", t.AssignedToName ?? "Unassigned", t.CreatedByName, t.Priority, TaskStatuses.Label(t.Status), t.DueAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "", t.IsOverdue ? "Yes" : "", t.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd"), t.CompletedAt?.ToLocalTime().ToString("yyyy-MM-dd") ?? "", t.Repeat, t.LastComment is null ? "" : $"{t.LastCommentBy}: {t.LastComment}" });
     private TaskCounts _counts = new();
     private List<EmployeeDto> _team = new();
     private List<DepartmentDto> _departments = new();
@@ -460,8 +492,40 @@
     // ---- status
     private async Task ToggleDoneAsync(TaskDto t)
     {
-        var res = await Api.AdminTaskStatusAsync(t.Id, t.Status == "done" ? "todo" : "done");
+        if (t.Status != "done") { await RequestDoneAsync(t.Id, t.Title); return; }
+        var res = await Api.AdminTaskStatusAsync(t.Id, "todo");
         Say(res.Message, res.Success);
+        await LoadAsync();
+    }
+
+    private sealed class ConfirmItem { public long Id; public string Text = ""; public bool Done, WasDone; public string Reason = ""; }
+    private sealed class ConfirmState { public long TaskId; public string Title = ""; public List<ConfirmItem> Items = new(); }
+    private ConfirmState? _confirm;
+    private string? _confirmError;
+
+    /// <summary>Opens the completion popup: every step is shown and each one left undone needs a reason.</summary>
+    private async Task RequestDoneAsync(long id, string title)
+    {
+        var res = await Api.AdminTaskAsync(id);
+        if (!res.Success) { Say(res.Message ?? "That task is not available to you.", false); return; }
+        _confirmError = null;
+        _confirm = new ConfirmState { TaskId = id, Title = title, Items = res.Checklist.Select(c => new ConfirmItem { Id = c.Id, Text = c.Text, Done = c.Done, WasDone = c.Done }).ToList() };
+    }
+
+    private async Task ConfirmDoneAsync()
+    {
+        if (_confirm is not { } cf) return;
+        var missing = cf.Items.Where(i => !i.Done).ToList();
+        if (missing.Any(i => string.IsNullOrWhiteSpace(i.Reason))) { _confirmError = "Write a reason for every step that is not done."; return; }
+        _busy = true;
+        foreach (var i in cf.Items.Where(i => i.Done && !i.WasDone)) await Api.AdminTaskTickItemAsync(cf.TaskId, i.Id, true);
+        var note = missing.Count == 0 ? null : "Not done: " + string.Join("; ", missing.Select(i => $"{i.Text} - {i.Reason.Trim()}"));
+        var res = await Api.AdminTaskStatusAsync(cf.TaskId, "done", note);
+        Say(res.Message, res.Success);
+        _busy = false;
+        if (!res.Success) { _confirmError = res.Message; return; }
+        _confirm = null;
+        if (_detail is not null) await OpenAsync(cf.TaskId);
         await LoadAsync();
     }
 
@@ -472,6 +536,7 @@
         _dragId = null;
         var task = _items.FirstOrDefault(t => t.Id == id);
         if (task is null || task.Status == status) return;
+        if (status == "done") { await RequestDoneAsync(id, task.Title); return; }
         var res = await Api.AdminTaskStatusAsync(id, status);
         if (!res.Success) Say(res.Message, false);
         await LoadAsync();
@@ -491,6 +556,7 @@
     private async Task OnDetailStatus(ChangeEventArgs e)
     {
         if (_detail?.Task is not { } t) return;
+        if (e.Value?.ToString() == "done") { await RequestDoneAsync(t.Id, t.Title); await RefreshDetailAsync(); return; }
         var res = await Api.AdminTaskStatusAsync(t.Id, e.Value?.ToString() ?? "todo");
         if (!res.Success) Say(res.Message, false);
         await RefreshDetailAsync();

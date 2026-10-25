@@ -92,3 +92,67 @@
 .fm-btn-line{border:1px solid rgba(255,255,255,.3);color:#fff}
 .fm-btn-line:hover{border-color:var(--gold);background:rgba(217,184,108,.1)}
 .fm p,.fm li{font-family:'Manrope',system-ui,sans-serif}
+
+/* ---------- motion & polish ---------- */
+.fm-hero{position:relative;overflow:hidden}
+.fm-hero::before{content:"";position:absolute;left:50%;top:50%;width:150%;aspect-ratio:1;translate:-50% -50%;background:conic-gradient(from 0deg,transparent 0deg,rgba(217,184,108,.11) 60deg,transparent 120deg,rgba(153,41,234,.12) 220deg,transparent 300deg);animation:fm-spin 30s linear infinite;pointer-events:none}
+@keyframes fm-spin{to{transform:rotate(360deg)}}
+.fm-hero .fm-wrap{position:relative;z-index:1}
+.fm-orb{position:absolute;border-radius:50%;pointer-events:none;z-index:0;background:radial-gradient(circle at 35% 35%,#f8e7b5,rgba(217,184,108,.35) 45%,transparent 72%);box-shadow:0 0 40px rgba(217,184,108,.25);animation:fm-float 9s ease-in-out infinite}
+.fm-orb.o1{width:150px;height:150px;right:8%;top:16%}
+.fm-orb.o2{width:54px;height:54px;right:26%;top:64%;animation-delay:-3s}
+.fm-orb.o3{width:96px;height:96px;right:4%;bottom:10%;animation-delay:-6s}
+@keyframes fm-float{50%{transform:translateY(-24px) rotate(8deg)}}
+.fm-eyebrow svg{animation:fm-pulse 3s ease-in-out infinite}
+@keyframes fm-pulse{50%{opacity:.5;transform:scale(1.14)}}
+.fm .fm-hero h1 em{background:linear-gradient(90deg,#f0d596,#ffffff,#d9b86c,#f0d596);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:fm-sheen 6s linear infinite}
+@keyframes fm-sheen{to{background-position:-220% 0}}
+.fm-hero h1{animation:fm-rise 1s cubic-bezier(.2,.8,.2,1) both}
+.fm-hero>.fm-wrap>p{animation:fm-rise 1s .15s cubic-bezier(.2,.8,.2,1) both}
+@keyframes fm-rise{from{opacity:0;transform:translateY(22px)}}
+.fm-metrics div{position:relative;overflow:hidden;animation:fm-rise .8s cubic-bezier(.2,.8,.2,1) both}
+.fm-metrics div:nth-child(1){animation-delay:.3s}
+.fm-metrics div:nth-child(2){animation-delay:.42s}
+.fm-metrics div:nth-child(3){animation-delay:.54s}
+.fm-metrics div:nth-child(4){animation-delay:.66s}
+.fm-metrics div::before{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(240,213,150,.18) 50%,transparent 70%);transform:translateX(-100%);transition:transform .8s ease;pointer-events:none}
+.fm-metrics div:hover::before{transform:translateX(100%)}
+
+/* ticker */
+.fm-ticker{position:relative;overflow:hidden;padding:1.1rem 0;background:linear-gradient(90deg,#241532,#160c24 50%,#241532);border-bottom:1px solid rgba(217,184,108,.22);-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.fm-ticker-track{display:flex;gap:0;width:max-content;animation:fm-ticker 38s linear infinite}
+.fm-ticker-track span{display:inline-flex;align-items:center;gap:1.4rem;padding:0 1.4rem;font:600 1.15rem 'Cormorant Garamond',Georgia,serif;letter-spacing:.02em;color:#e9dcc0;white-space:nowrap}
+.fm-ticker-track i{width:6px;height:6px;border-radius:50%;background:#d9b86c;box-shadow:0 0 10px rgba(217,184,108,.7)}
+@keyframes fm-ticker{to{transform:translateX(-50%)}}
+
+/* matrix bars grow in */
+.fm-amt u{transform-origin:left;animation:fm-grow 1.4s cubic-bezier(.2,.8,.2,1) .2s both}
+@keyframes fm-grow{from{transform:scaleX(0)}}
+.fm-row{animation:fm-fade .5s ease both}
+@keyframes fm-fade{from{opacity:0;transform:translateY(8px)}}
+.fm-row:not(.fm-row-head):hover .fm-no{color:var(--gold-2);transform:translateX(3px)}
+.fm-no{transition:color .3s,transform .3s}
+.fm-tag{transition:border-color .3s,color .3s}
+.fm-row:not(.fm-row-head):hover .fm-tag{border-color:rgba(217,184,108,.5);color:#fff}
+
+/* principle cards */
+.fm-cards article{position:relative;overflow:hidden}
+.fm-cards article::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,#9929ea,#d9b86c,#9929ea);background-size:200% 100%;transform:scaleX(0);transform-origin:left;transition:transform .6s cubic-bezier(.2,.8,.2,1);animation:fm-flow 4s linear infinite}
+.fm-cards article:hover::before{transform:scaleX(1)}
+@keyframes fm-flow{to{background-position:-200% 0}}
+.fm-cards span{animation:fm-ring 3s ease-in-out infinite}
+@keyframes fm-ring{0%,100%{box-shadow:0 0 0 0 rgba(217,184,108,.45)}50%{box-shadow:0 0 0 12px rgba(217,184,108,0)}}
+
+/* CTA */
+.fm-cta{position:relative;overflow:hidden}
+.fm-cta::before{content:"";position:absolute;inset:-30% -10%;background:radial-gradient(ellipse at 20% 50%,rgba(217,184,108,.12),transparent 55%);animation:fm-breathe 8s ease-in-out infinite;pointer-events:none}
+@keyframes fm-breathe{50%{transform:scale(1.08)}}
+.fm-cta .fm-wrap{position:relative}
+.fm-btn-gold{position:relative;overflow:hidden}
+.fm-btn-gold::after{content:"";position:absolute;top:0;bottom:0;left:-60%;width:40%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.6),transparent);transform:skewX(-20deg);pointer-events:none;animation:fm-sweep 3.8s ease-in-out infinite}
+@keyframes fm-sweep{0%,55%{left:-60%}100%{left:130%}}
+
+@media (prefers-reduced-motion:reduce){
+  .fm *,.fm *::before,.fm *::after,.fm-hero::before{animation:none!important;transition:none!important}
+  .fm-ticker-track{width:auto}
+}

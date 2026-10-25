@@ -218,3 +218,5 @@ th.sn,th.admin-sno{white-space:nowrap}
 .tk-person i{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#e7f3ea;color:#235b40;font-style:normal;font-weight:800;font-size:12px}
 .tk-person span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:1000px){.tk-r{grid-template-columns:34px minmax(0,1fr);row-gap:8px}.tk-r-tags{grid-column:2;justify-content:flex-start}.tk-due2,.tk-person{grid-column:2}}
+.tk-r-main .tk-r-note,.tk-card .tk-r-note{display:block;margin-top:3px;color:var(--ld-muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tk-r-note b{font-weight:600;color:inherit}

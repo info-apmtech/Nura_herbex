@@ -3,6 +3,26 @@
 @inject BrowserInterop Browser
 
 <footer class="nhf" aria-label="Site footer">
+
+    @* Movement band: looping exercise video with a static poster and gradient fallback *@
+    <div class="nhf-move">
+        <video class="nhf-move-video" autoplay muted loop playsinline preload="metadata" poster="_content/Nuraherbex.UI/images/hero-bg-nature.png" aria-hidden="true">
+            <source src="_content/Nuraherbex.UI/videos/exercise.mp4" type="video/mp4" />
+        </video>
+        <div class="nhf-move-shade"></div>
+        <div class="nhf-move-inner">
+            <div>
+                <span class="nhf-move-eyebrow">Move &middot; Recover &middot; Thrive</span>
+                <h3>Build strength, one <em>daily ritual</em> at a time.</h3>
+                <p>Pair a short movement routine with STAMIX for steady energy, stamina and recovery.</p>
+            </div>
+            <div class="nhf-move-actions">
+                <a class="nhf-move-btn" href="/shop">Shop STAMIX <Icon Name="ArrowRight" Size="16" /></a>
+                <a class="nhf-move-link" href="/#how-to-use">See the daily ritual</a>
+            </div>
+        </div>
+    </div>
+
     <div class="nhf-main">
         <div class="nhf-brand">
             <button type="button" class="nhf-logo" @onclick="GoTop" aria-label="Nura Herbex home">

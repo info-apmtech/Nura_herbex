@@ -103,11 +103,19 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log)
         var ids = rows.Select(r => r.Id).ToList();
         var checks = await db.TaskChecklistItems.AsNoTracking().Where(i => ids.Contains(i.TaskId)).GroupBy(i => i.TaskId).Select(g => new { g.Key, Total = g.Count(), Done = g.Count(i => i.Done) }).ToDictionaryAsync(x => x.Key);
         var comments = await db.TaskComments.AsNoTracking().Where(i => ids.Contains(i.TaskId)).GroupBy(i => i.TaskId).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N);
+        // Newest comment per task, shown under the title in the list.
+        var latest = (await db.TaskComments.AsNoTracking().Where(i => ids.Contains(i.TaskId)).OrderByDescending(i => i.CreatedAt).ThenByDescending(i => i.Id).Select(i => new { i.TaskId, i.Author, i.Body, i.CreatedAt }).ToListAsync())
+            .GroupBy(i => i.TaskId).ToDictionary(g => g.Key, g => g.First());
         var names = await NamesAsync(rows);
         return new TaskListResponse
         {
             Success = true, Counts = counts,
-            Items = rows.Select(t => ToDto(t, names, c, checks.TryGetValue(t.Id, out var ck) ? ck.Done : 0, ck?.Total ?? 0, comments.GetValueOrDefault(t.Id))).ToList(),
+            Items = rows.Select(t =>
+            {
+                var dto = ToDto(t, names, c, checks.TryGetValue(t.Id, out var ck) ? ck.Done : 0, ck?.Total ?? 0, comments.GetValueOrDefault(t.Id));
+                if (latest.TryGetValue(t.Id, out var lc)) { dto.LastCommentBy = lc.Author; dto.LastCommentAt = lc.CreatedAt; dto.LastComment = lc.Body.Length > 160 ? lc.Body[..160] + "…" : lc.Body; }
+                return dto;
+            }).ToList(),
         };
     }
 
@@ -216,12 +224,16 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log)
     {
         if (!TaskStatuses.All.Contains(status)) return (false, "Unknown status.");
         if (t.Status == status) return (true, "No change");
+        // Finishing with steps still open needs a written reason, so the creator can see what was skipped and why.
+        if (status == TaskStatuses.Done && string.IsNullOrWhiteSpace(note) && await db.TaskChecklistItems.AnyAsync(i => i.TaskId == t.Id && !i.Done))
+            return (false, "Some checklist steps are not ticked. Give a reason for each one before marking the task done.");
         var from = t.Status;
         t.Status = status; t.UpdatedAt = DateTime.UtcNow;
         Log(t.Id, c.Name, $"Moved from {TaskStatuses.Label(from)} to {TaskStatuses.Label(status)}{(string.IsNullOrWhiteSpace(note) ? "" : " - " + note.Trim())}");
         if (status == TaskStatuses.Done)
         {
             t.CompletedAt = DateTime.UtcNow;
+            if (Clean(note, 4000) is { } why) db.TaskComments.Add(new TaskComment { TaskId = t.Id, AuthorEmployeeId = c.EmployeeId, Author = c.Name, Body = "Marked done. " + why });
             if (t.CreatedByEmployeeId is { } creator && creator != c.EmployeeId) Notify(creator, $"Task done: {t.Title}", $"Completed by {c.Name}", t.Id);
             await db.SaveChangesAsync();
             await CreateNextRepeatAsync(t, c);

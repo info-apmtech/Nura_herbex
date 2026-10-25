@@ -58,7 +58,7 @@
         @if (AdminAuth.CanAll("followups"))
         {
             <div class="ld-card em-table-card">
-                <h4 class="fr-pad">By employee</h4>
+                <div class="fr-pad" style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h4 style="margin:0">By employee</h4><ExportButton Title="Follow-up report by employee" FileName="nura-followups-by-employee" Columns="@(new[] { "Employee", "Due", "Done", "Overdue", "On time", "Open leads", "Won" })" Rows="EmployeeRows" Disabled="@(_r.ByEmployee.Count == 0)" /></div>
                 <div class="em-scroll">
                     <table class="em-table">
                         <thead><tr><th class="sn">S.No</th><th>Employee</th><th class="num">Due</th><th class="num">Done</th><th class="num">Overdue</th><th class="num">On time</th><th class="num">Open leads</th><th class="num">Won</th></tr></thead>
@@ -82,7 +82,7 @@
         }
 
         <div class="ld-card em-table-card">
-            <h4 class="fr-pad">15-day journey — step by step</h4>
+            <div class="fr-pad" style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h4 style="margin:0">15-day journey — step by step</h4><ExportButton Title="15-day journey" FileName="nura-followups-journey" Columns="@(new[] { "Step", "Scheduled", "Done", "Auto-sent", "To do", "Overdue", "Skipped" })" Rows="JourneyRows" Disabled="@(_r.Journey.Count == 0)" /></div>
             <div class="em-scroll">
                 <table class="em-table">
                     <thead><tr><th class="sn">S.No</th><th>Step</th><th class="num">Scheduled</th><th class="num">Done</th><th class="num">Auto-sent</th><th class="num">To do</th><th class="num">Overdue</th><th class="num">Skipped</th></tr></thead>
@@ -102,7 +102,7 @@
         </div>
 
         <div class="ld-card em-table-card">
-            <h4 class="fr-pad">By type</h4>
+            <div class="fr-pad" style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h4 style="margin:0">By type</h4><ExportButton Title="Follow-ups by type" FileName="nura-followups-by-type" Columns="@(new[] { "Type", "Due", "Done", "Overdue" })" Rows="TypeRows" Disabled="@(_r.ByType.Count == 0)" /></div>
             <div class="em-scroll">
                 <table class="em-table">
                     <thead><tr><th class="sn">S.No</th><th>Type</th><th class="num">Due</th><th class="num">Done</th><th class="num">Overdue</th></tr></thead>
@@ -122,6 +122,9 @@
 
 @code {
     private int _sn;
+    private IEnumerable<IReadOnlyList<string>> EmployeeRows() => _r!.ByEmployee.Select(e => (IReadOnlyList<string>)new[] { e.Label, e.Due.ToString(), e.Done.ToString(), e.Overdue.ToString(), e.Done == 0 ? "" : e.OnTimePercent + "%", e.OpenLeads.ToString(), e.ConvertedLeads.ToString() });
+    private IEnumerable<IReadOnlyList<string>> JourneyRows() => _r!.Journey.Select(j => (IReadOnlyList<string>)new[] { j.Title, j.Total.ToString(), j.Done.ToString(), j.AutoSent.ToString(), j.Pending.ToString(), j.Overdue.ToString(), j.Skipped.ToString() });
+    private IEnumerable<IReadOnlyList<string>> TypeRows() => _r!.ByType.Select(t => (IReadOnlyList<string>)new[] { FuFmt.TypeLabel(t.Label), t.Due.ToString(), t.Done.ToString(), t.Overdue.ToString() });
     private FollowUpReportResponse? _r;
     private int _days = 30;
     private string? _error;

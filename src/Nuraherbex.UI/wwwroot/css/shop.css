@@ -101,3 +101,81 @@
 .sp-page .sc-empty{min-height:50vh;align-content:center}
 .sp-page .sc-empty h1,.sp-page .sc-empty h2{font-size:2rem;color:#fbf3dc}
 .sp-page p,.sp-page li,.sp-page dd,.sp-page dt{font-family:'Manrope',system-ui,sans-serif}
+
+/* ---------- Shop All Products: motion & polish ---------- */
+.nh-shop-hero { position: relative; overflow: hidden; }
+.nh-shop-hero::before, .nh-shop-hero::after { content: ""; position: absolute; border-radius: 50%; pointer-events: none; filter: blur(2px); }
+.nh-shop-hero::before { width: 260px; height: 260px; right: 6%; top: 10%; background: radial-gradient(circle at 35% 35%, #fff, rgba(185,125,255,.35) 55%, transparent 72%); animation: nhsh-float 10s ease-in-out infinite; }
+.nh-shop-hero::after { width: 120px; height: 120px; left: 46%; bottom: 8%; background: radial-gradient(circle at 35% 35%, #fff6d8, rgba(217,180,90,.3) 55%, transparent 72%); animation: nhsh-float 8s ease-in-out -4s infinite; }
+@keyframes nhsh-float { 50% { transform: translateY(-26px) scale(1.06); } }
+.nh-shop-hero-title { animation: nhsh-rise 1s cubic-bezier(.2,.8,.2,1) both; }
+.nh-shop-hero-sub { animation: nhsh-rise 1s .15s cubic-bezier(.2,.8,.2,1) both; }
+.nh-shop-hero-kicker { animation: nhsh-rise .9s cubic-bezier(.2,.8,.2,1) both; }
+.nh-shop-hero-sprig { animation: nhsh-sway 9s ease-in-out infinite; transform-origin: 50% 100%; }
+@keyframes nhsh-sway { 50% { transform: rotate(3deg) translateY(-8px); } }
+@keyframes nhsh-rise { from { opacity: 0; transform: translateY(20px); } }
+.nh-shop-hero-script span { display: inline-block; animation: nhsh-rise .8s cubic-bezier(.2,.8,.2,1) both; }
+.nh-shop-hero-script span:nth-of-type(1) { animation-delay: .4s; }
+.nh-shop-hero-script span:nth-of-type(2) { animation-delay: .55s; }
+.nh-shop-hero-script span:nth-of-type(3) { animation-delay: .7s; }
+.nh-shop-hero-script span:nth-of-type(4) { animation-delay: .85s; }
+
+/* active tab + live counter */
+.nh-shop-tab.active { position: relative; animation: nhsh-tab-pop .45s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes nhsh-tab-pop { from { transform: scale(.94); } }
+.nh-shop-tab svg { transition: transform .4s cubic-bezier(.2,.8,.2,1); }
+.nh-shop-tab:hover svg { transform: translateY(-2px) rotate(-6deg); }
+.nh-shop-count { animation: nhsh-rise .5s ease both; }
+
+/* product cards */
+.nh-shop-card { position: relative; overflow: hidden; animation: nhsh-card-in .7s cubic-bezier(.2,.8,.2,1) both; }
+.nh-shop-card:nth-child(1) { animation-delay: .05s; }
+.nh-shop-card:nth-child(2) { animation-delay: .12s; }
+.nh-shop-card:nth-child(3) { animation-delay: .19s; }
+.nh-shop-card:nth-child(4) { animation-delay: .26s; }
+.nh-shop-card:nth-child(5) { animation-delay: .33s; }
+.nh-shop-card:nth-child(6) { animation-delay: .4s; }
+@keyframes nhsh-card-in { from { opacity: 0; transform: translateY(26px) scale(.98); } }
+.nh-shop-card::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; z-index: 2; background: linear-gradient(90deg, #7d34c9, #d9b45a, #2d7a46, #7d34c9); background-size: 250% 100%; transform: scaleX(0); transform-origin: left; transition: transform .6s cubic-bezier(.2,.8,.2,1); animation: nhsh-flow 5s linear infinite; }
+.nh-shop-card:hover::before { transform: scaleX(1); }
+@keyframes nhsh-flow { to { background-position: -250% 0; } }
+.nh-shop-card:hover { transform: translateY(-8px); box-shadow: 0 30px 60px rgba(55,19,83,.16); transition: transform .5s cubic-bezier(.2,.8,.2,1), box-shadow .5s ease; }
+.nh-shop-card-img-wrap::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 35%, rgba(255,255,255,.55) 50%, transparent 65%); transform: translateX(-100%); pointer-events: none; }
+.nh-shop-card:hover .nh-shop-card-img-wrap::after { transform: translateX(100%); transition: transform 1s ease; }
+.nh-shop-card-img-wrap { position: relative; overflow: hidden; }
+.nh-shop-card-img { animation: nhsh-bob 6s ease-in-out infinite; }
+.nh-shop-card:nth-child(2n) .nh-shop-card-img { animation-delay: -3s; }
+@keyframes nhsh-bob { 50% { transform: translateY(-6px); } }
+.nh-shop-card:hover .nh-shop-card-img { animation-play-state: paused; }
+.nh-shop-bestseller-badge { animation: nhsh-badge 2.8s ease-in-out infinite; }
+@keyframes nhsh-badge { 0%, 100% { box-shadow: 0 0 0 0 rgba(217,180,90,.55); } 60% { box-shadow: 0 0 0 9px rgba(217,180,90,0); } }
+.nh-shop-stars svg { animation: nhsh-star 3.2s ease-in-out infinite; }
+.nh-shop-stars svg:nth-child(2) { animation-delay: .15s; }
+.nh-shop-stars svg:nth-child(3) { animation-delay: .3s; }
+.nh-shop-stars svg:nth-child(4) { animation-delay: .45s; }
+.nh-shop-stars svg:nth-child(5) { animation-delay: .6s; }
+@keyframes nhsh-star { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.22); } }
+.nh-shop-price { transition: color .3s ease; }
+.nh-shop-card:hover .nh-shop-price { color: #7d34c9; }
+.nh-shop-btn-solid, .nh-shop-btn-outline { position: relative; overflow: hidden; }
+.nh-shop-btn-solid::after, .nh-shop-btn-outline::after { content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; background: linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent); transform: skewX(-20deg); pointer-events: none; animation: nhsh-sweep 4s ease-in-out infinite; }
+@keyframes nhsh-sweep { 0%, 55% { left: -60%; } 100% { left: 130%; } }
+.nh-shop-btn-solid:hover .nh-shop-btn-cart-icon, .nh-shop-btn-outline:hover .nh-shop-btn-cart-icon { animation: nhsh-cart 0.7s ease; }
+@keyframes nhsh-cart { 30% { transform: translateX(3px) rotate(-8deg); } 60% { transform: translateX(-2px) rotate(4deg); } }
+
+/* category cards */
+.nh-cat-card { transition: transform .45s cubic-bezier(.2,.8,.2,1), box-shadow .45s ease; }
+.nh-cat-card:hover { transform: translateY(-8px); }
+.nh-cat-icon-circle { transition: transform .6s cubic-bezier(.2,.8,.2,1); }
+.nh-cat-card:hover .nh-cat-icon-circle { transform: rotate(360deg) scale(1.08); }
+.nh-cat-icon-circle::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 1px dashed rgba(125,52,201,.35); animation: nhsh-spin 26s linear infinite; }
+@keyframes nhsh-spin { to { transform: rotate(360deg); } }
+.nh-cat-icon-circle { position: relative; }
+
+/* story banner */
+.nh-shop-story-title { animation: nhsh-rise 1s cubic-bezier(.2,.8,.2,1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .nh-shop-hero::before, .nh-shop-hero::after, .nh-shop-hero-sprig, .nh-shop-card, .nh-shop-card::before, .nh-shop-card-img, .nh-shop-bestseller-badge, .nh-shop-stars svg, .nh-shop-btn-solid::after, .nh-shop-btn-outline::after, .nh-cat-icon-circle::after, .nh-shop-hero-title, .nh-shop-hero-sub, .nh-shop-hero-kicker, .nh-shop-hero-script span, .nh-shop-tab.active, .nh-shop-count, .nh-shop-story-title { animation: none !important; }
+  .nh-shop-card::before { animation: none !important; }
+}

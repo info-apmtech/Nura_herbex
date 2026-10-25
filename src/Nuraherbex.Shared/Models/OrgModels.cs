@@ -221,6 +221,10 @@ public class TaskDto
     public int ChecklistDone { get; set; }
     public int ChecklistTotal { get; set; }
     public int CommentCount { get; set; }
+    /// <summary>Newest comment (shortened), filled on the list so it can be read without opening the task.</summary>
+    public string? LastComment { get; set; }
+    public string? LastCommentBy { get; set; }
+    public DateTime? LastCommentAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public DateTime? CompletedAt { get; set; }

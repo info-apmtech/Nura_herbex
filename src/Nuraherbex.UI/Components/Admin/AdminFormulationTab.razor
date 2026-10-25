@@ -54,6 +54,7 @@
     @* Summary Metrics Header & Quick Edit *@
     <div class="flex items-center justify-between pt-1">
         <div class="flex items-center gap-2">
+            <ExportButton Title="Formulation ingredients" FileName="nura-formulation" Columns="@(new[] { "Ingredient", "Botanical name", "Category", "Amount", "Standardized extract", "Active compound", "Purpose" })" Rows="IngredientRows" Disabled="@(!FilteredIngredients.Any())" />
             <span class="text-[11px] font-mono uppercase tracking-wider text-zinc-400 font-semibold">
                 Formulation Highlights &amp; Telemetry
             </span>
@@ -140,6 +141,7 @@
         </div>
 
         <div class="flex items-center gap-2">
+            <ExportButton Title="Formulation ingredients" FileName="nura-formulation" Columns="@(new[] { "Ingredient", "Botanical name", "Category", "Amount", "Standardized extract", "Active compound", "Purpose" })" Rows="IngredientRows" Disabled="@(!FilteredIngredients.Any())" />
             <select @bind="_categoryFilter"
                     class="px-2.5 py-1.5 rounded-md bg-zinc-900/80 border border-zinc-800 text-xs text-zinc-200 outline-none focus:border-zinc-500 cursor-pointer">
                 <option value="All">All Categories</option>
@@ -587,6 +589,7 @@
 
     private static FormulationMetricDto CloneMetric(FormulationMetricDto m) => new() { Label = m.Label, Value = m.Value, UseAutoCount = m.UseAutoCount };
 
+    private IEnumerable<IReadOnlyList<string>> IngredientRows() => FilteredIngredients.Select(i => (IReadOnlyList<string>)new[] { i.Name, i.BotanicalName, string.IsNullOrEmpty(i.Category) ? "Botanical" : i.Category, i.Amount, i.ExtractRatio ?? "", i.ActiveCompound ?? "", i.Purpose ?? i.Benefit });
     private IEnumerable<FormulationIngredientDto> FilteredIngredients => Ingredients.Where(item =>
     {
         var matchesCategory = _categoryFilter == "All" || item.Category == _categoryFilter;
