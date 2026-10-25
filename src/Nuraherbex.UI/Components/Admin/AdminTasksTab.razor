@@ -172,6 +172,9 @@
                         }
                         else
                         {
+                            <label class="tk-auto"><input type="checkbox" @bind="_form.AutoAssign" /> <span><strong>Auto-assign</strong> to the least busy person who is signed in now@(_form.DepartmentId is not null ? " (in this department)" : "")</span></label>
+                            @if (!_form.AutoAssign)
+                            {
                             <div class="tk-people">
                                 <div class="tk-people-tools">
                                     @if (_form.DepartmentId is not null) { <button type="button" class="ld-tab" @onclick="PickWholeDepartment">Select everyone in this department (@PeopleShown.Count)</button> }
@@ -183,11 +186,12 @@
                                     <label class="tk-person @(_picked.Contains(person.Id) ? "is-on" : "")">
                                         <input type="checkbox" checked="@_picked.Contains(person.Id)" @onchange="e => TogglePerson(person, e.Value is true)" />
                                         <span class="ld-avatar">@person.Name[..1].ToUpperInvariant()</span>
-                                        <span><strong>@person.Name@(person.Id == AdminAuth.EmployeeId ? " (me)" : "")</strong><small>@(DeptOf(person) ?? "No department")</small></span>
+                                        <span><strong><i class="@($"tk-dot {(person.IsOnline ? "on" : "")}")" title="@(person.IsOnline ? "Signed in now" : "Not signed in")"></i>@person.Name@(person.Id == AdminAuth.EmployeeId ? " (me)" : "")</strong><small>@(DeptOf(person) ?? "No department") · @(person.IsOnline ? "online" : "offline")</small></span>
                                     </label>
                                 }
                                 @if (PeopleShown.Count == 0) { <p class="fu-hint">Nobody in this department yet. Leave it unassigned, or choose another department.</p> }
                             </div>
+                            }
                         }
                     </div>
                     <label class="fu-field">Priority
@@ -475,15 +479,16 @@
         else
         {
             // One task per person, so everybody tracks and finishes their own. No one picked = one unassigned task.
-            var ids = _picked.Count > 0 ? _picked.OrderBy(x => x).Select(x => (long?)x).ToList() : new List<long?> { null };
-            var made = 0; string? error = null;
+            var ids = _form.AutoAssign ? new List<long?> { null } : _picked.Count > 0 ? _picked.OrderBy(x => x).Select(x => (long?)x).ToList() : new List<long?> { null };
+            var made = 0; string? error = null, lastMessage = null;
             foreach (var who in ids)
             {
                 _form.AssignedToEmployeeId = who;
                 var res = await Api.AdminCreateTaskAsync(_form);
+                lastMessage = res.Message;
                 if (res.Success) made++; else { error = res.Message; break; }
             }
-            Say(error is not null ? $"{made} created, then stopped: {error}" : made == 1 ? "Task created" : $"{made} tasks created, one for each person", error is null);
+            Say(error is not null ? $"{made} created, then stopped: {error}" : _form.AutoAssign ? lastMessage : made == 1 ? "Task created" : $"{made} tasks created, one for each person", error is null);
             if (error is null) { _form = null; await LoadAsync(); }
         }
         _busy = false;

@@ -74,6 +74,7 @@ public class AdminController(
         if (!emp.IsActive) return Unauthorized(new AdminLoginResponse { Success = false, Message = "This account has been deactivated. Contact your administrator." });
 
         emp.LastLoginAt = DateTime.UtcNow;
+        emp.LastSeenAt = emp.LastLoginAt;
         await db.SaveChangesAsync();
         return Ok(new AdminLoginResponse
         {

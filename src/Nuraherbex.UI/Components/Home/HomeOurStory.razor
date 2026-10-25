@@ -1,3 +1,4 @@
+@using Nuraherbex.UI.Components.Shop
 @inject NavigationManager Nav
 
 <section id="our-story" class="nh-story">
@@ -22,7 +23,7 @@
                 At Nuraherbex, we blend time-tested herbal knowledge with modern science to create natural wellness solutions for a healthier, brighter tomorrow.
             </p>
 
-            <button @onclick='() => Nav.NavigateTo("/formulation")' class="nh-story-btn" aria-label="Read our story">
+            <button @onclick='() => Nav.NavigateTo("/our-story")' class="nh-story-btn" aria-label="Read our story">
                 <span>Our Story</span>
                 <span style="font-size: 15px; font-weight: 800;">→</span>
             </button>
@@ -30,80 +31,5 @@
     </div>
 </section>
 
-<section class="nhst" aria-label="Our story in detail">
-    <div class="nhst-flow" aria-hidden="true"></div>
 
-    <div class="nhst-inner">
-        <header class="nhst-head">
-            <span class="nhst-kicker"><i></i> THE NURA HERBEX WAY <i></i></span>
-            <h3 class="nhst-title">Rooted in tradition. <em>Proven</em> in the lab.</h3>
-            <p class="nhst-lead">Every Nura Herbex formula starts with classical Ayurvedic knowledge and ends with checks that you can verify yourself. Here is how a single jar travels from the field to your daily ritual.</p>
-        </header>
-
-        <div class="nhst-narrative">
-            <div class="nhst-narrative-text">
-                <p class="nhst-drop">Long before modern supplements, Ayurveda taught that strength begins with balance: good food, steady routines, and herbs that nourish the body from within. Nura Herbex starts from that idea.</p>
-                <p>We bring those time-tested botanicals into the realities of today. Busy schedules, long days and the demands of modern living call for a daily ritual that is simple enough to keep and thoughtful enough to trust.</p>
-                <p>So we keep the formulas whole, the ingredients recognisable and the process transparent, from the first herb we select to the jar that reaches your kitchen.</p>
-            </div>
-            <ul class="nhst-principles" aria-label="Our principles">
-                <li style="--d:0ms"><span>01</span><div><strong>Whole, not isolated</strong><small>Herbs used the way traditional practice intends.</small></div></li>
-                <li style="--d:120ms"><span>02</span><div><strong>Simple to keep</strong><small>One scoop a day, built into the routine you already have.</small></div></li>
-                <li style="--d:240ms"><span>03</span><div><strong>Open about what goes in</strong><small>Clear labels, and batch details you can check.</small></div></li>
-                <li style="--d:360ms"><span>04</span><div><strong>Respect for the tradition</strong><small>Ancient wisdom, guided by modern quality checks.</small></div></li>
-            </ul>
-        </div>
-
-        <div class="nhst-pillars">
-            <article class="nhst-pillar" style="--d:0ms">
-                <span class="nhst-pillar-ic"><Icon Name="Leaf" Size="22" /></span>
-                <h4>Time-honoured botanicals</h4>
-                <p>Seventeen herbs, seeds and nuts chosen for their place in Ayurvedic practice, blended into whole-botanical formulas with no fillers.</p>
-                <small>17 botanicals</small>
-            </article>
-            <article class="nhst-pillar" style="--d:120ms">
-                <span class="nhst-pillar-ic"><Icon Name="ShieldCheck" Size="22" /></span>
-                <h4>Independently lab-tested</h4>
-                <p>Third-party ICP-MS testing checks each batch for heavy metals and contaminants before it is released for sale.</p>
-                <small>Third-party ICP-MS testing</small>
-            </article>
-            <article class="nhst-pillar" style="--d:240ms">
-                <span class="nhst-pillar-ic"><Icon Name="Award" Size="22" /></span>
-                <h4>Verified batch by batch</h4>
-                <p>Scan the batch code on your jar to confirm where and when it was made, so you know exactly what you are taking.</p>
-                <small>Scan to verify</small>
-            </article>
-        </div>
-
-        <div class="nhst-timeline-head">
-            <span>From the field to your ritual</span>
-        </div>
-        <ol class="nhst-timeline">
-            <li style="--d:0ms">
-                <b>1</b>
-                <div><strong>Sourcing</strong><span>Botanicals are selected for purity and sourced for consistency.</span></div>
-            </li>
-            <li style="--d:150ms">
-                <b>2</b>
-                <div><strong>Formulation</strong><span>Herbs are blended into a balanced, whole-botanical formula.</span></div>
-            </li>
-            <li style="--d:300ms">
-                <b>3</b>
-                <div><strong>Testing</strong><span>Each batch is checked by an independent laboratory before release.</span></div>
-            </li>
-            <li style="--d:450ms">
-                <b>4</b>
-                <div><strong>Your ritual</strong><span>One daily scoop, taken consistently over a 25-day ritual.</span></div>
-            </li>
-        </ol>
-
-        <div class="nhst-stats">
-            <div><Icon Name="Sparkles" Size="18" /><strong>17</strong><small>Botanicals in every blend</small></div>
-            <div><Icon Name="Leaf" Size="18" /><strong>100%</strong><small>Plant-based formulas</small></div>
-            <div><Icon Name="Package" Size="18" /><strong>1</strong><small>Measured scoop a day</small></div>
-            <div><Icon Name="Truck" Size="18" /><strong>25</strong><small>Day ritual to build vitality</small></div>
-        </div>
-    </div>
-
-    <div class="nhst-flow nhst-flow-bottom" aria-hidden="true"></div>
-</section>
+<OurStoryDetail />

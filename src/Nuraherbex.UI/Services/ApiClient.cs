@@ -216,6 +216,7 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<FollowUpSettingsDto> AdminFollowUpSettingsAsync() => Call<FollowUpSettingsDto>(HttpMethod.Get, "api/admin/followups/settings", null, Who.Admin);
     public Task<ApiResult> AdminSaveFollowUpSettingsAsync(FollowUpSettingsRequest r) => Call<ApiResult>(HttpMethod.Put, "api/admin/followups/settings", r, Who.Admin);
     public Task<FollowUpReportResponse> AdminFollowUpReportAsync(int days) => Call<FollowUpReportResponse>(HttpMethod.Get, $"api/admin/followups/report?days={days}", null, Who.Admin);
+    public Task<ApiResult> AdminGoOfflineAsync() => Call<ApiResult>(HttpMethod.Post, "api/admin/presence/offline", null, Who.Admin);
     public Task<NotificationListResponse> AdminNotificationsAsync() => Call<NotificationListResponse>(HttpMethod.Get, "api/admin/notifications", null, Who.Admin);
     public Task<ApiResult> AdminReadAllNotificationsAsync() => Call<ApiResult>(HttpMethod.Put, "api/admin/notifications/read-all", new { }, Who.Admin);
     public Task<ApiResult> AdminReadNotificationAsync(long id) => Call<ApiResult>(HttpMethod.Put, $"api/admin/notifications/{id}/read", new { }, Who.Admin);

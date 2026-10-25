@@ -124,6 +124,40 @@
     </div>
   </section>
 
+  @* Standards *@
+  <section class="fm-standards">
+    <div class="fm-wrap">
+      <div class="fm-std-grid">
+        @for (var i = 0; i < Standards.Length; i++)
+        {
+          var s = Standards[i];
+          <article data-nh-reveal style="--d:@(i * 100)ms"><span><Icon Name="@s.Icon" Size="22" /></span><div><strong>@s.Title</strong><small>@s.Text</small></div></article>
+        }
+      </div>
+    </div>
+  </section>
+
+  @* FAQ *@
+  <section class="fm-faq">
+    <div class="fm-wrap fm-faq-wrap">
+      <header class="fm-head" data-nh-reveal>
+        <span class="fm-eyebrow">Formulation questions</span>
+        <h2>Answers, <em>in plain words</em></h2>
+      </header>
+      <div class="fm-faq-list" data-nh-reveal>
+        @for (var i = 0; i < Faq.Length; i++)
+        {
+          var idx = i;
+          <div class="fm-faq-item @(_faqOpen == idx ? "open" : "")">
+            <button type="button" class="fm-faq-q" aria-expanded="@(_faqOpen == idx)" @onclick="() => _faqOpen = _faqOpen == idx ? -1 : idx">@Faq[idx].Q <i><Icon Name="Plus" Size="16" /></i></button>
+            <div class="fm-faq-a"><div><p>@Faq[idx].A</p></div></div>
+          </div>
+        }
+      </div>
+      <p class="fm-faq-note">STAMIX is a food supplement, not a medicine. Speak to a healthcare professional if you are pregnant, nursing or taking medication.</p>
+    </div>
+  </section>
+
   @* CTA *@
   <section class="fm-cta">
     <div class="fm-wrap fm-cta-inner">
@@ -158,6 +192,25 @@
     }
 
     private static readonly string[] Anchors = { "label", "clinical-data", "supplement-facts" };
+
+    private int _faqOpen = 0;
+    private sealed record Std(string Icon, string Title, string Text);
+    private sealed record Qa(string Q, string A);
+    private static readonly Std[] Standards =
+    {
+        new("Scale", "Full disclosure", "Every ingredient and its amount per serving is listed. Nothing is hidden in a blend."),
+        new("FlaskConical", "Independently tested", "Third-party ICP-MS testing checks each batch for heavy metals and contaminants."),
+        new("ShieldCheck", "Batch verified", "Use the batch code on your jar to check where and when it was made."),
+        new("Leaf", "Whole botanicals", "Herbs, seeds and nuts used in whole-food form, with no synthetic fillers."),
+    };
+    private static readonly Qa[] Faq =
+    {
+        new("What is the daily serving?", "A daily serving is 20 g, taken as two level scoops (10 g twice a day). Stir into warm milk or water until smooth and follow the directions on your pack."),
+        new("Do you use proprietary blends?", "No. The table above lists every ingredient with the exact amount in each daily serving, so you can see precisely what you are taking."),
+        new("How is each batch checked?", "Each batch is tested by an independent laboratory using ICP-MS for heavy metals and contaminants. You can view the batch lab reports from this page or verify the batch code with our Trust Passport."),
+        new("Why are some doses so much larger than others?", "The nuts and seeds form the nutritional base of the blend, so their weights are larger. Concentrated botanicals such as Shilajit are used in smaller amounts."),
+        new("Where can I read the lab reports?", "Open the batch lab reports page, choose the batch printed on your jar and you will see its Certificate of Analysis."),
+    };
 
     private List<FormulationIngredientDto> _ingredients = DefaultIngredients();
     private FormulationMetricsDto _metrics = new();

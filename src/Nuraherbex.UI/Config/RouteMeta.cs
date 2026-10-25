@@ -39,6 +39,11 @@ public static class RouteMeta
         "https://nuraherbex.com/quality-reports",
         "Stamix™ Product Quality & Batch Reports | Nura Herbex");
 
+    public static readonly PageMeta OurStory = new(
+        "Our Story | Nura Herbex — Ancient Wisdom for Modern Living",
+        "Nura Herbex blends time-tested Ayurvedic knowledge with modern quality checks: whole botanicals, independent lab testing and batch details you can verify.",
+        "https://nuraherbex.com/our-story");
+
     public static readonly PageMeta Formulation = new(
         "Full Formulation & Botanical Ingredients | Stamix™ Nura Herbex",
         "Explore the full clinical formulation of Stamix™: 17 whole botanicals, herbs, seeds and nuts with exact milligrams added per 20g serving. 100% transparent and lab verified.",

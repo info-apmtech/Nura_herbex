@@ -2,6 +2,7 @@
 @page "/track-order"
 @using System.Text.Json
 @using Nuraherbex.UI.Components.Home
+@using Nuraherbex.UI.Components.Shop
 @inject NavigationManager Nav
 @inject ApiClient Api
 @inject BrowserInterop Browser
@@ -578,6 +579,7 @@
 
     </div>
 </div>
+@if (!_hasSearched && _order is null) { <TrackInfo /> }
 <HomeFooter />
 </div>
 

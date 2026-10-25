@@ -102,7 +102,7 @@
                             <td><span class="@($"ld-pill {(emp.IsActive ? "converted" : "not-interested")}")">@(emp.IsActive ? "Active" : "Inactive")</span></td>
                             <td class="num">@emp.OpenLeads</td>
                             <td class="num">@emp.OpenTasks</td>
-                            <td>@(emp.LastLoginAt is { } t ? AdminFmt.DateTimeShort(t) : "Never")</td>
+                            <td><i class="@($"tk-dot {(emp.IsOnline ? "on" : "")}")"></i>@(emp.IsOnline ? "Online · " : "")@(emp.LastLoginAt is { } t ? AdminFmt.DateTimeShort(t) : "Never")</td>
                             <td class="em-actions">
                                 @if (_removingId == emp.Id)
                                 {

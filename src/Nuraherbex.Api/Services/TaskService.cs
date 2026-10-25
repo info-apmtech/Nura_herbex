@@ -5,7 +5,7 @@ using Nuraherbex.Shared.Models;
 namespace Nuraherbex.Api.Services;
 
 /// <summary>Team task management: owners, due dates, priorities, checklists, comments, repeats and reminders.</summary>
-public class TaskService(NuraDbContext db, ILogger<TaskService> log)
+public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvailability availability)
 {
     public sealed record Caller(long? EmployeeId, string Name, bool CanSeeAll);
 
@@ -170,6 +170,9 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log)
     {
         var error = await ValidateAsync(r);
         if (error is not null) return (null, error);
+        // Auto-assign: only people who are signed in right now, least busy first. Nobody online = the task waits unassigned.
+        string? autoName = null;
+        if (r.AutoAssign && r.AssignedToEmployeeId is null && await availability.PickAsync("tasks", r.DepartmentId) is { } pick) { r.AssignedToEmployeeId = pick.Id; autoName = pick.Name; pick.LastAssignedAt = DateTime.UtcNow; }
         var t = new WorkTask
         {
             Title = r.Title.Trim(), Description = Clean(r.Description, 4000), Priority = r.Priority, DueAt = AsUtc(r.DueAt),
@@ -182,7 +185,7 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log)
         var pos = 0;
         foreach (var line in r.Checklist.Select(x => x.Trim()).Where(x => x.Length > 0).Take(40))
             db.TaskChecklistItems.Add(new TaskChecklistItem { TaskId = t.Id, Text = line.Length > 300 ? line[..300] : line, Position = pos++ });
-        Log(t.Id, c.Name, "Created the task");
+        Log(t.Id, c.Name, autoName is null ? "Created the task" : $"Created the task and auto-assigned it to {autoName} (signed in, least open work)");
         if (t.AssignedToEmployeeId is { } who && who != c.EmployeeId) Notify(who, $"New task: {t.Title}", $"From {c.Name}{(t.DueAt is { } d ? $" · due {FollowUpService.FormatDue(d)}" : "")}", t.Id);
         await db.SaveChangesAsync();
         return (t, null);

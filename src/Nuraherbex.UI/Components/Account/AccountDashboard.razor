@@ -58,7 +58,7 @@
     @* 2. KPI Scorecards *@
     <section class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
 
-        <div class="customer-account-stat bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
+        <div data-nh-reveal class="customer-account-stat bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
             <div class="flex items-center justify-between text-xs text-slate-400">
                 <span class="font-medium">Total Orders</span>
                 <Icon Name="Package" Size="14" Class="text-purple-400" />
@@ -67,7 +67,7 @@
             <div class="text-[11px] text-slate-500 mt-0.5 font-mono">Your order history</div>
         </div>
 
-        <div class="customer-account-stat bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
+        <div data-nh-reveal class="customer-account-stat bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
             <div class="flex items-center justify-between text-xs text-slate-400">
                 <span class="font-medium">Lifetime Spend</span>
                 <Icon Name="CreditCard" Size="14" Class="text-[#fff3bf]" />
@@ -76,7 +76,7 @@
             <div class="text-[11px] text-emerald-400 mt-0.5 font-mono">Across your orders</div>
         </div>
 
-        <div class="customer-account-stat bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
+        <div data-nh-reveal class="customer-account-stat bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
             <div class="flex items-center justify-between text-xs text-slate-400">
                 <span class="font-medium">Active Shipments</span>
                 <Icon Name="Truck" Size="14" Class="text-[#38bdf8]" />
@@ -85,7 +85,7 @@
             <div class="text-[11px] text-slate-500 mt-0.5 font-mono">Currently on the way</div>
         </div>
 
-        <a href="/quality-reports" class="customer-account-stat bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
+        <a href="/quality-reports" data-nh-reveal class="customer-account-stat bg-[#0e0a1b] border border-white/10 p-4 rounded-lg shadow-sm">
             <div class="flex items-center justify-between text-xs text-slate-400">
                 <span class="font-medium">Product quality</span>
                 <Icon Name="FileText" Size="14" Class="text-[#10b981]" />
@@ -95,6 +95,8 @@
         </a>
 
     </section>
+
+    <AccountOverview Customer="customer" OnGoTo="GoToTab" />
 
     @* 3. Segmented Navigation Bar *@
     <nav class="customer-account-tabs" aria-label="Account sections" role="tablist">
@@ -341,6 +343,14 @@
                                     @(string.IsNullOrEmpty(order.DeliveryStatus) ? "Order Confirmed" : order.DeliveryStatus)
                                 </span>
                             </div>
+
+                            <ol class="ao-track" aria-label="Order progress">
+                                @{ var stage = isDelivered ? 3 : hasAwb ? 2 : 1; }
+                                @for (var si = 0; si < TrackStages.Length; si++)
+                                {
+                                    <li class="@(si < stage ? "done" : si == stage ? "now" : "")"><i>@if (si < stage) { <Icon Name="Check" Size="11" /> } else { @(si + 1) }</i><span>@TrackStages[si]</span></li>
+                                }
+                            </ol>
 
                             @* Order Details Body *@
                             <div class="p-5 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -622,6 +632,8 @@ else
     private static readonly string[] _filters = { "ALL", "IN_TRANSIT", "DELIVERED", "PENDING" };
 
     private string _activeTab = "orders";
+    private static readonly string[] TrackStages = ["Confirmed", "Packed", "In transit", "Delivered"];
+    private void GoToTab(string tab) => _activeTab = tab;
     private List<OrderDto> _orders = new();
     private bool _loadingOrders;
     private string _orderFilter = "ALL";

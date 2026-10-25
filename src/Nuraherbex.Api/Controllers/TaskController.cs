@@ -38,7 +38,7 @@ public class TaskController(TaskService tasks, RightsService rights) : StaffCont
     public async Task<IActionResult> Create(TaskSaveRequest r)
     {
         var (t, error) = await tasks.CreateAsync(r, Me);
-        return t is null ? BadRequest(new ApiResult { Success = false, Message = error }) : StatusCode(201, new TaskDetailResponse { Success = true, Message = "Task created", Task = new TaskDto { Id = t.Id, Title = t.Title } });
+        return t is null ? BadRequest(new ApiResult { Success = false, Message = error }) : StatusCode(201, new TaskDetailResponse { Success = true, Message = r.AutoAssign && t.AssignedToEmployeeId is null ? "Task created. Nobody is signed in right now, so it is unassigned." : "Task created", Task = new TaskDto { Id = t.Id, Title = t.Title, AssignedToEmployeeId = t.AssignedToEmployeeId } });
     }
 
     [HttpPut("{id:long}")]

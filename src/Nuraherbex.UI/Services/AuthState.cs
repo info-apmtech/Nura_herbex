@@ -152,6 +152,7 @@ public class AdminSession(ApiClient api, SessionTokens tokens, BrowserInterop br
 
     public async Task SignOutAsync()
     {
+        if (tokens.AdminToken is not null) { try { await api.AdminGoOfflineAsync(); } catch { } } // stop auto-assigned work right away
         tokens.AdminToken = null;
         Adopt(null);
         Email = null;

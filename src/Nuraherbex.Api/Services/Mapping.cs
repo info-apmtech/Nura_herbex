@@ -87,7 +87,7 @@ public static class Mapping
     public static EmployeeDto ToDto(this Employee e) => new()
     {
         Id = e.Id, Name = e.Name, Email = e.Email, Phone = e.Phone, Role = e.Role, IsActive = e.IsActive,
-        CreatedAt = e.CreatedAt, LastLoginAt = e.LastLoginAt, DepartmentId = e.DepartmentId, DesignationId = e.DesignationId,
+        CreatedAt = e.CreatedAt, LastLoginAt = e.LastLoginAt, IsOnline = StaffAvailability.IsOnline(e), DepartmentId = e.DepartmentId, DesignationId = e.DesignationId,
     };
 
     public static LeadDto ToDto(this Lead l, Conversation? c = null) => new()

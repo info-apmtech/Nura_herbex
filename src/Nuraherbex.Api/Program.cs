@@ -60,6 +60,7 @@ builder.Services.AddHttpClient<ShiprocketService>();
 builder.Services.AddHttpClient<ShadowfaxService>(http => http.Timeout = TimeSpan.FromSeconds(25));
 builder.Services.AddScoped<ShippingGateway>();
 builder.Services.AddSingleton<MediaSigner>();
+builder.Services.AddScoped<StaffAvailability>();
 builder.Services.AddScoped<LeadService>();
 builder.Services.Configure<FollowUpOptions>(cfg.GetSection(FollowUpOptions.Section));
 builder.Services.AddScoped<FollowUpService>();
@@ -190,7 +191,7 @@ if (cfg.GetValue("Database:AutoCreate", true))
         else await db.Database.MigrateAsync();
         await DbSeeder.SeedAsync(db, cfg.GetValue("Database:SeedDemoBatch", false));
         await WhatsAppMediaBackfill.RunAsync(db, app.Logger);
-        await OrgSeeder.RunAsync(db, app.Logger);
+        await OrgSeeder.RunAsync(db, app.Logger, cfg.GetValue("Database:SeedTestStaff", false) ? cfg["Database:TestStaffPassword"] : null);
     }
     catch (Exception ex)
     {

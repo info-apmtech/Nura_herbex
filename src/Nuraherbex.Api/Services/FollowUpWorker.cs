@@ -22,6 +22,7 @@ public sealed class FollowUpWorker(IServiceScopeFactory scopes, IOptions<FollowU
                 using var scope = scopes.CreateScope();
                 await scope.ServiceProvider.GetRequiredService<FollowUpService>().RunCycleAsync();
                 await scope.ServiceProvider.GetRequiredService<TaskService>().RunCycleAsync();
+                await scope.ServiceProvider.GetRequiredService<LeadService>().AssignWaitingAsync();
             }
             catch (OperationCanceledException) { return; }
             catch (Exception ex) { log.LogError(ex, "[FollowUp] Cycle failed"); }

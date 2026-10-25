@@ -6,6 +6,7 @@
 @inject AuthState Auth
 @inject BrowserInterop Browser
 @using Nuraherbex.UI.Components.Home
+@using Nuraherbex.UI.Components.Shop
 
 <div class="nh-storefront ck-shell">
 <HomeNavbar />
@@ -129,6 +130,7 @@ else
                 <Icon Name="ArrowLeft" Size="14" />
                 <span>Back to Shop</span>
             </button>
+            <CheckoutExtras Part="steps" />
         </div>
 
         <form @onsubmit="HandleSubmit" @onsubmit:preventDefault class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
@@ -474,6 +476,7 @@ else
                         </div>
                     </div>
                 </div>
+                <CheckoutExtras Part="assure" />
             </div>
 
             @* RIGHT COLUMN: Order Summary *@
@@ -590,6 +593,7 @@ else
                             <Icon Name="ShieldCheck" Size="14" Class="text-emerald-400" />
                             <span>Secure checkout · Free returns within 7 days</span>
                         </div>
+                        <CheckoutExtras Part="next" />
                     </div>
 
                 </div>

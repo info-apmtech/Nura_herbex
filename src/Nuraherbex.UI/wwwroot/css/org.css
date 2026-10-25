@@ -220,3 +220,5 @@ th.sn,th.admin-sno{white-space:nowrap}
 @media(max-width:1000px){.tk-r{grid-template-columns:34px minmax(0,1fr);row-gap:8px}.tk-r-tags{grid-column:2;justify-content:flex-start}.tk-due2,.tk-person{grid-column:2}}
 .tk-r-main .tk-r-note,.tk-card .tk-r-note{display:block;margin-top:3px;color:var(--ld-muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tk-r-note b{font-weight:600;color:inherit}
+.tk-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#b8c0ba;margin-right:6px;vertical-align:middle}.tk-dot.on{background:#2e9b5f;box-shadow:0 0 0 3px rgba(46,155,95,.18)}
+.tk-auto{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px dashed var(--ld-line,#cfd8d1);border-radius:10px;background:rgba(35,91,64,.04);font-size:13px;margin-bottom:8px}.tk-auto strong{color:#235b40}

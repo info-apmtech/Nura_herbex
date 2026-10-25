@@ -1,0 +1,62 @@
+@inject CartState Cart
+
+@* Supporting content for /checkout. Part: steps (progress header) | assure (reassurance cards under the form) | next (what happens after ordering, inside the summary). *@
+
+@if (Part == "steps")
+{
+    <ol class="cx-steps" aria-label="Checkout progress">
+        <li class="done"><i><Icon Name="Check" Size="13" /></i><span>Cart</span></li>
+        <li class="now"><i>2</i><span>Details</span></li>
+        <li><i>3</i><span>Payment</span></li>
+        <li><i>4</i><span>Confirmed</span></li>
+    </ol>
+}
+else if (Part == "assure")
+{
+    <section class="cx-assure" aria-label="Why order with confidence">
+        <div class="cx-assure-head" data-nh-reveal>
+            <span class="nh-eyebrow">ORDER WITH CONFIDENCE</span>
+            <h3>Care at every step</h3>
+        </div>
+        <div class="cx-assure-grid">
+            @for (var i = 0; i < Items.Length; i++)
+            {
+                var a = Items[i];
+                <article class="cx-card" data-nh-reveal style="--d:@(i * 90)ms">
+                    <span><Icon Name="@a.Icon" Size="20" /></span>
+                    <div><strong>@a.Title</strong><small>@a.Text</small></div>
+                </article>
+            }
+        </div>
+    </section>
+}
+else if (Part == "next")
+{
+    var left = Math.Max(0, SiteConfig.FreeShippingThreshold - Cart.Subtotal);
+    <div class="cx-ship">
+        <div class="cx-ship-top"><Icon Name="Truck" Size="15" /><span>@(left <= 0 ? "You have unlocked free shipping" : $"Add ₹{left:N0} more for free shipping")</span></div>
+        <div class="cx-bar"><i style="width:@(Math.Round(Cart.FreeShippingProgress))%"></i></div>
+    </div>
+    <ol class="cx-next">
+        <li><b>1</b><div><strong>Confirmation</strong><small>You get an email or SMS as soon as your order is placed.</small></div></li>
+        <li><b>2</b><div><strong>Packed and dispatched</strong><small>Usually within 1–2 working days.</small></div></li>
+        <li><b>3</b><div><strong>Track it live</strong><small>Follow your parcel any time on our <a href="/track">tracking page</a>.</small></div></li>
+    </ol>
+    <p class="cx-help">Questions before you pay? Write to <a href="mailto:@SiteConfig.ContactEmail">@SiteConfig.ContactEmail</a> or call <a href="tel:@SiteConfig.ContactPhone">@SiteConfig.ContactPhone</a>.</p>
+}
+
+@code {
+    [Parameter] public string Part { get; set; } = "";
+
+    private sealed record Item(string Icon, string Title, string Text);
+    private static readonly Item[] Items =
+    [
+        new("ShieldCheck", "Secure payment", "Online payments are handled by PayU. We never see or store your card details."),
+        new("Leaf", "Batch verified", "Every pack carries a batch number you can check on our Trust Passport."),
+        new("Package", "Carefully packed", "Sealed and protected so your order reaches you in good condition."),
+        new("Phone", "Real human support", "Our care team is a call or email away on working days."),
+    ];
+
+    protected override void OnInitialized() => Cart.Changed += OnChanged;
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+}

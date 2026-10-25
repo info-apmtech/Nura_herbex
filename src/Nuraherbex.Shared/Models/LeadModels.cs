@@ -135,6 +135,8 @@ public class EmployeeDto
     public long? DesignationId { get; set; }
     public string? DesignationName { get; set; }
     public int OpenTasks { get; set; }
+    /// <summary>Signed in to the portal right now (checked in within the last two minutes).</summary>
+    public bool IsOnline { get; set; }
 }
 
 public class EmployeeSaveRequest

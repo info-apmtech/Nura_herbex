@@ -45,7 +45,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         if (forPage is "leads" or "followups") allowed = await rightsService.EmployeesWithPageAsync(forPage);
         else if (forPage is null) allowed = await rightsService.EmployeesWithPageAsync("leads"); // the original meaning: people who can own leads
         if (allowed is not null) q = q.Where(e => allowed.Contains(e.Id));
-        var team = await q.OrderBy(e => e.Name).Select(e => new EmployeeDto { Id = e.Id, Name = e.Name, Role = e.Role, IsActive = true, DepartmentId = e.DepartmentId }).ToListAsync();
+        var team = await q.OrderBy(e => e.Name).Select(e => new EmployeeDto { Id = e.Id, Name = e.Name, Role = e.Role, IsActive = true, DepartmentId = e.DepartmentId, IsOnline = e.LastSeenAt != null && e.LastSeenAt >= StaffAvailability.OnlineCutoff() }).ToListAsync();
         return Ok(new EmployeeListResponse { Success = true, Employees = team, AutoAssign = await leads.IsAutoAssignEnabledAsync() });
     }
 
@@ -467,7 +467,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     public async Task<IActionResult> LeadSettings(LeadSettingsRequest r)
     {
         await leads.SetAutoAssignAsync(r.AutoAssign);
-        return Ok(new ApiResult { Success = true, Message = r.AutoAssign ? "New leads will be assigned round-robin." : "New leads will wait in the admin queue." });
+        return Ok(new ApiResult { Success = true, Message = r.AutoAssign ? "New leads go to whoever is signed in and has the least open work." : "New leads will wait in the admin queue." });
     }
 
     private static string? Validate(EmployeeSaveRequest r, bool creating)

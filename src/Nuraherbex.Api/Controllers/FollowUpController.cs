@@ -175,8 +175,9 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
         _db.Notifications.Where(n => n.EmployeeId == MyId || ((IsAdmin || CanAll("followups")) && n.EmployeeId == null));
 
     [HttpGet("notifications")]
-    public async Task<NotificationListResponse> Notifications()
+    public async Task<NotificationListResponse> Notifications([FromServices] StaffAvailability presence)
     {
+        if (MyId is { } me) await presence.CheckInAsync(me); // the bell polls every 30 s, which doubles as the online signal
         var q = MyNotifications().AsNoTracking();
         var items = await q.OrderByDescending(n => n.CreatedAt).Take(30).ToListAsync();
         return new NotificationListResponse
@@ -184,6 +185,14 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
             Success = true, Unread = await q.CountAsync(n => n.ReadAt == null),
             Items = items.Select(n => new NotificationDto { Id = n.Id, Kind = n.Kind, Title = n.Title, Body = n.Body, Link = n.Link, CreatedAt = n.CreatedAt, IsRead = n.ReadAt != null }).ToList(),
         };
+    }
+
+    /// <summary>Called on sign-out so the person stops receiving auto-assigned work at once.</summary>
+    [HttpPost("presence/offline")]
+    public async Task<IActionResult> GoOffline([FromServices] StaffAvailability presence)
+    {
+        if (MyId is { } me) await presence.CheckOutAsync(me);
+        return Ok(new ApiResult { Success = true });
     }
 
     [HttpPut("notifications/read-all")]

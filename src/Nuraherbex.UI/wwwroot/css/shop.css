@@ -179,3 +179,26 @@
   .nh-shop-hero::before, .nh-shop-hero::after, .nh-shop-hero-sprig, .nh-shop-card, .nh-shop-card::before, .nh-shop-card-img, .nh-shop-bestseller-badge, .nh-shop-stars svg, .nh-shop-btn-solid::after, .nh-shop-btn-outline::after, .nh-cat-icon-circle::after, .nh-shop-hero-title, .nh-shop-hero-sub, .nh-shop-hero-kicker, .nh-shop-hero-script span, .nh-shop-tab.active, .nh-shop-count, .nh-shop-story-title { animation: none !important; }
   .nh-shop-card::before { animation: none !important; }
 }
+
+/* ---------- Elegant shop hero (deep purple, matches Our Story and policy pages) ---------- */
+.nh-storefront .nh-shop-hero { background: radial-gradient(900px 420px at 85% 0%, #6a2fb0 0%, transparent 65%), linear-gradient(135deg, #1c0a2e 0%, #36145a 60%, #2a1050 100%); border-bottom: 0; }
+.nh-storefront .nh-shop-hero::before { opacity: .55; }
+.nh-storefront .nh-shop-hero::after { opacity: .7; }
+.nh-shop-hero .nh-shop-hero-inner { max-width: 1200px; padding: 52px 24px 58px; justify-content: space-between; }
+.nh-shop-hero .nh-shop-hero-content { max-width: 560px; }
+.nh-shop-hero-crumbs { display: flex; align-items: center; gap: 6px; margin-bottom: 22px; font: 600 12.5px var(--nh-font-sans); color: rgba(255,255,255,.65); }
+.nh-shop-hero-crumbs a { color: rgba(255,255,255,.82); text-decoration: none; }
+.nh-shop-hero-crumbs a:hover { color: #fff; }
+.nh-shop-hero-crumbs strong { color: #fff; }
+.nh-storefront .nh-shop-hero-kicker { color: #d9b8ff; letter-spacing: .24em; }
+.nh-storefront .nh-shop-hero-title { color: #fff; font-weight: 600; font-size: clamp(2.6rem, 5vw, 4.2rem); }
+.nh-storefront .nh-shop-hero-title em { color: #f3dc92; font-style: italic; }
+.nh-storefront .nh-shop-hero-sub { color: rgba(255,255,255,.82); font-size: 1.05rem; line-height: 1.7; max-width: 500px; }
+.nh-shop-hero-chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 26px 0 0; padding: 0; list-style: none; }
+.nh-shop-hero-chips li { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 999px; font: 600 12.5px var(--nh-font-sans); color: #fff; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); transition: transform .3s, background .3s; }
+.nh-shop-hero-chips li:hover { transform: translateY(-3px); background: rgba(255,255,255,.18); }
+.nh-storefront .nh-shop-hero-script { color: #f3dc92; text-shadow: 0 2px 10px rgba(0,0,0,.35); }
+.nh-storefront .nh-shop-hero-sprig { filter: drop-shadow(0 18px 30px rgba(0,0,0,.35)); }
+.nh-storefront .nh-shop-hero::after { z-index: 0; }
+.nh-shop-hero { box-shadow: inset 0 -2px 0 #d9b45a; }
+@media (max-width: 900px) { .nh-shop-hero .nh-shop-hero-inner { padding: 40px 20px 44px; } .nh-shop-hero-visual { display: none; } }

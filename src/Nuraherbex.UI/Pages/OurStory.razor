@@ -1,0 +1,90 @@
+@page "/our-story"
+@page "/about"
+@using Nuraherbex.UI.Components.Home
+@using Nuraherbex.UI.Components.Shop
+@inject NavigationManager Nav
+@inject BrowserInterop Browser
+
+<div class="nh-storefront os-page">
+    <HomeNavbar />
+
+    <section class="pl-hero os-hero">
+        <span class="pl-orb o1" aria-hidden="true"></span>
+        <span class="pl-orb o2" aria-hidden="true"></span>
+        <div class="pl-hero-inner os-hero-inner">
+            <nav class="pl-crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>›</span><strong>Our story</strong></nav>
+            <span class="pl-eyebrow">ABOUT NURA HERBEX</span>
+            <h1>Ancient wisdom, <em>for modern living</em></h1>
+            <p class="pl-intro">We blend time-tested herbal knowledge with modern quality checks to create natural wellness you can understand, trust and verify. Healthier people, brighter tomorrows.</p>
+            <div class="os-hero-actions">
+                <button type="button" class="os-btn solid" @onclick='() => Nav.NavigateTo("/shop")'>Shop the range <Icon Name="ArrowRight" Size="16" /></button>
+                <button type="button" class="os-btn" @onclick='() => Nav.NavigateTo("/formulation")'>See the formulation</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="os-vals">
+        <div class="shx-inner">
+            <div class="shx-head" data-nh-reveal>
+                <span class="nh-eyebrow">WHAT WE STAND FOR</span>
+                <h2>Three promises we <em>keep</em></h2>
+                <p>Everything we make is measured against the same simple standards.</p>
+            </div>
+            <div class="os-vals-grid">
+                @for (var i = 0; i < Values.Length; i++)
+                {
+                    var v = Values[i];
+                    <article class="os-val" data-nh-reveal style="--d:@(i * 110)ms">
+                        <span><Icon Name="@v.Icon" Size="26" /></span>
+                        <h3>@v.Title</h3>
+                        <p>@v.Text</p>
+                    </article>
+                }
+            </div>
+        </div>
+    </section>
+
+    <OurStoryDetail />
+
+    <section class="os-quote">
+        <div class="shx-inner narrow" data-nh-reveal>
+            <Icon Name="Leaf" Size="28" />
+            <blockquote>Strength begins with balance: good food, steady routines and herbs that nourish the body from within.</blockquote>
+            <cite>The Nura Herbex philosophy</cite>
+        </div>
+    </section>
+
+    <section class="os-cta">
+        <div class="shx-inner">
+            <div class="os-cta-card" data-nh-reveal>
+                <div>
+                    <span class="nh-eyebrow">BEGIN YOUR RITUAL</span>
+                    <h2>One scoop a day, <em>made simple</em></h2>
+                    <p>Explore GUT 365 and STAMIX, or check the batch details of a pack you already own.</p>
+                </div>
+                <div class="os-hero-actions">
+                    <button type="button" class="os-btn solid" @onclick='() => Nav.NavigateTo("/shop")'>Explore products <Icon Name="ArrowRight" Size="16" /></button>
+                    <button type="button" class="os-btn" @onclick='() => Nav.NavigateTo("/trust-passport")'>Verify a batch</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <HomeFooter />
+</div>
+
+@code {
+    private sealed record Val(string Icon, string Title, string Text);
+
+    private static readonly Val[] Values =
+    [
+        new("Leaf", "Honest ingredients", "Whole botanicals that you can recognise, with the full ingredient list open for anyone to read."),
+        new("ShieldCheck", "Verified quality", "Each batch is checked by an independent laboratory, and its details are on the pack for you to confirm."),
+        new("Heart", "Made for real routines", "Simple, measured daily servings designed to fit the life you already lead."),
+    ];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Browser.SetMetaAsync(RouteMeta.OurStory);
+    }
+}

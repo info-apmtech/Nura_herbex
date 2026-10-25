@@ -1,0 +1,107 @@
+@inject NavigationManager Nav
+
+@* Member overview on /account: a greeting, how complete the profile is, shortcuts and a daily-ritual guide. *@
+
+<section class="ao" aria-label="Account overview">
+    <div class="ao-top">
+        <article class="ao-welcome" data-nh-reveal>
+            <span class="ao-eyebrow">@Greeting()</span>
+            <h2>Your wellness ritual, <em>all in one place</em></h2>
+            <p>Follow your orders, keep your details up to date and pick up where you left off.</p>
+            <div class="ao-since"><Icon Name="Leaf" Size="14" /> Member since @Customer.CreatedAt.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture)</div>
+        </article>
+
+        <article class="ao-ring" data-nh-reveal style="--d:90ms">
+            <div class="ao-ring-dial" style="--p:@Percent">
+                <svg viewBox="0 0 120 120" aria-hidden="true">
+                    <circle class="bg" cx="60" cy="60" r="52"></circle>
+                    <circle class="fg" cx="60" cy="60" r="52" pathLength="100"></circle>
+                </svg>
+                <strong>@Percent<small>%</small></strong>
+            </div>
+            <div class="ao-ring-body">
+                <h3>Profile @(Percent == 100 ? "complete" : "strength")</h3>
+                <ul>
+                    @foreach (var s in Steps)
+                    {
+                        var step = s;
+                        <li class="@(step.Done ? "done" : "")">
+                            @if (step.Done) { <i><Icon Name="Check" Size="11" /></i><span>@step.Label</span> }
+                            else { <i></i><button type="button" @onclick="() => OnGoTo.InvokeAsync(step.Tab)">@step.Label</button> }
+                        </li>
+                    }
+                </ul>
+            </div>
+        </article>
+    </div>
+
+    <div class="ao-actions">
+        @for (var i = 0; i < Actions.Length; i++)
+        {
+            var a = Actions[i];
+            <button type="button" class="ao-act" data-nh-reveal style="--d:@(i * 80)ms" @onclick="() => Nav.NavigateTo(a.Url)">
+                <span><Icon Name="@a.Icon" Size="20" /></span>
+                <strong>@a.Title</strong>
+                <small>@a.Text</small>
+                <em><Icon Name="ArrowRight" Size="15" /></em>
+            </button>
+        }
+    </div>
+
+    <div class="ao-ritual" data-nh-reveal>
+        <div class="ao-ritual-head">
+            <span class="ao-eyebrow">YOUR DAILY RITUAL</span>
+            <h3>Small habits, <em>steady results</em></h3>
+        </div>
+        <ol>
+            @for (var i = 0; i < Tips.Length; i++)
+            {
+                var t = Tips[i];
+                <li style="--d:@(i * 110)ms"><b>@(i + 1)</b><div><strong>@t.Title</strong><small>@t.Text</small></div></li>
+            }
+        </ol>
+        <p class="ao-note">Nura Herbex products are food supplements and are not a substitute for medical advice. Speak to a healthcare professional if you are pregnant, nursing or on medication.</p>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public CustomerDto Customer { get; set; } = new();
+    [Parameter] public EventCallback<string> OnGoTo { get; set; }
+
+    private sealed record Step(string Label, bool Done, string Tab);
+    private sealed record Action(string Icon, string Title, string Text, string Url);
+    private sealed record Tip(string Title, string Text);
+
+    private Step[] Steps => new[]
+    {
+        new Step("Add your name", !string.IsNullOrWhiteSpace(Customer.FullName), "profile"),
+        new Step("Add your email", !string.IsNullOrWhiteSpace(Customer.Email), "profile"),
+        new Step("Add a phone number", !string.IsNullOrWhiteSpace(Customer.Phone), "profile"),
+        new Step("Add a profile photo", !string.IsNullOrWhiteSpace(Customer.ProfileImageData), "profile"),
+        new Step("Save a delivery address", !string.IsNullOrWhiteSpace(Customer.ShippingAddress?.AddressLine1), "address"),
+    };
+
+    private int Percent => (int)Math.Round(Steps.Count(s => s.Done) * 100.0 / Steps.Length);
+
+    private static readonly Action[] Actions =
+    [
+        new("Truck", "Track an order", "See where your parcel is right now.", "/track"),
+        new("ShoppingBag", "Shop the range", "GUT 365 and STAMIX, ready to reorder.", "/shop"),
+        new("ShieldCheck", "Verify a batch", "Check the Trust Passport on your pack.", "/trust-passport"),
+        new("FlaskConical", "See the formula", "Every ingredient, fully disclosed.", "/formulation"),
+    ];
+
+    private static readonly Tip[] Tips =
+    [
+        new("Measure your serving", "Use the scoop in the pack for a 20 g daily STAMIX serving."),
+        new("Mix it warm", "Stir into warm milk or water until smooth and have it at the same time each day."),
+        new("Keep it consistent", "A steady daily routine matters more than an occasional big serving."),
+        new("Store it well", "Close the jar tightly and keep it in a cool, dry place away from sunlight."),
+    ];
+
+    private static string Greeting()
+    {
+        var h = DateTime.UtcNow.AddHours(5.5).Hour;
+        return h < 12 ? "GOOD MORNING" : h < 17 ? "GOOD AFTERNOON" : "GOOD EVENING";
+    }
+}

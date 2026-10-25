@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "web", "runtimeExecutable": "dotnet", "runtimeArgs": ["run", "--project", "src/Nuraherbex.Web", "--launch-profile", "http", "--artifacts-path", "C:/Users/hamee/AppData/Local/Temp/claude/E--Hamee-WorkingProcess-NuraHerbex-Powder/bf932423-96d9-4c3b-b6d8-df188e51786b/scratchpad/art", "--urls", "http://localhost:5201"], "port": 5201 }
+  ]
+}

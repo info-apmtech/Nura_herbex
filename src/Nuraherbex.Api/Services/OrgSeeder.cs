@@ -10,10 +10,11 @@ namespace Nuraherbex.Api.Services;
 /// </summary>
 public static class OrgSeeder
 {
-    public static async Task RunAsync(NuraDbContext db, ILogger log)
+    public static async Task RunAsync(NuraDbContext db, ILogger log, string? testStaffPassword = null)
     {
         await FirstRunAsync(db, log);
         await AddMarketingAndDesignAsync(db, log);
+        if (!string.IsNullOrWhiteSpace(testStaffPassword)) await AddTestStaffAsync(db, log, testStaffPassword);
     }
 
     private static async Task FirstRunAsync(NuraDbContext db, ILogger log)
@@ -90,5 +91,36 @@ public static class OrgSeeder
             log.LogInformation("[Org] Marketing and Design departments added");
         }
         catch (Exception ex) { log.LogWarning(ex, "[Org] Marketing and Design setup skipped"); }
+    }
+
+    /// <summary>
+    /// Development only (Database:SeedTestStaff): a few sales and support test accounts so auto-assign can be tried with several people signed in.
+    /// They start offline and only receive work after signing in. Existing accounts are left untouched.
+    /// </summary>
+    private static async Task AddTestStaffAsync(NuraDbContext db, ILogger log, string password)
+    {
+        try
+        {
+            var sales = await db.Departments.FirstOrDefaultAsync(d => d.Name == "Sales");
+            var support = await db.Departments.FirstOrDefaultAsync(d => d.Name == "Customer Support");
+            var salesExec = await db.Designations.FirstOrDefaultAsync(d => d.Name == "Sales Executive");
+            var supportExec = await db.Designations.FirstOrDefaultAsync(d => d.Name == "Support Executive");
+            (string Name, string Email, string Phone, Department? Dept, Designation? Desig)[] people =
+            [
+                ("Test Sales One", "test.sales1@nuraherbex.test", "9000000001", sales, salesExec),
+                ("Test Sales Two", "test.sales2@nuraherbex.test", "9000000002", sales, salesExec),
+                ("Test Sales Three", "test.sales3@nuraherbex.test", "9000000003", sales, salesExec),
+                ("Test Support One", "test.support1@nuraherbex.test", "9000000004", support, supportExec),
+            ];
+            var added = 0;
+            foreach (var p in people)
+            {
+                if (await db.Employees.AnyAsync(e => e.Email == p.Email)) continue;
+                db.Employees.Add(new Employee { Name = p.Name, Email = p.Email, Phone = p.Phone, Role = EmployeeRoles.Sales, PasswordHash = AdminPassword.Hash(password), DepartmentId = p.Dept?.Id, DesignationId = p.Desig?.Id });
+                added++;
+            }
+            if (added > 0) { await db.SaveChangesAsync(); RightsService.Invalidate(); log.LogInformation("[Org] {Count} test staff accounts created", added); }
+        }
+        catch (Exception ex) { log.LogWarning(ex, "[Org] Test staff skipped"); }
     }
 }

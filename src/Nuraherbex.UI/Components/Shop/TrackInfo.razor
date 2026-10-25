@@ -1,0 +1,113 @@
+@* Content shown under the order search on /track: how tracking works, delivery times, answers to common questions and how to reach care. Facts follow /shipping-policy. *@
+
+<section class="trk-steps">
+    <div class="shx-inner">
+        <div class="shx-head" data-nh-reveal>
+            <span class="nh-eyebrow">FROM OUR HANDS TO YOURS</span>
+            <h2>Your order, <em>step by step</em></h2>
+            <p>Every parcel follows the same careful journey, and you can follow each stage from this page.</p>
+        </div>
+        <ol class="trk-rail">
+            @for (var i = 0; i < Steps.Length; i++)
+            {
+                var s = Steps[i];
+                <li class="trk-step" data-nh-reveal style="--d:@(i * 120)ms">
+                    <span class="trk-dot"><Icon Name="@s.Icon" Size="22" /></span>
+                    <b>@(i + 1)</b>
+                    <h3>@s.Title</h3>
+                    <p>@s.Text</p>
+                </li>
+            }
+        </ol>
+    </div>
+</section>
+
+<section class="trk-eta">
+    <div class="shx-inner">
+        <div class="shx-head" data-nh-reveal>
+            <span class="nh-eyebrow">DELIVERY TIMES</span>
+            <h2>When to expect <em>your parcel</em></h2>
+            <p>Counted from dispatch, which usually happens within 1–2 working days of confirmation.</p>
+        </div>
+        <div class="trk-eta-grid">
+            @for (var i = 0; i < Eta.Length; i++)
+            {
+                var e = Eta[i];
+                <article class="trk-eta-card" data-nh-reveal style="--d:@(i * 100)ms">
+                    <span><Icon Name="@e.Icon" Size="22" /></span>
+                    <small>@e.Place</small>
+                    <strong>@e.Days</strong>
+                    <div class="trk-bar"><i style="--w:@e.Fill%"></i></div>
+                </article>
+            }
+        </div>
+        <p class="trk-fine" data-nh-reveal>Estimates, not guarantees. Weather, festivals and courier capacity can add a day or two.</p>
+    </div>
+</section>
+
+<section class="shx-faq">
+    <div class="shx-inner narrow">
+        <div class="shx-head" data-nh-reveal>
+            <span class="nh-eyebrow">TRACKING HELP</span>
+            <h2>Common <em>questions</em></h2>
+        </div>
+        <div class="shx-faq-list" data-nh-reveal>
+            @for (var i = 0; i < Faq.Length; i++)
+            {
+                var idx = i;
+                <div class="@($"shx-faq-item {(_open == idx ? "open" : "")}")">
+                    <button type="button" class="shx-faq-q" aria-expanded="@(_open == idx)" @onclick="() => _open = _open == idx ? -1 : idx">@Faq[idx].Q <i><Icon Name="Plus" Size="16" /></i></button>
+                    <div class="shx-faq-a"><div><p>@Faq[idx].A</p></div></div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+<section class="trk-help">
+    <div class="shx-inner">
+        <div class="trk-help-card" data-nh-reveal>
+            <div>
+                <span class="nh-eyebrow">STILL NEED A HAND?</span>
+                <h2>Our care team is here for you</h2>
+                <p>Keep your order number ready and we will look into it straight away on working days.</p>
+            </div>
+            <div class="trk-help-actions">
+                <a class="trk-btn solid" href="mailto:@SiteConfig.ContactEmail"><Icon Name="Mail" Size="16" /> Email us</a>
+                <a class="trk-btn" href="tel:@SiteConfig.ContactPhone"><Icon Name="Phone" Size="16" /> @SiteConfig.ContactPhone</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private int _open = 0;
+
+    private sealed record Step(string Icon, string Title, string Text);
+    private sealed record EtaRow(string Icon, string Place, string Days, int Fill);
+    private sealed record Qa(string Q, string A);
+
+    private static readonly Step[] Steps =
+    [
+        new("CheckCircle2", "Order confirmed", "You get a confirmation by email or SMS as soon as your payment is verified."),
+        new("Package", "Packed with care", "Your order is sealed, protected and labelled with its batch number."),
+        new("Truck", "On its way", "The courier picks up your parcel and tracking details are sent to you."),
+        new("MapPin", "Delivered", "Your parcel arrives at the address on your order. Keep your phone reachable."),
+    ];
+
+    private static readonly EtaRow[] Eta =
+    [
+        new("Building2", "Metro cities", "2–4 working days", 40),
+        new("MapPin", "Other major cities & towns", "3–6 working days", 65),
+        new("Truck", "Remote & rural locations", "6–9 working days", 95),
+    ];
+
+    private static readonly Qa[] Faq =
+    [
+        new("Where do I find my order number?", "It is in your confirmation email or SMS and looks like NH-457503. You can also search with the 10-digit mobile number you used at checkout."),
+        new("Tracking has not updated. What should I do?", "Couriers can take a little while to scan a parcel after pickup. If nothing has changed for more than 48 hours, contact our care team with your order number and we will chase it with the courier."),
+        new("Can I change my delivery address?", "Only before the order is dispatched. Please contact us as early as you can with your order number and the corrected address."),
+        new("What if my parcel looks damaged?", "Check it at delivery. If the packaging looks tampered with, record a short video while opening it and write to us within 48 hours so we can arrange a replacement or refund."),
+        new("Will the courier call me?", "Delivery partners normally try more than once. Please keep your phone reachable so they can confirm the address and hand the parcel over."),
+    ];
+}

@@ -10,7 +10,7 @@ namespace Nuraherbex.Api.Services;
 /// CRM lead capture. One lead per normalised phone number; repeat enquiries append a source event and
 /// refresh the conversation instead of creating a duplicate.
 /// </summary>
-public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, ILogger<LeadService> log)
+public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, ILogger<LeadService> log, StaffAvailability availability)
 {
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase) { "stop", "unsubscribe", "stop all", "opt out", "optout" };
     private static readonly HashSet<string> StartWords = new(StringComparer.OrdinalIgnoreCase) { "start", "subscribe", "opt in", "optin" };
@@ -113,16 +113,25 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         await db.SaveChangesAsync();
     }
 
-    /// <summary>The active sales employee who was given a lead the longest ago (never-assigned first), excluding <paramref name="excludeId"/>.</summary>
-    public async Task<Employee?> PickNextEmployeeAsync(long? excludeId = null)
+    /// <summary>The online sales employee with the least open work, or null when nobody is signed in (the lead then waits in the admin queue).</summary>
+    public Task<Employee?> PickNextEmployeeAsync(long? excludeId = null) => availability.PickAsync("leads", null, excludeId);
+
+    /// <summary>Gives leads that arrived while nobody was online to whoever is signed in now, least busy first. Called by the background worker.</summary>
+    public async Task<int> AssignWaitingAsync()
     {
-        // Only people whose designation lets them work leads take part in the rotation.
-        var rights = await db.Designations.AsNoTracking().ToDictionaryAsync(d => d.Id, d => d.RightsJson);
-        var staff = await db.Employees.Where(e => e.IsActive && e.Role == EmployeeRoles.Sales && e.Id != excludeId).ToListAsync();
-        return staff
-            .Where(e => (e.DesignationId is { } id && rights.TryGetValue(id, out var json) ? PageCatalog.LevelFrom(json, "leads") : PageCatalog.DefaultStaff.GetValueOrDefault("leads")) >= PageCatalog.Limited)
-            .OrderBy(e => e.LastAssignedAt == null ? 0 : 1).ThenBy(e => e.LastAssignedAt).ThenBy(e => e.Id)
-            .FirstOrDefault();
+        if (!await IsAutoAssignEnabledAsync()) return 0;
+        var waiting = await db.Leads.Where(l => l.AssignedToEmployeeId == null && l.Status != LeadStatuses.Converted && l.Status != LeadStatuses.NotInterested)
+            .OrderBy(l => l.CreatedAt).Take(50).ToListAsync();
+        var given = 0;
+        foreach (var lead in waiting)
+        {
+            var next = await PickNextEmployeeAsync();
+            if (next is null) break; // still nobody online
+            await AssignAsync(lead, next.Id, "Auto-assigned when a team member came online", "auto");
+            await db.SaveChangesAsync(); // so the next pick sees the new workload
+            given++;
+        }
+        return given;
     }
 
     /// <summary>Assigns the lead (null = unassign) and records history. Caller saves.</summary>
@@ -151,7 +160,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         if (lead.AssignedToEmployeeId is not null || !await IsAutoAssignEnabledAsync()) return;
         var next = await PickNextEmployeeAsync();
         if (next is null) return;
-        await AssignAsync(lead, next.Id, "Auto-assigned (round-robin)", "auto");
+        await AssignAsync(lead, next.Id, "Auto-assigned (online and least busy)", "auto");
     }
 
     /// <summary>Moves every open lead of a leaving employee: spread across the remaining team, or back to the admin queue.</summary>

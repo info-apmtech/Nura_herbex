@@ -290,6 +290,8 @@ public class TaskSaveRequest
     public string? OrderId { get; set; }
     public string? Tags { get; set; }
     public string Repeat { get; set; } = TaskRepeats.None;
+    /// <summary>Create only: when nobody is picked, give the task to the least busy person who is signed in (within the department, if one is set).</summary>
+    public bool AutoAssign { get; set; }
     /// <summary>Checklist lines for a new task.</summary>
     public List<string> Checklist { get; set; } = new();
 }

@@ -294,6 +294,8 @@ public class Employee
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? LastLoginAt { get; set; }
+    /// <summary>Last time the portal checked in; recent means online. Cleared on sign-out.</summary>
+    public DateTime? LastSeenAt { get; set; }
     /// <summary>Round-robin cursor: the employee who was assigned a lead longest ago gets the next one.</summary>
     public DateTime? LastAssignedAt { get; set; }
     public long? DepartmentId { get; set; }
