@@ -33,8 +33,8 @@
     {
         _open = false; _busy = true; _notice = null;
         StateHasChanged();
-        var rows = Rows().ToList();
-        var ok = await Exporter.RunAsync(format, FileName, Title, Columns, rows, Meta);
+        var rows = Rows().Select((r, n) => (IReadOnlyList<string>)new[] { (n + 1).ToString() }.Concat(r).ToList()).ToList();
+        var ok = await Exporter.RunAsync(format, FileName, Title, new[] { "S.No" }.Concat(Columns).ToList(), rows, Meta);
         _notice = ok ? $"Exported {rows.Count:N0} as {format.ToUpperInvariant()}" : "Export failed";
         _busy = false;
         _ = ClearNoticeAsync();

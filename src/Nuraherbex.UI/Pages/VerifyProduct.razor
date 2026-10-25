@@ -6,6 +6,7 @@
 @page "/verify-product"
 @page "/verify-batch"
 @using Nuraherbex.UI.Components.Verify
+@using Nuraherbex.UI.Components.Home
 @inject ApiClient Api
 @inject NavigationManager Nav
 @inject BrowserInterop Browser
@@ -14,53 +15,31 @@
     var batch = ActiveBatch;
 }
 
-<div class="skin vf-page min-h-screen text-zinc-100 pb-20 px-4 sm:px-6 lg:px-8 text-left font-sans selection:bg-zinc-800 selection:text-white">
-    <div class="max-w-xl mx-auto space-y-5">
+<div class="nh-storefront vf-shell">
+<HomeNavbar />
 
-        @* 1. Back Navigation *@
-        <div class="flex items-center justify-between gap-2 pb-1 pr-12 sm:pr-0">
-            <button @onclick="HandleBack"
-                    class="flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer group shrink-0">
-                <Icon Name="ArrowLeft" Size="14" Class="group-hover:-translate-x-0.5 transition-transform" />
-                <span>Back to Shop</span>
-            </button>
-            <span class="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800 truncate">
-                @(batch is not null ? $"Batch: {BatchLabel(batch)}" : "STAMIX · Product Quality & Testing")
-            </span>
-        </div>
+<section class="pl-hero vf-hero">
+    <span class="pl-orb o1" aria-hidden="true"></span>
+    <span class="pl-orb o2" aria-hidden="true"></span>
+    <div class="pl-hero-inner vf-hero-inner">
+        <nav class="pl-crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>›</span><strong>@(batch is not null ? $"Batch {BatchLabel(batch)}" : "Quality & batch reports")</strong></nav>
+        <span class="pl-eyebrow">@(batch is not null ? "BATCH RECORD CONFIRMED" : "PRODUCT QUALITY & TESTING")</span>
+        <h1>@(batch is not null ? "STAMIX batch quality report" : "See exactly what is in your jar")</h1>
+        <p class="pl-intro">
+            @(batch is not null
+                ? "The batch number matches Nura Herbex product records. Review the available Certificate of Analysis (COA) and laboratory results below."
+                : "Enter the batch number printed on your STAMIX pack to view its Certificate of Analysis (COA), laboratory results and batch details.")
+        </p>
+        <ul class="pl-meta">
+            <li><Icon Name="CheckCircle2" Size="15" /> Authentic product</li>
+            <li><Icon Name="FlaskConical" Size="15" /> Third-party tested</li>
+            <li><Icon Name="ShieldCheck" Size="15" /> Full transparency</li>
+        </ul>
+    </div>
+</section>
 
-        @* 2. Top Hero Header *@
-        <div class="text-left space-y-2.5">
-            <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] font-mono font-medium uppercase tracking-wider">
-                <Icon Name="ShieldCheck" Size="12" Class="@(batch is not null ? "text-emerald-400" : "text-zinc-400")" />
-                <span>@(batch is not null ? "Batch record confirmed" : "Product quality & batch reports")</span>
-            </div>
-
-            <h1 class="text-xl sm:text-2xl font-semibold text-zinc-100 tracking-tight font-sans">
-                @(batch is not null ? "STAMIX Batch Quality Report" : "STAMIX Product Quality & Testing")
-            </h1>
-
-            <p class="text-xs text-zinc-400 leading-relaxed font-normal">
-                @(batch is not null
-                    ? "The batch number matches Nura Herbex product records. Review the available Certificate of Analysis (COA) and laboratory results below."
-                    : "Enter the batch number printed on your STAMIX pack to view its available Certificate of Analysis (COA), laboratory results, and batch details.")
-            </p>
-
-            <div class="flex flex-wrap items-center gap-2 pt-0.5 text-[10px] font-mono text-zinc-300">
-                <div class="flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-900/60 border border-zinc-800">
-                    <Icon Name="CheckCircle2" Size="12" Class="text-emerald-400" />
-                    <span>AUTHENTIC PRODUCT</span>
-                </div>
-                <div class="flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-900/60 border border-zinc-800">
-                    <Icon Name="CheckCircle2" Size="12" Class="text-emerald-400" />
-                    <span>THIRD-PARTY TESTED</span>
-                </div>
-                <div class="flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-900/60 border border-zinc-800">
-                    <Icon Name="CheckCircle2" Size="12" Class="text-emerald-400" />
-                    <span>FULL TRANSPARENCY</span>
-                </div>
-            </div>
-        </div>
+<div class="vf-page vf-light text-zinc-100 pb-20 pt-8 px-4 sm:px-6 lg:px-8 text-left font-sans selection:bg-zinc-800 selection:text-white">
+    <div class="max-w-3xl mx-auto space-y-5">
 
         @* 3. Hero Visual Display *@
         <div class="relative rounded-lg border border-zinc-800 bg-[#121215] p-6 overflow-hidden flex items-center justify-center min-h-[220px]">
@@ -188,6 +167,9 @@
         </div>
 
     </div>
+</div>
+
+<HomeFooter />
 </div>
 
 @code {

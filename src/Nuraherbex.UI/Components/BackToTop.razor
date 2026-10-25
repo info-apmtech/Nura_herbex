@@ -1,0 +1,10 @@
+@inject BrowserInterop Browser
+
+@* Floating "back to top" button that sits directly above the assistant launcher. nura.js shows it after the page has been scrolled. *@
+<button type="button" class="nh-btt" aria-label="Back to top" title="Back to top" @onclick="GoTop">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"></path></svg>
+</button>
+
+@code {
+    private async Task GoTop() => await Browser.ScrollToTopAsync();
+}

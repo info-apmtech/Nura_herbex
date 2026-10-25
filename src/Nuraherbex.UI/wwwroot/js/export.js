@@ -84,7 +84,7 @@
       { name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
       { name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${sheetName}" sheetId="1" r:id="rId1"/></sheets></workbook>` },
       { name: 'xl/_rels/workbook.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
-      { name: 'xl/styles.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF235B40"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs></styleSheet>' },
+      { name: 'xl/styles.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF5E209E"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs></styleSheet>' },
       { name: 'xl/worksheets/sheet1.xml', data: sheet },
     ]);
   }
@@ -127,12 +127,12 @@
     for (let p = 0; p < pages; p++) {
       let c = '';
       const y0 = H - M;
-      c += `BT /F2 15 Tf ${M} ${y0 - 10} Td 0.137 0.357 0.251 rg (${esc(pdfText(title))}) Tj ET\n`;
+      c += `BT /F2 15 Tf ${M} ${y0 - 10} Td 0.369 0.125 0.620 rg (${esc(pdfText(title))}) Tj ET\n`;
       let metaY = y0 - 26;
       (meta || []).slice(0, 3).forEach((m) => { c += `BT /F1 8 Tf ${M} ${metaY} Td 0.42 0.47 0.43 rg (${esc(pdfText(m))}) Tj ET\n`; metaY -= 11; });
       c += `BT /F1 8 Tf ${W - M - 190} ${y0 - 10} Td 0.42 0.47 0.43 rg (${esc('Generated ' + pdfText(generated))}) Tj ET\n`;
       let y = H - M - 56;
-      c += `0.137 0.357 0.251 rg ${M} ${y - headH + 4} ${usable} ${headH} re f\n`;
+      c += `0.369 0.125 0.620 rg ${M} ${y - headH + 4} ${usable} ${headH} re f\n`;
       let x = M;
       cols.forEach((h, i) => { c += `BT /F2 ${hfs} Tf ${x + 5} ${y - 8} Td 1 1 1 rg (${esc(fit(h, widths[i] - 10, hfs, true))}) Tj ET\n`; x += widths[i]; });
       y -= headH;

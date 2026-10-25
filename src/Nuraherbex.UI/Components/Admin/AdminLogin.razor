@@ -1,9 +1,69 @@
 @inject AdminSession Admin
 @inject NavigationManager Nav
-<div class="admin-login"><section class="admin-login-story"><a href="/shop" class="admin-brand"><img class="admin-brand-logo" src="/_content/Nuraherbex.UI/images/logo-mark.png" alt="" /><span>Nura Herbex<small>NATURALLY, BETTER.</small></span></a><div><span class="admin-eyebrow">THE BUSINESS BEHIND THE BOTANICALS</span><h1>A little care.<br />A thriving store.</h1><p>Your products, customers and everyday operations. Thoughtfully brought together.</p><div class="admin-login-decoration"><Icon Name="Leaf" Size="120" /></div></div><small>Nura Herbex · Store administration</small></section><section class="admin-login-form"><div class="admin-login-box"><span class="admin-attention-icon"><Icon Name="Lock" Size="24" /></span><h2>Welcome back</h2><p>Sign in to manage your Nura Herbex store.</p>@if (!string.IsNullOrEmpty(_authError)) { <div role="alert" class="admin-error">@_authError</div> }<form @onsubmit="HandleLogin" @onsubmit:preventDefault><label class="admin-label">Administrator email<input type="email" autocomplete="username" required @bind:event="oninput" @bind="_email" placeholder="Enter your email" /></label><label class="admin-label">Password<input type="password" autocomplete="current-password" required @bind:event="oninput" @bind="_password" placeholder="Enter your password" /></label><button class="admin-btn admin-btn-primary" disabled="@_loggingIn">@(_loggingIn ? "Signing in…" : "Sign in to your workspace") <Icon Name="ArrowRight" Size="17" /></button></form><a class="admin-back-link" href="/shop">← Back to the store</a><p class="admin-help">Authorized administrators only.</p></div></section></div>
+
+<div class="al">
+    <section class="al-story">
+        <span class="al-orb o1" aria-hidden="true"></span>
+        <span class="al-orb o2" aria-hidden="true"></span>
+        <span class="al-grid" aria-hidden="true"></span>
+
+        <a href="/" class="al-brand" aria-label="Nura Herbex home">
+            <img src="/_content/Nuraherbex.UI/images/logo-mark.png" alt="" />
+            <span>Nura Herbex<small>TEAM WORKSPACE</small></span>
+        </a>
+
+        <div class="al-pitch">
+            <span class="al-eyebrow">ONE WORKSPACE FOR THE WHOLE TEAM</span>
+            <h1>Run every order, <em>lead and task</em> with confidence</h1>
+            <p>Sales, support and operations share one clear view of the business, so customers always get a prompt, careful reply.</p>
+            <ul class="al-points">
+                <li style="--d:120ms"><span><Icon Name="Package" Size="18" /></span><div><strong>Orders and shipping</strong><small>Track every parcel from payment to doorstep.</small></div></li>
+                <li style="--d:240ms"><span><Icon Name="Users" Size="18" /></span><div><strong>Leads and follow-ups</strong><small>Work is shared out to whoever is available.</small></div></li>
+                <li style="--d:360ms"><span><Icon Name="CheckCircle2" Size="18" /></span><div><strong>Tasks and reports</strong><small>Clear owners, due dates and live results.</small></div></li>
+            </ul>
+        </div>
+
+        <small class="al-foot">Nura Herbex · Ancient wisdom for modern living</small>
+    </section>
+
+    <section class="al-form">
+        <div class="al-card">
+            <span class="al-lock"><Icon Name="Lock" Size="22" /></span>
+            <h2>Welcome back</h2>
+            <p class="al-sub">Sign in with your work email to open your workspace.</p>
+
+            @if (!string.IsNullOrEmpty(_authError))
+            {
+                <div role="alert" class="al-error"><Icon Name="AlertCircle" Size="16" /><span>@_authError</span></div>
+            }
+
+            <form @onsubmit="HandleLogin" @onsubmit:preventDefault>
+                <label class="al-field">
+                    <span>Work email</span>
+                    <div><Icon Name="Mail" Size="17" />
+                        <input type="email" autocomplete="username" required @bind:event="oninput" @bind="_email" placeholder="name@company.com" /></div>
+                </label>
+                <label class="al-field">
+                    <span>Password</span>
+                    <div><Icon Name="KeyRound" Size="17" />
+                        <input type="@(_show ? "text" : "password")" autocomplete="current-password" required @bind:event="oninput" @bind="_password" placeholder="Enter your password" />
+                        <button type="button" class="al-eye" @onclick="() => _show = !_show" aria-label="@(_show ? "Hide password" : "Show password")"><Icon Name="@(_show ? "EyeOff" : "Eye")" Size="17" /></button></div>
+                </label>
+                <button class="al-cta" disabled="@_loggingIn">
+                    @if (_loggingIn) { <Icon Name="RefreshCw" Size="17" Class="animate-spin" /> <span>Signing in…</span> }
+                    else { <span>Sign in to your workspace</span> <Icon Name="ArrowRight" Size="17" /> }
+                </button>
+            </form>
+
+            <div class="al-secure"><Icon Name="ShieldCheck" Size="15" /> Encrypted session · authorised team members only</div>
+            <a class="al-back" href="/">← Back to the store</a>
+        </div>
+    </section>
+</div>
+
 @code {
     [Parameter] public EventCallback OnLoggedIn { get; set; }
     private string _email = "", _password = "", _authError = "";
-    private bool _loggingIn;
+    private bool _loggingIn, _show;
     private async Task HandleLogin() { if (_loggingIn) return; _authError = ""; _loggingIn = true; try { var res = await Admin.LoginAsync(_email, _password); if (res.Success && !string.IsNullOrEmpty(res.Token)) { _password = ""; await OnLoggedIn.InvokeAsync(); } else _authError = res.Message ?? "Sign-in failed. Check your credentials."; } finally { _loggingIn = false; } }
 }

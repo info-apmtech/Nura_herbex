@@ -29,15 +29,16 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
     private static string Clip(string? s, int n) => string.IsNullOrEmpty(s) ? "" : (s.Length <= n ? s : s[..n] + "…").Replace("\r", " ").Replace("\n", " ");
     private static ReportStat S(string label, object value, string? hint = null, string tone = "neutral") => new() { Label = label, Value = Convert.ToString(value, Inv) ?? "", Hint = hint, Tone = tone };
 
-    public async Task<ReportResponse?> BuildAsync(string key, DateTime fromUtc, DateTime toUtc, string periodLabel)
+    /// <param name="ownerOnly">When set, leads, follow-ups and tasks are limited to this employee's own records.</param>
+    public async Task<ReportResponse?> BuildAsync(string key, DateTime fromUtc, DateTime toUtc, string periodLabel, long? ownerOnly = null)
     {
         var r = key switch
         {
             "orders" => await OrdersAsync(fromUtc, toUtc),
-            "leads" => await LeadsAsync(fromUtc, toUtc),
-            "followups" => await FollowUpsAsync(fromUtc, toUtc),
+            "leads" => await LeadsAsync(fromUtc, toUtc, ownerOnly),
+            "followups" => await FollowUpsAsync(fromUtc, toUtc, ownerOnly),
             "whatsapp" => await WhatsAppAsync(fromUtc, toUtc),
-            "tasks" => await TasksAsync(fromUtc, toUtc),
+            "tasks" => await TasksAsync(fromUtc, toUtc, ownerOnly),
             "customers" => await CustomersAsync(fromUtc, toUtc),
             "payments" => await PaymentsAsync(fromUtc, toUtc),
             _ => null,
@@ -82,14 +83,24 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
 
     // ---- Leads ----------------------------------------------------------------------------------
 
-    private async Task<ReportResponse> LeadsAsync(DateTime from, DateTime to)
+    private async Task<ReportResponse> LeadsAsync(DateTime from, DateTime to, long? ownerOnly)
     {
         var owners = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
-        var leads = await db.Leads.AsNoTracking().Where(l => l.CreatedAt >= from && l.CreatedAt < to).OrderByDescending(l => l.CreatedAt).Take(MaxRows).ToListAsync();
-        var res = new ReportResponse { Columns = ["Lead ID", "Created", "Name", "Phone", "Email", "Source", "Campaign / detail", "Status", "Consent", "Owner", "Last contact", "Converted on", "First message"] };
+        var leads = await db.Leads.AsNoTracking().Where(l => l.CreatedAt >= from && l.CreatedAt < to && (ownerOnly == null || l.AssignedToEmployeeId == ownerOnly)).OrderByDescending(l => l.CreatedAt).Take(MaxRows).ToListAsync();
+        var ids = leads.Select(l => l.Id).ToList();
+        // The newest comment staff left when changing the lead's status, plus how many follow-ups are done.
+        var notes = (await db.LeadStatusHistory.AsNoTracking().Where(h => ids.Contains(h.LeadId) && h.Note != null && h.Note != "").OrderByDescending(h => h.CreatedAt).ToListAsync())
+            .GroupBy(h => h.LeadId).ToDictionary(g => g.Key, g => g.First());
+        var fu = await db.FollowUps.AsNoTracking().Where(f => ids.Contains(f.LeadId)).GroupBy(f => f.LeadId).Select(g => new { g.Key, Total = g.Count(), Done = g.Count(f => f.Status == "done") }).ToDictionaryAsync(x => x.Key);
+        var res = new ReportResponse { Columns = ["Lead ID", "Created", "Name", "Phone", "Email", "Source", "Campaign / detail", "Status", "Owner", "Notes", "Latest comment", "Follow-ups", "Last contact", "Converted on", "Consent", "First message"] };
         foreach (var l in leads)
-            res.Rows.Add([l.Id.ToString(Inv), Ist(l.CreatedAt), l.Name, l.Phone, l.Email ?? "", l.Source, l.SourceDetail ?? "", l.Status, l.ConsentStatus,
-                l.AssignedToEmployeeId is { } id ? owners.GetValueOrDefault(id) ?? "" : "Unassigned", Ist(l.LastContactAt), Ist(l.ConvertedAt), Clip(l.FirstMessage, 120)]);
+        {
+            notes.TryGetValue(l.Id, out var h);
+            fu.TryGetValue(l.Id, out var f);
+            res.Rows.Add([l.Id.ToString(Inv), Ist(l.CreatedAt), l.Name, l.Phone, l.Email ?? "", l.Source, l.SourceDetail ?? "", l.Status,
+                l.AssignedToEmployeeId is { } id ? owners.GetValueOrDefault(id) ?? "" : "Unassigned", Clip(l.Notes, 300),
+                h is null ? "" : $"{Clip(h.Note, 300)} ({Ist(h.CreatedAt)})", f is null ? "" : $"{f.Done} of {f.Total} done", Ist(l.LastContactAt), Ist(l.ConvertedAt), l.ConsentStatus, Clip(l.FirstMessage, 160)]);
+        }
         var won = leads.Count(l => l.Status == LeadStatuses.Converted);
         var unassigned = leads.Count(l => l.AssignedToEmployeeId is null);
         res.Summary =
@@ -105,20 +116,20 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
 
     // ---- Follow-ups -----------------------------------------------------------------------------
 
-    private async Task<ReportResponse> FollowUpsAsync(DateTime from, DateTime to)
+    private async Task<ReportResponse> FollowUpsAsync(DateTime from, DateTime to, long? ownerOnly)
     {
         var owners = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
-        var items = await db.FollowUps.AsNoTracking().Where(f => f.DueAt >= from && f.DueAt < to).OrderByDescending(f => f.DueAt).Take(MaxRows).ToListAsync();
+        var items = await db.FollowUps.AsNoTracking().Where(f => f.DueAt >= from && f.DueAt < to && (ownerOnly == null || f.AssignedToEmployeeId == ownerOnly)).OrderByDescending(f => f.DueAt).Take(MaxRows).ToListAsync();
         var leadIds = items.Select(i => i.LeadId).Distinct().ToList();
-        var leads = await db.Leads.AsNoTracking().Where(l => leadIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => new { l.Name, l.Phone });
+        var leads = await db.Leads.AsNoTracking().Where(l => leadIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => new { l.Name, l.Phone, l.Status });
         var today = FollowUpService.TodayStartUtc();
-        var res = new ReportResponse { Columns = ["Due", "Lead", "Phone", "Type", "Task", "Step", "Owner", "Status", "Completed", "Completed by", "Outcome", "Source", "Order"] };
+        var res = new ReportResponse { Columns = ["Due", "Lead", "Phone", "Type", "Task", "Notes", "Owner", "Status", "Completed", "Completed by", "Outcome / comment", "Lead status", "Step", "Source", "Order"] };
         foreach (var f in items)
         {
             leads.TryGetValue(f.LeadId, out var l);
             var status = f.Status == "pending" && f.DueAt < today ? "overdue" : f.Status;
-            res.Rows.Add([Ist(f.DueAt), l?.Name ?? "", l?.Phone ?? "", f.Type, f.Title, f.StepKey ?? "", f.AssignedToEmployeeId is { } id ? owners.GetValueOrDefault(id) ?? "" : "Unassigned",
-                status, Ist(f.CompletedAt), f.CompletedBy ?? "", Clip(f.Outcome, 120), f.Source, f.OrderId ?? ""]);
+            res.Rows.Add([Ist(f.DueAt), l?.Name ?? "", l?.Phone ?? "", f.Type, f.Title, Clip(f.Notes, 300), f.AssignedToEmployeeId is { } id ? owners.GetValueOrDefault(id) ?? "" : "Unassigned",
+                status, Ist(f.CompletedAt), f.CompletedBy ?? "", Clip(f.Outcome, 300), l?.Status ?? "", f.StepKey ?? "", f.Source, f.OrderId ?? ""]);
         }
         var done = items.Count(f => f.Status == "done");
         var sent = items.Count(f => f.Status == "done" && f.Outcome != null && f.Outcome.StartsWith("Sent"));
@@ -160,18 +171,22 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
 
     // ---- Tasks ----------------------------------------------------------------------------------
 
-    private async Task<ReportResponse> TasksAsync(DateTime from, DateTime to)
+    private async Task<ReportResponse> TasksAsync(DateTime from, DateTime to, long? ownerOnly)
     {
         var people = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
         var depts = await db.Departments.AsNoTracking().ToDictionaryAsync(d => d.Id, d => d.Name);
-        var tasks = await db.WorkTasks.AsNoTracking().Where(t => t.CreatedAt >= from && t.CreatedAt < to).OrderByDescending(t => t.CreatedAt).Take(MaxRows).ToListAsync();
+        var tasks = await db.WorkTasks.AsNoTracking().Where(t => t.CreatedAt >= from && t.CreatedAt < to && (ownerOnly == null || t.AssignedToEmployeeId == ownerOnly || t.CreatedByEmployeeId == ownerOnly)).OrderByDescending(t => t.CreatedAt).Take(MaxRows).ToListAsync();
+        var taskIds = tasks.Select(t => t.Id).ToList();
+        var checks = await db.TaskChecklistItems.AsNoTracking().Where(i => taskIds.Contains(i.TaskId)).GroupBy(i => i.TaskId).Select(g => new { g.Key, Total = g.Count(), Done = g.Count(i => i.Done) }).ToDictionaryAsync(x => x.Key);
+        var lastComment = (await db.TaskComments.AsNoTracking().Where(c => taskIds.Contains(c.TaskId)).OrderByDescending(c => c.CreatedAt).ToListAsync()).GroupBy(c => c.TaskId).ToDictionary(g => g.Key, g => g.First());
         var now = FollowUpService.Clock();
-        var res = new ReportResponse { Columns = ["Task ID", "Title", "Department", "Assigned to", "Created by", "Priority", "Status", "Created", "Due", "Completed", "Late"] };
+        var res = new ReportResponse { Columns = ["Task ID", "Title", "Department", "Assigned to", "Created by", "Priority", "Status", "Checklist", "Latest comment", "Created", "Due", "Completed", "Late"] };
         foreach (var t in tasks)
         {
             var late = t.Status != "done" && t.DueAt is { } d && d < now;
             res.Rows.Add([t.Id.ToString(Inv), t.Title, t.DepartmentId is { } di ? depts.GetValueOrDefault(di) ?? "" : "", t.AssignedToEmployeeId is { } a ? people.GetValueOrDefault(a) ?? "" : "Unassigned",
-                t.CreatedByName, t.Priority, t.Status, Ist(t.CreatedAt), Ist(t.DueAt), Ist(t.CompletedAt), late ? "Yes" : ""]);
+                t.CreatedByName, t.Priority, t.Status, checks.TryGetValue(t.Id, out var ck) ? $"{ck.Done} of {ck.Total}" : "",
+                lastComment.TryGetValue(t.Id, out var lc) ? $"{lc.Author}: {Clip(lc.Body, 300)}" : "", Ist(t.CreatedAt), Ist(t.DueAt), Ist(t.CompletedAt), late ? "Yes" : ""]);
         }
         var doneCount = tasks.Count(t => t.Status == "done");
         var overdue = tasks.Count(t => t.Status != "done" && t.DueAt is { } d && d < now);

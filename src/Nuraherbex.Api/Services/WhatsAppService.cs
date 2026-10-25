@@ -302,6 +302,7 @@ public partial class WhatsAppService(
         if (status == "failed" && s.TryGetProperty("errors", out var errs) && errs.GetArrayLength() > 0)
         {
             log.LogWarning("[WhatsApp] Message {Id} failed: {Err}", id, errs[0].GetRawText());
+            msg.RawPayload = errs[0].GetRawText();
             await NotifyFailureAsync("WhatsApp message could not be delivered", $"WhatsApp reported a delivery failure to +{msg.Phone}. Open the WhatsApp log to see which messages failed.");
         }
     }
@@ -552,13 +553,14 @@ public partial class WhatsAppService(
             {
                 Direction = "outbound", WaMessageId = waId ?? $"failed-{Guid.NewGuid():N}", Phone = NormalizePhone(phone),
                 Type = type, Body = logBody, Status = res.IsSuccessStatusCode ? "sent" : "failed", OrderId = orderId, LeadId = leadId, SentBy = sentBy ?? "system",
+                RawPayload = res.IsSuccessStatusCode ? null : (text.Length > 4000 ? text[..4000] : text),
             });
             await db.SaveChangesAsync();
             if (res.IsSuccessStatusCode) await RaiseLimitNoticesAsync(await GetLimitStatusAsync());
             else
             {
-                LastError = $"WhatsApp rejected the message (HTTP {(int)res.StatusCode}). The customer may need to message you first, or use an approved template.";
-                await NotifyFailureAsync("WhatsApp message failed to send", $"A message to +{NormalizePhone(phone)} was rejected by WhatsApp (HTTP {(int)res.StatusCode}). Open the WhatsApp log to see the details.");
+                LastError = WhatsAppErrors.Friendly(text, (int)res.StatusCode);
+                await NotifyFailureAsync("WhatsApp message failed to send", $"A message to +{NormalizePhone(phone)} was rejected: {LastError}");
             }
             return res.IsSuccessStatusCode;
         }

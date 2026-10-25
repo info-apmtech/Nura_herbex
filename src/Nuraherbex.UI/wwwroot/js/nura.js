@@ -76,6 +76,7 @@
       let ticking = false;
       const onScroll = () => {
         const y = window.scrollY;
+        const btt = document.querySelector('.nh-btt'); if (btt) btt.classList.toggle('is-show', y > 480);
         const total = document.documentElement.scrollHeight - window.innerHeight;
         const progress = total > 0 ? (y / total) * 100 : 0;
         if (!ticking) {
@@ -519,10 +520,14 @@
     scrollToTop(smooth) { window.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' }); },
 
     scrollToId(id, delay) {
-      setTimeout(() => {
+      // Retries briefly so links such as /#reviews work right after navigating from another page.
+      let tries = 0;
+      const attempt = () => {
         const el = document.getElementById(id);
         if (el) el.scrollIntoView({ behavior: 'smooth' });
-      }, delay || 0);
+        else if (++tries < 25) setTimeout(attempt, 100);
+      };
+      setTimeout(attempt, delay || 0);
     },
 
     // --- SEO / document head ---

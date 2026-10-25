@@ -12,14 +12,27 @@ namespace Nuraherbex.Api.Controllers;
 [Authorize(Roles = "admin,sales")]
 public class ReportController(ReportService reports, RightsService rights) : StaffControllerBase(rights)
 {
+    /// <summary>Who may open a report and whose records it covers. Administrators and people with full Reports access see everything;
+    /// everyone else gets the leads, follow-ups and tasks reports for the pages they work on, limited to their own records unless they manage that page.</summary>
+    private (bool Allowed, long? OwnerOnly, string? Scope) Access(string key)
+    {
+        if (IsAdmin || CanAll("reports")) return (true, null, null);
+        var page = key switch { "leads" => "leads", "followups" => "followups", "tasks" => "tasks", _ => null };
+        if (page is null || Level(page) < 1) return (false, null, null);
+        if (CanAll(page)) return (true, null, null);
+        return MyId is { } me ? (true, me, "Showing your own records only.") : (false, null, null);
+    }
+
     [HttpGet]
-    public ReportListResponse List() => new() { Success = true, Reports = ReportService.Catalog.ToList() };
+    public ReportListResponse List() => new() { Success = true, Reports = ReportService.Catalog.Where(r => Access(r.Key).Allowed).ToList() };
 
     /// <param name="from">First day, yyyy-MM-dd (default: 29 days ago).</param>
     /// <param name="to">Last day included, yyyy-MM-dd (default: today).</param>
     [HttpGet("{key}")]
     public async Task<IActionResult> Get(string key, [FromQuery] string? from, [FromQuery] string? to)
     {
+        var access = Access(key.ToLowerInvariant());
+        if (!access.Allowed) return StatusCode(403, new ApiResult { Success = false, Message = "You do not have access to this report." });
         var today = FollowUpService.IstNow.Date;
         var start = Parse(from) ?? today.AddDays(-29);
         var end = Parse(to) ?? today;
@@ -27,7 +40,8 @@ public class ReportController(ReportService reports, RightsService rights) : Sta
         if ((end - start).TotalDays > 800) return BadRequest(new ApiResult { Success = false, Message = "Choose a period of up to about two years." });
 
         var label = start == end ? start.ToString("d MMM yyyy", CultureInfo.InvariantCulture) : $"{start:d MMM yyyy} to {end:d MMM yyyy}";
-        var result = await reports.BuildAsync(key.ToLowerInvariant(), FollowUpService.ToUtc(start), FollowUpService.ToUtc(end.AddDays(1)), label);
+        var result = await reports.BuildAsync(key.ToLowerInvariant(), FollowUpService.ToUtc(start), FollowUpService.ToUtc(end.AddDays(1)), label, access.OwnerOnly);
+        if (result is not null) result.ScopeNote = access.Scope;
         return result is null ? NotFound(new ApiResult { Success = false, Message = "Unknown report." }) : Ok(result);
     }
 

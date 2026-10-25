@@ -569,6 +569,8 @@ public class WhatsAppMessageDto
     public string? MediaName { get; set; }
     /// <summary>Emoji reaction left on this message.</summary>
     public string? Reaction { get; set; }
+    /// <summary>Why WhatsApp refused or could not deliver this message, in plain words. Only set when it failed.</summary>
+    public string? Error { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

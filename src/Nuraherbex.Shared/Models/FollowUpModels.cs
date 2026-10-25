@@ -279,4 +279,6 @@ public class ReportResponse : ApiResult
     public List<ReportStat> Summary { get; set; } = new();
     /// <summary>True when more records matched than are shown; narrow the dates for the rest.</summary>
     public bool Truncated { get; set; }
+    /// <summary>Set when the report is limited to the signed-in person's own records.</summary>
+    public string? ScopeNote { get; set; }
 }

@@ -70,11 +70,12 @@ else
         new("batches", "Batch reports", "ShieldCheck", "STOREFRONT & SUPPORT"), new("formulation", "Formulation", "FlaskConical", "STOREFRONT & SUPPORT"), new("content", "Store content", "FileText", "STOREFRONT & SUPPORT"),
     };
     /// <summary>Only the pages this person's designation allows. People who only see their own records get "My" wording.</summary>
-    private NavItem[] Navigation => AllPages.Where(p => AdminAuth.Can(p.Id)).Select(p => p.Id switch
+    private NavItem[] Navigation => AllPages.Where(p => AdminAuth.Can(p.Id) || (p.Id == "reports" && (AdminAuth.Can("leads") || AdminAuth.Can("followups") || AdminAuth.Can("tasks")))).Select(p => p.Id switch
     {
         "crm" when !AdminAuth.CanAll("crm") => p with { Label = "My dashboard" },
         "followups" when !AdminAuth.CanAll("followups") => p with { Label = "My follow-ups" },
         "tasks" when !AdminAuth.CanAll("tasks") => p with { Label = "My tasks" },
+        "reports" when !AdminAuth.CanAll("reports") => p with { Label = "My reports" },
         _ => p,
     }).ToArray();
     private string PageName => Navigation.FirstOrDefault(n => n.Id == _activeTab)?.Label ?? "Workspace";

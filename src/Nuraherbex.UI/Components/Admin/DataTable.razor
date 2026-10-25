@@ -56,7 +56,7 @@
         <table class="dt-table">
             <thead>
                 <tr>
-                    <th class="dt-sn" scope="col">#</th>
+                    <th class="dt-sn" scope="col">S.No</th>
                     @foreach (var v in Vis)
                     {
                         var idx = v.Idx; var c = v.C;
@@ -235,11 +235,11 @@
         _menu = false; _exporting = true; _notice = null;
         StateHasChanged();
         var cols = Vis.Select(v => v.C).Where(c => c.Export).ToList();
-        var rows = Filtered.Select(i => (IReadOnlyList<string>)cols.Select(c => c.Text(i)).ToList()).ToList();
+        var rows = Filtered.Select((i, n) => (IReadOnlyList<string>)new[] { (n + 1).ToString() }.Concat(cols.Select(c => c.Text(i))).ToList()).ToList();
         var meta = new List<string>();
         if (ExportMeta is not null) meta.AddRange(ExportMeta);
         if (!string.IsNullOrWhiteSpace(_q)) meta.Add($"Filtered by: {_q.Trim()}");
-        var ok = await Exporter.RunAsync(format, FileName, Title, cols.Select(c => c.Header).ToList(), rows, meta);
+        var ok = await Exporter.RunAsync(format, FileName, Title, new[] { "S.No" }.Concat(cols.Select(c => c.Header)).ToList(), rows, meta);
         _notice = ok ? $"Exported {rows.Count:N0} record{(rows.Count == 1 ? "" : "s")} as {format.ToUpperInvariant()}." : "The export could not be created in this browser.";
         _exporting = false;
     }

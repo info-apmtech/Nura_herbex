@@ -17,10 +17,14 @@
 
 @if (IsPdp)
 {
-  <div class="sp-page text-left text-slate-200 min-h-screen relative overflow-hidden">
-    <div class="sp-container relative z-10">
-      <ShopPdpView Products="_products" />
+  <div class="nh-storefront pdp-shell">
+    <HomeNavbar />
+    <div class="sp-page text-left text-slate-200 min-h-screen relative overflow-hidden">
+      <div class="sp-container relative z-10">
+        <ShopPdpView Products="_products" />
+      </div>
     </div>
+    <HomeFooter />
   </div>
 }
 else

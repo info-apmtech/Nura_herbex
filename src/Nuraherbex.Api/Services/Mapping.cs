@@ -65,6 +65,7 @@ public static class Mapping
         SentBy = m.SentBy is null or "system" or "auto" ? null : m.SentBy,
         MediaUrl = signer is not null && (m.MediaId is not null || m.MediaFile is not null) ? signer.Url(m.Id) : null,
         MediaMime = m.MediaMime, MediaName = m.MediaName, Reaction = m.Reaction,
+        Error = m.Direction == "outbound" && m.Status == "failed" ? WhatsAppErrors.Friendly(m.RawPayload) : null,
     };
 
     /// <summary>Short text for lists and AI context when a message has no text of its own.</summary>

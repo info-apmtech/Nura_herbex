@@ -4,6 +4,7 @@
 <div class="fr">
     <div class="fr-bar">
         <p>@(AdminAuth.CanAll("followups") ? "How well the team follows up, and how the 15-day journey is performing." : "Your follow-up performance.")</p>
+        <a class="ld-btn" href="/admin/reports"><Icon Name="FileText" Size="14" /> Detailed list with comments</a>
         <div class="fr-range" role="group" aria-label="Report period">
             @foreach (var d in new[] { 7, 30, 90 })
             {

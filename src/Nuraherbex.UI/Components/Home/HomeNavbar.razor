@@ -61,64 +61,41 @@
     }
 </header>
 
-@* Slide-over Drawer Backdrop *@
+@* Slide-over navigation drawer *@
 @if (_isMenuOpen)
 {
-    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:999; backdrop-filter:blur(3px);" @onclick="CloseMenu"></div>
+    <div class="nhd-backdrop" @onclick="CloseMenu"></div>
 
-    <aside style="position:fixed; top:0; right:0; height:100%; width:82%; max-width:360px; background:#ffffff; z-index:1000; box-shadow:-6px 0 24px rgba(0,0,0,0.15); display:flex; flex-direction:column; justify-content:space-between;">
-        <div>
-            <div style="padding:20px; border-bottom:1px solid #f0ecf4; display:flex; align-items:center; justify-content:space-between; background:#faf8fc;">
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <img src="_content/Nuraherbex.UI/images/logo-mark.png" alt="Nura Herbex" style="width:32px; height:32px; object-fit:contain;" />
-                    <span style="font-weight:800; font-size:14px; letter-spacing:0.06em; color:#123d37;">NURA HERBEX</span>
-                </div>
-                <button @onclick="CloseMenu" aria-label="Close menu" style="background:none; border:none; cursor:pointer; padding:6px;">
-                    <Icon Name="X" Size="18" />
-                </button>
+    <aside class="nhd" role="dialog" aria-modal="true" aria-label="Site navigation">
+        <div class="nhd-top">
+            <div class="nhd-brand">
+                <img src="_content/Nuraherbex.UI/images/logo-mark.png" alt="" />
+                <span><strong>NURA HERBEX</strong><small>Ayurvedic Wellness</small></span>
             </div>
-
-            <nav style="padding:20px 16px; display:flex; flex-direction:column; gap:6px;">
-                <button @onclick="GoHome" style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
-                    <span>Home</span>
-                    <Icon Name="ArrowRight" Size="16" />
-                </button>
-                <button @onclick='() => GoPage("/shop")' style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
-                    <span>All Products</span>
-                    <Icon Name="ArrowRight" Size="16" />
-                </button>
-                <button @onclick='() => GoScroll("featured-products")' style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
-                    <span>GUT 365 &amp; STAMIX</span>
-                    <Icon Name="ArrowRight" Size="16" />
-                </button>
-                <button @onclick='() => GoScroll("wellness-goals")' style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
-                    <span>Wellness Goals</span>
-                    <Icon Name="ArrowRight" Size="16" />
-                </button>
-                <button @onclick='() => GoPage("/our-story")' style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
-                    <span>Our Story</span>
-                    <Icon Name="ArrowRight" Size="16" />
-                </button>
-                <button @onclick='() => GoPage("/formulation")' style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
-                    <span>Formulation</span>
-                    <Icon Name="ArrowRight" Size="16" />
-                </button>
-                <button @onclick='() => GoPage("/track")' style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
-                    <span>Track Order</span>
-                    <Icon Name="ArrowRight" Size="16" />
-                </button>
-                <button @onclick='() => GoPage("/account")' style="width:100%; text-align:left; padding:12px 14px; border:none; background:none; border-radius:10px; font-weight:600; font-size:15px; cursor:pointer; display:flex; justify-content:space-between;">
-                    <span>My Account</span>
-                    <Icon Name="ArrowRight" Size="16" />
-                </button>
-            </nav>
+            <button type="button" class="nhd-close" @onclick="CloseMenu" aria-label="Close menu"><Icon Name="X" Size="18" /></button>
         </div>
 
-        <div style="padding:20px; border-top:1px solid #f0ecf4; background:#faf8fc;">
-            <button @onclick='() => { CloseMenu(); Cart.SetOpen(true); }' style="width:100%; background:#732dbd; color:#fff; font-weight:800; font-size:13px; text-transform:uppercase; letter-spacing:0.08em; padding:14px; border-radius:9999px; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
-                <Icon Name="ShoppingBag" Size="16" />
-                <span>View Cart (@Cart.ItemCount)</span>
+        <nav class="nhd-body" aria-label="Main">
+            @foreach (var group in MenuGroups)
+            {
+                <span class="nhd-label">@group.Title</span>
+                @foreach (var item in group.Items)
+                {
+                    var entry = item;
+                    <button type="button" class="nhd-item @(IsActive(entry) ? "is-active" : "")" @onclick="() => Go(entry)">
+                        <span class="nhd-ic"><Icon Name="@entry.Icon" Size="18" /></span>
+                        <span class="nhd-tx"><strong>@entry.Title</strong><small>@entry.Text</small></span>
+                        <Icon Name="ArrowRight" Size="15" Class="nhd-arrow" />
+                    </button>
+                }
+            }
+        </nav>
+
+        <div class="nhd-foot">
+            <button type="button" class="nhd-cart" @onclick='() => { CloseMenu(); Cart.SetOpen(true); }'>
+                <Icon Name="ShoppingBag" Size="17" /> <span>View cart (@Cart.ItemCount)</span>
             </button>
+            <p>Need help? <a href="mailto:@SiteConfig.ContactEmail">@SiteConfig.ContactEmail</a></p>
         </div>
     </aside>
 }
@@ -158,6 +135,47 @@
     {
         CloseMenu();
         await Browser.ScrollToIdAsync(id);
+    }
+
+    private sealed record MenuItem(string Icon, string Title, string Text, string Url);
+    private sealed record MenuGroup(string Title, MenuItem[] Items);
+
+    private static readonly MenuGroup[] MenuGroups =
+    [
+        new("Discover",
+        [
+            new("Sparkles", "Home", "Back to the front page", "/"),
+            new("ShoppingBag", "Shop all products", "GUT 365 and STAMIX", "/shop"),
+            new("Leaf", "Our story", "Ancient wisdom for modern living", "/our-story"),
+            new("Clock", "Daily ritual", "How to take it, step by step", "/#stamina-power"),
+        ]),
+        new("Learn",
+        [
+            new("FlaskConical", "Ingredient matrix", "Every botanical and its amount", "/formulation#ingredient-matrix"),
+            new("ShieldCheck", "Quality testing", "Batch lab reports and COA", "/quality-reports"),
+            new("Star", "Customer reviews", "What our customers say", "/#reviews"),
+            new("MessageSquare", "FAQs", "Quick answers", "/#faq"),
+        ]),
+        new("Your account",
+        [
+            new("Truck", "Track order", "Follow your parcel live", "/track"),
+            new("User", "My account", "Orders, profile and reviews", "/account"),
+        ]),
+    ];
+
+    private bool IsActive(MenuItem item)
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').ToLowerInvariant();
+        var target = item.Url.Split('#')[0].TrimEnd('/').ToLowerInvariant();
+        if (item.Url.Contains('#')) return false;
+        return target.Length == 0 ? path.Length == 0 : path == target || path.StartsWith(target + "/", StringComparison.Ordinal);
+    }
+
+    private async Task Go(MenuItem item)
+    {
+        CloseMenu();
+        Nav.NavigateTo(item.Url);
+        if (!item.Url.Contains('#')) await Browser.ScrollToTopAsync();
     }
 
     private void HandleSearchKey(KeyboardEventArgs e)

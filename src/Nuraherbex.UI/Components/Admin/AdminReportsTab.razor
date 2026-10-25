@@ -41,6 +41,7 @@
     @if (_report is { } rep)
     {
         <div class="rp-title"><h4>@rep.Title</h4><span>@rep.Period</span></div>
+        @if (!string.IsNullOrEmpty(rep.ScopeNote)) { <div class="em-note ok" role="status"><Icon Name="User" Size="15" /><span>@rep.ScopeNote</span></div> }
 
         <div class="rp-stats">
             @foreach (var s in rep.Summary)
@@ -150,6 +151,7 @@
     {
         var res = await Api.AdminReportsAsync();
         if (res.Success) _catalog = res.Reports;
+        if (_catalog.Count > 0 && _catalog.All(c => c.Key != _key)) _key = _catalog[0].Key;
         await SetRangeAsync("30");
     }
 

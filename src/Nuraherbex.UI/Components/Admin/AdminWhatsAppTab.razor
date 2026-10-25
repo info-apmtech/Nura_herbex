@@ -23,13 +23,111 @@
     @if (!string.IsNullOrEmpty(_loadError)) { <div class="em-note bad" role="alert"><Icon Name="AlertCircle" Size="15" /><span>@_loadError</span></div> }
 
     <nav class="wl-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected="@(_tab == "chat")" class="@(_tab == "chat" ? "is-on" : "")" @onclick='() => _tab = "chat"'>Conversations <small>@Convs.Count.ToString("N0")</small></button>
         <button type="button" role="tab" aria-selected="@(_tab == "log")" class="@(_tab == "log" ? "is-on" : "")" @onclick='() => _tab = "log"'>Message log <small>@_messages.Count.ToString("N0")</small></button>
         <button type="button" role="tab" aria-selected="@(_tab == "send")" class="@(_tab == "send" ? "is-on" : "")" @onclick='() => _tab = "send"'>Send a message</button>
         <button type="button" role="tab" aria-selected="@(_tab == "usage")" class="@(_tab == "usage" ? "is-on" : "")" @onclick='() => _tab = "usage"'>Usage &amp; budget</button>
         <button type="button" role="tab" aria-selected="@(_tab == "setup")" class="@(_tab == "setup" ? "is-on" : "")" @onclick='() => _tab = "setup"'>Connection setup</button>
     </nav>
 
-    @if (_tab == "log")
+    @if (_tab == "chat")
+    {
+        <section class="@($"wc {(_selPhone.Length > 0 ? "has-sel" : "")}")" aria-label="Conversations">
+            <aside class="wc-list">
+                <div class="wc-search"><Icon Name="Search" Size="15" /><input type="search" placeholder="Search name or number" aria-label="Search conversations" @bind="_chatQ" @bind:event="oninput" /></div>
+                <ul class="wc-convs">
+                    @foreach (var c in FilteredConvs)
+                    {
+                        var conv = c;
+                        var w = WindowInfo(conv.LastInbound);
+                        <li>
+                            <button type="button" class="@($"wc-conv {(_selPhone == conv.Phone ? "is-sel" : "")}")" @onclick="() => Select(conv.Phone)">
+                                <i class="wc-av">@InitialOf(conv.Name)</i>
+                                <span class="wc-conv-main">
+                                    <span class="wc-conv-top"><b>@conv.Name</b><small>@ShortTime(conv.Last.CreatedAt)</small></span>
+                                    <span class="wc-conv-prev">
+                                        @if (conv.Last.Direction == "outbound") { <em class="@($"wc-tick {TickClass(conv.Last.Status)}")">@Tick(conv.Last.Status)</em> }
+                                        @MessageText(conv.Last)
+                                    </span>
+                                </span>
+                                <span class="@($"wc-dot {(w.Open ? "on" : "")}")" title="@(w.Open ? "Reply window open" : "Reply window closed")"></span>
+                            </button>
+                        </li>
+                    }
+                    @if (!FilteredConvs.Any()) { <li class="wc-none">@(_messages.Count == 0 ? "No conversations yet. Customer messages will appear here." : "No conversation matches your search.")</li> }
+                </ul>
+            </aside>
+
+            <div class="wc-thread">
+                @if (SelectedConv is { } sel)
+                {
+                    var win = WindowInfo(sel.LastInbound);
+                    <header class="wc-thead">
+                        <button type="button" class="wc-back" aria-label="Back to conversations" @onclick='() => _selPhone = ""'><Icon Name="ArrowLeft" Size="18" /></button>
+                        <i class="wc-av lg">@InitialOf(sel.Name)</i>
+                        <div class="wc-who"><b>@sel.Name</b><small>+@sel.Phone · @sel.Count messages</small></div>
+                        <span class="@($"wc-window {(win.Open ? "open" : "closed")}")"><Icon Name="Clock" Size="13" /> @win.Text</span>
+                    </header>
+
+                    <div class="wc-msgs">
+                        @{ var thread = ThreadFor(sel.Phone); }
+                        @for (var i = 0; i < thread.Count; i++)
+                        {
+                            var tm = thread[i];
+                            var older = i + 1 < thread.Count ? thread[i + 1] : null;
+                            <div @key="tm.Id" class="@($"wc-row {(tm.Direction == "inbound" ? "in" : "out")}")">
+                                <div class="@($"wc-bubble {(tm.Status == "failed" ? "failed" : "")}")">
+                                    @if (tm.MediaUrl is not null) { <a href="@Api.Url(tm.MediaUrl)" target="_blank" rel="noopener" class="wl-media">@MediaIcon(tm.Type) @(string.IsNullOrWhiteSpace(tm.MediaName) ? MediaLabel(tm.Type) : tm.MediaName)</a> }
+                                    @if (!string.IsNullOrEmpty(tm.Body) || tm.MediaUrl is null) { <p>@(string.IsNullOrEmpty(tm.Body) ? $"[{MediaLabel(tm.Type)}]" : tm.Body)</p> }
+                                    <span class="wc-meta">
+                                        @if (tm.Direction == "outbound" && !string.IsNullOrEmpty(SentBy(tm))) { <small>@SentBy(tm)</small> }
+                                        <small>@tm.CreatedAt.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture)</small>
+                                        @if (tm.Direction == "outbound") { <em class="@($"wc-tick {TickClass(tm.Status)}")" title="@tm.Status">@Tick(tm.Status)</em> }
+                                    </span>
+                                    @if (tm.Status == "failed" && !string.IsNullOrEmpty(tm.Error)) { <span class="wc-fail"><Icon Name="AlertCircle" Size="13" /> @tm.Error</span> }
+                                </div>
+                            </div>
+                            @if (older is null || older.CreatedAt.ToLocalTime().Date != tm.CreatedAt.ToLocalTime().Date)
+                            {
+                                <div class="wc-day"><span>@DayLabel(tm.CreatedAt)</span></div>
+                            }
+                        }
+                    </div>
+
+                    <footer class="wc-compose">
+                        @if (!win.Open && !_force)
+                        {
+                            <div class="wc-lock">
+                                <Icon Name="Lock" Size="18" />
+                                <div>
+                                    <b>The 24-hour reply window is closed</b>
+                                    <p>WhatsApp only allows free-text replies within 24 hours of the customer's last message. @(sel.LastInbound is null ? "This contact has not written to you yet." : $"{sel.Name} last wrote on {sel.LastInbound.Value.ToLocalTime().ToString("dd MMM, HH:mm", CultureInfo.InvariantCulture)}.") Send an approved template from a follow-up, or wait for them to message you.</p>
+                                    <button type="button" class="wc-link" @onclick="() => _force = true">Try sending anyway</button>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            @if (!string.IsNullOrEmpty(_replyError)) { <div class="wc-err" role="alert"><Icon Name="AlertCircle" Size="15" /><span>@_replyError</span></div> }
+                            <form class="wc-form" @onsubmit="SendReplyAsync" @onsubmit:preventDefault>
+                                <textarea rows="2" placeholder="Type a reply…" aria-label="Reply" @bind="_reply" @bind:event="oninput"></textarea>
+                                <button type="submit" class="wc-send" disabled="@(_replying || string.IsNullOrWhiteSpace(_reply))" aria-label="Send reply"><Icon Name="@(_replying ? "RefreshCw" : "Send")" Size="18" Class="@(_replying ? "animate-spin" : "")" /></button>
+                            </form>
+                        }
+                    </footer>
+                }
+                else
+                {
+                    <div class="wc-empty">
+                        <span><Icon Name="MessageCircle" Size="30" /></span>
+                        <h4>Select a conversation</h4>
+                        <p>Choose a customer on the left to read the full chat and reply. A green dot means the 24-hour reply window is still open.</p>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+    else if (_tab == "log")
     {
         <div class="wl-kpis">
             <div class="wl-kpi"><span>Total messages</span><b>@_messages.Count.ToString("N0")</b><small>latest @_messages.Count.ToString("N0") loaded</small></div>
@@ -56,6 +154,11 @@
                     <label>Phone number <small>with country code</small><input type="tel" required placeholder="+91 98765 43210" @bind="_send.Phone" @bind:event="oninput" /></label>
                     <label>Order ID <small>optional</small><input type="text" placeholder="NH-123456" @bind="_orderId" @bind:event="oninput" /></label>
                 </div>
+                @{ var sw = WindowInfo(LastInboundFor(_send.Phone)); }
+                @if (Last10(_send.Phone).Length >= 7)
+                {
+                    <div class="@($"wc-window block {(sw.Open ? "open" : "closed")}")"><Icon Name="Clock" Size="14" /> <span>@sw.Text@(sw.Open ? "" : ". WhatsApp will refuse free text to this number; use an approved template from a follow-up instead.")</span></div>
+                }
                 <label>Message<textarea rows="5" required placeholder="Type your message…" @bind="_send.Text" @bind:event="oninput"></textarea></label>
                 <div class="wl-form-foot"><span>@(_send.Text?.Length ?? 0) characters</span><button type="submit" class="ld-btn primary" disabled="@_sending"><Icon Name="Send" Size="14" /> @(_sending ? "Sending…" : "Send message")</button></div>
             </form>
@@ -98,6 +201,7 @@
                     @if (m.MediaUrl is not null) { <a href="@Api.Url(m.MediaUrl)" target="_blank" rel="noopener" class="wl-media">@MediaIcon(m.Type) @(string.IsNullOrWhiteSpace(m.MediaName) ? MediaLabel(m.Type) : m.MediaName) <small>Open</small></a> }
                     <p>@(string.IsNullOrEmpty(m.Body) ? (m.MediaUrl is not null ? "" : $"[{MediaLabel(m.Type)}]") : m.Body)</p>
                 </div>
+                @if (m.Status == "failed" && !string.IsNullOrEmpty(m.Error)) { <div class="wc-err" role="alert"><Icon Name="AlertCircle" Size="15" /><span><b>Why it failed:</b> @m.Error</span></div> }
                 <dl class="wl-facts">
                     <div><dt>Contact</dt><dd>@(string.IsNullOrEmpty(m.ProfileName) ? "Unknown" : m.ProfileName)</dd></div>
                     <div><dt>Phone</dt><dd>+@m.Phone</dd></div>
@@ -119,7 +223,7 @@
     private List<WhatsAppMessageDto> _messages = new();
     private IReadOnlyList<WhatsAppMessageDto> _view = Array.Empty<WhatsAppMessageDto>();
     private WhatsAppMessageDto? _detail;
-    private string _tab = "log";
+    private string _tab = "chat";
     private bool _loading = true;
     private string? _loadError;
 
@@ -127,6 +231,77 @@
     private string _orderId = "";
     private bool _sending, _sendOk, _copied;
     private string? _sendMessage;
+
+    // ---- conversations (WhatsApp-style view) ----
+    private string _chatQ = "", _selPhone = "", _reply = "";
+    private bool _force, _replying;
+    private string? _replyError;
+    private static readonly TimeSpan WindowLen = TimeSpan.FromHours(24);
+
+    private sealed record Conv(string Phone, string Name, WhatsAppMessageDto Last, DateTime? LastInbound, int Count);
+
+    private List<Conv> Convs => _messages
+        .GroupBy(m => m.Phone)
+        .Select(g =>
+        {
+            var last = g.OrderByDescending(m => m.CreatedAt).First();
+            var name = g.Select(m => m.ProfileName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? "+" + g.Key;
+            DateTime? lastIn = g.Where(m => m.Direction == "inbound").Select(m => (DateTime?)m.CreatedAt).Max();
+            return new Conv(g.Key, name, last, lastIn, g.Count());
+        })
+        .OrderByDescending(c => c.Last.CreatedAt).ToList();
+
+    private IEnumerable<Conv> FilteredConvs
+    {
+        get
+        {
+            var q = _chatQ.Trim();
+            if (q.Length == 0) return Convs;
+            var digits = new string(q.Where(char.IsDigit).ToArray());
+            return Convs.Where(c => c.Name.Contains(q, StringComparison.OrdinalIgnoreCase) || (digits.Length > 0 && c.Phone.Contains(digits)));
+        }
+    }
+
+    private Conv? SelectedConv => _selPhone.Length == 0 ? null : Convs.FirstOrDefault(c => c.Phone == _selPhone);
+
+    /// <summary>Newest first, because the thread is rendered bottom-up so it opens at the latest message.</summary>
+    private List<WhatsAppMessageDto> ThreadFor(string phone) => _messages.Where(m => m.Phone == phone).OrderByDescending(m => m.CreatedAt).ThenByDescending(m => m.Id).Take(300).ToList();
+
+    private void Select(string phone) { _selPhone = phone; _reply = ""; _replyError = null; _force = false; }
+
+    private static string Last10(string? p) { var d = new string((p ?? "").Where(char.IsDigit).ToArray()); return d.Length > 10 ? d[^10..] : d; }
+
+    private DateTime? LastInboundFor(string? phone)
+    {
+        var k = Last10(phone);
+        if (k.Length < 7) return null;
+        return _messages.Where(m => m.Direction == "inbound" && Last10(m.Phone) == k).Select(m => (DateTime?)m.CreatedAt).Max();
+    }
+
+    /// <summary>WhatsApp allows free-text replies only during the 24 hours after the customer's last message.</summary>
+    private static (bool Open, string Text) WindowInfo(DateTime? lastInbound)
+    {
+        if (lastInbound is null) return (false, "No customer message yet");
+        var left = WindowLen - (DateTime.UtcNow - lastInbound.Value.ToUniversalTime());
+        if (left <= TimeSpan.Zero) return (false, "Reply window closed");
+        return (true, left.TotalHours >= 1 ? $"Reply window open · {(int)left.TotalHours}h {left.Minutes}m left" : $"Reply window open · {Math.Max(1, left.Minutes)}m left");
+    }
+
+    private static string InitialOf(string name) { var t = name.TrimStart('+', ' '); return t.Length == 0 ? "?" : t[..1].ToUpperInvariant(); }
+    private static string ShortTime(DateTime utc) { var l = utc.ToLocalTime(); return l.Date == DateTime.Now.Date ? l.ToString("HH:mm", CultureInfo.InvariantCulture) : l.Date == DateTime.Now.Date.AddDays(-1) ? "Yesterday" : l.ToString("dd MMM", CultureInfo.InvariantCulture); }
+    private static string DayLabel(DateTime utc) { var l = utc.ToLocalTime(); return l.Date == DateTime.Now.Date ? "Today" : l.Date == DateTime.Now.Date.AddDays(-1) ? "Yesterday" : l.ToString("dd MMMM yyyy", CultureInfo.InvariantCulture); }
+    private static string Tick(string? s) => s switch { "failed" => "!", "delivered" or "read" => "✓✓", _ => "✓" };
+    private static string TickClass(string? s) => s switch { "failed" => "bad", "read" => "read", _ => "" };
+
+    private async Task SendReplyAsync()
+    {
+        if (_replying || _selPhone.Length == 0 || string.IsNullOrWhiteSpace(_reply)) return;
+        _replying = true; _replyError = null;
+        var res = await Api.AdminWhatsAppSendAsync(new WhatsAppSendRequest { Phone = _selPhone, Text = _reply.Trim() });
+        _replying = false;
+        if (res.Success) _reply = ""; else _replyError = res.Message ?? "The message could not be sent.";
+        await RefreshAsync(false);
+    }
 
     private int Received => _messages.Count(m => m.Direction == "inbound");
     private int SentCount => _messages.Count(m => m.Direction == "outbound" && m.Status != "failed");

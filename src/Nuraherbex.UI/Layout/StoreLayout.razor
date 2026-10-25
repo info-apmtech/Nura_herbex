@@ -38,6 +38,7 @@
 
     <CartDrawer />
     <Modals />
+    <BackToTop />
     <StamixAssistant />
 </div>
 
@@ -56,7 +57,8 @@
         get
         {
             var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').ToLowerInvariant();
-            return path is "/shop" or "/store" or "/products" or "/product";
+            return path is "/shop" or "/store" or "/products" or "/product" or "/products/stamix" or "/product/stamix" or "/shop/stamix"
+                || path.StartsWith("/catalog/", StringComparison.Ordinal);
         }
     }
 
@@ -74,7 +76,18 @@
         }
     }
 
-    private bool IsStorefront => IsHome || IsStorefrontCatalog || IsCheckout || IsPolicyPage || IsAccountPage;
+    // Pages that bring their own navbar and footer (the current navigation) instead of the legacy header.
+    private bool IsStandalonePage
+    {
+        get
+        {
+            var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').ToLowerInvariant();
+            return path is "/our-story" or "/about" or "/verify" or "/verify-product" or "/verify-batch"
+                || path.StartsWith("/quality-reports", StringComparison.Ordinal) || path.StartsWith("/trust-passport", StringComparison.Ordinal);
+        }
+    }
+
+    private bool IsStorefront => IsHome || IsStorefrontCatalog || IsCheckout || IsPolicyPage || IsAccountPage || IsStandalonePage;
 
     private bool IsAccountPage
     {
