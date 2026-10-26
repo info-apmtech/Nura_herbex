@@ -1,3 +1,4 @@
+@inject ContentState Content
 @inject CartState Cart
 @inject NavigationManager Nav
 @inject BrowserInterop Browser
@@ -84,9 +85,9 @@ else
         <div class="nh-shop-hero-inner">
             <div class="nh-shop-hero-content">
                 <nav class="nh-shop-hero-crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>›</span><strong>Shop</strong></nav>
-                <span class="nh-shop-hero-kicker">NATURAL WELLNESS FOR A BRIGHTER YOU</span>
+                <span class="nh-shop-hero-kicker">@Content.P("shop.hero.kicker")</span>
                 <h1 class="nh-shop-hero-title">Shop <em>all</em><br />products</h1>
-                <p class="nh-shop-hero-sub">Whole-botanical, plant-powered formulas, batch verified and made to be part of your daily ritual.</p>
+                <p class="nh-shop-hero-sub">@Content.P("shop.hero.sub")</p>
                 <ul class="nh-shop-hero-chips" aria-label="Highlights">
                     <li><Icon Name="Leaf" Size="14" /> 100% botanical</li>
                     <li><Icon Name="ShieldCheck" Size="14" /> Lab tested</li>
@@ -95,7 +96,7 @@ else
             </div>
 
             <div class="nh-shop-hero-visual">
-                <img src="_content/Nuraherbex.UI/images/shop-blossom-sprig.png" alt="Natural botanical flowers" class="nh-shop-hero-sprig" />
+                <img src="@Content.P("shop.hero.image")" alt="Natural botanical flowers" class="nh-shop-hero-sprig" />
                 <div class="nh-shop-hero-script">
                     <span>Better</span><br />
                     <span>Habits</span><br />
@@ -203,17 +204,17 @@ else
                         <div class="nh-shop-card" @key="prod.Id">
                             
                             @* Product Image with Optional Bestseller Badge *@
-                            <div class="nh-shop-card-img-wrap">
+                            <a class="nh-shop-card-img-wrap" href="@("/catalog/" + Uri.EscapeDataString(prod.Id))" aria-label="View details of @prod.Name">
                                 @if (!string.IsNullOrEmpty(prod.Badge))
                                 {
                                     <span class="nh-shop-bestseller-badge">@prod.Badge</span>
                                 }
                                 <img src="@prod.ImageUrl" alt="@prod.Name jar" class="nh-shop-card-img" />
-                            </div>
+                            </a>
 
                             @* Product Card Details *@
                             <div class="nh-shop-card-body">
-                                <h3 class="nh-shop-card-name">@prod.Name</h3>
+                                <h3 class="nh-shop-card-name"><a href="@("/catalog/" + Uri.EscapeDataString(prod.Id))">@prod.Name</a></h3>
                                 <p class="nh-shop-card-sub">@prod.Subtitle</p>
                                 <p class="nh-shop-card-desc">@prod.Description</p>
 
@@ -236,6 +237,7 @@ else
                                     <span class="nh-shop-price">₹@prod.Price.ToString("N0")</span>
                                 </div>
 
+                                <a class="nh-shop-view-details" href="@("/catalog/" + Uri.EscapeDataString(prod.Id))">View details <span aria-hidden="true">→</span></a>
                                 @* Add to Cart Button (Solid or Outline based on design) *@
                                 <button @onclick="() => HandleAddToCart(prod)"
                                         class="@(prod.IsSolidButton ? "nh-shop-btn-solid" : "nh-shop-btn-outline")"

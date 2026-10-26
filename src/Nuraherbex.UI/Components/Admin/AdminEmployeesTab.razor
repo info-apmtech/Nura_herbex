@@ -75,16 +75,16 @@
         <div class="em-scroll">
             <table class="em-table">
                 <thead>
-                    <tr><th class="sn">S.No</th><th>Employee</th><th>Designation</th><th>Department</th><th>Status</th><th class="num">Open leads</th><th class="num">Open tasks</th><th>Last sign-in</th><th></th></tr>
+                    <tr><th class="sn">S.No</th><th>Employee</th><th>Designation</th><th>Department</th><th>Status</th><th class="num">Open leads</th><th class="num">Open tasks</th><th>WhatsApp</th><th>Last sign-in</th><th></th></tr>
                 </thead>
                 <tbody>
                     @if (_loading)
                     {
-                        <tr><td colspan="9" class="em-empty">Loading team…</td></tr>
+                        <tr><td colspan="10" class="em-empty">Loading team…</td></tr>
                     }
                     else if (_employees.Count == 0)
                     {
-                        <tr><td colspan="9" class="em-empty"><strong>No employees yet</strong>Add your first sales executive so new leads can be assigned and followed up.</td></tr>
+                        <tr><td colspan="10" class="em-empty"><strong>No employees yet</strong>Add your first sales executive so new leads can be assigned and followed up.</td></tr>
                     }
                     @{ var sn = (_page - 1) * _size; }
                     @foreach (var e in _employees.Skip((_page - 1) * _size).Take(_size))
@@ -102,6 +102,16 @@
                             <td><span class="@($"ld-pill {(emp.IsActive ? "converted" : "not-interested")}")">@(emp.IsActive ? "Active" : "Inactive")</span></td>
                             <td class="num">@emp.OpenLeads</td>
                             <td class="num">@emp.OpenTasks</td>
+                            <td>
+                                @if (emp.IsActive && emp.Role == "sales")
+                                {
+                                    <button type="button" class="@($"wa-toggle {(emp.WhatsAppActive ? "is-on" : "")}")" role="switch" aria-checked="@emp.WhatsAppActive" disabled="@(_waBusy == emp.Id)"
+                                            title="@(emp.WhatsAppActive ? "Receives new WhatsApp leads. Click to switch off and move their pending leads." : emp.IsOnline ? "Click to let this person receive new WhatsApp leads." : "Not signed in: they can switch it on after signing in.")" @onclick="() => ToggleWhatsAppAsync(emp)">
+                                        <span class="wa-toggle-track"><i></i></span><span class="wa-toggle-label">@(emp.WhatsAppActive ? "Active" : "Off")</span>
+                                    </button>
+                                }
+                                else { <span class="fu-hint">â€”</span> }
+                            </td>
                             <td><i class="@($"tk-dot {(emp.IsOnline ? "on" : "")}")"></i>@(emp.IsOnline ? "Online · " : "")@(emp.LastLoginAt is { } t ? AdminFmt.DateTimeShort(t) : "Never")</td>
                             <td class="em-actions">
                                 @if (_removingId == emp.Id)
@@ -151,6 +161,17 @@
     private EmployeeSaveRequest? _form;
     private long? _editingId;
     private long? _removingId;
+    private long? _waBusy;
+
+    /// <summary>Switches a person's WhatsApp lead intake. Switching off moves their not-yet-started leads to other active people.</summary>
+    private async Task ToggleWhatsAppAsync(EmployeeDto emp)
+    {
+        _waBusy = emp.Id;
+        var res = await Api.AdminSetEmployeeWhatsAppAsync(emp.Id, !emp.WhatsAppActive);
+        Say(res.Message, res.Success);
+        await LoadAsync();
+        _waBusy = null;
+    }
     private bool _autoAssign = true;
     private bool _loading = true;
     private bool _busy;

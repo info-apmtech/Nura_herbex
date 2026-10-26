@@ -11,6 +11,9 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
 
     private static readonly string[] OpenStatuses = [TaskStatuses.Todo, TaskStatuses.InProgress, TaskStatuses.Blocked];
 
+    /// <summary>Finished tasks stay visible (Done chip, Done column of the board) for this many days. One number, so the chip and the board always agree.</summary>
+    public const int DoneWindowDays = 30;
+
     // ---------------------------------------------------------------------
     // Visibility and permissions
     // ---------------------------------------------------------------------
@@ -57,41 +60,46 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
         var now = DateTime.UtcNow;
         var todayStart = FollowUpService.TodayStartUtc();
         var tomorrow = todayStart.AddDays(1);
+        var doneSince = now.AddDays(-DoneWindowDays);
         var open = visible.Where(t => t.Status != TaskStatuses.Done);
 
-        var counts = new TaskCounts
-        {
-            Open = await open.CountAsync(),
-            Overdue = await open.CountAsync(t => t.DueAt != null && t.DueAt < now),
-            DueToday = await open.CountAsync(t => t.DueAt != null && t.DueAt >= todayStart && t.DueAt < tomorrow),
-            Done = await visible.CountAsync(t => t.Status == TaskStatuses.Done && t.CompletedAt >= now.AddDays(-30)),
-            Mine = await open.CountAsync(t => t.AssignedToEmployeeId == c.EmployeeId),
-            Unassigned = await open.CountAsync(t => t.AssignedToEmployeeId == null),
-        };
-
+        // The filters the person picked (who, department, priority, search...) apply to the counts too, so a chip always matches what its list shows.
+        // Only the status scope is left out: that is what the chips themselves switch between.
         var q = visible;
-        switch (f.Scope)
-        {
-            case "overdue": q = q.Where(t => t.Status != TaskStatuses.Done && t.DueAt != null && t.DueAt < now); break;
-            case "today": q = q.Where(t => t.Status != TaskStatuses.Done && t.DueAt != null && t.DueAt >= todayStart && t.DueAt < tomorrow); break;
-            case "done": q = q.Where(t => t.Status == TaskStatuses.Done && t.CompletedAt >= now.AddDays(-30)); break;
-            case "board": q = q.Where(t => t.Status != TaskStatuses.Done || t.CompletedAt >= now.AddDays(-14)); break;
-            case "all": break;
-            default: q = q.Where(t => t.Status != TaskStatuses.Done); break;
-        }
         if (f.Assignee == "me") q = q.Where(t => t.AssignedToEmployeeId == c.EmployeeId);
         else if (f.Assignee == "unassigned") q = q.Where(t => t.AssignedToEmployeeId == null);
         else if (long.TryParse(f.Assignee, out var aid)) q = q.Where(t => t.AssignedToEmployeeId == aid);
         if (f.CreatedByMe) q = q.Where(t => t.CreatedByEmployeeId == c.EmployeeId);
         if (f.DepartmentId is { } dep) q = q.Where(t => t.DepartmentId == dep);
         if (!string.IsNullOrWhiteSpace(f.Priority)) q = q.Where(t => t.Priority == f.Priority);
-        if (!string.IsNullOrWhiteSpace(f.Status)) q = q.Where(t => t.Status == f.Status);
         if (f.LeadId is { } lead) q = q.Where(t => t.LeadId == lead);
         if (!string.IsNullOrWhiteSpace(f.Search))
         {
             var s = f.Search.Trim();
             q = q.Where(t => t.Title.Contains(s) || (t.Tags != null && t.Tags.Contains(s)) || (t.Description != null && t.Description.Contains(s)));
         }
+
+        var qOpen = q.Where(t => t.Status != TaskStatuses.Done);
+        var counts = new TaskCounts
+        {
+            Open = await qOpen.CountAsync(),
+            Overdue = await qOpen.CountAsync(t => t.DueAt != null && t.DueAt < now),
+            DueToday = await qOpen.CountAsync(t => t.DueAt != null && t.DueAt >= todayStart && t.DueAt < tomorrow),
+            Done = await q.CountAsync(t => t.Status == TaskStatuses.Done && t.CompletedAt >= doneSince),
+            Mine = await open.CountAsync(t => t.AssignedToEmployeeId == c.EmployeeId),
+            Unassigned = await open.CountAsync(t => t.AssignedToEmployeeId == null),
+        };
+
+        switch (f.Scope)
+        {
+            case "overdue": q = q.Where(t => t.Status != TaskStatuses.Done && t.DueAt != null && t.DueAt < now); break;
+            case "today": q = q.Where(t => t.Status != TaskStatuses.Done && t.DueAt != null && t.DueAt >= todayStart && t.DueAt < tomorrow); break;
+            case "done": q = q.Where(t => t.Status == TaskStatuses.Done && t.CompletedAt >= doneSince); break;
+            case "board": q = q.Where(t => t.Status != TaskStatuses.Done || t.CompletedAt >= doneSince); break;
+            case "all": break;
+            default: q = q.Where(t => t.Status != TaskStatuses.Done); break;
+        }
+        if (!string.IsNullOrWhiteSpace(f.Status)) q = q.Where(t => t.Status == f.Status);
 
         var rows = (await q.Take(1000).ToListAsync())
             .OrderBy(t => t.Status == TaskStatuses.Done ? 1 : 0)
@@ -243,15 +251,38 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
         }
         else
         {
+            var reopened = from == TaskStatuses.Done;
             t.CompletedAt = null;
+            if (reopened) await RemoveUntouchedNextRepeatAsync(t); // finishing it again must not stack up another copy
             await db.SaveChangesAsync();
+            if (reopened) return (true, "Task reopened. It is back in your open tasks.");
         }
         return (true, status == TaskStatuses.Done ? "Task completed" : "Status updated");
+    }
+
+    /// <summary>The still-open later occurrence of a repeating task, if one was already made (by finishing it before).</summary>
+    private IQueryable<WorkTask> NextOccurrences(WorkTask done) =>
+        db.WorkTasks.Where(x => x.Id != done.Id && x.Status != TaskStatuses.Done && x.Title == done.Title && x.Repeat == done.Repeat
+            && x.AssignedToEmployeeId == done.AssignedToEmployeeId && x.CreatedByEmployeeId == done.CreatedByEmployeeId && x.DueAt > done.DueAt);
+
+    /// <summary>When a finished repeating task is reopened, drop the next occurrence that was created for it if nobody has touched it yet.</summary>
+    private async Task RemoveUntouchedNextRepeatAsync(WorkTask reopened)
+    {
+        if (reopened.Repeat == TaskRepeats.None || reopened.DueAt is null) return;
+        foreach (var n in await NextOccurrences(reopened).Where(x => x.Status == TaskStatuses.Todo).ToListAsync())
+        {
+            var touched = await db.TaskComments.AnyAsync(m => m.TaskId == n.Id) || await db.TaskChecklistItems.AnyAsync(i => i.TaskId == n.Id && i.Done)
+                || await db.TaskActivities.CountAsync(a => a.TaskId == n.Id) > 1;
+            if (touched) continue;
+            await DeleteAsync(n);
+            Log(reopened.Id, "system", "Removed the next repeat that was created when this task was finished, because it was reopened");
+        }
     }
 
     private async Task CreateNextRepeatAsync(WorkTask done, Caller c)
     {
         if (done.Repeat == TaskRepeats.None || done.DueAt is not { } due) return;
+        if (await NextOccurrences(done).AnyAsync()) return; // already scheduled: marking it done a second time must not add another
         var next = done.Repeat switch { TaskRepeats.Daily => due.AddDays(1), TaskRepeats.Weekly => due.AddDays(7), _ => due.AddMonths(1) };
         while (next < DateTime.UtcNow) next = done.Repeat switch { TaskRepeats.Daily => next.AddDays(1), TaskRepeats.Weekly => next.AddDays(7), _ => next.AddMonths(1) }; // skip occurrences already missed
         var copy = new WorkTask

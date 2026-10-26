@@ -1,3 +1,4 @@
+@inject ContentState Content
 @using Nuraherbex.UI.Components.Shop
 @inject NavigationManager Nav
 
@@ -12,19 +13,19 @@
 
     <div class="nh-story-inner">
         <div class="nh-story-box">
-            <span class="nh-story-kicker">OUR STORY</span>
+            <span class="nh-story-kicker">@Content.P("home.story.kicker")</span>
             
             <h2 class="nh-story-title">
-                <span>Ancient Wisdom</span><br />
-                for Modern Living
+                <span>@Content.P("home.story.title1")</span><br />
+                @Content.P("home.story.title2")
             </h2>
 
             <p class="nh-story-text">
-                At Nuraherbex, we blend time-tested herbal knowledge with modern science to create natural wellness solutions for a healthier, brighter tomorrow.
+                @Content.P("home.story.text")
             </p>
 
             <button @onclick='() => Nav.NavigateTo("/our-story")' class="nh-story-btn" aria-label="Read our story">
-                <span>Our Story</span>
+                <span>@Content.P("home.story.button")</span>
                 <span style="font-size: 15px; font-weight: 800;">→</span>
             </button>
         </div>

@@ -15,164 +15,149 @@
     var batch = ActiveBatch;
 }
 
-<div class="nh-storefront vf-shell">
+<div class="nh-storefront tp-shell">
 <HomeNavbar />
 
-<section class="pl-hero vf-hero">
-    <span class="pl-orb o1" aria-hidden="true"></span>
-    <span class="pl-orb o2" aria-hidden="true"></span>
-    <div class="pl-hero-inner vf-hero-inner">
-        <nav class="pl-crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>›</span><strong>@(batch is not null ? $"Batch {BatchLabel(batch)}" : "Quality & batch reports")</strong></nav>
-        <span class="pl-eyebrow">@(batch is not null ? "BATCH RECORD CONFIRMED" : "PRODUCT QUALITY & TESTING")</span>
-        <h1>@(batch is not null ? "STAMIX batch quality report" : "See exactly what is in your jar")</h1>
-        <p class="pl-intro">
-            @(batch is not null
-                ? "The batch number matches Nura Herbex product records. Review the available Certificate of Analysis (COA) and laboratory results below."
-                : "Enter the batch number printed on your STAMIX pack to view its Certificate of Analysis (COA), laboratory results and batch details.")
-        </p>
-        <ul class="pl-meta">
-            <li><Icon Name="CheckCircle2" Size="15" /> Authentic product</li>
-            <li><Icon Name="FlaskConical" Size="15" /> Third-party tested</li>
-            <li><Icon Name="ShieldCheck" Size="15" /> Full transparency</li>
-        </ul>
-    </div>
-</section>
+<main class="tp-page">
+    <img class="tp-leaf tp-leaf-r" src="_content/Nuraherbex.UI/images/leaf-sprig-right.png" alt="" aria-hidden="true" />
+    <img class="tp-leaf tp-leaf-l" src="_content/Nuraherbex.UI/images/leaf-sprig-left.png" alt="" aria-hidden="true" />
 
-<div class="vf-page vf-light text-zinc-100 pb-20 pt-8 px-4 sm:px-6 lg:px-8 text-left font-sans selection:bg-zinc-800 selection:text-white">
-    <div class="max-w-3xl mx-auto space-y-5">
+    @if (batch is null)
+    {
+        <section class="tp-hero">
+            <span class="tp-badge"><Icon Name="ShieldCheck" Size="30" /></span>
+            <h1>Trust Passport</h1>
+            <p class="tp-tag">Verify your product. Build your trust.</p>
+            <i class="tp-rule" aria-hidden="true"></i>
+            <p class="tp-sub">Enter your product's batch number to view lab test reports and certifications.</p>
+        </section>
 
-        @* 3. Hero Visual Display *@
-        <div class="relative rounded-lg border border-zinc-800 bg-[#121215] p-6 overflow-hidden flex items-center justify-center min-h-[220px]">
-            <div class="relative z-10 w-40 sm:w-48 h-40 sm:h-48 flex items-center justify-center">
-                <img src="@Media.StamixMockup1"
-                     alt="Stamix Verified Canister"
-                     class="max-h-full max-w-full object-contain filter drop-shadow-[0_12px_24px_rgba(0,0,0,0.8)]" />
-
-                <div class="absolute -top-1 -right-2 sm:-right-4 px-2 py-1 rounded bg-zinc-900/90 border border-zinc-800 text-[9px] font-mono text-zinc-300 uppercase tracking-wider flex items-center gap-1">
-                    <Icon Name="BarChart3" Size="11" Class="text-zinc-400" />
-                    <span>NABL LAB VERIFIED</span>
-                </div>
-
-                <div class="absolute -bottom-1 -right-2 sm:-right-4 px-2 py-1 rounded bg-zinc-900/90 border border-zinc-800 text-[9px] font-mono text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                    <Icon Name="Check" Size="11" StrokeWidth="3" Class="text-emerald-400" />
-                    <span>@(batch is not null ? "SEAL CONFIRMED" : "CENTRAL REGISTRY")</span>
+        <section class="tp-card tp-entry" aria-labelledby="tp-enter">
+            <div class="tp-entry-head">
+                <span class="tp-entry-ic"><Icon Name="Scan" Size="26" /></span>
+                <div>
+                    <h2 id="tp-enter">Enter Batch Number</h2>
+                    <p>Find the batch number on your product packaging and enter it below.</p>
                 </div>
             </div>
-        </div>
-
-        @* 4. Batch Search & Quick Switcher *@
-        <div class="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 space-y-2.5">
-            <form @onsubmit="HandleSearch" @onsubmit:preventDefault class="flex gap-2">
-                <div class="relative flex-1">
-                    <Icon Name="Search" Size="14" Class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-                    <input @ref="_searchInput"
-                           type="text"
-                           @bind="_searchText" @bind:event="oninput"
-                           placeholder="Enter Batch No. from your canister or jar..."
-                           class="w-full pl-8 pr-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 font-mono placeholder:text-zinc-600 outline-none focus:border-zinc-500 transition-colors" />
-                </div>
-                <button type="submit"
-                        class="px-4 py-1.5 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs tracking-tight transition-colors cursor-pointer shrink-0 shadow-sm">
-                    Verify
-                </button>
+            <form @onsubmit="HandleSearch" @onsubmit:preventDefault>
+                <label class="tp-input">
+                    <input @ref="_searchInput" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="e.g. NHB240801" aria-label="Batch number"
+                           @bind="_searchText" @bind:event="oninput" />
+                    <Icon Name="Tag" Size="24" />
+                </label>
+                <button type="submit" class="tp-btn tp-btn-solid">Verify Batch <Icon Name="ArrowRight" Size="18" /></button>
             </form>
+            @if (!string.IsNullOrEmpty(_feedback)) { <p role="status" class="@($"tp-feedback {(_feedback.StartsWith("✓") ? "ok" : "bad")}")">@_feedback</p> }
+            <div class="tp-or"><span>OR</span></div>
+            <a class="tp-btn tp-btn-ghost" href="@RequestMailto"><Icon Name="Mail" Size="18" /> Request Batch Number <Icon Name="ChevronRight" Size="16" /></a>
 
-            @if (!string.IsNullOrEmpty(_feedback))
+            <button type="button" class="tp-help" aria-expanded="@_helpOpen" @onclick="() => _helpOpen = !_helpOpen">
+                <Icon Name="Info" Size="22" /> <span>Where to find the batch number?</span> <Icon Name="ChevronDown" Size="18" Class="@(_helpOpen ? "tp-flip" : "")" />
+            </button>
+            @if (_helpOpen)
             {
-                <div class="@($"text-[11px] font-mono font-medium {(_feedback.Contains("not found") || _feedback.Contains("Please enter") ? "text-amber-400" : "text-emerald-400")}")">
-                    @_feedback
-                </div>
+                <p class="tp-help-body">Look at the base or the side label of your jar. The batch number is printed next to the manufacturing and expiry dates.</p>
             }
+        </section>
 
-            @if (_batches.Count > 0)
-            {
-                <div class="flex items-center gap-1.5 flex-wrap pt-1">
-                    <span class="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">Active Batches:</span>
-                    @foreach (var b in _batches)
-                    {
-                        var bNo = BatchLabel(b);
-                        var isSelected = batch is not null && string.Equals(BatchLabel(batch), bNo, StringComparison.OrdinalIgnoreCase);
-                        <button @key="bNo" type="button" @onclick="() => SelectQuickBatch(bNo)"
-                                class="@($"px-2 py-0.5 rounded text-[11px] font-mono font-medium transition-colors cursor-pointer {(isSelected ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 shadow-sm" : "bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200")}")">
-                            #@bNo
-                        </button>
-                    }
-                </div>
-            }
-        </div>
-
-        @* 5. Awaiting Batch or Verified Dossier *@
-        @if (batch is null)
+        @if (_batches.Count > 0)
         {
-            <VerifyGuide />
-        }
-        else
-        {
-            <div class="space-y-4 pt-1 animate-in fade-in duration-300">
-                @* Official Verified Batch Authenticity Bar *@
-                <div class="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 space-y-2 text-left">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <div class="flex items-center gap-2.5">
-                            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                                <Icon Name="ShieldCheck" Size="18" />
-                            </div>
-                            <div>
-                                <div class="text-[10px] font-mono text-emerald-400 uppercase font-semibold tracking-wider">OFFICIAL BATCH VERIFIED</div>
-                                <h2 class="text-sm sm:text-base font-bold text-zinc-100 font-sans">
-                                    @(string.IsNullOrEmpty(batch.ProductName) ? "STAMIX™ Botanical Vitality Formula (300g)" : batch.ProductName)
-                                </h2>
-                            </div>
-                        </div>
-
-                        <div class="px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs font-bold shrink-0">
-                            Batch: #@BatchLabel(batch)
-                        </div>
-                    </div>
-                </div>
-
-                @* Official batch report: show PDFs in the browser viewer and image reports inline. *@
-                @if (!string.IsNullOrEmpty(batch.DocumentUrl) && IsPdf(batch))
+            <div class="tp-chips"><span>Recent batches</span>
+                @foreach (var b in _batches.Take(6))
                 {
-                    <div class="rounded-xl border border-zinc-800 bg-zinc-950 p-2 sm:p-4 shadow-2xl space-y-3">
-                        <iframe src="@batch.DocumentUrl" title="@($"Laboratory report for Batch {BatchLabel(batch)}")" class="w-full h-[72vh] rounded bg-white"></iframe>
-                        <a href="@batch.DocumentUrl" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 text-xs text-emerald-300 underline">
-                            <Icon Name="ExternalLink" Size="13" /> Open laboratory report
-                        </a>
-                    </div>
+                    var no = BatchLabel(b);
+                    <button type="button" @key="no" @onclick="() => SelectQuickBatch(no)">#@no</button>
                 }
-                else
-                {
-                    <div class="rounded-xl border border-zinc-800 bg-zinc-950 p-2 sm:p-4 shadow-2xl overflow-hidden flex items-center justify-center">
-                        <img src="@(string.IsNullOrEmpty(batch.DocumentUrl) ? VerifyCertificateSvg.Generate(batch) : batch.DocumentUrl)"
-                             alt="@($"Official Certificate for Batch {BatchLabel(batch)}")"
-                             class="w-full max-w-2xl h-auto object-contain rounded-lg border border-zinc-800/80 shadow-2xl" />
-                    </div>
-                }
-
-                @* Bottom Action: Verify Another Batch *@
-                <div class="pt-2">
-                    <button type="button" @onclick="VerifyAnotherAsync"
-                            class="w-full py-2.5 px-4 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 hover:text-white font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer">
-                        <Icon Name="Search" Size="14" />
-                        <span>Verify Another Batch Number</span>
-                    </button>
-                </div>
             </div>
         }
 
-        @* Brand Signature Footer *@
-        <div class="text-center pt-6 pb-4 text-xs text-zinc-600 space-y-0.5">
-            <div class="font-semibold text-zinc-400 tracking-wider font-mono text-[11px] uppercase">Nura Herbex®</div>
-            <p class="text-[10px] text-zinc-600">Science. Tradition. A Stronger You.</p>
+        <div class="tp-products" aria-hidden="true">
+            <img src="_content/Nuraherbex.UI/images/product-gut365.png" alt="" />
+            <img src="_content/Nuraherbex.UI/images/product-stamix.png" alt="" />
+            <p class="tp-script">Pure<br />Nature<br />Real Results</p>
         </div>
+    }
+    else
+    {
+        <nav class="tp-crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>›</span><a href="/trust-passport" @onclick="VerifyAnotherAsync" @onclick:preventDefault>Trust Passport</a><span>›</span><strong>Batch Results</strong></nav>
 
-    </div>
-</div>
+        <section class="tp-hero tp-hero-ok">
+            <span class="tp-badge tp-badge-ok"><Icon Name="Check" Size="32" StrokeWidth="3" /></span>
+            <h1>Batch Verified</h1>
+            <p class="tp-sub">Here are your product details, lab test report and certifications for this batch.</p>
+        </section>
+
+        <section class="tp-card tp-product">
+            <img src="@ProductImage(batch)" alt="@batch.ProductName" />
+            <div>
+                <h2>@(string.IsNullOrWhiteSpace(batch.ProductName) ? "Nura Herbex" : batch.ProductName)</h2>
+                <p class="tp-prod-sub">@ProductSubtitle(batch)</p>
+                <dl>
+                    <div><dt>Batch No.</dt><dd>@BatchLabel(batch)</dd></div>
+                    <div><dt>Mfg. Date</dt><dd>@batch.MfgDate</dd></div>
+                    <div><dt>Expiry Date</dt><dd>@batch.ExpDate</dd></div>
+                    <div><dt>Pack Size</dt><dd>@batch.PackSize</dd></div>
+                </dl>
+            </div>
+        </section>
+
+        <section class="tp-card">
+            <div class="tp-sec-head">
+                <span class="tp-sec-ic"><Icon Name="FileText" Size="24" /></span>
+                <div><h3>Lab Test Report (This Batch)</h3><p>Third-party lab test report for this specific batch number@(string.IsNullOrWhiteSpace(batch.LabName) ? "." : $" · {batch.LabName}.")</p></div>
+            </div>
+            @if (!string.IsNullOrEmpty(batch.DocumentUrl))
+            {
+                <a class="tp-file" href="@batch.DocumentUrl" download="@FileName(batch)" aria-label="Download lab report">
+                    <span class="tp-file-badge">@(IsPdf(batch) ? "PDF" : "IMG")</span>
+                    <span><strong>@FileName(batch)</strong><small>@(string.IsNullOrWhiteSpace(batch.FileSize) ? "" : batch.FileSize + " • ")@(IsPdf(batch) ? "PDF" : "Image")</small></span>
+                    <Icon Name="Download" Size="22" />
+                </a>
+                <a class="tp-btn tp-btn-ghost" href="@batch.DocumentUrl" target="_blank" rel="noopener noreferrer"><Icon Name="Eye" Size="20" /> View Lab Report</a>
+            }
+            else { <p class="tp-none">The lab report for this batch has not been uploaded yet.</p> }
+            @if (!string.IsNullOrWhiteSpace(batch.Notes)) { <p class="tp-note">@batch.Notes</p> }
+        </section>
+
+        var productCerts = Certs(batch, "product"); var brandCerts = Certs(batch, "brand");
+        @if (productCerts.Count > 0)
+        {
+            <section class="tp-card">
+                <div class="tp-sec-head">
+                    <span class="tp-sec-ic"><Icon Name="ShieldCheck" Size="24" /></span>
+                    <div><h3>Product Certifications</h3><p>Certifications specific to @(string.IsNullOrWhiteSpace(batch.ProductName) ? "this product" : batch.ProductName).</p></div>
+                </div>
+                <div class="tp-certs">@foreach (var c in productCerts) { <TrustCert Doc="c" /> }</div>
+            </section>
+        }
+        @if (brandCerts.Count > 0)
+        {
+            <section class="tp-card">
+                <div class="tp-sec-head">
+                    <span class="tp-sec-ic"><Icon Name="Building2" Size="24" /></span>
+                    <div><h3>Brand &amp; Manufacturing Certifications</h3><p>Our manufacturing facility and brand certifications.</p></div>
+                </div>
+                <div class="tp-certs">@foreach (var c in brandCerts) { <TrustCert Doc="c" /> }</div>
+            </section>
+        }
+
+        <button type="button" class="tp-btn tp-btn-solid tp-again" @onclick="VerifyAnotherAsync"><Icon Name="Search" Size="18" /> Verify another batch</button>
+    }
+</main>
 
 <HomeFooter />
 </div>
 
 @code {
+    private bool _helpOpen;
+    private string RequestMailto => "mailto:care@nuraherbex.com?subject=" + Uri.EscapeDataString("Batch number request") + "&body=" + Uri.EscapeDataString("Hello, I would like to verify my product. Product name and order number: ");
+    private static List<BatchDocumentDto> Certs(TrustBatchDto b, string kind) => b.Documents.Where(d => string.Equals(d.Kind, kind, StringComparison.OrdinalIgnoreCase)).ToList();
+    private static bool IsGut(TrustBatchDto b) => (b.ProductName ?? "").Contains("GUT", StringComparison.OrdinalIgnoreCase);
+    private static string ProductImage(TrustBatchDto b) => "_content/Nuraherbex.UI/images/" + (IsGut(b) ? "product-gut365.png" : "product-stamix.png");
+    private static string ProductSubtitle(TrustBatchDto b) => IsGut(b) ? "Digestive Health & Gut Support" : "Men's Wellness Support";
+    private static string FileName(TrustBatchDto b) => string.IsNullOrWhiteSpace(b.DocumentName) ? $"{BatchLabel(b)}_Lab_Report" : b.DocumentName!;
+
     [Parameter] public string? BatchNo { get; set; }
     [SupplyParameterFromQuery(Name = "batch")] public string? QBatch { get; set; }
     [SupplyParameterFromQuery(Name = "batch_no")] public string? QBatchNo { get; set; }

@@ -1,0 +1,27 @@
+@inject ApiClient Api
+
+<button type="button" class="@($"wa-toggle {(_active ? "is-on" : "")}")" role="switch" aria-checked="@_active" disabled="@(_busy || !_loaded)"
+        title="@(_note ?? (_active ? "You receive new WhatsApp leads. Click to stop." : "Turn on to receive new WhatsApp leads."))" @onclick="ToggleAsync">
+    <span class="wa-toggle-track"><i></i></span>
+    <span class="wa-toggle-label">WhatsApp @(_active ? "active" : "off")</span>
+</button>
+
+@code {
+    private bool _active, _busy, _loaded;
+    private string? _note;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var res = await Api.AdminGetWhatsAppActiveAsync();
+        if (res.Success) _active = res.Active;
+        _loaded = true;
+    }
+
+    private async Task ToggleAsync()
+    {
+        _busy = true;
+        var res = await Api.AdminSetWhatsAppActiveAsync(!_active);
+        if (res.Success) { _active = res.Active; _note = res.Message; }
+        _busy = false;
+    }
+}

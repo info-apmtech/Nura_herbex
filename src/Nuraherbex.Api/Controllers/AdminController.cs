@@ -311,6 +311,16 @@ public class AdminController(
         return Ok(new ApiResult { Success = true });
     }
 
+    /// <summary>Saves the full set of page overrides (images, videos and copy). Blank values are dropped so the page falls back to its default.</summary>
+    [HttpPut("content/page"), Authorize(Roles = "admin,sales")]
+    public async Task<IActionResult> SavePageContent(PageContentDto dto)
+    {
+        var known = PageContentCatalog.Fields.Select(f => f.Key).ToHashSet();
+        var clean = new PageContentDto { Values = dto.Values.Where(kv => known.Contains(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value)).ToDictionary(kv => kv.Key, kv => kv.Value.Trim()) };
+        await settings.SetAsync(SettingsService.PageContentKey, clean);
+        return Ok(new ApiResult { Success = true });
+    }
+
     [HttpPut("formulation/ingredients"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> SaveIngredients(List<FormulationIngredientDto> list)
     {

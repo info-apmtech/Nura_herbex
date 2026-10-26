@@ -500,6 +500,7 @@
         if (t.Status != "done") { await RequestDoneAsync(t.Id, t.Title); return; }
         var res = await Api.AdminTaskStatusAsync(t.Id, "todo");
         Say(res.Message, res.Success);
+        if (res.Success && _scope == "done") _scope = "open"; // otherwise the reopened task is hidden by the Done filter while the Open count goes up
         await LoadAsync();
     }
 
@@ -530,7 +531,8 @@
         _busy = false;
         if (!res.Success) { _confirmError = res.Message; return; }
         _confirm = null;
-        if (_detail is not null) await OpenAsync(cf.TaskId);
+        _detail = null; // finished: leave the task page instead of reopening it
+        if (new Uri(Nav.Uri).Query.Contains("open=")) Nav.NavigateTo("/admin/tasks");
         await LoadAsync();
     }
 
@@ -562,8 +564,10 @@
     {
         if (_detail?.Task is not { } t) return;
         if (e.Value?.ToString() == "done") { await RequestDoneAsync(t.Id, t.Title); await RefreshDetailAsync(); return; }
+        var wasDone = t.Status == "done";
         var res = await Api.AdminTaskStatusAsync(t.Id, e.Value?.ToString() ?? "todo");
         if (!res.Success) Say(res.Message, false);
+        else if (wasDone) { Say(res.Message, true); if (_scope == "done") _scope = "open"; }
         await RefreshDetailAsync();
     }
 

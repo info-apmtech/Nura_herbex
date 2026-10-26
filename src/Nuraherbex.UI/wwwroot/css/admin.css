@@ -617,3 +617,25 @@ body:has(.admin-theme)::-webkit-scrollbar,
   .al-card { padding: 30px 22px 24px; border-radius: 24px; }
 }
 @media (prefers-reduced-motion: reduce) { .al *, .admin-theme .admin-content > * { animation: none !important; transition: none !important; } }
+
+/* Staff WhatsApp lead switch */
+.wa-toggle{display:inline-flex;align-items:center;gap:.5rem;border:1px solid var(--admin-border,#e5e7eb);background:#fff;border-radius:999px;padding:.3rem .7rem;font-size:.8rem;font-weight:600;cursor:pointer}
+.wa-toggle:disabled{opacity:.6;cursor:default}
+.wa-toggle-track{width:32px;height:18px;border-radius:999px;background:#cbd5e1;position:relative;transition:background .2s}
+.wa-toggle-track i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .2s}
+.wa-toggle.is-on .wa-toggle-track{background:#25d366}
+.wa-toggle.is-on .wa-toggle-track i{transform:translateX(14px)}
+@media (max-width:640px){.wa-toggle-label{display:none}}
+
+/* Page content editor */
+.pce{background:#fff;border:1px solid #e8def4;border-radius:14px;padding:20px;margin-bottom:20px}
+.pce-head{display:flex;gap:16px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;margin-bottom:14px}
+.pce-head h2{font-size:20px}.pce-head p{color:#80788a;font-size:13px;margin-top:4px;max-width:60ch}
+.pce-tabs{display:flex;gap:8px;margin-bottom:14px;overflow-x:auto}
+.pce-tab{border:1px solid #e4d9f1;background:#fff;border-radius:999px;padding:6px 16px;font-weight:600;font-size:13px}
+.pce-tab.is-active{background:#5e209e;color:#fff;border-color:#5e209e}
+.pce-group{border:1px solid #efe8f7;border-radius:12px;padding:14px;margin:0 0 14px;display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.pce-group legend{padding:0 8px;font-weight:700;font-size:13px;color:#5e209e}
+.pce-field{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:#4a4254}
+.pce-preview{width:100%;max-height:150px;object-fit:cover;border-radius:8px;background:#f2f0f4}
+.pce-reset{align-self:flex-start;border:0;background:none;color:#5e209e;font-size:12px;font-weight:600;padding:0;text-decoration:underline}

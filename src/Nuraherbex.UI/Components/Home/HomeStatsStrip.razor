@@ -1,34 +1,35 @@
+@inject ContentState Content
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 
 <section class="nh-stats" aria-label="Nura Herbex at a glance">
     <video id="nh-stats-video" class="nh-stats-video" autoplay loop muted playsinline preload="metadata" disablepictureinpicture aria-hidden="true">
-        <source src="@Media.SolutionVideo" type="video/mp4" />
+        <source src="@Content.P("home.stats.video")" type="video/mp4" />
     </video>
     <span class="nh-stats-veil" aria-hidden="true"></span>
     <div class="nh-stats-inner">
         <div class="nh-stat" data-nh-reveal style="--d:0ms">
             <span class="nh-stat-ic"><Icon Name="Leaf" Size="22" /></span>
             <CountUp Value="17" Class="nh-stat-num" Suffix="+" />
-            <span class="nh-stat-label">Whole botanicals<br />in every scoop</span>
+            <span class="nh-stat-label">@Content.P("home.stats.label1")</span>
             <i class="nh-stat-bar" aria-hidden="true"></i>
         </div>
         <div class="nh-stat" data-nh-reveal style="--d:100ms">
             <span class="nh-stat-ic"><Icon Name="Clock" Size="22" /></span>
             <CountUp Value="25" Class="nh-stat-num" />
-            <span class="nh-stat-label">Day daily ritual<br />per 500 g jar</span>
+            <span class="nh-stat-label">@Content.P("home.stats.label2")</span>
             <i class="nh-stat-bar" aria-hidden="true"></i>
         </div>
         <div class="nh-stat" data-nh-reveal style="--d:200ms">
             <span class="nh-stat-ic"><Icon Name="Sparkles" Size="22" /></span>
             <CountUp Value="100" Class="nh-stat-num" Suffix="%" />
-            <span class="nh-stat-label">Natural,<br />plant-based formula</span>
+            <span class="nh-stat-label">@Content.P("home.stats.label3")</span>
             <i class="nh-stat-bar" aria-hidden="true"></i>
         </div>
         <div class="nh-stat" data-nh-reveal style="--d:300ms">
             <span class="nh-stat-ic"><Icon Name="ShieldCheck" Size="22" /></span>
             <CountUp Value="0" Class="nh-stat-num" />
-            <span class="nh-stat-label">Added<br />preservatives</span>
+            <span class="nh-stat-label">@Content.P("home.stats.label4")</span>
             <i class="nh-stat-bar" aria-hidden="true"></i>
         </div>
     </div>

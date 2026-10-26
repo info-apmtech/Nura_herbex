@@ -292,6 +292,9 @@ public class ContentController(SettingsService settings) : ControllerBase
     [HttpGet("site")]
     public async Task<SiteContent> Site() => await settings.GetAsync<SiteContent>(SettingsService.SiteContentKey) ?? SiteContent.Default();
 
+    [HttpGet("page")]
+    public async Task<PageContentDto> Page() => await settings.GetAsync<PageContentDto>(SettingsService.PageContentKey) ?? new PageContentDto();
+
     [HttpGet("formulation-ingredients")]
     public async Task<List<FormulationIngredientDto>> Ingredients()
     {

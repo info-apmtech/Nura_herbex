@@ -153,6 +153,8 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<ApiResult> AdminDeleteBatchAsync(string idOrBatchNo) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/batches/{Uri.EscapeDataString(idOrBatchNo)}", null, Who.Admin);
 
     public Task<ApiResult> AdminSaveContentAsync(SiteContent c) => Call<ApiResult>(HttpMethod.Put, "api/admin/content", c, Who.Admin);
+    public async Task<PageContentDto> GetPageContentAsync() => await GetRaw<PageContentDto>("api/content/page") ?? new();
+    public Task<ApiResult> AdminSavePageContentAsync(PageContentDto d) => Call<ApiResult>(HttpMethod.Put, "api/admin/content/page", d, Who.Admin);
     public Task<ApiResult> AdminResetContentAsync() => Call<ApiResult>(HttpMethod.Delete, "api/admin/content", null, Who.Admin);
     public Task<ApiResult> AdminSaveIngredientsAsync(List<FormulationIngredientDto> list) => Call<ApiResult>(HttpMethod.Put, "api/admin/formulation/ingredients", list, Who.Admin);
     public Task<ApiResult> AdminSaveMetricsAsync(FormulationMetricsDto m) => Call<ApiResult>(HttpMethod.Put, "api/admin/formulation/metrics", m, Who.Admin);
@@ -191,6 +193,7 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
 
     public Task<EmployeeResponse> AdminCreateEmployeeAsync(EmployeeSaveRequest r) => Call<EmployeeResponse>(HttpMethod.Post, "api/admin/employees", r, Who.Admin);
     public Task<EmployeeResponse> AdminUpdateEmployeeAsync(long id, EmployeeSaveRequest r) => Call<EmployeeResponse>(HttpMethod.Put, $"api/admin/employees/{id}", r, Who.Admin);
+    public Task<ApiResult> AdminSetEmployeeWhatsAppAsync(long id, bool active) => Call<ApiResult>(HttpMethod.Put, $"api/admin/employees/{id}/whatsapp", new WhatsAppActiveRequest { Active = active }, Who.Admin);
     public Task<ApiResult> AdminRemoveEmployeeAsync(long id, bool spreadLeads) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/employees/{id}?reassign={(spreadLeads ? "auto" : "unassigned")}", null, Who.Admin);
     public Task<ApiResult> AdminLeadSettingsAsync(bool autoAssign) => Call<ApiResult>(HttpMethod.Put, "api/admin/leads/settings", new LeadSettingsRequest { AutoAssign = autoAssign }, Who.Admin);
     public Task<LeadOrderResponse> AdminLeadOrderAsync(long id, LeadOrderRequest r) => Call<LeadOrderResponse>(HttpMethod.Post, $"api/admin/leads/{id}/order", r, Who.Admin);
@@ -217,6 +220,8 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<ApiResult> AdminSaveFollowUpSettingsAsync(FollowUpSettingsRequest r) => Call<ApiResult>(HttpMethod.Put, "api/admin/followups/settings", r, Who.Admin);
     public Task<FollowUpReportResponse> AdminFollowUpReportAsync(int days) => Call<FollowUpReportResponse>(HttpMethod.Get, $"api/admin/followups/report?days={days}", null, Who.Admin);
     public Task<ApiResult> AdminGoOfflineAsync() => Call<ApiResult>(HttpMethod.Post, "api/admin/presence/offline", null, Who.Admin);
+    public Task<WhatsAppActiveResponse> AdminGetWhatsAppActiveAsync() => Call<WhatsAppActiveResponse>(HttpMethod.Get, "api/admin/presence/whatsapp", null, Who.Admin);
+    public Task<WhatsAppActiveResponse> AdminSetWhatsAppActiveAsync(bool active) => Call<WhatsAppActiveResponse>(HttpMethod.Put, "api/admin/presence/whatsapp", new WhatsAppActiveRequest { Active = active }, Who.Admin);
     public Task<NotificationListResponse> AdminNotificationsAsync() => Call<NotificationListResponse>(HttpMethod.Get, "api/admin/notifications", null, Who.Admin);
     public Task<ApiResult> AdminReadAllNotificationsAsync() => Call<ApiResult>(HttpMethod.Put, "api/admin/notifications/read-all", new { }, Who.Admin);
     public Task<ApiResult> AdminReadNotificationAsync(long id) => Call<ApiResult>(HttpMethod.Put, $"api/admin/notifications/{id}/read", new { }, Who.Admin);

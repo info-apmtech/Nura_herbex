@@ -496,3 +496,8 @@ body:has(.nhd) .sa-widget, body:has(.nhd) .nh-btt { visibility: hidden; }
 .pdp-shell .sp-page { padding-top: 28px; }
 .vf-light :is(h2, h3).text-\[\#fff3bf\], .vf-light .vf-guide h2, .vf-light .vf-guide h3 { color: #1b1233 !important; }
 .nh-storefront .vf-light h2, .nh-storefront .vf-light h2.text-white, .nh-storefront .vf-light h3 { color: #1b1233 !important; }
+
+/* Phones: keep the assistant teaser from covering the page; the chat button stays */
+@media (max-width: 640px) {
+  .sa-widget .sa-preview { display: none; }
+}

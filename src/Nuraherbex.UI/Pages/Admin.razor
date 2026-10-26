@@ -25,7 +25,7 @@ else
             <div class="admin-sidebar-bottom"><a class="admin-nav-item" href="/shop"><Icon Name="ExternalLink" Size="18" /> View storefront</a><div class="admin-user"><span class="admin-avatar">@(string.IsNullOrEmpty(AdminAuth.Name) ? "A" : AdminAuth.Name[..1].ToUpperInvariant())</span><span><strong>@(string.IsNullOrEmpty(AdminAuth.Name) ? "Administrator" : AdminAuth.Name)</strong><small>@(AdminAuth.Designation ?? AdminAuth.Email)</small></span><button class="admin-icon-btn" title="Sign out" aria-label="Sign out" @onclick="LogoutAsync"><Icon Name="LogOut" Size="18" /></button></div></div>
         </aside>
         @if (_mobileMenu) { <button class="admin-mobile-backdrop" aria-label="Close navigation" @onclick="() => _mobileMenu = false"></button> }
-        <div class="admin-main"><header class="admin-topbar"><div class="admin-actions"><button class="admin-icon-btn admin-menu-toggle" aria-label="Toggle navigation" aria-expanded="@_mobileMenu" @onclick="() => _mobileMenu = !_mobileMenu"><Icon Name="Menu" Size="22" /></button><span class="admin-breadcrumb">Workspace <span>/</span> <strong>@PageName</strong></span></div><div class="admin-actions">@if (AdminAuth.IsAuthenticated) { <AdminBell /> }<span class="admin-today">@DateTime.Now.ToString("ddd, dd MMM yyyy")</span><a class="admin-btn admin-btn-small" href="/shop"><Icon Name="ExternalLink" Size="15" /> Open store</a></div></header>
+        <div class="admin-main"><header class="admin-topbar"><div class="admin-actions"><button class="admin-icon-btn admin-menu-toggle" aria-label="Toggle navigation" aria-expanded="@_mobileMenu" @onclick="() => _mobileMenu = !_mobileMenu"><Icon Name="Menu" Size="22" /></button><span class="admin-breadcrumb">Workspace <span>/</span> <strong>@PageName</strong></span></div><div class="admin-actions">@if (AdminAuth.IsAuthenticated) { <AdminWhatsAppToggle /><AdminBell /> }<span class="admin-today">@DateTime.Now.ToString("ddd, dd MMM yyyy")</span><a class="admin-btn admin-btn-small" href="/shop"><Icon Name="ExternalLink" Size="15" /> Open store</a></div></header>
         <main class="admin-content">
         @if (_loadErrors.Count > 0) { <div role="alert" class="admin-error">@string.Join(" · ", _loadErrors.Select(e => e.Key + ": " + e.Value)) <button class="admin-btn admin-btn-small" @onclick="RefreshAsync">Retry</button></div> }
         @if (!AdminAuth.HasAnyPage) { <div class="admin-error" role="status"><strong>No pages assigned yet.</strong> Ask an administrator to give your account a designation.</div> }
@@ -42,7 +42,7 @@ else
             else if (_activeTab == "customers") { <AdminCustomersTab Customers="_customers" Loading="_customersLoading" OnReload="LoadCustomersAsync" /> }
             else if (_activeTab == "batches") { <AdminBatchesTab Batches="_batches" Loading="_batchesLoading" OnReload="LoadBatchesAsync" /> }
             else if (_activeTab == "formulation") { <AdminFormulationTab Ingredients="_ingredients" Metrics="_metrics" IngredientsChanged="OnIngredientsChanged" MetricsChanged="OnMetricsChanged" /> }
-            else if (_activeTab == "content") { <AdminContentTab /> }
+            else if (_activeTab == "content") { <AdminPageContentEditor /><AdminContentTab /> }
             else if (_activeTab == "crm") { <AdminCrmDashboard /> }
             else if (_activeTab == "leads") { <AdminLeadsTab /> }
             else if (_activeTab == "followups") { <AdminFollowUpsTab /> }

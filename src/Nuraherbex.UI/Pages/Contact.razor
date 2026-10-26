@@ -1,0 +1,100 @@
+@page "/contact"
+@page "/support"
+@using Nuraherbex.UI.Components.Home
+@inject BrowserInterop Browser
+@inject NavigationManager Nav
+
+<PageTitle>Contact &amp; Support — Nura Herbex</PageTitle>
+
+<div class="nh-storefront tp-shell">
+    <HomeNavbar />
+
+    <section class="bp-hero">
+        <div class="bp-hero-in">
+            <span class="bp-eyebrow">We're here for you</span>
+            <h1>Contact &amp; Support</h1>
+            <p>Have a question? Need guidance? Our team is here to help you on your wellness journey.</p>
+        </div>
+    </section>
+
+    <div class="bp-wrap">
+        <div class="bp-icons">
+            <section class="bp-card bp-icon">
+                <span><Icon Name="MessageCircle" Size="22" /></span><strong>WhatsApp Support</strong><small>Chat with our team for quick help</small>
+                <a class="bp-btn" href="@WhatsAppUrl" target="_blank" rel="noopener noreferrer">Chat on WhatsApp</a>
+            </section>
+            <section class="bp-card bp-icon">
+                <span><Icon Name="Phone" Size="22" /></span><strong>Call Us</strong><small>Speak to our wellness team</small>
+                <a href="tel:@SiteConfig.ContactPhone"><strong>@SiteConfig.ContactPhone</strong></a>
+            </section>
+            <section class="bp-card bp-icon">
+                <span><Icon Name="Mail" Size="22" /></span><strong>Email Us</strong><small>Send us your queries</small>
+                <a href="mailto:@SiteConfig.ContactEmail"><strong>@SiteConfig.ContactEmail</strong></a>
+            </section>
+            <section class="bp-card bp-icon">
+                <span><Icon Name="MapPin" Size="22" /></span><strong>Our Office</strong><small>@SiteConfig.ContactAddress</small>
+                <a href="@MapUrl" target="_blank" rel="noopener noreferrer"><strong>View on Maps</strong></a>
+            </section>
+        </div>
+
+        <section class="bp-card">
+            <span class="bp-kicker">Send us a message</span>
+            <h2>Get In Touch</h2>
+            <p>Fill out the form and your email app will open with the message ready to send to our team.</p>
+            <form class="bp-form" @onsubmit="Send" @onsubmit:preventDefault>
+                <label>Your name *<input required maxlength="80" @bind="_name" @bind:event="oninput" /></label>
+                <label>Your email *<input type="email" required maxlength="120" @bind="_email" @bind:event="oninput" /></label>
+                <label>Subject *
+                    <select required @bind="_subject">
+                        <option value="">Choose a topic</option>
+                        <option>Orders &amp; Shipping</option>
+                        <option>Product Information</option>
+                        <option>Account Support</option>
+                        <option>Returns &amp; Refunds</option>
+                        <option>Other</option>
+                    </select>
+                </label>
+                <label>Your message *<textarea required rows="4" maxlength="1500" placeholder="Tell us how we can help you…" @bind="_message" @bind:event="oninput"></textarea></label>
+                <button type="submit" class="bp-btn" style="justify-content:center">Send message <Icon Name="ArrowRight" Size="16" /></button>
+            </form>
+        </section>
+
+        <section>
+            <span class="bp-kicker">Quick help</span>
+            <h2 style="font-family:var(--nh-font-serif,Georgia,serif);color:#1d1530;margin:4px 0 12px">Common Support Topics</h2>
+            <div class="bp-icons">
+                <a class="bp-card bp-icon" href="/track"><span><Icon Name="Package" Size="20" /></span><strong>Orders &amp; Shipping</strong><small>Track orders and delivery</small></a>
+                <a class="bp-card bp-icon" href="/trust-passport"><span><Icon Name="FileText" Size="20" /></span><strong>Product Information</strong><small>Batch reports and certifications</small></a>
+                <a class="bp-card bp-icon" href="/account"><span><Icon Name="ShieldCheck" Size="20" /></span><strong>Account Support</strong><small>Login and account help</small></a>
+                <a class="bp-card bp-icon" href="/refund-policy"><span><Icon Name="Check" Size="20" /></span><strong>Returns &amp; Refunds</strong><small>Policy and how to request</small></a>
+            </div>
+        </section>
+    </div>
+
+    <HomeFooter />
+</div>
+
+@code {
+    private string _name = "", _email = "", _subject = "", _message = "";
+
+    private static string WhatsAppUrl
+    {
+        get
+        {
+            var digits = new string(SiteConfig.ContactPhone.Where(char.IsDigit).ToArray()).TrimStart('0');
+            return $"https://wa.me/91{digits}?text={Uri.EscapeDataString("Hello Nura Herbex, I need help.")}";
+        }
+    }
+    private static string MapUrl => "https://www.google.com/maps/search/?api=1&query=" + Uri.EscapeDataString(SiteConfig.ContactAddress);
+
+    private void Send()
+    {
+        var body = $"{_message}\n\nFrom: {_name} ({_email})";
+        Nav.NavigateTo($"mailto:{SiteConfig.ContactEmail}?subject={Uri.EscapeDataString(_subject)}&body={Uri.EscapeDataString(body)}", forceLoad: true);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Browser.ScrollToTopAsync();
+    }
+}

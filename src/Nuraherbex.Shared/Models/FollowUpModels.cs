@@ -137,6 +137,9 @@ public class NotificationDto
     public bool IsRead { get; set; }
 }
 
+public class WhatsAppActiveRequest { public bool Active { get; set; } }
+public class WhatsAppActiveResponse : ApiResult { public bool Active { get; set; } }
+
 public class NotificationListResponse : ApiResult
 {
     public List<NotificationDto> Items { get; set; } = new();

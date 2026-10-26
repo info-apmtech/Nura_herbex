@@ -1,3 +1,4 @@
+@inject ContentState Content
 @implements IDisposable
 
 <section class="nhx-hero" aria-label="Featured products" aria-roledescription="carousel">
@@ -16,12 +17,12 @@
 
             <div class="nhx-grid">
                 <div class="nhx-copy">
-                    <span class="nhx-kicker">Natural wellness for a brighter you</span>
+                    <span class="nhx-kicker">@Content.P("home.hero.kicker")</span>
                     <h1 class="nhx-title">
-                        <span class="nhx-line"><span>Better Digestion</span></span>
-                        <span class="nhx-line"><span>Brighter <em>Living</em></span></span>
+                        <span class="nhx-line"><span>@Content.P("home.hero.line1")</span></span>
+                        <span class="nhx-line"><span>@HeadWords(Content.P("home.hero.line2"))<em>@LastWord(Content.P("home.hero.line2"))</em></span></span>
                     </h1>
-                    <p class="nhx-sub">Gut &amp; liver enhancement made from time-honoured herbs — more balance, more energy, a healthier you.</p>
+                    <p class="nhx-sub">@Content.P("home.hero.sub")</p>
                     <ul class="nhx-chips">
                         <li><Icon Name="Leaf" Size="14" /> 100% natural</li>
                         <li><Icon Name="ShieldCheck" Size="14" /> Batch verified</li>
@@ -110,6 +111,9 @@
 </section>
 
 @code {
+    private static string HeadWords(string s) { var i = s.TrimEnd().LastIndexOf(' '); return i < 0 ? "" : s[..(i + 1)]; }
+    private static string LastWord(string s) { s = s.TrimEnd(); var i = s.LastIndexOf(' '); return i < 0 ? s : s[(i + 1)..]; }
+
     private const int TotalSlides = 2;
     private static readonly TimeSpan SlideDuration = TimeSpan.FromSeconds(10);   // keep in sync with --nhx-ms in home-v3.css
     private int currentSlide;

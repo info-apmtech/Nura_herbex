@@ -189,10 +189,30 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
 
     /// <summary>Called on sign-out so the person stops receiving auto-assigned work at once.</summary>
     [HttpPost("presence/offline")]
-    public async Task<IActionResult> GoOffline([FromServices] StaffAvailability presence)
+    public async Task<IActionResult> GoOffline([FromServices] StaffAvailability presence, [FromServices] LeadService leads)
     {
-        if (MyId is { } me) await presence.CheckOutAsync(me);
+        if (MyId is { } me) { await presence.CheckOutAsync(me); await leads.SwitchOffWhatsAppAsync(me, "Owner signed out", "auto"); }
         return Ok(new ApiResult { Success = true });
+    }
+
+    /// <summary>Staff switch for receiving auto-assigned WhatsApp leads.</summary>
+    [HttpGet("presence/whatsapp")]
+    public async Task<WhatsAppActiveResponse> GetWhatsAppActive([FromServices] StaffAvailability presence) =>
+        new() { Success = true, Active = MyId is { } me && await presence.IsWhatsAppActiveAsync(me) };
+
+    [HttpPut("presence/whatsapp")]
+    public async Task<WhatsAppActiveResponse> SetWhatsAppActive([FromBody] WhatsAppActiveRequest req, [FromServices] StaffAvailability presence, [FromServices] LeadService leads)
+    {
+        if (MyId is not { } me) return new() { Success = false, Message = "Only team members with their own login can switch this." };
+        var given = 0;
+        if (req.Active)
+        {
+            await presence.SetWhatsAppActiveAsync(me, true);
+            await presence.CheckInAsync(me); // switching on counts as being here right now
+            given = await leads.AssignWaitingAsync(); // hand over leads that were waiting, without waiting for the 2-minute worker
+        }
+        else await leads.SwitchOffWhatsAppAsync(me, "Owner switched WhatsApp off", MyName); // their not-yet-started leads move to someone active
+        return new() { Success = true, Active = req.Active, Message = req.Active ? (given > 0 ? $"You are WhatsApp active. {given} waiting lead(s) were shared out." : "You are WhatsApp active. New WhatsApp leads can now come to you.") : "WhatsApp off. You will not get new WhatsApp leads." };
     }
 
     [HttpPut("notifications/read-all")]

@@ -137,6 +137,8 @@ public class EmployeeDto
     public int OpenTasks { get; set; }
     /// <summary>Signed in to the portal right now (checked in within the last two minutes).</summary>
     public bool IsOnline { get; set; }
+    /// <summary>The person switched "WhatsApp active" on, so new WhatsApp leads can be assigned to them.</summary>
+    public bool WhatsAppActive { get; set; }
 }
 
 public class EmployeeSaveRequest

@@ -1,0 +1,10 @@
+<div class="tp-cert">
+    <span class="tp-cert-ic"><Icon Name="Award" Size="26" /></span>
+    <strong>@Doc.Title</strong>
+    @if (!string.IsNullOrWhiteSpace(Doc.ValidTill)) { <small>Valid till: @Doc.ValidTill</small> }
+    @if (!string.IsNullOrWhiteSpace(Doc.Url)) { <a href="@Doc.Url" target="_blank" rel="noopener noreferrer"><Icon Name="Eye" Size="14" /> View</a> }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public BatchDocumentDto Doc { get; set; } = new();
+}

@@ -28,7 +28,7 @@
     }
 
     <main class="flex-1 relative z-10" id="main-content">
-        @Body
+        @if (_contentReady) { @Body }
     </main>
 
     @if (!IsAccountPage && !IsStorefront)
@@ -98,6 +98,8 @@
         }
     }
 
+    private bool _contentReady;
+
     private bool IsLightAccountPage => IsAccountPage && Auth.IsAuthenticated;
 
     protected override async Task OnInitializedAsync()
@@ -107,6 +109,7 @@
         Auth.Changed += Refresh;
         Content.Changed += Refresh;
         await Task.WhenAll(Cart.InitAsync(), Auth.InitAsync(), Content.InitAsync());
+        _contentReady = true; // pages read admin-edited copy and media, so wait for it once to avoid a flash of the defaults
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

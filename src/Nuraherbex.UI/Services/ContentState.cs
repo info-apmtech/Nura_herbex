@@ -11,13 +11,28 @@ public class ContentState(ApiClient api)
     public bool IsSaving { get; private set; }
     public event Action? Changed;
     private bool _loaded;
+    private Dictionary<string, string> _page = new();
+
+    /// <summary>Text, image or video address for a <see cref="PageContentCatalog"/> field: the admin's value, else the built-in default.</summary>
+    public string P(string key) => _page.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v) ? v : PageContentCatalog.DefaultOf(key);
+
+    public IReadOnlyDictionary<string, string> PageOverrides => _page;
+
+    public async Task<ApiResult> SavePageAsync(Dictionary<string, string> values)
+    {
+        var res = await api.AdminSavePageContentAsync(new PageContentDto { Values = values });
+        if (res.Success) { _page = values.Where(kv => !string.IsNullOrWhiteSpace(kv.Value)).ToDictionary(kv => kv.Key, kv => kv.Value.Trim()); Changed?.Invoke(); }
+        return res;
+    }
 
     public async Task InitAsync()
     {
         if (_loaded) return;
         _loaded = true;
         var remote = await api.GetSiteContentAsync();
-        if (remote is not null) { Content = remote; Changed?.Invoke(); }
+        if (remote is not null) Content = remote;
+        _page = (await api.GetPageContentAsync()).Values;
+        Changed?.Invoke();
     }
 
     /// <summary>Saves a draft (admin only) and, on success, publishes it to the live site.</summary>

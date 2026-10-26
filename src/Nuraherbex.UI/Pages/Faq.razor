@@ -1,0 +1,72 @@
+@page "/faq"
+@page "/faqs"
+@using Nuraherbex.UI.Components.Home
+@inject BrowserInterop Browser
+
+<PageTitle>FAQs — Nura Herbex</PageTitle>
+
+<div class="nh-storefront tp-shell">
+    <HomeNavbar />
+
+    <section class="bp-hero">
+        <div class="bp-hero-in">
+            <span class="bp-eyebrow">Support center</span>
+            <h1>Frequently Asked Questions</h1>
+            <p>Find quick answers to common questions about our products, orders and more.</p>
+        </div>
+    </section>
+
+    <div class="bp-wrap">
+        <div class="tp-chips" role="tablist" aria-label="FAQ topics">
+            @foreach (var t in Topics)
+            {
+                var topic = t;
+                <button type="button" role="tab" aria-selected="@(_topic == topic)" class="@(_topic == topic ? "faq-tab on" : "faq-tab")" @onclick="() => _topic = topic">@topic</button>
+            }
+        </div>
+
+        <div class="bp-acc">
+            @foreach (var f in Items.Where(i => i.Topic == _topic))
+            {
+                <details @key="f.Q"><summary>@f.Q</summary><p>@((MarkupString)f.A)</p></details>
+            }
+        </div>
+
+        <section class="bp-card" style="text-align:center">
+            <span class="bp-kicker">Still need help?</span>
+            <h2>We're Here for You</h2>
+            <p>Our team is ready to assist you with any questions or concerns.</p>
+            <p><a class="bp-btn" href="/contact">Contact support <Icon Name="ArrowRight" Size="16" /></a></p>
+        </section>
+    </div>
+
+    <HomeFooter />
+</div>
+
+@code {
+    private static readonly string[] Topics = { "Orders & Delivery", "Products", "Payments", "Returns" };
+    private string _topic = Topics[0];
+    private record Item(string Topic, string Q, string A);
+
+    private static readonly Item[] Items =
+    {
+        new("Orders & Delivery", "How do I place an order?", "Choose your product on the <a href=\"/shop\">shop</a>, add it to the cart and check out with your delivery address. You can order as a guest or sign in."),
+        new("Orders & Delivery", "What are the delivery options and charges?", "Shipping is free on orders above ₹999. See the <a href=\"/shipping-policy\">Shipping Policy</a> for charges on smaller orders."),
+        new("Orders & Delivery", "How long does delivery take?", "Delivery time depends on your location. The estimate is shown at checkout and in the <a href=\"/shipping-policy\">Shipping Policy</a>."),
+        new("Orders & Delivery", "Can I track my order?", "Yes. Use <a href=\"/track\">Track Order</a> with your order number, or open your account to see all your orders."),
+        new("Orders & Delivery", "Can I change or cancel my order?", "Contact us as soon as possible with your order number. Orders that have not shipped can usually be changed or cancelled. See the <a href=\"/refund-policy\">Cancellation &amp; Refund Policy</a>."),
+        new("Products", "Are your products safe and natural?", "Our formulas are made from botanicals and are manufactured and tested with quality checks. You can read the lab report for your own batch on the <a href=\"/trust-passport\">Trust Passport</a>. Please read the <a href=\"/disclaimer\">Disclaimer</a> for important health information."),
+        new("Products", "How do I use the product?", "Follow the directions on the label. Individual results vary, and you should speak to a healthcare professional if you have a medical condition or take medicines."),
+        new("Products", "How can I check my batch?", "Enter the batch number from your jar on the <a href=\"/trust-passport\">Trust Passport</a> page to see its lab report and certifications."),
+        new("Payments", "What payment methods do you accept?", "You can pay online with UPI, cards and net banking through our secure payment partner."),
+        new("Payments", "Is my payment secure?", "Payments are processed by a secure payment gateway. We do not store your card details."),
+        new("Returns", "What is your return and refund policy?", "Please read our <a href=\"/refund-policy\">Cancellation, Return &amp; Refund Policy</a> for what is eligible and how to request it."),
+        new("Returns", "Do you offer subscriptions?", "Subscription options, when available, are shown on the product page."),
+        new("Returns", "How can I contact customer support?", "Use the <a href=\"/contact\">Contact &amp; Support</a> page, call us or message us on WhatsApp."),
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Browser.ScrollToTopAsync();
+    }
+}

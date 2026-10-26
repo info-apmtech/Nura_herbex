@@ -1,0 +1,86 @@
+@implements IDisposable
+@inject ContentState Content
+
+<section class="pce">
+    <header class="pce-head">
+        <div>
+            <h2>Page images, videos &amp; text</h2>
+            <p>Change what each page of the store shows. Paste a link for images and videos (for example from your media library). Leave a box empty to use the original.</p>
+        </div>
+        <button type="button" class="admin-btn" disabled="@_saving" @onclick="SaveAsync">@(_saving ? "Saving…" : _saved ? "Saved ✓" : "Save changes")</button>
+    </header>
+
+    @if (_error is not null) { <p role="alert" class="admin-error">@_error</p> }
+
+    <nav class="pce-tabs" aria-label="Pages">
+        @foreach (var page in Pages)
+        {
+            var p = page;
+            <button type="button" class="@($"pce-tab {(_page == p ? "is-active" : "")}")" @onclick="() => _page = p">@p</button>
+        }
+    </nav>
+
+    @foreach (var group in PageContentCatalog.Fields.Where(f => f.Page == _page).GroupBy(f => f.Section))
+    {
+        <fieldset class="pce-group">
+            <legend>@group.Key</legend>
+            @foreach (var f in group)
+            {
+                var field = f;
+                <label class="pce-field">
+                    <span>@field.Label</span>
+                    @if (field.Kind == PageFieldKind.LongText)
+                    {
+                        <textarea rows="3" placeholder="@field.Default" value="@Get(field.Key)" @oninput="e => Set(field.Key, e.Value?.ToString())"></textarea>
+                    }
+                    else
+                    {
+                        <input type="text" placeholder="@field.Default" value="@Get(field.Key)" @oninput="e => Set(field.Key, e.Value?.ToString())" />
+                    }
+                    @if (field.Kind == PageFieldKind.Image)
+                    {
+                        <img class="pce-preview" src="@Shown(field)" alt="Preview of @field.Label" />
+                    }
+                    else if (field.Kind == PageFieldKind.Video)
+                    {
+                        <video class="pce-preview" src="@Shown(field)" muted controls preload="metadata"></video>
+                    }
+                    @if (!string.IsNullOrEmpty(Get(field.Key))) { <button type="button" class="pce-reset" @onclick="() => Set(field.Key, null)">Use original</button> }
+                </label>
+            }
+        </fieldset>
+    }
+</section>
+
+@code {
+    private static readonly string[] Pages = PageContentCatalog.Fields.Select(f => f.Page).Distinct().ToArray();
+    private readonly Dictionary<string, string> _draft = new();
+    private string _page = Pages[0];
+    private bool _saving, _saved;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Content.InitAsync();
+        foreach (var kv in Content.PageOverrides) _draft[kv.Key] = kv.Value;
+    }
+
+    private string Get(string key) => _draft.GetValueOrDefault(key) ?? "";
+    private string Shown(PageField f) => string.IsNullOrWhiteSpace(Get(f.Key)) ? f.Default : Get(f.Key);
+
+    private void Set(string key, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) _draft.Remove(key); else _draft[key] = value;
+        _saved = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true; _error = null;
+        var res = await Content.SavePageAsync(new Dictionary<string, string>(_draft));
+        _saving = false; _saved = res.Success;
+        if (!res.Success) _error = string.IsNullOrEmpty(res.Message) ? "Could not save. Please try again." : res.Message;
+    }
+
+    public void Dispose() { }
+}

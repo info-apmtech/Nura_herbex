@@ -1,0 +1,65 @@
+@inject ApiClient Api
+
+<div class="fu-modal-backdrop" @onclick="OnClose">
+    <div class="fu-modal lo" role="dialog" aria-modal="true" aria-label="Certifications" @onclick:stopPropagation="true">
+        <header><h3>Certifications for batch @Batch.BatchNo</h3><button type="button" class="em-x" aria-label="Close" @onclick="OnClose"><Icon Name="X" Size="16" /></button></header>
+        <div class="fu-form">
+            <p class="fu-hint">These show on the customer Trust Passport page for this batch. Add only certificates you hold, with the dates printed on them.</p>
+            @foreach (var c in _certs)
+            {
+                var cert = c;
+                <div class="pce-group" style="margin:0">
+                    <label class="pce-field">Type
+                        <select @bind="cert.Kind"><option value="product">Product certification</option><option value="brand">Brand &amp; manufacturing certification</option></select>
+                    </label>
+                    <label class="pce-field">Name <input type="text" maxlength="80" placeholder="e.g. ISO 22000" @bind="cert.Title" @bind:event="oninput" /></label>
+                    <label class="pce-field">Valid till <input type="text" maxlength="30" placeholder="e.g. Dec 2026" @bind="cert.ValidTill" @bind:event="oninput" /></label>
+                    <label class="pce-field">Link to certificate <input type="text" maxlength="500" placeholder="https://..." @bind="cert.Url" @bind:event="oninput" /></label>
+                    <button type="button" class="pce-reset" @onclick="() => _certs.Remove(cert)">Remove</button>
+                </div>
+            }
+            <button type="button" class="ld-btn" @onclick="Add"><Icon Name="Plus" Size="14" /> Add certification</button>
+            @if (_error is not null) { <p class="fu-hint" role="alert" style="color:#b3261e">@_error</p> }
+            <footer>
+                <button type="button" class="ld-btn" @onclick="OnClose">Cancel</button>
+                <button type="button" class="ld-btn primary" disabled="@_busy" @onclick="SaveAsync">@(_busy ? "Saving…" : "Save certifications")</button>
+            </footer>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public TrustBatchDto Batch { get; set; } = new();
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private List<BatchDocumentDto> _certs = new();
+    private bool _busy;
+    private string? _error;
+
+    protected override void OnInitialized() =>
+        _certs = Batch.Documents.Where(IsCert).Select(d => new BatchDocumentDto { Id = d.Id, Title = d.Title, Kind = d.Kind, ValidTill = d.ValidTill, Url = d.Url }).ToList();
+
+    private static bool IsCert(BatchDocumentDto d) => d.Kind is "product" or "brand";
+    private void Add() => _certs.Add(new BatchDocumentDto { Id = Guid.NewGuid().ToString("N")[..8], Kind = "product" });
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+        if (_certs.Any(c => string.IsNullOrWhiteSpace(c.Title))) { _error = "Give every certification a name."; return; }
+        if (_certs.Any(c => !string.IsNullOrWhiteSpace(c.Url) && !c.Url.Trim().StartsWith("https://", StringComparison.OrdinalIgnoreCase) && !c.Url.Trim().StartsWith("http://", StringComparison.OrdinalIgnoreCase))) { _error = "Links must start with https://"; return; }
+        _busy = true;
+        foreach (var c in _certs) { c.Title = c.Title.Trim(); c.Url = string.IsNullOrWhiteSpace(c.Url) ? null : c.Url.Trim(); c.ValidTill = string.IsNullOrWhiteSpace(c.ValidTill) ? null : c.ValidTill.Trim(); }
+        var payload = new TrustBatchDto
+        {
+            Id = Batch.Id, BatchNo = Batch.BatchNo, ProductName = Batch.ProductName, PackSize = Batch.PackSize, MfgDate = Batch.MfgDate, ExpDate = Batch.ExpDate, Status = Batch.Status,
+            DocumentName = Batch.DocumentName, DocumentUrl = Batch.DocumentUrl, DocumentType = Batch.DocumentType, FileSize = Batch.FileSize, LabName = Batch.LabName, Notes = Batch.Notes,
+            QualityChecks = Batch.QualityChecks, IsActive = Batch.IsActive, CreatedAt = Batch.CreatedAt, UpdatedAt = DateTime.UtcNow,
+            Documents = Batch.Documents.Where(d => !IsCert(d)).Concat(_certs).ToList(),
+        };
+        var res = await Api.AdminSaveBatchAsync(payload);
+        _busy = false;
+        if (!res.Success) { _error = res.Message ?? "Could not save."; return; }
+        await OnSaved.InvokeAsync();
+    }
+}

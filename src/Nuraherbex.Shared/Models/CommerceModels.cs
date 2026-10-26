@@ -453,6 +453,12 @@ public class BatchDocumentDto
     public string? ActionText { get; set; }
     public string? Tag { get; set; }
     public string? Details { get; set; }
+    /// <summary>"document" (default), "product" (certification for this product) or "brand" (manufacturing / brand certification).</summary>
+    public string Kind { get; set; } = "document";
+    /// <summary>For certifications: until when it is valid, as written on the certificate (for example "Dec 2026").</summary>
+    public string? ValidTill { get; set; }
+    /// <summary>For certifications: link to the certificate file or page.</summary>
+    public string? Url { get; set; }
 }
 
 public class TrustBatchDto

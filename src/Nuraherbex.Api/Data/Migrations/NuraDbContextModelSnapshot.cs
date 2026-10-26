@@ -264,6 +264,9 @@ namespace Nuraherbex.Api.Data.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("nvarchar(16)");
 
+                    b.Property<bool>("WhatsAppActive")
+                        .HasColumnType("bit");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DesignationId");

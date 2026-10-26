@@ -45,7 +45,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         if (forPage is "leads" or "followups") allowed = await rightsService.EmployeesWithPageAsync(forPage);
         else if (forPage is null) allowed = await rightsService.EmployeesWithPageAsync("leads"); // the original meaning: people who can own leads
         if (allowed is not null) q = q.Where(e => allowed.Contains(e.Id));
-        var team = await q.OrderBy(e => e.Name).Select(e => new EmployeeDto { Id = e.Id, Name = e.Name, Role = e.Role, IsActive = true, DepartmentId = e.DepartmentId, IsOnline = e.LastSeenAt != null && e.LastSeenAt >= StaffAvailability.OnlineCutoff() }).ToListAsync();
+        var team = await q.OrderBy(e => e.Name).Select(e => new EmployeeDto { Id = e.Id, Name = e.Name, Role = e.Role, IsActive = true, DepartmentId = e.DepartmentId, IsOnline = e.LastSeenAt != null && e.LastSeenAt >= StaffAvailability.OnlineCutoff(), WhatsAppActive = e.WhatsAppActive }).ToListAsync();
         return Ok(new EmployeeListResponse { Success = true, Employees = team, AutoAssign = await leads.IsAutoAssignEnabledAsync() });
     }
 
@@ -389,6 +389,29 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         if (existing is not null && existing.Id == MyId && !IsAdmin && (existing.DesignationId != r.DesignationId || existing.Role != r.Role))
             return "You cannot change your own designation or role.";
         return null;
+    }
+
+    /// <summary>
+    /// An administrator (or anyone with Team rights) switches a person's "WhatsApp active" on or off. On needs the person to be signed in
+    /// (otherwise the system would switch them straight back off); off moves their not-yet-started leads to other active people.
+    /// </summary>
+    [HttpPut("employees/{id:long}/whatsapp")]
+    public async Task<IActionResult> SetEmployeeWhatsApp(long id, WhatsAppActiveRequest r, [FromServices] StaffAvailability presence)
+    {
+        var emp = await db.Employees.FirstOrDefaultAsync(e => e.Id == id);
+        if (emp is null) return NotFound(new ApiResult { Success = false, Message = "Employee not found" });
+        if (r.Active)
+        {
+            if (!emp.IsActive) return BadRequest(new ApiResult { Success = false, Message = $"{emp.Name} is not an active employee." });
+            if (emp.Role != EmployeeRoles.Sales) return BadRequest(new ApiResult { Success = false, Message = "Only sales staff receive WhatsApp leads." });
+            if (!StaffAvailability.IsOnline(emp)) return BadRequest(new ApiResult { Success = false, Message = $"{emp.Name} is not signed in right now, so they cannot be set active. They can switch it on themselves when they sign in." });
+            emp.WhatsAppActive = true;
+            await db.SaveChangesAsync();
+            var given = await leads.AssignWaitingAsync();
+            return Ok(new ApiResult { Success = true, Message = given > 0 ? $"{emp.Name} is WhatsApp active. {given} waiting lead(s) were shared out." : $"{emp.Name} is WhatsApp active." });
+        }
+        var moved = await leads.SwitchOffWhatsAppAsync(id, $"WhatsApp switched off by {MyName}", MyName);
+        return Ok(new ApiResult { Success = true, Message = moved > 0 ? $"{emp.Name} is WhatsApp off. {moved} pending lead(s) moved to other active people, or back to the admin queue if nobody else is active." : $"{emp.Name} is WhatsApp off." });
     }
 
     [HttpPost("employees")]

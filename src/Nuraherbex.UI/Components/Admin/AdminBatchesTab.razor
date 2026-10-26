@@ -147,6 +147,11 @@
                             <Icon Name="Eye" Size="13" />
                             <span>View Document</span>
                         </button>
+                        <button type="button" @onclick="() => _certBatch = batch" title="Product and brand certifications shown on the Trust Passport"
+                                class="py-1.5 px-3 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-zinc-400 hover:text-zinc-200 flex items-center justify-center gap-1.5 transition-colors cursor-pointer">
+                            <Icon Name="Award" Size="13" />
+                            <span>Certifications (@batch.Documents.Count(d => d.Kind is "product" or "brand"))</span>
+                        </button>
                         <button @onclick="@(() => Nav.NavigateTo("/quality-reports"))"
                                 class="py-1.5 px-3 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-zinc-400 hover:text-zinc-200 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                                 title="Open customer quality and testing page">
@@ -503,6 +508,11 @@
 @* ======================================================================= *@
 @* MODAL: CONFIRM DELETE BATCH                                              *@
 @* ======================================================================= *@
+@if (_certBatch is not null)
+{
+    <AdminBatchCerts Batch="_certBatch" OnClose="() => _certBatch = null" OnSaved="CertsSavedAsync" />
+}
+
 @if (_toDelete is not null)
 {
     var del = _toDelete;
@@ -562,6 +572,8 @@
     [Parameter] public List<TrustBatchDto> Batches { get; set; } = new();
     [Parameter] public bool Loading { get; set; }
     [Parameter] public EventCallback OnReload { get; set; }
+    private TrustBatchDto? _certBatch;
+    private async Task CertsSavedAsync() { _certBatch = null; await OnReload.InvokeAsync(); }
 
     private bool _showAdd;
     private bool _showSample;

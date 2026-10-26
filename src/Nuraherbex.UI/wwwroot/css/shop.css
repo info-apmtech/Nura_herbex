@@ -202,3 +202,10 @@
 .nh-storefront .nh-shop-hero::after { z-index: 0; }
 .nh-shop-hero { box-shadow: inset 0 -2px 0 #d9b45a; }
 @media (max-width: 900px) { .nh-shop-hero .nh-shop-hero-inner { padding: 40px 20px 44px; } .nh-shop-hero-visual { display: none; } }
+
+/* Product cards link through to the detail page */
+a.nh-shop-card-img-wrap{display:block;text-decoration:none}
+.nh-shop-card-name a{color:inherit;text-decoration:none}
+.nh-shop-card-name a:hover{text-decoration:underline}
+.nh-shop-view-details{display:inline-flex;align-items:center;gap:.35rem;margin:.25rem 0 .6rem;font-size:.85rem;font-weight:700;color:#732dbd;text-decoration:none}
+.nh-shop-view-details:hover{text-decoration:underline}

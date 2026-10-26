@@ -114,7 +114,10 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     }
 
     /// <summary>The online sales employee with the least open work, or null when nobody is signed in (the lead then waits in the admin queue).</summary>
-    public Task<Employee?> PickNextEmployeeAsync(long? excludeId = null) => availability.PickAsync("leads", null, excludeId);
+    public Task<Employee?> PickNextEmployeeAsync(long? excludeId = null, bool whatsAppOnly = true) => availability.PickAsync("leads", null, excludeId, whatsAppOnly);
+
+    /// <summary>WhatsApp leads only go to staff who switched "WhatsApp active" on; leads from other sources (website orders) go to anyone signed in.</summary>
+    private static bool NeedsWhatsAppSwitch(Lead lead) => lead.Source == "whatsapp";
 
     /// <summary>Gives leads that arrived while nobody was online to whoever is signed in now, least busy first. Called by the background worker.</summary>
     public async Task<int> AssignWaitingAsync()
@@ -123,10 +126,13 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         var waiting = await db.Leads.Where(l => l.AssignedToEmployeeId == null && l.Status != LeadStatuses.Converted && l.Status != LeadStatuses.NotInterested)
             .OrderBy(l => l.CreatedAt).Take(50).ToListAsync();
         var given = 0;
+        var noTakerFor = new HashSet<bool>(); // stop asking once nobody can take a kind of lead (WhatsApp / other) in this pass
         foreach (var lead in waiting)
         {
-            var next = await PickNextEmployeeAsync();
-            if (next is null) break; // still nobody online
+            var wa = NeedsWhatsAppSwitch(lead);
+            if (noTakerFor.Contains(wa)) continue;
+            var next = await PickNextEmployeeAsync(null, wa);
+            if (next is null) { noTakerFor.Add(wa); continue; } // nobody online (or nobody WhatsApp-active) for this kind of lead; the other kind may still have a taker
             await AssignAsync(lead, next.Id, "Auto-assigned when a team member came online", "auto");
             await db.SaveChangesAsync(); // so the next pick sees the new workload
             given++;
@@ -158,9 +164,54 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     public async Task AutoAssignAsync(Lead lead)
     {
         if (lead.AssignedToEmployeeId is not null || !await IsAutoAssignEnabledAsync()) return;
-        var next = await PickNextEmployeeAsync();
+        var next = await PickNextEmployeeAsync(null, NeedsWhatsAppSwitch(lead));
         if (next is null) return;
-        await AssignAsync(lead, next.Id, "Auto-assigned (online and least busy)", "auto");
+        await AssignAsync(lead, next.Id, NeedsWhatsAppSwitch(lead) ? "Auto-assigned (online, WhatsApp active, least busy)" : "Auto-assigned (online and least busy)", "auto");
+    }
+
+    /// <summary>
+    /// Leads an employee has not started on yet: still "new" and no reply from a team member. These are the ones that can safely move to someone else
+    /// when the owner is away; leads already being worked stay with their owner.
+    /// </summary>
+    private IQueryable<Lead> PendingOf(long employeeId) =>
+        db.Leads.Where(l => l.AssignedToEmployeeId == employeeId && l.Status == LeadStatuses.New
+            && !db.WhatsAppMessages.Any(m => m.LeadId == l.Id && m.Direction == "outbound" && m.SentBy != null && m.SentBy != "system")); // the automatic welcome message is sent by "system" and does not count
+
+    /// <summary>Gives the pending leads of <paramref name="employeeId"/> to other WhatsApp-active people; with nobody available they go back to the admin queue until someone is.</summary>
+    public async Task<int> MovePendingLeadsAsync(long employeeId, string reason, string changedBy)
+    {
+        var pending = await PendingOf(employeeId).OrderBy(l => l.CreatedAt).ToListAsync();
+        foreach (var lead in pending)
+        {
+            var target = await PickNextEmployeeAsync(employeeId, NeedsWhatsAppSwitch(lead));
+            await AssignAsync(lead, target?.Id, $"{reason} ({(target is null ? "returned to admin queue" : "moved to an active person")})", changedBy);
+            await db.SaveChangesAsync(); // so the next pick sees the new workload
+        }
+        return pending.Count;
+    }
+
+    /// <summary>Turns "WhatsApp active" off for a person and moves their pending leads to others. Returns how many leads moved.</summary>
+    public async Task<int> SwitchOffWhatsAppAsync(long employeeId, string reason, string changedBy)
+    {
+        var emp = await db.Employees.FirstOrDefaultAsync(e => e.Id == employeeId);
+        if (emp is null) return 0;
+        emp.WhatsAppActive = false;
+        await db.SaveChangesAsync();
+        return await MovePendingLeadsAsync(employeeId, reason, changedBy);
+    }
+
+    /// <summary>
+    /// Anyone marked WhatsApp active who is no longer around (signed out, stopped checking in, or deactivated) is switched off,
+    /// and their pending leads move to someone who is. Called by the background worker.
+    /// </summary>
+    public async Task<int> ReleaseAwayStaffAsync()
+    {
+        var cutoff = StaffAvailability.OnlineCutoff();
+        var away = await db.Employees.Where(e => e.WhatsAppActive && (!e.IsActive || e.LastSeenAt == null || e.LastSeenAt < cutoff)).Select(e => e.Id).ToListAsync();
+        var moved = 0;
+        foreach (var id in away) moved += await SwitchOffWhatsAppAsync(id, "Owner went offline", "auto");
+        if (away.Count > 0) log.LogInformation("[Lead] {Away} staff went away; {Moved} pending lead(s) moved", away.Count, moved);
+        return moved;
     }
 
     /// <summary>Moves every open lead of a leaving employee: spread across the remaining team, or back to the admin queue.</summary>
@@ -170,7 +221,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
             && l.Status != LeadStatuses.Converted && l.Status != LeadStatuses.NotInterested).ToListAsync();
         foreach (var lead in open)
         {
-            var target = spreadAcrossTeam ? await PickNextEmployeeAsync(fromEmployeeId) : null;
+            var target = spreadAcrossTeam ? await PickNextEmployeeAsync(fromEmployeeId, NeedsWhatsAppSwitch(lead)) : null;
             await AssignAsync(lead, target?.Id, $"Employee removed ({(target is null ? "returned to admin queue" : "redistributed")})", changedBy);
             await db.SaveChangesAsync(); // persists LastAssignedAt so the rotation advances per lead
         }

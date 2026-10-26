@@ -11,6 +11,7 @@ public class SettingsService(NuraDbContext db)
     public const string SiteContentKey = "site_content";
     public const string IngredientsKey = "formulation_ingredients";
     public const string MetricsKey = "formulation_metrics";
+    public const string PageContentKey = "page_content";
 
     public async Task<T?> GetAsync<T>(string key) where T : class
     {

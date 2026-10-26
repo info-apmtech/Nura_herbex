@@ -24,6 +24,12 @@ public class StaffAvailability(NuraDbContext db)
     public Task CheckOutAsync(long employeeId) =>
         db.Employees.Where(e => e.Id == employeeId).ExecuteUpdateAsync(s => s.SetProperty(e => e.LastSeenAt, (DateTime?)null));
 
+    public Task SetWhatsAppActiveAsync(long employeeId, bool active) =>
+        db.Employees.Where(e => e.Id == employeeId).ExecuteUpdateAsync(s => s.SetProperty(e => e.WhatsAppActive, active));
+
+    public Task<bool> IsWhatsAppActiveAsync(long employeeId) =>
+        db.Employees.AsNoTracking().Where(e => e.Id == employeeId).Select(e => e.WhatsAppActive).FirstOrDefaultAsync();
+
     /// <summary>Open leads + open tasks + overdue follow-ups per employee: a simple picture of who is busy.</summary>
     public async Task<Dictionary<long, int>> WorkloadAsync()
     {
@@ -46,11 +52,11 @@ public class StaffAvailability(NuraDbContext db)
     /// <paramref name="page"/> limits it to people whose designation lets them open that page; <paramref name="departmentId"/> to one department.
     /// Returns null when nobody is online, so the work waits in the admin queue instead of landing on someone who is away.
     /// </summary>
-    public async Task<Employee?> PickAsync(string page, long? departmentId = null, long? excludeId = null)
+    public async Task<Employee?> PickAsync(string page, long? departmentId = null, long? excludeId = null, bool whatsAppOnly = false)
     {
         var rights = await db.Designations.AsNoTracking().ToDictionaryAsync(d => d.Id, d => d.RightsJson);
         var cutoff = OnlineCutoff();
-        var staff = await db.Employees.Where(e => e.IsActive && e.Role == EmployeeRoles.Sales && e.Id != excludeId && e.LastSeenAt != null && e.LastSeenAt >= cutoff
+        var staff = await db.Employees.Where(e => e.IsActive && e.Role == EmployeeRoles.Sales && e.Id != excludeId && e.LastSeenAt != null && e.LastSeenAt >= cutoff && (!whatsAppOnly || e.WhatsAppActive)
             && (departmentId == null || e.DepartmentId == departmentId)).ToListAsync();
         if (staff.Count == 0) return null;
         var load = await WorkloadAsync();
