@@ -26,7 +26,7 @@
                         <span class="nhb-save">Save @Percent(p)%</span>
                     </div>
                     <div class="nhb-body">
-                        <h3>@p.Name</h3>
+                        <h3><a class="nh-title-link" href="@("/catalog/" + Uri.EscapeDataString(p.Id))">@p.Name</a></h3>
                         <p class="nhb-supply">@p.Supply</p>
                         <ul>
                             @foreach (var perk in p.Perks)
@@ -52,7 +52,7 @@
             <img src="_content/Nuraherbex.UI/images/product-1.png" alt="GUT 365 jar" loading="lazy" />
             <div class="nhb-gut-copy">
                 <span class="nhb-gut-tag">ALSO IN THE RANGE</span>
-                <h3>@_gutName</h3>
+                <h3><a class="nh-title-link" href="/catalog/gut-365">@_gutName</a></h3>
                 <p>@_gutBlurb</p>
             </div>
             <div class="nhb-gut-buy">

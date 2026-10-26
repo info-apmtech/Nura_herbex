@@ -30,6 +30,11 @@
             <p class="tp-tag">Verify your product. Build your trust.</p>
             <i class="tp-rule" aria-hidden="true"></i>
             <p class="tp-sub">Enter your product's batch number to view lab test reports and certifications.</p>
+            <ul class="tp-points" aria-label="What you get">
+                <li><Icon Name="FlaskConical" Size="15" /> Lab tested</li>
+                <li><Icon Name="ShieldCheck" Size="15" /> Batch verified</li>
+                <li><Icon Name="Leaf" Size="15" /> 100% natural</li>
+            </ul>
         </section>
 
         <section class="tp-card tp-entry" aria-labelledby="tp-enter">
@@ -61,6 +66,12 @@
             }
         </section>
 
+        <ol class="tp-steps" aria-label="How it works">
+            <li><b>1</b><span>Find the batch number on your jar</span></li>
+            <li><b>2</b><span>Enter it and tap Verify</span></li>
+            <li><b>3</b><span>See the lab report and certificates</span></li>
+        </ol>
+
         @if (_batches.Count > 0)
         {
             <div class="tp-chips"><span>Recent batches</span>
@@ -85,6 +96,7 @@
         <section class="tp-hero tp-hero-ok">
             <span class="tp-badge tp-badge-ok"><Icon Name="Check" Size="32" StrokeWidth="3" /></span>
             <h1>Batch Verified</h1>
+            <span class="tp-seal"><Icon Name="ShieldCheck" Size="14" /> Authentic Â· Batch #@BatchLabel(batch)</span>
             <p class="tp-sub">Here are your product details, lab test report and certifications for this batch.</p>
         </section>
 
@@ -114,7 +126,15 @@
                     <span><strong>@FileName(batch)</strong><small>@(string.IsNullOrWhiteSpace(batch.FileSize) ? "" : batch.FileSize + " • ")@(IsPdf(batch) ? "PDF" : "Image")</small></span>
                     <Icon Name="Download" Size="22" />
                 </a>
-                <a class="tp-btn tp-btn-ghost" href="@batch.DocumentUrl" target="_blank" rel="noopener noreferrer"><Icon Name="Eye" Size="20" /> View Lab Report</a>
+                <button type="button" class="tp-btn tp-btn-ghost" aria-expanded="@_showReport" @onclick="() => _showReport = !_showReport"><Icon Name="Eye" Size="20" /> @(_showReport ? "Hide Lab Report" : "View Lab Report")</button>
+                @if (_showReport)
+                {
+                    <div class="tp-viewer">
+                        @if (IsPdf(batch)) { <iframe src="@batch.DocumentUrl" title="@($"Laboratory report for batch {BatchLabel(batch)}")"></iframe> }
+                        else { <img src="@batch.DocumentUrl" alt="@($"Laboratory report for batch {BatchLabel(batch)}")" /> }
+                        <a href="@batch.DocumentUrl" target="_blank" rel="noopener noreferrer"><Icon Name="ExternalLink" Size="14" /> Open in a new tab</a>
+                    </div>
+                }
             }
             else { <p class="tp-none">The lab report for this batch has not been uploaded yet.</p> }
             @if (!string.IsNullOrWhiteSpace(batch.Notes)) { <p class="tp-note">@batch.Notes</p> }
@@ -142,6 +162,17 @@
             </section>
         }
 
+        @if (_batches.Count > 1)
+        {
+            <div class="tp-chips"><span>Other batches</span>
+                @foreach (var b in _batches.Where(x => BatchLabel(x) != BatchLabel(batch)).Take(8))
+                {
+                    var no = BatchLabel(b);
+                    <button type="button" @key="no" @onclick="() => SelectQuickBatch(no)">#@no</button>
+                }
+            </div>
+        }
+
         <button type="button" class="tp-btn tp-btn-solid tp-again" @onclick="VerifyAnotherAsync"><Icon Name="Search" Size="18" /> Verify another batch</button>
     }
 </main>
@@ -150,9 +181,15 @@
 </div>
 
 @code {
-    private bool _helpOpen;
+    private bool _helpOpen, _showReport;
     private string RequestMailto => "mailto:care@nuraherbex.com?subject=" + Uri.EscapeDataString("Batch number request") + "&body=" + Uri.EscapeDataString("Hello, I would like to verify my product. Product name and order number: ");
-    private static List<BatchDocumentDto> Certs(TrustBatchDto b, string kind) => b.Documents.Where(d => string.Equals(d.Kind, kind, StringComparison.OrdinalIgnoreCase)).ToList();
+    /// <summary>Certifications an admin added to the batch; a batch with none shows the standard set (BatchCertDefaults).</summary>
+    private static List<BatchDocumentDto> Certs(TrustBatchDto b, string kind)
+    {
+        var own = b.Documents.Where(d => d.Kind is "product" or "brand").ToList();
+        var source = own.Count > 0 ? own : BatchCertDefaults.All;
+        return source.Where(d => string.Equals(d.Kind, kind, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
     private static bool IsGut(TrustBatchDto b) => (b.ProductName ?? "").Contains("GUT", StringComparison.OrdinalIgnoreCase);
     private static string ProductImage(TrustBatchDto b) => "_content/Nuraherbex.UI/images/" + (IsGut(b) ? "product-gut365.png" : "product-stamix.png");
     private static string ProductSubtitle(TrustBatchDto b) => IsGut(b) ? "Digestive Health & Gut Support" : "Men's Wellness Support";
@@ -246,6 +283,7 @@
 
     private async Task SelectQuickBatch(string bNo)
     {
+        _showReport = false;
         _searchText = bNo;
         _activeBatchNo = bNo;
         await ShowFeedback($"✓ Batch {bNo} loaded from registry", 3000);
@@ -264,6 +302,7 @@
     {
         _activeBatchNo = "";
         _searchText = "";
+        _showReport = false;
         _lastRequested = null;
         Nav.NavigateTo("/quality-reports", replace: true);
         try { await _searchInput.FocusAsync(); } catch { }

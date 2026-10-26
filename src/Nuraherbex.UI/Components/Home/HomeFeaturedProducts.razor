@@ -29,13 +29,13 @@
                         <span class="nhp-badge">@p.Badge</span>
                         <span class="nhp-glow" aria-hidden="true"></span>
                         <span class="nhp-ring" aria-hidden="true"></span>
-                        <img src="@p.Image" alt="@p.Name jar" class="nhp-jar" loading="lazy" />
+                        <a href="@("/catalog/" + Uri.EscapeDataString(p.Id))" tabindex="-1" aria-hidden="true"><img src="@p.Image" alt="@p.Name jar" class="nhp-jar" loading="lazy" /></a>
                         <span class="nhp-pill"><Icon Name="@p.PillIcon" Size="14" /> @p.Pill</span>
                     </div>
 
                     <div class="nhp-body">
                         <span class="nhp-cat">@p.Category</span>
-                        <h3 class="nhp-name">@p.Name</h3>
+                        <h3 class="nhp-name"><a class="nh-title-link" href="@("/catalog/" + Uri.EscapeDataString(p.Id))">@p.Name</a></h3>
                         <p class="nhp-desc">@p.Desc</p>
 
                         <ul class="nhp-points">

@@ -209,3 +209,16 @@ a.nh-shop-card-img-wrap{display:block;text-decoration:none}
 .nh-shop-card-name a:hover{text-decoration:underline}
 .nh-shop-view-details{display:inline-flex;align-items:center;gap:.35rem;margin:.25rem 0 .6rem;font-size:.85rem;font-weight:700;color:#732dbd;text-decoration:none}
 .nh-shop-view-details:hover{text-decoration:underline}
+
+/* Product titles on the home page open the detail page */
+.nh-title-link{color:inherit;text-decoration:none;transition:color .15s}
+.nh-title-link:hover{color:#5e209e;text-decoration:underline;text-underline-offset:4px}
+.nhp-media>a{display:contents}
+
+/* Verify batch call-out on the product page */
+.sc-verify{display:flex;align-items:center;gap:14px;margin:16px 0 4px;padding:14px 16px;border-radius:14px;border:1px solid #d9cdee;background:linear-gradient(135deg,#f6f0ff,#fff);color:#3b1a73;text-decoration:none;transition:transform .15s,box-shadow .15s,border-color .15s}
+.sc-verify:hover{transform:translateY(-1px);border-color:#7b3fc4;box-shadow:0 10px 24px -12px rgba(94,32,158,.45)}
+.sc-verify-ic{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:#5e209e;color:#fff;flex:none}
+.sc-verify span:nth-child(2){flex:1;min-width:0}
+.sc-verify strong{display:block;font-size:1rem;color:#1d1530}
+.sc-verify small{display:block;font-size:.8rem;color:#5a5266;margin-top:2px}

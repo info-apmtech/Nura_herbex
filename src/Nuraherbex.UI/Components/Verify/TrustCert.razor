@@ -1,5 +1,5 @@
 <div class="tp-cert">
-    <span class="tp-cert-ic"><Icon Name="Award" Size="26" /></span>
+    <span class="@($"tp-emblem e-{Emblem.Key}")" aria-hidden="true">@Emblem.Text</span>
     <strong>@Doc.Title</strong>
     @if (!string.IsNullOrWhiteSpace(Doc.ValidTill)) { <small>Valid till: @Doc.ValidTill</small> }
     @if (!string.IsNullOrWhiteSpace(Doc.Url)) { <a href="@Doc.Url" target="_blank" rel="noopener noreferrer"><Icon Name="Eye" Size="14" /> View</a> }
@@ -7,4 +7,19 @@
 
 @code {
     [Parameter, EditorRequired] public BatchDocumentDto Doc { get; set; } = new();
+
+    /// <summary>A simple badge picked from the certificate name (no logo files are bundled).</summary>
+    private (string Key, string Text) Emblem
+    {
+        get
+        {
+            var t = (Doc.Title ?? "").ToUpperInvariant();
+            if (t.Contains("FSSAI")) return ("fssai", "fssai");
+            if (t.Contains("HACCP")) return ("haccp", "HACCP");
+            if (t.Contains("USDA")) return ("usda", "USDA");
+            if (t.Contains("GMP")) return ("gmp", "GMP");
+            if (t.Contains("ISO")) return ("iso", "ISO");
+            return ("gen", string.IsNullOrWhiteSpace(Doc.Title) ? "âœ“" : Doc.Title.Trim()[..1].ToUpperInvariant());
+        }
+    }
 }
