@@ -142,3 +142,15 @@
   .wc-window{display:none}
   .wc-thead .wc-who small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
+
+/* ---- Refined tabs and conversation search ---- */
+.wl-tabs{gap:6px;padding:5px;border:1px solid #e9e0f5;border-radius:16px;background:#f7f3fc;overflow-x:auto;width:fit-content;max-width:100%}
+.wl-tabs button{padding:9px 16px;border-radius:12px;border-bottom:0;margin:0;font-size:13.5px;color:#6b6480;transition:background .15s,color .15s,box-shadow .15s}
+.wl-tabs button:hover{background:rgba(255,255,255,.7);color:#2a1a47}
+.wl-tabs button.is-on{background:#fff;color:#4b1a85;box-shadow:0 4px 12px -6px rgba(55,19,90,.35),0 0 0 1px #e9e0f5}
+.wl-tabs small{background:#ece2f9;color:#4b1a85}
+.wl-tabs button.is-on small{background:#5e209e;color:#fff}
+.wc-search{margin:14px;border-radius:999px;background:#fff;border:1px solid #e3d9f1;padding:0 16px;box-shadow:0 2px 8px -4px rgba(55,19,90,.2)}
+.wc-search:focus-within{border-color:#7b3fc4;box-shadow:0 0 0 4px rgba(123,63,196,.14)}
+.wc-search svg{color:#7b3fc4}
+@media(max-width:560px){.wl-tabs{width:100%}}

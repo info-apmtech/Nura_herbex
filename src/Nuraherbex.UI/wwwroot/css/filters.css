@@ -30,3 +30,55 @@
 .fp-chip small{font-size:11px;font-weight:600;color:#8b8499}
 .fp-chip:hover{border-color:#5e209e}
 .fp-chip.is-on{background:#5e209e;border-color:#5e209e;color:#fff}.fp-chip.is-on small{color:#cfe6d8}
+
+/* ---- Refined look (elegant, calm, professional) ---- */
+.fp{background:#fff;border:1px solid #e9e0f5;border-radius:18px;box-shadow:0 10px 30px -14px rgba(55,19,90,.22),0 1px 2px rgba(55,19,90,.04);overflow:hidden}
+.fp-head{padding:12px 18px;gap:12px;background:linear-gradient(180deg,#fbf8ff 0%,#fff 100%)}
+.fp-title{padding:8px 14px 8px 10px;border-radius:999px;background:#f1e9fb;color:#4b1a85;font-weight:700;letter-spacing:.1px;transition:background .15s}
+.fp-title:hover{background:#e8dcf8}
+.fp-title>svg:first-child{padding:4px;width:24px;height:24px;border-radius:50%;background:#5e209e;color:#fff;box-sizing:border-box}
+.fp-badge{min-width:20px;height:20px;background:#1fa463;box-shadow:0 0 0 3px rgba(31,164,99,.18)}
+.fp-result{padding:5px 12px;border-radius:999px;background:#f6f3fa;font-size:12.5px;color:#6b6480}
+.fp-reset{border-radius:999px;padding:7px 14px;border-color:#f0d4d0;background:#fff;color:#b3261e}
+.fp-reset:hover{background:#fdeceb;border-color:#e8b3ad}
+.fp-active{padding:2px 18px 14px;gap:8px}
+.fp-tag{padding:5px 6px 5px 12px;border-radius:999px;background:#f1e9fb;color:#4b1a85;font-weight:650;border:1px solid #e3d5f6}
+.fp-tag em{color:#7a6f93}
+.fp-tag button{color:#5e209e;background:#fff}
+.fp-tag button:hover{background:#5e209e;color:#fff}
+.fp-grid{padding:18px;gap:18px 20px;border-top:1px solid #f1eaf9;background:#fffdff}
+.fp-field{gap:8px}
+.fp-field label{font-size:10.5px;letter-spacing:.9px;color:#7a6f93;display:flex;align-items:center;gap:7px}
+.fp-field label:before{content:"";width:5px;height:5px;border-radius:50%;background:#b58be6}
+.fp-input,.fp-field select,.fp-pair input{border:1px solid #e3d9f1;border-radius:12px;background:#faf8fd;min-height:42px;transition:border-color .15s,box-shadow .15s,background .15s}
+.fp-field select,.fp-pair input{padding:0 12px;appearance:none}
+.fp-field select{background:#faf8fd url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a6f93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 12px center;padding-right:32px}
+.fp-input{padding:0 12px}
+.fp-input:hover,.fp-field select:hover,.fp-pair input:hover{border-color:#cdb8ea}
+.fp-input:focus-within,.fp-field select:focus,.fp-pair input:focus{background:#fff;border-color:#7b3fc4;box-shadow:0 0 0 4px rgba(123,63,196,.14)}
+.fp-pair{gap:10px}.fp-pair span{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#a59cb8}
+.fp-chips{gap:8px}
+.fp-chip{padding:7px 13px;border:1px solid #e3d9f1;background:#faf8fd;color:#3a2d55;font-weight:650;box-shadow:0 1px 1px rgba(55,19,90,.03)}
+.fp-chip small{padding:1px 7px;border-radius:999px;background:#fff;color:#7a6f93;font-size:10.5px;border:1px solid #eee6f8}
+.fp-chip:hover{border-color:#9b5be0;background:#fff;transform:translateY(-1px)}
+.fp-chip.is-on{background:linear-gradient(135deg,#7b3fc4,#5e209e);border-color:transparent;color:#fff;box-shadow:0 6px 14px -6px rgba(94,32,158,.6)}
+.fp-chip.is-on small{background:rgba(255,255,255,.2);color:#fff;border-color:transparent}
+@media(max-width:560px){.fp-head{padding:10px 12px}.fp-grid{padding:14px 12px}.fp-active{padding:2px 12px 12px}}
+.fp-grid{grid-auto-flow:row dense;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.fp-field.fpk-chips,.fp-field.fpk-date{grid-column:1/-1}
+.fp-field.fpk-date .fp-pair{max-width:420px}
+.admin-theme .fp-input input{padding:0;border:0;background:transparent;box-shadow:none;min-height:40px;border-radius:0}
+.admin-theme .fp-input input:focus{box-shadow:none;border:0}
+
+/* ---- Compact alignment: less empty space ---- */
+.fp-head{padding:10px 14px}
+.fp-active{padding:0 14px 10px}
+.fp-grid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr));grid-auto-flow:row dense;gap:12px 14px;padding:14px}
+.fp-field{gap:5px;align-self:start}
+.fp-field.fpk-date,.fp-field.fpk-chips{grid-column:span 2}
+.fp-field.fpk-date .fp-pair{max-width:none}
+.fp-field.fpk-chips .fp-chips{gap:6px}
+.fp-input,.fp-field select,.fp-pair input{min-height:38px}
+.admin-theme .fp-input input{min-height:36px}
+.fp-chip{padding:5px 11px}
+@media(max-width:560px){.fp-field.fpk-date,.fp-field.fpk-chips{grid-column:1/-1}.fp-grid{grid-template-columns:1fr 1fr;padding:12px}}
