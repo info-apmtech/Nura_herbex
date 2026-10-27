@@ -265,6 +265,8 @@ public class TaskDetailResponse : ApiResult
 public class TaskCounts
 {
     public int Open { get; set; }
+    /// <summary>Open tasks due after today. They are not listed until their day, only counted for a hint.</summary>
+    public int Upcoming { get; set; }
     public int Overdue { get; set; }
     public int DueToday { get; set; }
     public int Done { get; set; }

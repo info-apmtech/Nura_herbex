@@ -90,6 +90,28 @@
 .tk-check{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px dashed var(--ld-line)}
 .tk-check label{display:flex;gap:8px;align-items:center;cursor:pointer}
 .tk-check.done span{text-decoration:line-through;color:var(--ld-muted)}
+.tk-tabs{display:flex;gap:6px;border-bottom:1px solid var(--ld-line);margin:4px 0 14px}
+.tk-tab{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border:0;background:none;font-size:14px;font-weight:600;color:var(--ld-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tk-tab b{min-width:22px;padding:1px 7px;border-radius:999px;background:var(--ld-soft);font-size:12px;text-align:center}
+.tk-upcoming{display:flex;align-items:center;gap:6px;margin:0 0 12px;padding:8px 12px;border-radius:10px;background:var(--ld-soft);color:var(--ld-muted);font-size:13px}
+.tk-tab:hover{color:inherit}
+.tk-tab.is-on{color:var(--ld-green);border-bottom-color:var(--ld-green)}
+.tk-tab.is-on b{background:var(--ld-green);color:#fff}
+/* Polished checklist rows: card per step, round custom checkbox, reason field drops underneath */
+.tk-check{flex-wrap:wrap;gap:8px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--ld-line);border-radius:12px;background:#fff;transition:border-color .15s,background .15s,box-shadow .15s}
+.tk-check:hover{border-color:#c9bfd6;box-shadow:0 1px 4px rgba(60,30,90,.07)}
+.tk-check.done{background:#f3faf5;border-color:#bfe3c9}
+.tk-check:not(.done):has(.fu-input){background:#fff8f6;border-color:#f1cdc6}
+.tk-check label{flex:1;min-width:0;gap:10px;font-size:14px;line-height:1.35}
+.tk-check input[type=checkbox]{appearance:none;-webkit-appearance:none;flex:none;width:20px;height:20px;margin:0;border:1.5px solid #b9b0c4;border-radius:50%;background:#fff;display:grid;place-items:center;cursor:pointer;transition:background .15s,border-color .15s,transform .1s}
+.tk-check input[type=checkbox]::after{content:"";width:5px;height:10px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px) scale(0);transition:transform .15s}
+.tk-check input[type=checkbox]:hover:not(:disabled){border-color:var(--ld-green)}
+.tk-check input[type=checkbox]:checked{background:var(--ld-green);border-color:var(--ld-green)}
+.tk-check input[type=checkbox]:checked::after{transform:rotate(45deg) translate(-1px,-1px) scale(1)}
+.tk-check input[type=checkbox]:active:not(:disabled){transform:scale(.9)}
+.tk-check input[type=checkbox]:focus-visible{outline:2px solid var(--ld-green);outline-offset:2px}
+.tk-check input[type=checkbox]:disabled{opacity:.5;cursor:not-allowed}
+.tk-check > .fu-input{flex:1 1 100%;height:36px;font-size:13px;border-color:#e6b9b0;background:#fff}
 .tk-add{display:flex;gap:8px;margin-top:8px}
 .tk-add input{flex:1;min-width:0}
 .tk-comment{background:var(--ld-soft);border-radius:10px;padding:8px 12px;margin-bottom:8px}
@@ -221,7 +243,21 @@ th.sn,th.admin-sno{white-space:nowrap}
 .tk-r-main .tk-r-note,.tk-card .tk-r-note{display:block;margin-top:3px;color:var(--ld-muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tk-r-note b{font-weight:600;color:inherit}
 .tk-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#bcb7c1;margin-right:6px;vertical-align:middle}.tk-dot.on{background:#2e9b5f;box-shadow:0 0 0 3px rgba(46,155,95,.18)}
-.tk-auto{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px dashed var(--ld-line,#d3cfd8);border-radius:10px;background:rgba(94,32,158,.04);font-size:13px;margin-bottom:8px}.tk-auto strong{color:#5e209e}
+.tk-auto{display:flex;gap:10px;align-items:center;padding:9px 12px;border:1px solid var(--ld-line,#d3cfd8);border-radius:10px;background:#faf8fc;font-size:12.5px;font-weight:400;line-height:1.35;color:#4b5563;margin:0;cursor:pointer;transition:border-color .15s,background .15s}.tk-auto strong{color:#5e209e;font-weight:700}
+.tk-auto:hover{border-color:#c9bfd6}
+.tk-auto:has(input:checked){border-color:#5e209e;background:rgba(94,32,158,.07)}
+.fu-field .tk-auto input[type=checkbox]{flex:0 0 16px;width:16px!important;height:16px!important;min-height:0!important;padding:0!important;margin:0;accent-color:#5e209e}
+.fu-field .tk-auto span{color:inherit;font-weight:400}
+.tk-wide{gap:8px}
+.tk-wide>span{font-size:12px;font-weight:650;color:#4b5563;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px}
+.tk-wide>span small{margin:0;font-size:11.5px}
+.tk-people{max-height:200px;padding:6px;gap:2px;border-radius:10px;background:#fff}
+.tk-people-tools{margin:0 0 2px;padding:0 2px}
+.tk-people-tools:empty{display:none}
+.tk-people .tk-person{padding:5px 8px;gap:10px;font-weight:400}
+.tk-people .tk-person strong{font-size:13px;font-weight:650;color:var(--ld-ink)}
+.tk-people .tk-person small{margin-top:1px}
+.tk-people .tk-person span{white-space:normal}
 
 /* ---------- Popups always fit the screen: the body scrolls, header and buttons stay in view ---------- */
 .fu-modal-backdrop { overflow-y: auto; overscroll-behavior: contain; align-items: center; }
@@ -240,3 +276,32 @@ th.sn,th.admin-sno{white-space:nowrap}
 }
 /* Popups and the task drawer sit above the admin sidebar and top bar */
 .fu-modal-backdrop, .tk-drawer-bg { z-index: 2000 !important; }
+
+/* ===== Corporate refinement: auto-assign switch + checklist ===== */
+.tk-auto{gap:12px;padding:12px 14px;border:1px solid #e3e1e8;border-radius:10px;background:#fff;box-shadow:0 1px 2px rgba(20,16,32,.04);font-size:12.5px;color:#5b5766;position:relative}
+.tk-auto:hover{border-color:#cfcad9;background:#fcfbfe}
+.tk-auto:has(input:checked){border-color:#5e209e;background:#faf7fd;box-shadow:0 0 0 3px rgba(94,32,158,.08)}
+.tk-auto strong{color:#1f1b2b;font-weight:650;letter-spacing:.01em}
+.tk-auto span{line-height:1.4}
+.fu-field .tk-auto input[type=checkbox]{appearance:none;-webkit-appearance:none;order:2;margin-left:auto;flex:0 0 36px;width:36px!important;height:20px!important;border-radius:999px!important;border:0!important;background:#cfcad9!important;position:relative;cursor:pointer;transition:background .2s}
+.fu-field .tk-auto input[type=checkbox]::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .2s}
+.fu-field .tk-auto input[type=checkbox]:checked{background:#5e209e!important}
+.fu-field .tk-auto input[type=checkbox]:checked::after{transform:translateX(16px)}
+.fu-field .tk-auto input[type=checkbox]:focus-visible{outline:2px solid #5e209e;outline-offset:2px}
+.tk-people{border-color:#e3e1e8;box-shadow:inset 0 1px 2px rgba(20,16,32,.03)}
+.tk-people .tk-person{border:1px solid transparent;border-radius:8px}
+.tk-people .tk-person.is-on{background:#faf7fd;border-color:#d9c8ec}
+
+.tk-check{border:1px solid #e3e1e8;border-radius:8px;padding:11px 14px;margin-bottom:6px;background:#fff;box-shadow:0 1px 2px rgba(20,16,32,.03)}
+.tk-check:hover{border-color:#cfcad9;box-shadow:0 1px 3px rgba(20,16,32,.07)}
+.tk-check label{font-size:13.5px;color:#1f1b2b;gap:12px}
+.tk-check input[type=checkbox]{width:18px;height:18px;border-radius:5px;border:1.5px solid #a9a3b8}
+.tk-check input[type=checkbox]::after{width:4px;height:9px}
+.tk-check input[type=checkbox]:checked{background:#5e209e;border-color:#5e209e}
+.tk-check.done{background:#f8f7fb;border-color:#e3e1e8}
+.tk-check.done span{color:#8a8598}
+.tk-check:not(.done):has(.fu-input){background:#fff;border-color:#e3e1e8;border-left:3px solid #c0392b}
+.tk-check > .fu-input{height:36px;border-color:#d9d5e2!important;font-size:13px}
+.tk-check .em-x{margin-left:8px;opacity:.55}.tk-check .em-x:hover{opacity:1}
+.fu-field .tk-text{height:auto;min-height:92px;padding:10px 12px!important;line-height:1.5;resize:vertical;font-family:inherit}
+.tk-add .fu-input{height:38px}

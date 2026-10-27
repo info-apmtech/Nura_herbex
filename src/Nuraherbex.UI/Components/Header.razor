@@ -28,6 +28,10 @@
         <div class="nv-actions">
             <button @onclick='() => GoPage("/shop")' class="nv-cta">Shop now <Icon Name="ArrowRight" Size="14" /></button>
 
+            <button @onclick='() => GoPage("/admin")' aria-label="Admin Portal" title="Admin Portal" class="nv-icon @(PathIs("/admin") || new Uri(Nav.Uri).AbsolutePath.StartsWith("/admin/", StringComparison.OrdinalIgnoreCase) ? "is-active" : "")">
+                <Icon Name="ShieldCheck" Size="18" />
+            </button>
+
             <button @onclick="GoAccount" aria-label="Vitality Account" title="@AccountTitle" class="nv-icon @(IsAccount ? "is-active" : "")">
                 <Icon Name="User" Size="18" />
                 @if (Auth.IsAuthenticated) { <span class="nv-dot ring-black"></span> }
@@ -152,6 +156,7 @@
         new("Quality & Testing", () => GoPage("/quality-reports"), IsQuality),
         new("Track Order", () => GoPage("/track"), PathIs("/track", "/track-order")),
         new(Auth.IsAuthenticated ? "My Account" : "Sign In / Account", () => GoPage("/account"), IsAccount),
+        new("Admin Portal", () => GoPage("/admin")),
     };
 
     protected override void OnInitialized()

@@ -6,7 +6,7 @@
     <div class="em-head">
         <div>
             <h3>Tasks</h3>
-            <p>@(AdminAuth.CanAll("tasks") ? "Every task across the team: who owns it, what is late and what is done." : "Tasks assigned to you or created by you.")</p>
+            <p>@(AdminAuth.CanAll("tasks") ? "Every task across the team: who owns it, what is late and what is done." : "Your tasks.")</p>
         </div>
         <div class="em-head-actions"><ExportButton Title="Tasks" FileName="nura-tasks" Columns="@(new[] { "Task", "Department", "Assigned to", "Created by", "Priority", "Status", "Due", "Late", "Created", "Completed", "Repeat", "Latest comment" })" Rows="ExportRows" Disabled="@(_items.Count == 0)" /><button type="button" class="ld-btn primary" @onclick="StartCreate"><Icon Name="Plus" Size="14" /> New task</button></div>
     </div>
@@ -27,21 +27,34 @@
         <div class="@($"em-note {(_ok ? "ok" : "bad")}")" role="status"><Icon Name="@(_ok ? "CheckCircle2" : "AlertCircle")" Size="15" /><span>@_message</span><button type="button" class="em-x" aria-label="Dismiss" @onclick="() => _message = null"><Icon Name="X" Size="14" /></button></div>
     }
 
-    <div class="fu-chips tk-chips">
-        <button type="button" class="@Chip("open", "")" @onclick='() => SetView("open", "")'><b>@_counts.Open</b><span>Open</span></button>
-        <button type="button" class="@Chip("overdue", "late")" @onclick='() => SetView("overdue", "")'><b>@_counts.Overdue</b><span>Overdue</span></button>
-        <button type="button" class="@Chip("today", "today")" @onclick='() => SetView("today", "")'><b>@_counts.DueToday</b><span>Due today</span></button>
-        <button type="button" class="@Chip("done", "")" @onclick='() => SetView("done", "")'><b>@_counts.Done</b><span>Done</span></button>
+    <div class="tk-tabs" role="tablist" aria-label="Task status">
+        <button type="button" role="tab" aria-selected="@(_scope != "done")" class="tk-tab @(_scope != "done" ? "is-on" : "")" @onclick='() => SetView("open", "")'>Pending <b>@_counts.Open</b></button>
+        <button type="button" role="tab" aria-selected="@(_scope == "done")" class="tk-tab @(_scope == "done" ? "is-on" : "")" @onclick='() => SetView("done", "")'>Completed <b>@_counts.Done</b></button>
     </div>
+    @if (_scope != "done")
+    {
+        <div class="fu-chips tk-chips">
+            <button type="button" class="@Chip("open", "")" @onclick='() => SetView("open", "")'><b>@_counts.Open</b><span>All pending</span></button>
+            <button type="button" class="@Chip("overdue", "late")" @onclick='() => SetView("overdue", "")'><b>@_counts.Overdue</b><span>Overdue</span></button>
+            <button type="button" class="@Chip("today", "today")" @onclick='() => SetView("today", "")'><b>@_counts.DueToday</b><span>Due today</span></button>
+        </div>
+        @if (_counts.Upcoming > 0)
+        {
+            <p class="tk-upcoming"><Icon Name="Clock" Size="13" /> @_counts.Upcoming upcoming task@(_counts.Upcoming == 1 ? "" : "s") will show here on @(_counts.Upcoming == 1 ? "its" : "their") due day.</p>
+        }
+    }
 
     <div class="tk-bar">
         <div class="ld-search"><Icon Name="Search" Size="15" /><input type="search" placeholder="Search tasks" aria-label="Search tasks" @bind="_q" @bind:event="oninput" @bind:after="LoadAsync" /></div>
+        @if (AdminAuth.CanAll("tasks"))
+        {
         <select aria-label="Person" @bind="_assignee" @bind:after="LoadAsync">
             <option value="">Everyone</option>
             <option value="me">My tasks (@_counts.Mine)</option>
             <option value="unassigned">Unassigned (@_counts.Unassigned)</option>
             @foreach (var p in _team) { <option value="@p.Id">@p.Name</option> }
         </select>
+        }
         <button type="button" class="tk-more @(_more ? "is-on" : "")" aria-expanded="@_more" @onclick="() => _more = !_more"><Icon Name="SlidersHorizontal" Size="14" /> More filters@(_department != "" || _priority != "" ? " (on)" : "")</button>
         @if (_more || _department != "" || _priority != "")
         {
@@ -65,7 +78,7 @@
     else if (_board)
     {
         <div class="tk-board">
-            @foreach (var st in TaskStatuses.All)
+            @foreach (var st in TaskStatuses.All.Where(s => (s == "done") == (_scope == "done")))
             {
                 var status = st;
                 var col = _items.Where(t => t.Status == status).ToList();
@@ -105,7 +118,8 @@
                 var due = DueInfo(task);
                 var isDone = task.Status == "done";
                 <article class="@($"tk-r p-{task.Priority} {(isDone ? "is-done" : "")}")" @key="task.Id">
-                    <button type="button" class="@($"tk-tick {(isDone ? "on" : "")}")" disabled="@(!task.CanEdit)" title="@(!task.CanEdit ? "You can only view this task" : isDone ? "Reopen this task" : "Mark as done")" aria-label="@(isDone ? "Reopen task" : "Mark task as done")" @onclick="() => ToggleDoneAsync(task)"><Icon Name="Check" Size="14" /></button>
+                    @if (isDone) { <span class="tk-tick on" title="Done" aria-label="Done"><Icon Name="Check" Size="14" /></span> }
+                    else { <button type="button" class="tk-tick" disabled="@(!task.CanEdit)" title="@(!task.CanEdit ? "You can only view this task" : "Mark as done")" aria-label="Mark task as done" @onclick="() => ToggleDoneAsync(task)"><Icon Name="Check" Size="14" /></button> }
                     <button type="button" class="tk-r-main" @onclick="() => OpenAsync(task.Id)">
                         <strong>@task.Title</strong>
                         <small>@string.Join(" · ", new[] { task.DepartmentName, task.LeadName is { } ln ? "Lead: " + ln : null, task.Repeat != "none" ? "Repeats " + task.Repeat : null }.Where(x => x is not null))</small>
@@ -409,8 +423,7 @@
 
     private async Task LoadAsync()
     {
-        var scope = _board ? (_scope == "done" ? "done" : "board") : _scope;
-        var res = await Api.AdminTasksAsync(scope, _assignee, long.TryParse(_department, out var d) ? d : null, _priority, _q, _leadFilter);
+        var res = await Api.AdminTasksAsync(_scope, _assignee, long.TryParse(_department, out var d) ? d : null, _priority, _q, _leadFilter);
         if (res.Success) { _items = res.Items; _counts = res.Counts; }
         else Say(res.Message ?? "Could not load tasks.", false);
         _loading = false;

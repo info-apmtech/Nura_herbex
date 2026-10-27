@@ -18,9 +18,10 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
     // Visibility and permissions
     // ---------------------------------------------------------------------
 
-    /// <summary>Tasks this person may see: everything with the top task right, otherwise tasks assigned to or created by them.</summary>
+    /// <summary>Tasks this person may see: everything with the top task right, otherwise only their own tasks (each assignee has their own copy).
+    /// Tasks they created and left unassigned stay visible too, so they are not lost.</summary>
     public IQueryable<WorkTask> Visible(Caller c) =>
-        c.CanSeeAll ? db.WorkTasks : db.WorkTasks.Where(t => t.AssignedToEmployeeId == c.EmployeeId || t.CreatedByEmployeeId == c.EmployeeId);
+        c.CanSeeAll ? db.WorkTasks : db.WorkTasks.Where(t => t.AssignedToEmployeeId == c.EmployeeId || (t.AssignedToEmployeeId == null && t.CreatedByEmployeeId == c.EmployeeId));
 
     public static bool CanEdit(WorkTask t, Caller c) => c.CanSeeAll || (c.EmployeeId is { } me && (t.CreatedByEmployeeId == me || t.AssignedToEmployeeId == me));
     public static bool CanDelete(WorkTask t, Caller c) => c.CanSeeAll || (c.EmployeeId is { } me && t.CreatedByEmployeeId == me);
@@ -79,10 +80,12 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
             q = q.Where(t => t.Title.Contains(s) || (t.Tags != null && t.Tags.Contains(s)) || (t.Description != null && t.Description.Contains(s)));
         }
 
-        var qOpen = q.Where(t => t.Status != TaskStatuses.Done);
+        // Pending shows only what needs attention now: overdue, due today, or no date. Later tasks appear on their own day.
+        var qOpen = q.Where(t => t.Status != TaskStatuses.Done && (t.DueAt == null || t.DueAt < tomorrow));
         var counts = new TaskCounts
         {
             Open = await qOpen.CountAsync(),
+            Upcoming = await q.CountAsync(t => t.Status != TaskStatuses.Done && t.DueAt != null && t.DueAt >= tomorrow),
             Overdue = await qOpen.CountAsync(t => t.DueAt != null && t.DueAt < now),
             DueToday = await qOpen.CountAsync(t => t.DueAt != null && t.DueAt >= todayStart && t.DueAt < tomorrow),
             Done = await q.CountAsync(t => t.Status == TaskStatuses.Done && t.CompletedAt >= doneSince),
@@ -97,7 +100,7 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
             case "done": q = q.Where(t => t.Status == TaskStatuses.Done && t.CompletedAt >= doneSince); break;
             case "board": q = q.Where(t => t.Status != TaskStatuses.Done || t.CompletedAt >= doneSince); break;
             case "all": break;
-            default: q = q.Where(t => t.Status != TaskStatuses.Done); break;
+            default: q = q.Where(t => t.Status != TaskStatuses.Done && (t.DueAt == null || t.DueAt < tomorrow)); break;
         }
         if (!string.IsNullOrWhiteSpace(f.Status)) q = q.Where(t => t.Status == f.Status);
 
