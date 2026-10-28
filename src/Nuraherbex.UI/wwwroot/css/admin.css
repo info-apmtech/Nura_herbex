@@ -639,3 +639,8 @@ body:has(.admin-theme)::-webkit-scrollbar,
 .pce-field{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:#4a4254}
 .pce-preview{width:100%;max-height:150px;object-fit:cover;border-radius:8px;background:#f2f0f4}
 .pce-reset{align-self:flex-start;border:0;background:none;color:#5e209e;font-size:12px;font-weight:600;padding:0;text-decoration:underline}
+
+/* Store content > Mobile view checklist */
+.pce-hint { margin: 0 0 10px; font-size: 12px; opacity: .7; }
+.pce-check { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 13px; cursor: pointer; }
+.pce-check input { width: 18px; height: 18px; flex: none; accent-color: #7c3aed; }

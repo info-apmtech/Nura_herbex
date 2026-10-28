@@ -118,3 +118,8 @@
 
 :where(.nf,.nv-bar,.nv-drawer) :where(p,li,figcaption,span,a,button,small,strong,div){font-family:'Manrope',system-ui,sans-serif}
 .nf p,.nf li,.nv-drawer p{font-family:'Manrope',system-ui,sans-serif}
+
+/* Admin-controlled "hide on mobile" sections (see MobileSection.razor) */
+.nh-mob-ok { display: contents; }
+.nh-mob-hide { display: contents; }
+@media (max-width: 767.98px) { .nh-mob-hide { display: none !important; } }

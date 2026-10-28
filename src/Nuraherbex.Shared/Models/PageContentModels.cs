@@ -55,5 +55,62 @@ public static class PageContentCatalog
         new("Shop", "Page banner", "shop.hero.image", "Banner flowers image", PageFieldKind.Image, $"{Ui}/images/shop-blossom-sprig.png"),
     ];
 
+    /// <summary>A block of a storefront page that an admin can hide on phones. Stored as <c>mobile.hide.{Id}</c> = "1" in the same page-content settings.</summary>
+    public record MobileSection(string Page, string Id, string Label);
+
+    public const string MobileHidePrefix = "mobile.hide.";
+    public static string MobileKey(string id) => MobileHidePrefix + id;
+    public static bool IsMobileKey(string key) => MobileSections.Any(m => MobileKey(m.Id) == key);
+
+    public static readonly IReadOnlyList<MobileSection> MobileSections =
+    [
+        new("Home", "home.announce", "Announcement bar"),
+        new("Home", "home.hero", "Hero banner"),
+        new("Home", "home.benefits", "Benefits bar"),
+        new("Home", "home.featured", "Featured products"),
+        new("Home", "home.stamina", "Stamina power"),
+        new("Home", "home.stats", "At a glance (stats strip)"),
+        new("Home", "home.why", "Why choose us"),
+        new("Home", "home.goals", "Wellness goals"),
+        new("Home", "home.ingredients", "Ingredient spotlight"),
+        new("Home", "home.bundles", "Bundles"),
+        new("Home", "home.reviews", "Customer reviews"),
+        new("Home", "home.story", "Our story teaser"),
+        new("Home", "home.perks", "Perks"),
+        new("Home", "home.faq", "FAQ"),
+        new("Home", "home.footer", "Newsletter sign-up"),
+
+        new("Shop", "shop.extras", "Extra sections below the products"),
+
+        new("Our Story", "story.hero", "Intro banner"),
+        new("Our Story", "story.values", "Three promises"),
+        new("Our Story", "story.detail", "Story details"),
+        new("Our Story", "story.quote", "Quote"),
+        new("Our Story", "story.cta", "Begin your ritual"),
+
+        new("Formulation", "fm.hero", "Intro banner"),
+        new("Formulation", "fm.ticker", "Ingredient ticker"),
+        new("Formulation", "fm.matrix", "Ingredient matrix"),
+        new("Formulation", "fm.principles", "Science principles"),
+        new("Formulation", "fm.standards", "Standards"),
+        new("Formulation", "fm.faq", "Questions"),
+        new("Formulation", "fm.cta", "Batch lab reports"),
+
+        new("Quality", "quality.hero", "Intro banner"),
+        new("Quality", "quality.sourcing", "01 · Ingredient sourcing"),
+        new("Quality", "quality.manufacturing", "02 · Manufacturing"),
+        new("Quality", "quality.testing", "03 · Quality testing"),
+        new("Quality", "quality.packaging", "04 · Packaging"),
+        new("Quality", "quality.commitment", "Our commitment"),
+
+        new("FAQ", "faq.hero", "Intro banner"),
+        new("FAQ", "faq.help", "Still need help?"),
+
+        new("Contact", "contact.hero", "Intro banner"),
+        new("Contact", "contact.channels", "Contact options"),
+        new("Contact", "contact.form", "Message form"),
+        new("Contact", "contact.help", "Quick help"),
+    ];
+
     public static string DefaultOf(string key) => Fields.FirstOrDefault(f => f.Key == key)?.Default ?? "";
 }

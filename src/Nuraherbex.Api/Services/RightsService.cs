@@ -112,7 +112,7 @@ public static class PageRules
         }
 
         if (path is "/api/admin/login" or "/api/admin/verify" or "/api/admin/team" or "/api/admin/team/departments") return Open;
-        if (Is("/api/admin/notifications")) return Open;
+        if (Is("/api/admin/notifications") || Is("/api/admin/presence")) return Open; // every signed-in staff member controls their own presence and WhatsApp switch
 
         // team and organisation
         if (Is("/api/admin/employees") || Is("/api/admin/departments") || Is("/api/admin/designations") || Is("/api/admin/rights")) return For(m, "team");

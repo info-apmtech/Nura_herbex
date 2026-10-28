@@ -20,6 +20,22 @@
         }
     </nav>
 
+    @if (PageContentCatalog.MobileSections.Any(m => m.Page == _page))
+    {
+        <fieldset class="pce-group pce-mobile">
+            <legend>Mobile view</legend>
+            <p class="pce-hint">Untick a section to hide it on phones (screens under 768px wide). It still shows on laptops and tablets.</p>
+            @foreach (var m in PageContentCatalog.MobileSections.Where(m => m.Page == _page))
+            {
+                var sec = m;
+                <label class="pce-check">
+                    <input type="checkbox" checked="@(!IsHidden(sec.Id))" @onchange="e => SetShown(sec.Id, e.Value is true)" />
+                    <span>Show &ldquo;@sec.Label&rdquo; on mobile</span>
+                </label>
+            }
+        </fieldset>
+    }
+
     @foreach (var group in PageContentCatalog.Fields.Where(f => f.Page == _page).GroupBy(f => f.Section))
     {
         <fieldset class="pce-group">
@@ -53,7 +69,7 @@
 </section>
 
 @code {
-    private static readonly string[] Pages = PageContentCatalog.Fields.Select(f => f.Page).Distinct().ToArray();
+    private static readonly string[] Pages = PageContentCatalog.Fields.Select(f => f.Page).Concat(PageContentCatalog.MobileSections.Select(m => m.Page)).Distinct().ToArray();
     private readonly Dictionary<string, string> _draft = new();
     private string _page = Pages[0];
     private bool _saving, _saved;
@@ -64,6 +80,9 @@
         await Content.InitAsync();
         foreach (var kv in Content.PageOverrides) _draft[kv.Key] = kv.Value;
     }
+
+    private bool IsHidden(string id) => Get(PageContentCatalog.MobileKey(id)) == "1";
+    private void SetShown(string id, bool shown) => Set(PageContentCatalog.MobileKey(id), shown ? null : "1");
 
     private string Get(string key) => _draft.GetValueOrDefault(key) ?? "";
     private string Shown(PageField f) => string.IsNullOrWhiteSpace(Get(f.Key)) ? f.Default : Get(f.Key);

@@ -11,7 +11,7 @@
 <div class="fm">
 
   @* Hero *@
-  <section class="fm-hero">
+  <MobileSection Id="fm.hero"><section class="fm-hero">
     <span class="fm-orb o1" aria-hidden="true"></span>
     <span class="fm-orb o2" aria-hidden="true"></span>
     <span class="fm-orb o3" aria-hidden="true"></span>
@@ -28,9 +28,10 @@
         <div><Icon Name="Zap" Size="20" /><strong>0.00%</strong><span>Synthetic fillers</span></div>
       </div>
     </div>
-  </section>
+  </section></MobileSection>
 
   @* Ingredient ticker *@
+  <MobileSection Id="fm.ticker">
   @if (_ingredients.Count > 0)
   {
     <div class="fm-ticker" aria-hidden="true">
@@ -45,9 +46,10 @@
       </div>
     </div>
   }
+  </MobileSection>
 
   @* Matrix *@
-  <section class="fm-section" id="ingredient-matrix">
+  <MobileSection Id="fm.matrix"><section class="fm-section" id="ingredient-matrix">
     <div class="fm-wrap">
       <header class="fm-head">
         <span class="fm-eyebrow">The ingredient matrix</span>
@@ -107,10 +109,10 @@
         }
       </div>
     </div>
-  </section>
+  </section></MobileSection>
 
   @* Principles *@
-  <section class="fm-section fm-light">
+  <MobileSection Id="fm.principles"><section class="fm-section fm-light">
     <div class="fm-wrap">
       <header class="fm-head">
         <span class="fm-eyebrow">The science</span>
@@ -122,10 +124,10 @@
         <article><span><Icon Name="ShieldCheck" Size="22" /></span><h3>Enhanced bioavailability</h3><p>Patented BioPerine® black pepper extract inhibits intestinal glucuronidation, vastly amplifying the systemic absorption of herbal active compounds.</p></article>
       </div>
     </div>
-  </section>
+  </section></MobileSection>
 
   @* Standards *@
-  <section class="fm-standards">
+  <MobileSection Id="fm.standards"><section class="fm-standards">
     <div class="fm-wrap">
       <div class="fm-std-grid">
         @for (var i = 0; i < Standards.Length; i++)
@@ -135,10 +137,10 @@
         }
       </div>
     </div>
-  </section>
+  </section></MobileSection>
 
   @* FAQ *@
-  <section class="fm-faq">
+  <MobileSection Id="fm.faq"><section class="fm-faq">
     <div class="fm-wrap fm-faq-wrap">
       <header class="fm-head" data-nh-reveal>
         <span class="fm-eyebrow">Formulation questions</span>
@@ -156,10 +158,10 @@
       </div>
       <p class="fm-faq-note">STAMIX is a food supplement, not a medicine. Speak to a healthcare professional if you are pregnant, nursing or taking medication.</p>
     </div>
-  </section>
+  </section></MobileSection>
 
   @* CTA *@
-  <section class="fm-cta">
+  <MobileSection Id="fm.cta"><section class="fm-cta">
     <div class="fm-wrap fm-cta-inner">
       <div>
         <span class="fm-eyebrow"><Icon Name="Award" Size="14" /> Independent lab verification</span>
@@ -171,7 +173,7 @@
         <button class="fm-btn fm-btn-gold" @onclick="HandleShop"><Icon Name="ShoppingBag" Size="16" /> Shop STAMIX™ <Icon Name="ArrowRight" Size="16" /></button>
       </div>
     </div>
-  </section>
+  </section></MobileSection>
 
 </div>
 <HomeFooter />

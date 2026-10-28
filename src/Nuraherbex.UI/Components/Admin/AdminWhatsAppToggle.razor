@@ -21,7 +21,8 @@
     {
         _busy = true;
         var res = await Api.AdminSetWhatsAppActiveAsync(!_active);
-        if (res.Success) { _active = res.Active; _note = res.Message; }
+        _note = res.Message;
+        if (res.Success) _active = res.Active;
         _busy = false;
     }
 }

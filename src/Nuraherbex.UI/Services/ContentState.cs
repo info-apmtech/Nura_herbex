@@ -16,6 +16,9 @@ public class ContentState(ApiClient api)
     /// <summary>Text, image or video address for a <see cref="PageContentCatalog"/> field: the admin's value, else the built-in default.</summary>
     public string P(string key) => _page.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v) ? v : PageContentCatalog.DefaultOf(key);
 
+    /// <summary>True when the admin chose to hide this page section on phones.</summary>
+    public bool HiddenOnMobile(string sectionId) => _page.TryGetValue(PageContentCatalog.MobileKey(sectionId), out var v) && v == "1";
+
     public IReadOnlyDictionary<string, string> PageOverrides => _page;
 
     public async Task<ApiResult> SavePageAsync(Dictionary<string, string> values)

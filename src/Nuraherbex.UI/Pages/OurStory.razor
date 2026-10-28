@@ -8,7 +8,7 @@
 <div class="nh-storefront os-page">
     <HomeNavbar />
 
-    <section class="pl-hero os-hero">
+    <MobileSection Id="story.hero"><section class="pl-hero os-hero">
         <span class="pl-orb o1" aria-hidden="true"></span>
         <span class="pl-orb o2" aria-hidden="true"></span>
         <div class="pl-hero-inner os-hero-inner">
@@ -21,9 +21,9 @@
                 <button type="button" class="os-btn" @onclick='() => Nav.NavigateTo("/formulation")'>See the formulation</button>
             </div>
         </div>
-    </section>
+    </section></MobileSection>
 
-    <section class="os-vals">
+    <MobileSection Id="story.values"><section class="os-vals">
         <div class="shx-inner">
             <div class="shx-head" data-nh-reveal>
                 <span class="nh-eyebrow">WHAT WE STAND FOR</span>
@@ -42,19 +42,19 @@
                 }
             </div>
         </div>
-    </section>
+    </section></MobileSection>
 
-    <OurStoryDetail />
+    <MobileSection Id="story.detail"><OurStoryDetail /></MobileSection>
 
-    <section class="os-quote">
+    <MobileSection Id="story.quote"><section class="os-quote">
         <div class="shx-inner narrow" data-nh-reveal>
             <Icon Name="Leaf" Size="28" />
             <blockquote>Strength begins with balance: good food, steady routines and herbs that nourish the body from within.</blockquote>
             <cite>The Nura Herbex philosophy</cite>
         </div>
-    </section>
+    </section></MobileSection>
 
-    <section class="os-cta">
+    <MobileSection Id="story.cta"><section class="os-cta">
         <div class="shx-inner">
             <div class="os-cta-card" data-nh-reveal>
                 <div>
@@ -68,7 +68,7 @@
                 </div>
             </div>
         </div>
-    </section>
+    </section></MobileSection>
 
     <HomeFooter />
 </div>

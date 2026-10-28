@@ -1,0 +1,14 @@
+@implements IDisposable
+@inject ContentState Content
+
+@* Wraps a page section so the admin can hide it on phones (Admin > Store content > Mobile view). Transparent to layout unless hidden. *@
+<div class="@(Content.HiddenOnMobile(Id) ? "nh-mob-hide" : "nh-mob-ok")">@ChildContent</div>
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override void OnInitialized() => Content.Changed += Refresh;
+    private void Refresh() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => Content.Changed -= Refresh;
+}

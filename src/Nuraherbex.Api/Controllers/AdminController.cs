@@ -316,7 +316,7 @@ public class AdminController(
     public async Task<IActionResult> SavePageContent(PageContentDto dto)
     {
         var known = PageContentCatalog.Fields.Select(f => f.Key).ToHashSet();
-        var clean = new PageContentDto { Values = dto.Values.Where(kv => known.Contains(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value)).ToDictionary(kv => kv.Key, kv => kv.Value.Trim()) };
+        var clean = new PageContentDto { Values = dto.Values.Where(kv => (known.Contains(kv.Key) || PageContentCatalog.IsMobileKey(kv.Key)) && !string.IsNullOrWhiteSpace(kv.Value)).ToDictionary(kv => kv.Key, kv => kv.Value.Trim()) };
         await settings.SetAsync(SettingsService.PageContentKey, clean);
         return Ok(new ApiResult { Success = true });
     }
