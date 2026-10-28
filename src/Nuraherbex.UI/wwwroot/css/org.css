@@ -305,3 +305,22 @@ th.sn,th.admin-sno{white-space:nowrap}
 .tk-check .em-x{margin-left:8px;opacity:.55}.tk-check .em-x:hover{opacity:1}
 .fu-field .tk-text{height:auto;min-height:92px;padding:10px 12px!important;line-height:1.5;resize:vertical;font-family:inherit}
 .tk-add .fu-input{height:38px}
+.tk-by{opacity:.65;font-size:11px}
+.tk-tick.on:hover:not(:disabled){background:#fff;color:var(--ld-green)}
+
+/* Assignee picker: selectable cards, two or three to a row */
+.tk-people.tk-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;max-height:300px;padding:10px;border-radius:12px;background:#faf9fc}
+.tk-people.tk-cards .tk-people-tools{grid-column:1/-1;margin:0 0 2px;display:flex;gap:8px;flex-wrap:wrap}
+.tk-people.tk-cards .tk-people-tools .ld-tab{border-radius:999px;padding:6px 14px;font-size:12px;font-weight:650}
+.tk-people.tk-cards .fu-hint{grid-column:1/-1}
+.tk-people.tk-cards .tk-person{position:relative;padding:12px 40px 12px 12px;gap:12px;background:#fff;border:1.5px solid #e6e3ec;border-radius:12px;transition:border-color .15s,box-shadow .15s,background .15s;align-items:center}
+.tk-people.tk-cards .tk-person:hover{border-color:#c9b3e6;box-shadow:0 4px 14px rgba(94,32,158,.08)}
+.tk-people.tk-cards .tk-person.is-on{background:#f6effd;border-color:#7a35c4;box-shadow:0 0 0 3px rgba(122,53,196,.12)}
+.tk-people.tk-cards .tk-person input[type=checkbox]{position:absolute;top:10px;right:10px;width:18px;height:18px;margin:0;accent-color:#5e209e}
+.tk-people.tk-cards .tk-person .ld-avatar{flex:0 0 38px;width:38px;height:38px;border-radius:50%;background:#5e209e;color:#fff;display:grid;place-items:center;font-size:14px;font-weight:700}
+.tk-people.tk-cards .tk-person>span:last-of-type{min-width:0;flex:1}
+.tk-people.tk-cards .tk-person strong{display:flex;align-items:center;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-people.tk-cards .tk-person small{margin-top:3px;font-size:11.5px}
+/* the status dot was picking up the 28px avatar style of task rows */
+.tk-person i.tk-dot{flex:none;display:inline-block;width:8px;height:8px;border-radius:50%;background:#bcb7c1;margin-right:6px;font-size:0}
+.tk-person i.tk-dot.on{background:#2e9b5f;box-shadow:0 0 0 3px rgba(46,155,95,.18)}

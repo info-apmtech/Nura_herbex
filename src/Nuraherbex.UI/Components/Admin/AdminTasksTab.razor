@@ -40,7 +40,7 @@
         </div>
         @if (_counts.Upcoming > 0)
         {
-            <p class="tk-upcoming"><Icon Name="Clock" Size="13" /> @_counts.Upcoming upcoming task@(_counts.Upcoming == 1 ? "" : "s") will show here on @(_counts.Upcoming == 1 ? "its" : "their") due day.</p>
+            <button type="button" class="@Chip("upcoming", "")" @onclick='() => SetView("upcoming", "")'><b>@_counts.Upcoming</b><span>Upcoming</span></button>
         }
     }
 
@@ -118,11 +118,11 @@
                 var due = DueInfo(task);
                 var isDone = task.Status == "done";
                 <article class="@($"tk-r p-{task.Priority} {(isDone ? "is-done" : "")}")" @key="task.Id">
-                    @if (isDone) { <span class="tk-tick on" title="Done" aria-label="Done"><Icon Name="Check" Size="14" /></span> }
+                    @if (isDone) { <button type="button" class="tk-tick on" disabled="@(!task.CanEdit)" title="Marked done by mistake? Click to undo" aria-label="Undo done" @onclick="() => ToggleDoneAsync(task)"><Icon Name="Check" Size="14" /></button> }
                     else { <button type="button" class="tk-tick" disabled="@(!task.CanEdit)" title="@(!task.CanEdit ? "You can only view this task" : "Mark as done")" aria-label="Mark task as done" @onclick="() => ToggleDoneAsync(task)"><Icon Name="Check" Size="14" /></button> }
                     <button type="button" class="tk-r-main" @onclick="() => OpenAsync(task.Id)">
                         <strong>@task.Title</strong>
-                        <small>@string.Join(" · ", new[] { task.DepartmentName, task.LeadName is { } ln ? "Lead: " + ln : null, task.Repeat != "none" ? "Repeats " + task.Repeat : null }.Where(x => x is not null))</small>
+                        <small>@string.Join(" · ", new[] { task.DepartmentName, task.LeadName is { } ln ? "Lead: " + ln : null, task.Repeat != "none" ? "Repeats " + task.Repeat : null, task.StartAt is { } sa && !isDone && sa.ToLocalTime().Date >= DateTime.Today ? "Starts " + sa.ToLocalTime().ToString("ddd, dd MMM") : null }.Where(x => x is not null))</small>
                         @if (task.LastComment is not null) { <small class="tk-r-note" title="@task.LastComment"><Icon Name="MessageSquare" Size="11" /> <b>@task.LastCommentBy</b>: @task.LastComment</small> }
                     </button>
                     <div class="tk-r-tags">
@@ -189,7 +189,7 @@
                             <label class="tk-auto"><input type="checkbox" @bind="_form.AutoAssign" /> <span><strong>Auto-assign</strong> to the least busy person who is signed in now@(_form.DepartmentId is not null ? " (in this department)" : "")</span></label>
                             @if (!_form.AutoAssign)
                             {
-                            <div class="tk-people">
+                            <div class="tk-people tk-cards">
                                 <div class="tk-people-tools">
                                     @if (_form.DepartmentId is not null) { <button type="button" class="ld-tab" @onclick="PickWholeDepartment">Select everyone in this department (@PeopleShown.Count)</button> }
                                     @if (_picked.Count > 0) { <button type="button" class="ld-tab" @onclick="ClearPicked">Clear (@_picked.Count)</button> }
@@ -211,7 +211,10 @@
                     <label class="fu-field">Priority
                         <select @bind="_form.Priority">@foreach (var p in TaskPriorities.All) { <option value="@p">@Cap(p)</option> }</select>
                     </label>
-                    <label class="fu-field">Due
+                    <label class="fu-field">Start date
+                        <input class="fu-input" type="datetime-local" @bind="_start" />
+                    </label>
+                    <label class="fu-field">End date (due)
                         <input class="fu-input" type="datetime-local" @bind="_due" />
                     </label>
                     <label class="fu-field">Repeat
@@ -283,7 +286,8 @@
                         else { <b>@TaskStatuses.Label(dt.Status)</b> }
                     </div>
                     <div><small>Assigned to</small><b>@(dt.AssignedToName ?? "Unassigned")</b></div>
-                    <div><small>Due</small><b class="@(dt.IsOverdue ? "late" : "")">@(dt.DueAt is { } d ? AdminFmt.DateTimeShort(d) : "No due date")</b></div>
+                    <div><small>Start</small><b>@(dt.StartAt is { } sd ? AdminFmt.DateTimeShort(sd) : "Not set")</b></div>
+                    <div><small>End (due)</small><b class="@(dt.IsOverdue ? "late" : "")">@(dt.DueAt is { } d ? AdminFmt.DateTimeShort(d) : "No due date")</b></div>
                     <div><small>Department</small><b>@(dt.DepartmentName ?? "—")</b></div>
                     <div><small>Created by</small><b>@dt.CreatedByName</b></div>
                     @if (dt.Repeat != "none") { <div><small>Repeats</small><b>@Cap(dt.Repeat)</b></div> }
@@ -296,7 +300,7 @@
                 {
                     var item = c;
                     <div class="tk-check @(item.Done ? "done" : "")">
-                        <label><input type="checkbox" checked="@item.Done" disabled="@(!dt.CanEdit)" @onchange="e => TickAsync(item, e.Value is true)" /> <span>@item.Text</span></label>
+                        <label><input type="checkbox" checked="@item.Done" disabled="@(!dt.CanEdit)" @onchange="e => TickAsync(item, e.Value is true)" /> <span>@item.Text</span>@if (item.Done && item.DoneAt is { } dat) { <small class="tk-by"> · ticked@(item.DoneByName is { } dn ? " by " + dn : "") @AdminFmt.DateTimeShort(dat)</small> }@if (item.AddedAt is { } aat) { <small class="tk-by"> · added@(item.AddedByName is { } an ? " by " + an : "") @AdminFmt.DateTimeShort(aat)</small> }</label>
                         @if (dt.CanEdit) { <button type="button" class="em-x" aria-label="Remove step" @onclick="() => RemoveItemAsync(item)"><Icon Name="X" Size="13" /></button> }
                     </div>
                 }
@@ -313,7 +317,7 @@
                 @if (_detail.Comments.Count == 0) { <p class="tk-none">No comments yet.</p> }
                 <form class="tk-add" @onsubmit="CommentAsync" @onsubmit:preventDefault><input class="fu-input" maxlength="2000" placeholder="Write a comment" aria-label="Write a comment" @bind="_comment" @bind:event="oninput" /><button class="ld-btn primary" type="submit" disabled="@string.IsNullOrWhiteSpace(_comment)">Send</button></form>
 
-                <details class="tk-activity"><summary>Activity (@_detail.Activity.Count)</summary>
+                <details class="tk-activity" open><summary>Audit trail (@_detail.Activity.Count)</summary>
                     @foreach (var a in _detail.Activity) { <div><small>@AdminFmt.DateTimeShort(a.CreatedAt)</small> <b>@a.Actor</b> @a.Text</div> }
                 </details>
             </div>
@@ -390,7 +394,7 @@
     private void PickWholeDepartment() { foreach (var p in PeopleShown) _picked.Add(p.Id); }
     private void ClearPicked() => _picked.Clear();
     private long? _editingId;
-    private DateTime? _due;
+    private DateTime? _due, _start;
     private string _checklistText = "";
 
     private TaskDetailResponse? _detail;
@@ -453,6 +457,7 @@
         _form.Priority = t.Priority;
         _form.Repeat = t.Repeat;
         _due = DateTime.Today.AddDays(t.DueInDays).AddHours(10);
+        if (_start > _due) _start = _due.Value.Date; // a template due earlier today must not end before it starts
         _checklistText = string.Join("\n", t.Checklist);
         var dept = _departments.FirstOrDefault(d => TaskTemplates.RoleFor(d.Name) == t.Role);
         if (dept is not null) { _form.DepartmentId = dept.Id; SyncDepartment(_picked); }
@@ -460,7 +465,7 @@
 
     private void StartCreate()
     {
-        _editingId = null; _checklistText = ""; _due = null; _tplKey = null;
+        _editingId = null; _checklistText = ""; _due = null; _start = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, DateTime.Now.Hour, DateTime.Now.Minute, 0); _tplKey = null; // starts now unless changed
         _tplRole = TaskTemplates.RoleFor(AdminAuth.Designation) ?? TaskTemplates.RoleFor(AdminAuth.Department) ?? "Sales";
         _picked.Clear();
         if (AdminAuth.EmployeeId is { } me && _team.Any(p => p.Id == me)) _picked.Add(me);
@@ -472,7 +477,7 @@
     {
         if (_detail?.Task is not { } t) return;
         _editingId = t.Id;
-        _due = t.DueAt?.ToLocalTime();
+        _due = t.DueAt?.ToLocalTime(); _start = t.StartAt?.ToLocalTime();
         _form = new TaskSaveRequest { Title = t.Title, Description = t.Description, Priority = t.Priority, AssignedToEmployeeId = t.AssignedToEmployeeId, DepartmentId = t.DepartmentId, LeadId = t.LeadId, OrderId = t.OrderId, Tags = t.Tags, Repeat = t.Repeat };
         _detail = null;
     }
@@ -481,7 +486,7 @@
     {
         if (_form is null) return;
         _busy = true;
-        _form.DueAt = _due?.ToUniversalTime();
+        _form.StartAt = _start?.ToUniversalTime(); _form.DueAt = _due?.ToUniversalTime();
         _form.Checklist = _checklistText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
         if (_editingId is { } id)
         {

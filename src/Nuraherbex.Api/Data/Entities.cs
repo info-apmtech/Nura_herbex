@@ -413,6 +413,8 @@ public class WorkTask
     public string Status { get; set; } = "todo";
     /// <summary>low | normal | high | urgent</summary>
     public string Priority { get; set; } = "normal";
+    /// <summary>When work begins. The task is listed as pending from this day; before it, the task is upcoming. Empty = listed by its due date.</summary>
+    public DateTime? StartAt { get; set; }
     public DateTime? DueAt { get; set; }
     public long? AssignedToEmployeeId { get; set; }
     public long? CreatedByEmployeeId { get; set; }
@@ -428,6 +430,8 @@ public class WorkTask
     public DateTime? CompletedAt { get; set; }
     public DateTime? ReminderSentAt { get; set; }
     public DateTime? OverdueNotifiedAt { get; set; }
+    public DateTime? StartSoonNotifiedAt { get; set; }
+    public DateTime? StartedNotifiedAt { get; set; }
 }
 
 public class TaskComment
@@ -446,6 +450,12 @@ public class TaskChecklistItem
     public long TaskId { get; set; }
     public string Text { get; set; } = "";
     public bool Done { get; set; }
+    /// <summary>Who ticked it and when, so progress can be traced. Cleared when it is unticked.</summary>
+    public DateTime? DoneAt { get; set; }
+    public string? DoneByName { get; set; }
+    /// <summary>When and by whom the step was added: a step added days after the task was created is visible in the audit trail.</summary>
+    public DateTime AddedAt { get; set; } = DateTime.UtcNow;
+    public string? AddedByName { get; set; }
     public int Position { get; set; }
 }
 

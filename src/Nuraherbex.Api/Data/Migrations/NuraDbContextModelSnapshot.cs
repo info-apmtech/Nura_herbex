@@ -1153,8 +1153,20 @@ namespace Nuraherbex.Api.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("AddedByName")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("Done")
                         .HasColumnType("bit");
+
+                    b.Property<DateTime?>("DoneAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DoneByName")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("Position")
                         .HasColumnType("int");
@@ -1421,6 +1433,15 @@ namespace Nuraherbex.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("nvarchar(16)");
+
+                    b.Property<DateTime?>("StartAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("StartSoonNotifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("StartedNotifiedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("Status")
                         .IsRequired()

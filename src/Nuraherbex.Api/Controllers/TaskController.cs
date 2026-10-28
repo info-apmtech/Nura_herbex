@@ -105,6 +105,6 @@ public class TaskController(TaskService tasks, RightsService rights) : StaffCont
         var t = await Find(id);
         if (t is null) return NoTask();
         if (!TaskService.CanEdit(t, Me)) return Denied();
-        return await tasks.RemoveChecklistAsync(t, itemId) ? Ok(new ApiResult { Success = true }) : NotFound(new ApiResult { Success = false, Message = "Checklist item not found" });
+        return await tasks.RemoveChecklistAsync(t, itemId, Me) ? Ok(new ApiResult { Success = true }) : NotFound(new ApiResult { Success = false, Message = "Checklist item not found" });
     }
 }

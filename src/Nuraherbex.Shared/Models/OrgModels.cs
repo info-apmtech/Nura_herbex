@@ -205,6 +205,7 @@ public class TaskDto
     public string? Description { get; set; }
     public string Status { get; set; } = TaskStatuses.Todo;
     public string Priority { get; set; } = TaskPriorities.Normal;
+    public DateTime? StartAt { get; set; }
     public DateTime? DueAt { get; set; }
     public bool IsOverdue { get; set; }
     public long? AssignedToEmployeeId { get; set; }
@@ -237,6 +238,10 @@ public class TaskChecklistItemDto
     public long Id { get; set; }
     public string Text { get; set; } = "";
     public bool Done { get; set; }
+    public DateTime? DoneAt { get; set; }
+    public string? DoneByName { get; set; }
+    public DateTime? AddedAt { get; set; }
+    public string? AddedByName { get; set; }
 }
 
 public class TaskCommentDto
@@ -285,6 +290,7 @@ public class TaskSaveRequest
     public string Title { get; set; } = "";
     public string? Description { get; set; }
     public string Priority { get; set; } = TaskPriorities.Normal;
+    public DateTime? StartAt { get; set; }
     public DateTime? DueAt { get; set; }
     public long? AssignedToEmployeeId { get; set; }
     public long? DepartmentId { get; set; }
