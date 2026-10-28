@@ -324,3 +324,17 @@ th.sn,th.admin-sno{white-space:nowrap}
 /* the status dot was picking up the 28px avatar style of task rows */
 .tk-person i.tk-dot{flex:none;display:inline-block;width:8px;height:8px;border-radius:50%;background:#bcb7c1;margin-right:6px;font-size:0}
 .tk-person i.tk-dot.on{background:#2e9b5f;box-shadow:0 0 0 3px rgba(46,155,95,.18)}
+.tk-meta{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:#8a8598;padding-left:30px}
+.tk-meta:empty{display:none}
+.tk-meta-done{color:#1f7a45;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+.tk-undo{border:1px solid #e0b4ad;background:#fff;color:#b3402f;border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:650;cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+.tk-undo:hover{background:#fdf0ee}
+button.tk-prog{border:0;background:none;padding:0;cursor:pointer;font:inherit;color:inherit}
+button.tk-prog:hover em,button.tk-prog.is-open em{color:#5e209e;font-weight:700}
+.tk-r-check{grid-column:1/-1;margin:2px 0 4px;padding:12px 14px;border:1px solid #e3e1e8;border-radius:12px;background:#faf9fc;display:flex;flex-direction:column;gap:6px}
+.tk-r-check>strong{font-size:13px}.tk-r-check>strong small{font-weight:400;color:#8a8598;margin-left:6px}
+.tk-lc{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;padding:8px 10px;background:#fff;border:1px solid #e6e3ec;border-radius:10px}
+.tk-lc.done{background:#f3faf5;border-color:#bfe3c9}
+.tk-lc label{display:flex;align-items:center;gap:10px;flex:1;min-width:160px;cursor:pointer;font-size:13.5px}
+.tk-lc input[type=checkbox]{width:18px;height:18px;accent-color:#5e209e;margin:0}
+.tk-lc.done span{text-decoration:line-through;color:#8a8598}

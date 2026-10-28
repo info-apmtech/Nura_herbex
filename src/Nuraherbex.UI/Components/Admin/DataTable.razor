@@ -29,6 +29,11 @@
                 }
             </div>
         }
+        @if (RowDetail is not null)
+        {
+            <button type="button" class="dt-expand" @onclick="ExpandAll"><Icon Name="ChevronDown" Size="13" /> Expand all</button>
+            <button type="button" class="dt-expand" @onclick="_open.Clear"><Icon Name="ChevronUp" Size="13" /> Collapse all</button>
+        }
         <span class="dt-spacer"></span>
         <span class="dt-count">@Filtered.Count.ToString("N0") @(Filtered.Count == 1 ? "record" : "records")@(Filtered.Count != Items.Count ? $" of {Items.Count:N0}" : "")</span>
         @if (Exportable)
@@ -56,6 +61,7 @@
         <table class="dt-table">
             <thead>
                 <tr>
+                    @if (RowDetail is not null) { <th class="dt-tg" scope="col"><span class="sr-only">Details</span></th> }
                     <th class="dt-sn" scope="col">S.No</th>
                     @foreach (var v in Vis)
                     {
@@ -74,11 +80,11 @@
             <tbody>
                 @if (Loading)
                 {
-                    <tr><td colspan="@(Vis.Count + 1 + (RowActions is null ? 0 : 1))" class="dt-empty">Loading…</td></tr>
+                    <tr><td colspan="@(Vis.Count + 1 + ExtraCols)" class="dt-empty">Loading…</td></tr>
                 }
                 else if (Filtered.Count == 0)
                 {
-                    <tr><td colspan="@(Vis.Count + 1 + (RowActions is null ? 0 : 1))" class="dt-empty">@(string.IsNullOrWhiteSpace(_q) ? EmptyText : "Nothing matches your search.")</td></tr>
+                    <tr><td colspan="@(Vis.Count + 1 + ExtraCols)" class="dt-empty">@(string.IsNullOrWhiteSpace(_q) ? EmptyText : "Nothing matches your search.")</td></tr>
                 }
                 else
                 {
@@ -87,6 +93,7 @@
                     {
                         n++;
                         <tr class="@(RowClass?.Invoke(item))" @onclick="() => OnRowClick.InvokeAsync(item)">
+                            @if (RowDetail is not null) { <td class="dt-tg" @onclick:stopPropagation="true"><button type="button" class="dt-chev @(_open.Contains(item) ? "is-open" : "")" aria-expanded="@_open.Contains(item)" aria-label="Show or hide details" @onclick="() => ToggleRow(item)"><Icon Name="ChevronRight" Size="15" /></button></td> }
                             <td class="dt-sn">@n</td>
                             @foreach (var v in Vis)
                             {
@@ -95,6 +102,7 @@
                             }
                             @if (RowActions is not null) { <td class="is-right dt-actions" @onclick:stopPropagation="true">@RowActions(item)</td> }
                         </tr>
+                        if (RowDetail is not null && _open.Contains(item)) { <tr class="dt-detail"><td colspan="@(Vis.Count + 1 + ExtraCols)">@RowDetail(item)</td></tr> }
                     }
                 }
             </tbody>
@@ -139,6 +147,12 @@
     [Parameter] public RenderFragment<TItem>? RowActions { get; set; }
     [Parameter] public Func<TItem, string>? RowClass { get; set; }
     [Parameter] public EventCallback<TItem> OnRowClick { get; set; }
+    /// <summary>Optional extra content under a row. When set, every row gets an expand / collapse arrow and the bar gets Expand all / Collapse all.</summary>
+    [Parameter] public RenderFragment<TItem>? RowDetail { get; set; }
+    private readonly HashSet<TItem> _open = new(ReferenceEqualityComparer.Instance as IEqualityComparer<TItem> ?? EqualityComparer<TItem>.Default);
+    private int ExtraCols => (RowDetail is null ? 0 : 1) + (RowActions is null ? 0 : 1);
+    private void ToggleRow(TItem item) { if (!_open.Remove(item)) _open.Add(item); }
+    private void ExpandAll() { foreach (var i in PageItems) _open.Add(i); }
 
     private static readonly int[] SizeOptions = [10, 25, 50, 100, 250];
     private string _q = "";

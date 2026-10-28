@@ -180,13 +180,21 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
         var checks = await db.TaskChecklistItems.AsNoTracking().Where(i => taskIds.Contains(i.TaskId)).GroupBy(i => i.TaskId).Select(g => new { g.Key, Total = g.Count(), Done = g.Count(i => i.Done) }).ToDictionaryAsync(x => x.Key);
         var lastComment = (await db.TaskComments.AsNoTracking().Where(c => taskIds.Contains(c.TaskId)).OrderByDescending(c => c.CreatedAt).ToListAsync()).GroupBy(c => c.TaskId).ToDictionary(g => g.Key, g => g.First());
         var now = FollowUpService.Clock();
-        var res = new ReportResponse { Columns = ["Task ID", "Title", "Department", "Assigned to", "Created by", "Priority", "Status", "Checklist", "Latest comment", "Created", "Due", "Completed", "Late"] };
+        // Full audit trail per task, oldest first: every logged change (created, edits, status moves, checklist steps added / ticked / unticked / removed) and every comment.
+        var activities = await db.TaskActivities.AsNoTracking().Where(a => taskIds.Contains(a.TaskId)).ToListAsync();
+        var commentsAll = await db.TaskComments.AsNoTracking().Where(c => taskIds.Contains(c.TaskId)).ToListAsync();
+        var trail = activities.Select(a => (a.TaskId, a.CreatedAt, Line: new ReportDetailLine { Actor = a.Actor, Text = a.Text, Kind = "activity" }))
+            .Concat(commentsAll.Select(c => (c.TaskId, c.CreatedAt, Line: new ReportDetailLine { Actor = c.Author, Text = c.Body, Kind = "comment" })))
+            .GroupBy(x => x.TaskId).ToDictionary(g => g.Key, g => g.OrderBy(x => x.CreatedAt).Select(x => { x.Line.When = Ist(x.CreatedAt); return x.Line; }).ToList());
+        var res = new ReportResponse { Columns = ["Task ID", "Title", "Department", "Assigned to", "Created by", "Priority", "Status", "Checklist", "Latest comment", "Created", "Due", "Completed", "Late", "Audit trail"] };
         foreach (var t in tasks)
         {
             var late = t.Status != "done" && t.DueAt is { } d && d < now;
             res.Rows.Add([t.Id.ToString(Inv), t.Title, t.DepartmentId is { } di ? depts.GetValueOrDefault(di) ?? "" : "", t.AssignedToEmployeeId is { } a ? people.GetValueOrDefault(a) ?? "" : "Unassigned",
                 t.CreatedByName, t.Priority, t.Status, checks.TryGetValue(t.Id, out var ck) ? $"{ck.Done} of {ck.Total}" : "",
-                lastComment.TryGetValue(t.Id, out var lc) ? $"{lc.Author}: {Clip(lc.Body, 300)}" : "", Ist(t.CreatedAt), Ist(t.DueAt), Ist(t.CompletedAt), late ? "Yes" : ""]);
+                lastComment.TryGetValue(t.Id, out var lc) ? $"{lc.Author}: {Clip(lc.Body, 300)}" : "", Ist(t.CreatedAt), Ist(t.DueAt), Ist(t.CompletedAt), late ? "Yes" : "",
+                trail.TryGetValue(t.Id, out var tl) ? string.Join("\n", tl.Select(x => $"{x.When} · {x.Actor}: {Clip(x.Text, 400)}")) : ""]);
+            if (trail.TryGetValue(t.Id, out var lines)) res.Details[t.Id.ToString(Inv)] = lines;
         }
         var doneCount = tasks.Count(t => t.Status == "done");
         var overdue = tasks.Count(t => t.Status != "done" && t.DueAt is { } d && d < now);

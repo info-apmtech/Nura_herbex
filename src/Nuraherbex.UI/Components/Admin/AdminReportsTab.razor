@@ -75,7 +75,7 @@
         }
 
         <DataTable TItem="List<string>" Items="_view" Columns="_cols" Loading="_loading" Title="@($"{rep.Title} report")" FileName="@($"nura-{rep.Key}-report")"
-                   ExportMeta="@ExportMeta" SearchPlaceholder="@($"Quick search in {rep.Title.ToLowerInvariant()}")" EmptyText="No records match these filters." PageSize="25" />
+                   ExportMeta="@ExportMeta" RowDetail="@TrailFor(rep)" SearchPlaceholder="@($"Quick search in {rep.Title.ToLowerInvariant()}")" EmptyText="No records match these filters." PageSize="25" />
     }
     else if (_loading) { <div class="ld-card ld-empty">Loading report…</div> }
 </div>
@@ -116,7 +116,7 @@
         ["leads"] = ["Email", "Consent", "First message", "Last contact"],
         ["followups"] = ["Step", "Source", "Order", "Completed by"],
         ["whatsapp"] = ["Order"],
-        ["tasks"] = ["Created by", "Completed"],
+        ["tasks"] = ["Created by", "Completed", "Audit trail"], // the full trail is under each row (expand arrow); this column is for exports
         ["payments"] = ["Transaction"],
     };
 
@@ -219,6 +219,19 @@
         _rows = res.Rows;
         _view = _rows;
     }
+
+    private RenderFragment<List<string>>? TrailFor(ReportResponse rep) => rep.Key != "tasks" ? null : row => __builder =>
+    {
+        var lines = row.Count > 0 && rep.Details.TryGetValue(row[0], out var l) ? l : new List<ReportDetailLine>();
+        <div class="rp-trail">
+            <h6>Audit trail · @lines.Count @(lines.Count == 1 ? "entry" : "entries")</h6>
+            @foreach (var x in lines)
+            {
+                <div class="@($"rp-trail-i {x.Kind}")"><small>@x.When</small><span><b>@x.Actor</b> @(x.Kind == "comment" ? "commented: " : "")@x.Text</span></div>
+            }
+            @if (lines.Count == 0) { <span class="rp-trail-empty">No activity recorded for this task.</span> }
+        </div>
+    };
 
     private Task OnFiltered(IReadOnlyList<List<string>> view) { _view = view; StateHasChanged(); return Task.CompletedTask; }
 

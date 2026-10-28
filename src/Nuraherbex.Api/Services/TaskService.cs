@@ -81,7 +81,8 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
         }
 
         // Pending shows only what needs attention now: overdue, due today, or no date. Later tasks appear on their own day.
-        var qOpen = q.Where(t => t.Status != TaskStatuses.Done && (t.StartAt != null ? t.StartAt < tomorrow : (t.DueAt == null || t.DueAt < tomorrow)));
+        // Pending lists everything not finished: tasks that have started first, then upcoming ones (they carry a "Starts ..." label).
+        var qOpen = q.Where(t => t.Status != TaskStatuses.Done);
         var counts = new TaskCounts
         {
             Open = await qOpen.CountAsync(),
@@ -101,12 +102,13 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
             case "board": q = q.Where(t => t.Status != TaskStatuses.Done || t.CompletedAt >= doneSince); break;
             case "all": break;
             case "upcoming": q = q.Where(t => t.Status != TaskStatuses.Done && (t.StartAt != null ? t.StartAt >= tomorrow : (t.DueAt != null && t.DueAt >= tomorrow))); break;
-            default: q = q.Where(t => t.Status != TaskStatuses.Done && (t.StartAt != null ? t.StartAt < tomorrow : (t.DueAt == null || t.DueAt < tomorrow))); break;
+            default: q = q.Where(t => t.Status != TaskStatuses.Done); break;
         }
         if (!string.IsNullOrWhiteSpace(f.Status)) q = q.Where(t => t.Status == f.Status);
 
         var rows = (await q.Take(1000).ToListAsync())
             .OrderBy(t => t.Status == TaskStatuses.Done ? 1 : 0)
+            .ThenBy(t => f.Scope != "upcoming" && IsUpcoming(t, tomorrow) ? 1 : 0)
             .ThenByDescending(t => f.Scope == "done" ? 0 : PriorityRank(t.Priority))
             .ThenBy(t => f.Scope == "upcoming" ? (t.StartAt ?? t.DueAt ?? DateTime.MaxValue) : (t.DueAt ?? DateTime.MaxValue))
             .ThenByDescending(t => t.Status == TaskStatuses.Done ? t.CompletedAt : null)
@@ -130,6 +132,8 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
             }).ToList(),
         };
     }
+
+    private static bool IsUpcoming(WorkTask t, DateTime tomorrow) => t.Status != TaskStatuses.Done && (t.StartAt != null ? t.StartAt >= tomorrow : t.DueAt != null && t.DueAt >= tomorrow);
 
     private static int PriorityRank(string p) => p switch { TaskPriorities.Urgent => 4, TaskPriorities.High => 3, TaskPriorities.Normal => 2, _ => 1 };
 

@@ -130,11 +130,27 @@
                         <span class="@($"tk-pill st-{task.Status}")">@TaskStatuses.Label(task.Status)</span>
                         @if (task.ChecklistTotal > 0)
                         {
-                            <span class="tk-prog" title="@task.ChecklistDone of @task.ChecklistTotal steps done"><i style="width:@(100 * task.ChecklistDone / task.ChecklistTotal)%"></i><em>@task.ChecklistDone/@task.ChecklistTotal</em></span>
+                            <button type="button" class="@($"tk-prog {(_listOpen == task.Id ? "is-open" : "")}")" title="@task.ChecklistDone of @task.ChecklistTotal steps done. Click to tick steps here" aria-expanded="@(_listOpen == task.Id)" @onclick="() => ToggleListAsync(task)"><i style="width:@(100 * task.ChecklistDone / task.ChecklistTotal)%"></i><em>@task.ChecklistDone/@task.ChecklistTotal</em></button>
                         }
                     </div>
                     <span class="@($"tk-due2 {due.Tone}")"><Icon Name="Clock" Size="13" /> @due.Text</span>
                     <span class="tk-person"><i>@Initial(task.AssignedToName)</i><span>@(task.AssignedToName ?? "Unassigned")</span></span>
+                    @if (_listOpen == task.Id)
+                    {
+                        <div class="tk-r-check">
+                            <strong>Checklist <small>tick each step as it is finished</small></strong>
+                            @foreach (var ci in _listItems)
+                            {
+                                var step = ci;
+                                <div class="@($"tk-lc {(step.Done ? "done" : "")}")">
+                                    <label><input type="checkbox" checked="@step.Done" disabled="@(!task.CanEdit)" @onchange="e => TickInlineAsync(task, step, e.Value is true)" /> <span>@step.Text</span></label>
+                                    @if (step.Done && step.DoneAt is { } sdt) { <small class="tk-meta-done"><Icon Name="CheckCircle" Size="12" /> @(step.DoneByName ?? "Someone") · @AdminFmt.DateTimeShort(sdt)</small> }
+                                    @if (task.CanEdit && step.Done) { <button type="button" class="tk-undo" @onclick="() => TickInlineAsync(task, step, false)"><Icon Name="RotateCcw" Size="12" /> Undo</button> }
+                                </div>
+                            }
+                            @if (_listItems.Count == 0) { <small>Loading…</small> }
+                        </div>
+                    }
                 </article>
             }
         </div>
@@ -300,8 +316,13 @@
                 {
                     var item = c;
                     <div class="tk-check @(item.Done ? "done" : "")">
-                        <label><input type="checkbox" checked="@item.Done" disabled="@(!dt.CanEdit)" @onchange="e => TickAsync(item, e.Value is true)" /> <span>@item.Text</span>@if (item.Done && item.DoneAt is { } dat) { <small class="tk-by"> · ticked@(item.DoneByName is { } dn ? " by " + dn : "") @AdminFmt.DateTimeShort(dat)</small> }@if (item.AddedAt is { } aat) { <small class="tk-by"> · added@(item.AddedByName is { } an ? " by " + an : "") @AdminFmt.DateTimeShort(aat)</small> }</label>
+                        <label><input type="checkbox" checked="@item.Done" disabled="@(!dt.CanEdit)" @onchange="e => TickAsync(item, e.Value is true)" /> <span>@item.Text</span></label>
+                        @if (dt.CanEdit && item.Done) { <button type="button" class="tk-undo" title="Ticked by mistake? Put this step back to not done" @onclick="() => TickAsync(item, false)"><Icon Name="RotateCcw" Size="12" /> Undo</button> }
                         @if (dt.CanEdit) { <button type="button" class="em-x" aria-label="Remove step" @onclick="() => RemoveItemAsync(item)"><Icon Name="X" Size="13" /></button> }
+                        <div class="tk-meta">
+                            @if (item.Done && item.DoneAt is { } dat) { <span class="tk-meta-done"><Icon Name="CheckCircle" Size="12" /> Completed@(item.DoneByName is { } dn ? " by " + dn : "") on @AdminFmt.DateTimeShort(dat)</span> }
+                            @if (item.AddedAt is { } aat) { <span>Added@(item.AddedByName is { } an ? " by " + an : "") on @AdminFmt.DateTimeShort(aat)</span> }
+                        </div>
                     </div>
                 }
                 @if (dt.CanEdit)
@@ -587,6 +608,28 @@
         if (!res.Success) Say(res.Message, false);
         else if (wasDone) { Say(res.Message, true); if (_scope == "done") _scope = "open"; }
         await RefreshDetailAsync();
+    }
+
+    private long? _listOpen;
+    private List<TaskChecklistItemDto> _listItems = new();
+
+    /// <summary>Opens the checklist of a task right in the list, so steps can be ticked without opening or editing the task.</summary>
+    private async Task ToggleListAsync(TaskDto task)
+    {
+        if (_listOpen == task.Id) { _listOpen = null; return; }
+        _listOpen = task.Id; _listItems = new();
+        var res = await Api.AdminTaskAsync(task.Id);
+        if (res.Success) _listItems = res.Checklist; else { _listOpen = null; Say(res.Message ?? "That task is not available to you.", false); }
+    }
+
+    private async Task TickInlineAsync(TaskDto task, TaskChecklistItemDto step, bool done)
+    {
+        var res = await Api.AdminTaskTickItemAsync(task.Id, step.Id, done);
+        if (!res.Success) { Say(res.Message ?? "Could not update the step.", false); return; }
+        var fresh = await Api.AdminTaskAsync(task.Id);
+        if (fresh.Success) _listItems = fresh.Checklist;
+        await LoadAsync();
+        if (done && _listItems.Count > 0 && _listItems.All(i => i.Done)) Say("All steps are done. Press the tick on the task to mark it complete.", true);
     }
 
     private async Task TickAsync(TaskChecklistItemDto item, bool done)

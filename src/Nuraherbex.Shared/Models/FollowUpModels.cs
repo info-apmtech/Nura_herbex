@@ -284,4 +284,15 @@ public class ReportResponse : ApiResult
     public bool Truncated { get; set; }
     /// <summary>Set when the report is limited to the signed-in person's own records.</summary>
     public string? ScopeNote { get; set; }
+    /// <summary>Optional per-row detail shown when a row is expanded (the task audit trail), keyed by the first column of the row.</summary>
+    public Dictionary<string, List<ReportDetailLine>> Details { get; set; } = new();
+}
+
+public class ReportDetailLine
+{
+    public string When { get; set; } = "";
+    public string Actor { get; set; } = "";
+    public string Text { get; set; } = "";
+    /// <summary>activity | comment</summary>
+    public string Kind { get; set; } = "activity";
 }
