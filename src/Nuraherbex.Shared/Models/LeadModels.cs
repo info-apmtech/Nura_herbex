@@ -182,3 +182,16 @@ public class LeadConsentRequest
     /// <summary>opted_in | unknown</summary>
     public string Status { get; set; } = "opted_in";
 }
+
+/// <summary>The automatic reply a new WhatsApp message gets when nobody on the team is active (Sundays, holidays, nights).</summary>
+public class AfterHoursSettings
+{
+    public const string DefaultMessage = "Hello {name}, thank you for contacting Nura Herbex 🌿\nOur team is away right now (Sunday, holiday or outside working hours). We have received your message and will reply as soon as we are back.\nIn the meantime, send *track* or your order ID (e.g. NH-123456) to get your order status.";
+    public bool Enabled { get; set; } = true;
+    public string Message { get; set; } = DefaultMessage;
+}
+
+public class AfterHoursResponse : ApiResult
+{
+    public AfterHoursSettings Settings { get; set; } = new();
+}

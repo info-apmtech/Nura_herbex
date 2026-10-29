@@ -25,6 +25,7 @@ public sealed class FollowUpWorker(IServiceScopeFactory scopes, IOptions<FollowU
                 var leadService = scope.ServiceProvider.GetRequiredService<LeadService>();
                 await leadService.ReleaseAwayStaffAsync();
                 await leadService.AssignWaitingAsync();
+                await leadService.RebalanceAsync();
             }
             catch (OperationCanceledException) { return; }
             catch (Exception ex) { log.LogError(ex, "[FollowUp] Cycle failed"); }

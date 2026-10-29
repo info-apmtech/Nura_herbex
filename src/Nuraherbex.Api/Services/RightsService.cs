@@ -118,7 +118,7 @@ public static class PageRules
         if (Is("/api/admin/employees") || Is("/api/admin/departments") || Is("/api/admin/designations") || Is("/api/admin/rights")) return For(m, "team");
         if (path == "/api/admin/ai/reply-settings") return Read(m) ? For(m, "leads", "followups") : For(m, "team");
         if (path == "/api/admin/followups/settings") return Read(m) ? For(m, "followups") : For(m, "team");
-        if (path == "/api/admin/leads/settings") return For(m, "team");
+        if (path is "/api/admin/leads/settings" or "/api/admin/leads/after-hours") return For(m, "team");
 
         // sales and work
         if (Is("/api/admin/crm")) return For(m, "crm");

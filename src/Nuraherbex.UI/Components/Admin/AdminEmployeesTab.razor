@@ -27,6 +27,21 @@
         </div>
     }
 
+    <details class="em-afterhours">
+        <summary><Icon Name="MessageCircle" Size="15" /> After-hours reply <small>@(_ah.Enabled ? "On" : "Off")</small></summary>
+        <div class="em-ah-body">
+            <p class="fu-hint">When a customer writes on WhatsApp and nobody on the team is signed in with <strong>WhatsApp active</strong> (Sundays, holidays, nights), they automatically get this message. Each customer gets it at most once every 12 hours, and the lead stays unassigned until someone is back.</p>
+            <label class="em-switch"><input type="checkbox" checked="@_ah.Enabled" @onchange="e => _ah.Enabled = e.Value is true" /><span class="em-track"><span class="em-knob"></span></span><span class="em-switch-label">Send the after-hours reply</span></label>
+            <label class="fu-field">Message <small>{name} is replaced by the customer's first name</small>
+                <textarea class="fu-input" rows="5" maxlength="1000" @bind="_ah.Message" @bind:event="oninput"></textarea>
+            </label>
+            <div class="em-ah-actions">
+                <button type="button" class="ld-btn" @onclick="() => _ah.Message = AfterHoursSettings.DefaultMessage">Use the standard message</button>
+                <button type="button" class="ld-btn primary" disabled="@_busy" @onclick="SaveAfterHoursAsync">Save</button>
+            </div>
+        </div>
+    </details>
+
     @if (_form is not null)
     {
         <form class="ld-card em-form" @onsubmit="SaveAsync" @onsubmit:preventDefault>
@@ -178,7 +193,7 @@
     private string? _message;
     private bool _messageOk;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync() { await LoadAsync(); var ah = await Api.AdminAfterHoursAsync(); if (ah.Success) _ah = ah.Settings; }
 
     private async Task LoadAsync()
     {
@@ -220,6 +235,16 @@
         Say(res.Message, res.Success);
         _removingId = null;
         if (res.Success) await LoadAsync();
+        _busy = false;
+    }
+
+    private AfterHoursSettings _ah = new();
+
+    private async Task SaveAfterHoursAsync()
+    {
+        _busy = true;
+        var res = await Api.AdminSaveAfterHoursAsync(_ah);
+        Say(res.Message, res.Success);
         _busy = false;
     }
 

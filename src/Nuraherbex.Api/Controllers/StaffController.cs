@@ -407,8 +407,8 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
             if (!StaffAvailability.IsOnline(emp)) return BadRequest(new ApiResult { Success = false, Message = $"{emp.Name} is not signed in right now, so they cannot be set active. They can switch it on themselves when they sign in." });
             emp.WhatsAppActive = true;
             await db.SaveChangesAsync();
-            var given = await leads.AssignWaitingAsync();
-            return Ok(new ApiResult { Success = true, Message = given > 0 ? $"{emp.Name} is WhatsApp active. {given} waiting lead(s) were shared out." : $"{emp.Name} is WhatsApp active." });
+            var given = await leads.AssignWaitingAsync() + await leads.RebalanceAsync();
+            return Ok(new ApiResult { Success = true, Message = given > 0 ? $"{emp.Name} is WhatsApp active. {given} lead(s) were shared out." : $"{emp.Name} is WhatsApp active." });
         }
         var moved = await leads.SwitchOffWhatsAppAsync(id, $"WhatsApp switched off by {MyName}", MyName);
         return Ok(new ApiResult { Success = true, Message = moved > 0 ? $"{emp.Name} is WhatsApp off. {moved} pending lead(s) moved to other active people, or back to the admin queue if nobody else is active." : $"{emp.Name} is WhatsApp off." });
@@ -484,6 +484,18 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         var moved = await leads.ReassignOpenLeadsAsync(emp.Id, spreadAcrossTeam: !string.Equals(reassign, "unassigned", StringComparison.OrdinalIgnoreCase), MyName);
         log.LogInformation("[Staff] {Admin} removed employee {Email}; {Moved} lead(s) reassigned", MyName, emp.Email, moved);
         return Ok(new ApiResult { Success = true, Message = moved > 0 ? $"{emp.Name} removed; {moved} open lead(s) were reassigned." : $"{emp.Name} removed." });
+    }
+
+    [HttpGet("leads/after-hours")]
+    public async Task<AfterHoursResponse> GetAfterHours() => new() { Success = true, Settings = await leads.GetAfterHoursAsync() };
+
+    [HttpPut("leads/after-hours")]
+    public async Task<IActionResult> SaveAfterHours(AfterHoursSettings r)
+    {
+        if (r.Enabled && string.IsNullOrWhiteSpace(r.Message)) return BadRequest(new ApiResult { Success = false, Message = "Write the message customers should receive." });
+        if (r.Message.Length > 1000) return BadRequest(new ApiResult { Success = false, Message = "The message is too long (1000 characters at most)." });
+        await leads.SaveAfterHoursAsync(new AfterHoursSettings { Enabled = r.Enabled, Message = r.Message.Trim() });
+        return Ok(new ApiResult { Success = true, Message = r.Enabled ? "After-hours reply saved. Customers who write when nobody is active will get it." : "After-hours reply is off." });
     }
 
     [HttpPut("leads/settings")]

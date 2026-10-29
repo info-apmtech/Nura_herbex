@@ -209,10 +209,10 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
         {
             await presence.SetWhatsAppActiveAsync(me, true);
             await presence.CheckInAsync(me); // switching on counts as being here right now
-            given = await leads.AssignWaitingAsync(); // hand over leads that were waiting, without waiting for the 2-minute worker
+            given = await leads.AssignWaitingAsync() + await leads.RebalanceAsync(); // hand over leads that were waiting, without waiting for the 2-minute worker
         }
         else await leads.SwitchOffWhatsAppAsync(me, "Owner switched WhatsApp off", MyName); // their not-yet-started leads move to someone active
-        return new() { Success = true, Active = req.Active, Message = req.Active ? (given > 0 ? $"You are WhatsApp active. {given} waiting lead(s) were shared out." : "You are WhatsApp active. New WhatsApp leads can now come to you.") : "WhatsApp off. You will not get new WhatsApp leads." };
+        return new() { Success = true, Active = req.Active, Message = req.Active ? (given > 0 ? $"You are WhatsApp active. {given} lead(s) were shared out." : "You are WhatsApp active. New WhatsApp leads can now come to you.") : "WhatsApp off. You will not get new WhatsApp leads." };
     }
 
     [HttpPut("notifications/read-all")]

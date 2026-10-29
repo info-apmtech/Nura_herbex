@@ -172,6 +172,12 @@ public partial class WhatsAppService(
             return;
         }
 
+        if (_o.CanSend)
+        {
+            try { if (await leads.AfterHoursReplyAsync(lead) is { } away) await SendTextAsync(from, away, null, "auto"); }
+            catch (Exception ex) { log.LogWarning(ex, "[WhatsApp] After-hours reply failed for {Phone}", from); }
+        }
+
         if (_o.AutoReplyEnabled && _o.CanSend && type is "text" or "button" or "interactive")
         {
             try { await AutoReplyAsync(from, body ?? ""); }

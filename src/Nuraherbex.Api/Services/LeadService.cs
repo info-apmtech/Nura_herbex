@@ -102,6 +102,45 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     public const string AutoAssignKey = "leads.autoAssign";
 
     /// <summary>Round-robin is on unless an admin switched it off.</summary>
+    // ---------------------------------------------------------------------
+    // After-hours reply: nobody active (Sunday, holiday, night) -> the customer still gets an answer
+    // ---------------------------------------------------------------------
+
+    private const string AfterHoursKey = "leads.afterhours";
+    private static readonly TimeSpan AfterHoursRepeat = TimeSpan.FromHours(12);
+
+    public async Task<AfterHoursSettings> GetAfterHoursAsync()
+    {
+        var row = await db.SiteSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == AfterHoursKey);
+        if (row is null) return new AfterHoursSettings();
+        try { return System.Text.Json.JsonSerializer.Deserialize<AfterHoursSettings>(row.Value, NuraJson.Options) ?? new AfterHoursSettings(); }
+        catch (System.Text.Json.JsonException) { return new AfterHoursSettings(); }
+    }
+
+    public async Task SaveAfterHoursAsync(AfterHoursSettings s)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(s, NuraJson.Options);
+        var row = await db.SiteSettings.FirstOrDefaultAsync(x => x.Key == AfterHoursKey);
+        if (row is null) db.SiteSettings.Add(new SiteSetting { Key = AfterHoursKey, Value = json });
+        else { row.Value = json; row.UpdatedAt = DateTime.UtcNow; }
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// The text to send for a new inbound WhatsApp message, or null when none is needed: the feature is off, the customer opted out,
+    /// somebody is signed in and WhatsApp active (they will answer), or this customer already got it in the last 12 hours.
+    /// </summary>
+    public async Task<string?> AfterHoursReplyAsync(Lead lead)
+    {
+        var s = await GetAfterHoursAsync();
+        if (!s.Enabled || string.IsNullOrWhiteSpace(s.Message) || lead.ConsentStatus == "opted_out") return null;
+        if ((await availability.EligibleAsync("leads", null, null, true)).Count > 0) return null;
+        var since = DateTime.UtcNow - AfterHoursRepeat;
+        if (await db.WhatsAppMessages.AnyAsync(m => m.LeadId == lead.Id && m.Direction == "outbound" && m.SentBy == "auto" && m.CreatedAt >= since)) return null;
+        var name = string.IsNullOrWhiteSpace(lead.Name) || lead.Name == lead.Phone ? "there" : lead.Name.Trim().Split(' ')[0];
+        return s.Message.Replace("{name}", name);
+    }
+
     public async Task<bool> IsAutoAssignEnabledAsync() =>
         !string.Equals((await db.SiteSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == AutoAssignKey))?.Value, "false", StringComparison.OrdinalIgnoreCase);
 
@@ -140,6 +179,41 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         return given;
     }
 
+    /// <summary>
+    /// Shares unstarted leads out evenly when someone new comes online. People who are online and eligible are compared by open work;
+    /// while the busiest holds at least 2 more than the least busy and has an unstarted lead (status "new", no team reply yet), the newest of those
+    /// moves to the least busy person. Leads already being worked never move. Returns how many leads moved.
+    /// </summary>
+    public async Task<int> RebalanceAsync()
+    {
+        if (!await IsAutoAssignEnabledAsync()) return 0;
+        var moved = 0;
+        foreach (var wa in new[] { true, false })
+        {
+            var people = await availability.EligibleAsync("leads", null, null, wa);
+            if (people.Count < 2) continue;
+            var load = await availability.WorkloadAsync();
+            for (var guard = 0; guard < 200; guard++)
+            {
+                var receiver = people.OrderBy(p => load.GetValueOrDefault(p.Id)).ThenBy(p => p.LastAssignedAt == null ? 0 : 1).ThenBy(p => p.LastAssignedAt).ThenBy(p => p.Id).First();
+                Lead? lead = null; Employee? donor = null;
+                foreach (var d in people.Where(p => p.Id != receiver.Id && load.GetValueOrDefault(p.Id) - load.GetValueOrDefault(receiver.Id) >= 2).OrderByDescending(p => load.GetValueOrDefault(p.Id)))
+                {
+                    lead = await PendingOf(d.Id).Where(l => (l.Source == "whatsapp") == wa).OrderByDescending(l => l.AssignedAt).FirstOrDefaultAsync();
+                    if (lead is not null) { donor = d; break; }
+                }
+                if (lead is null || donor is null) break;
+                await AssignAsync(lead, receiver.Id, $"Shared out evenly: {receiver.Name} is online and {donor.Name} had unstarted leads waiting", "auto");
+                await db.SaveChangesAsync(); // so the next round sees the new workload
+                load[donor.Id] = load.GetValueOrDefault(donor.Id) - 1;
+                load[receiver.Id] = load.GetValueOrDefault(receiver.Id) + 1;
+                moved++;
+            }
+        }
+        if (moved > 0) log.LogInformation("[Lead] Rebalanced {Moved} unstarted lead(s) between online staff", moved);
+        return moved;
+    }
+
     /// <summary>Assigns the lead (null = unassign) and records history. Caller saves.</summary>
     public async Task AssignAsync(Lead lead, long? employeeId, string? reason, string changedBy)
     {
@@ -175,7 +249,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     /// </summary>
     private IQueryable<Lead> PendingOf(long employeeId) =>
         db.Leads.Where(l => l.AssignedToEmployeeId == employeeId && l.Status == LeadStatuses.New
-            && !db.WhatsAppMessages.Any(m => m.LeadId == l.Id && m.Direction == "outbound" && m.SentBy != null && m.SentBy != "system")); // the automatic welcome message is sent by "system" and does not count
+            && !db.WhatsAppMessages.Any(m => m.LeadId == l.Id && m.Direction == "outbound" && m.SentBy != null && m.SentBy != "system" && m.SentBy != "auto")); // automatic messages (welcome = "system", after-hours reply = "auto") do not count
 
     /// <summary>Gives the pending leads of <paramref name="employeeId"/> to other WhatsApp-active people; with nobody available they go back to the admin queue until someone is.</summary>
     public async Task<int> MovePendingLeadsAsync(long employeeId, string reason, string changedBy)

@@ -196,6 +196,8 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<ApiResult> AdminSetEmployeeWhatsAppAsync(long id, bool active) => Call<ApiResult>(HttpMethod.Put, $"api/admin/employees/{id}/whatsapp", new WhatsAppActiveRequest { Active = active }, Who.Admin);
     public Task<ApiResult> AdminRemoveEmployeeAsync(long id, bool spreadLeads) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/employees/{id}?reassign={(spreadLeads ? "auto" : "unassigned")}", null, Who.Admin);
     public Task<ApiResult> AdminLeadSettingsAsync(bool autoAssign) => Call<ApiResult>(HttpMethod.Put, "api/admin/leads/settings", new LeadSettingsRequest { AutoAssign = autoAssign }, Who.Admin);
+    public Task<AfterHoursResponse> AdminAfterHoursAsync() => Call<AfterHoursResponse>(HttpMethod.Get, "api/admin/leads/after-hours", null, Who.Admin);
+    public Task<ApiResult> AdminSaveAfterHoursAsync(AfterHoursSettings s) => Call<ApiResult>(HttpMethod.Put, "api/admin/leads/after-hours", s, Who.Admin);
     public Task<LeadOrderResponse> AdminLeadOrderAsync(long id, LeadOrderRequest r) => Call<LeadOrderResponse>(HttpMethod.Post, $"api/admin/leads/{id}/order", r, Who.Admin);
     public Task<CrmDashboardResponse> AdminCrmDashboardAsync(int days) => Call<CrmDashboardResponse>(HttpMethod.Get, $"api/admin/crm/dashboard?days={days}", null, Who.Admin);
     public Task<ReplySuggestionResponse> AdminSuggestReplyAsync(long id, ReplySuggestRequest r) => Call<ReplySuggestionResponse>(HttpMethod.Post, $"api/admin/leads/{id}/suggest-reply", r, Who.Admin);

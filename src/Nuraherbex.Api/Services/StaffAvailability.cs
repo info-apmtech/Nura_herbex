@@ -54,16 +54,24 @@ public class StaffAvailability(NuraDbContext db)
     /// </summary>
     public async Task<Employee?> PickAsync(string page, long? departmentId = null, long? excludeId = null, bool whatsAppOnly = false)
     {
+        var staff = await EligibleAsync(page, departmentId, excludeId, whatsAppOnly);
+        if (staff.Count == 0) return null;
+        var load = await WorkloadAsync();
+        return staff
+            .OrderBy(e => load.GetValueOrDefault(e.Id))
+            .ThenBy(e => e.LastAssignedAt == null ? 0 : 1).ThenBy(e => e.LastAssignedAt).ThenBy(e => e.Id)
+            .FirstOrDefault();
+    }
+
+    /// <summary>Everyone who could take new work of this kind right now: active, sales, online, allowed to open the page, and (when asked) WhatsApp active.</summary>
+    public async Task<List<Employee>> EligibleAsync(string page, long? departmentId = null, long? excludeId = null, bool whatsAppOnly = false)
+    {
         var rights = await db.Designations.AsNoTracking().ToDictionaryAsync(d => d.Id, d => d.RightsJson);
         var cutoff = OnlineCutoff();
         var staff = await db.Employees.Where(e => e.IsActive && e.Role == EmployeeRoles.Sales && e.Id != excludeId && e.LastSeenAt != null && e.LastSeenAt >= cutoff && (!whatsAppOnly || e.WhatsAppActive)
             && (departmentId == null || e.DepartmentId == departmentId)).ToListAsync();
-        if (staff.Count == 0) return null;
-        var load = await WorkloadAsync();
         return staff
             .Where(e => (e.DesignationId is { } id && rights.TryGetValue(id, out var json) ? PageCatalog.LevelFrom(json, page) : PageCatalog.DefaultStaff.GetValueOrDefault(page)) >= PageCatalog.Limited)
-            .OrderBy(e => load.GetValueOrDefault(e.Id))
-            .ThenBy(e => e.LastAssignedAt == null ? 0 : 1).ThenBy(e => e.LastAssignedAt).ThenBy(e => e.Id)
-            .FirstOrDefault();
+            .ToList();
     }
 }
