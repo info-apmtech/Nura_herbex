@@ -125,6 +125,7 @@ public static class PageRules
         if (Is("/api/admin/leads")) return For(m, "leads");
         if (Is("/api/admin/followups")) return For(m, "followups");
         if (Is("/api/admin/tasks")) return For(m, "tasks");
+        if (Is("/api/admin/shipping")) return For(m, "shipping");
         // Staff without the Reports page may still open the reports for pages they work on (leads, follow-ups, tasks); the controller scopes them to their own records.
         if (Is("/api/admin/reports")) return For(m, "reports", "leads", "followups", "tasks");
 

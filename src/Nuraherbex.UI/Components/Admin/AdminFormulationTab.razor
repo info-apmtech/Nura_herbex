@@ -1,229 +1,209 @@
 @inject ApiClient Api
 @inject BrowserInterop Browser
 
-<div class="space-y-4">
-    @* Top Formulation Header & Actions *@
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-lg bg-zinc-900/40 border border-zinc-800">
-        <div class="space-y-0.5">
-            <div class="flex items-center gap-2">
-                <h3 class="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-                    <Icon Name="FlaskConical" Size="16" Class="text-purple-400" />
-                    <span>STAMIX™ Clinical Formulation Matrix</span>
+<div class="afm">
+    @* Page header & primary actions *@
+    <div class="afm-card afm-head">
+        <div class="afm-head-main">
+            <span class="afm-head-icon"><Icon Name="FlaskConical" Size="24" /></span>
+            <div>
+                <h3 class="afm-title">
+                    <span>STAMIX™ Formulation</span>
+                    <span class="afm-live">Live on website</span>
                 </h3>
-                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-950/60 border border-purple-800/60 text-purple-300">
-                    Live Database Sync
-                </span>
+                <p class="afm-sub">
+                    Manage the ingredients, amount per 20g daily serving and clinical purpose shown to customers on <code>/formulation</code>.
+                </p>
             </div>
-            <p class="text-xs text-zinc-400">
-                Manage active botanicals, exact amount added per 20g daily serving, standardized extract grades, and clinical indications displayed on <code class="text-purple-300 font-mono">/formulation</code>.
-            </p>
         </div>
 
-        <div class="flex items-center gap-2 shrink-0">
-            <button type="button" @onclick="ResetIngredientsAsync"
-                    class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-                    title="Reset to 17 standard clinical botanicals">
-                <Icon Name="RotateCcw" Size="13" />
+        <div class="afm-actions">
+            <button type="button" class="afm-btn" @onclick="ResetIngredientsAsync" title="Reset to the 17 standard clinical botanicals">
+                <Icon Name="RotateCcw" Size="15" />
                 <span>Reset Defaults</span>
             </button>
-
-            <button type="button" @onclick="OpenEditMetrics"
-                    class="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-amber-300 hover:text-amber-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-                    title="Configure the 4 formulation highlight cards">
-                <Icon Name="Edit3" Size="13" />
-                <span>Edit Metrics</span>
+            <button type="button" class="afm-btn" @onclick="OpenEditMetrics" title="Edit the 4 highlight cards">
+                <Icon Name="Edit3" Size="15" />
+                <span>Edit Highlights</span>
             </button>
-
-            <button type="button" @onclick="OpenAddIngredient"
-                    class="px-3.5 py-1.5 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm">
-                <Icon Name="Plus" Size="13" />
+            <button type="button" class="afm-btn afm-btn-primary" @onclick="OpenAddIngredient" disabled="@(_products.Count == 0)">
+                <Icon Name="Plus" Size="15" />
                 <span>Add Ingredient</span>
             </button>
         </div>
     </div>
 
+    @* Product selector: each product has its own formulation *@
+    <div class="afm-card afm-products">
+        <span class="afm-label">Product</span>
+        @if (_products.Count == 0)
+        {
+            <p class="afm-empty-note">@(_productsLoading ? "Loading products..." : "No products found. Add a product in the catalog first.")</p>
+        }
+        else
+        {
+            <div class="afm-tabs">
+                @foreach (var p in _products)
+                {
+                    var prod = p;
+                    var on = prod.Id == _productId;
+                    <button type="button" @key="prod.Id" @onclick="() => SelectProduct(prod.Id)" class="afm-tab @(on ? "is-on" : "")">
+                        <span>@prod.Name</span>
+                        <span class="afm-tab-count">@IngredientCount(prod.Id)</span>
+                    </button>
+                }
+            </div>
+        }
+    </div>
+
     @* Notification feedback banner *@
     @if (!string.IsNullOrEmpty(_feedback))
     {
-        <div class="p-3 rounded-lg bg-purple-950/50 border border-purple-800 text-purple-200 text-xs flex items-center gap-2 animate-in fade-in font-medium">
-            <Icon Name="CheckCircle2" Size="15" Class="text-emerald-400 shrink-0" />
+        var isError = _feedback.StartsWith("Error", StringComparison.OrdinalIgnoreCase);
+        <div class="afm-notice @(isError ? "is-error" : "")" role="status">
+            <Icon Name="@(isError ? "AlertCircle" : "CheckCircle2")" Size="17" />
             <span>@_feedback</span>
         </div>
     }
 
-    @* Summary Metrics Header & Quick Edit *@
-    <div class="flex items-center justify-between pt-1">
-        <div class="flex items-center gap-2">
-            <ExportButton Title="Formulation ingredients" FileName="nura-formulation" Columns="@(new[] { "Ingredient", "Botanical name", "Category", "Amount", "Standardized extract", "Active compound", "Purpose" })" Rows="IngredientRows" Disabled="@(!FilteredIngredients.Any())" />
-            <span class="text-[11px] font-mono uppercase tracking-wider text-zinc-400 font-semibold">
-                Formulation Highlights &amp; Telemetry
-            </span>
-            <span class="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800/80 border border-zinc-700/50 text-amber-300 font-mono">
-                Updatable
-            </span>
+    @* Highlights *@
+    <div class="afm-section">
+        <div>
+            <h4>Formulation Highlights</h4>
+            <p>Headline figures shown at the top of the public formulation page. Click a card to edit.</p>
         </div>
-        <button type="button" @onclick="OpenEditMetrics"
-                class="px-2.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/70 text-zinc-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Edit these 4 summary metrics">
-            <Icon Name="Edit3" Size="12" Class="text-amber-400" />
-            <span>Edit Metrics</span>
+    </div>
+
+    <div class="afm-metrics">
+        <button type="button" class="afm-metric" style="--accent:#1b1233" @onclick="OpenEditMetrics" title="Click to edit">
+            <span class="afm-metric-top">
+                <span class="afm-metric-label">@Or(Metrics.TotalIngredients.Label, "Total Ingredients")</span>
+                <span class="afm-metric-edit"><Icon Name="Edit3" Size="14" /></span>
+            </span>
+            <span class="afm-metric-value">
+                @(Metrics.TotalIngredients.UseAutoCount
+                    ? $"{ProductIngredients.Count} Botanicals"
+                    : Or(Metrics.TotalIngredients.Value, $"{ProductIngredients.Count} Botanicals"))
+            </span>
+        </button>
+
+        <button type="button" class="afm-metric" style="--accent:#b45309" @onclick="OpenEditMetrics" title="Click to edit">
+            <span class="afm-metric-top">
+                <span class="afm-metric-label">@Or(Metrics.DailyServing.Label, "Daily Serving Base")</span>
+                <span class="afm-metric-edit"><Icon Name="Edit3" Size="14" /></span>
+            </span>
+            <span class="afm-metric-value">@Or(Metrics.DailyServing.Value, "20,000 mg (20g)")</span>
+        </button>
+
+        <button type="button" class="afm-metric" style="--accent:#15803d" @onclick="OpenEditMetrics" title="Click to edit">
+            <span class="afm-metric-top">
+                <span class="afm-metric-label">@Or(Metrics.Bioavailability.Label, "Bioavailability Catalyst")</span>
+                <span class="afm-metric-edit"><Icon Name="Edit3" Size="14" /></span>
+            </span>
+            <span class="afm-metric-value">@Or(Metrics.Bioavailability.Value, "BioPerine® +2000%")</span>
+        </button>
+
+        <button type="button" class="afm-metric" style="--accent:#5e209e" @onclick="OpenEditMetrics" title="Click to edit">
+            <span class="afm-metric-top">
+                <span class="afm-metric-label">@Or(Metrics.Transparency.Label, "Public Transparency")</span>
+                <span class="afm-metric-edit"><Icon Name="Edit3" Size="14" /></span>
+            </span>
+            <span class="afm-metric-value">@Or(Metrics.Transparency.Value, "100% Unmasked")</span>
         </button>
     </div>
 
-    @* Summary Metrics (Dynamic & Clickable to Edit) *@
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div @onclick="OpenEditMetrics"
-             class="group relative p-3 rounded-lg bg-zinc-900/40 hover:bg-zinc-900/70 border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer space-y-0.5"
-             title="Click to edit this metric">
-            <div class="flex items-center justify-between">
-                <span class="text-[10px] text-zinc-400 uppercase font-mono truncate">
-                    @Or(Metrics.TotalIngredients.Label, "Total Ingredients")
-                </span>
-                <Icon Name="Edit3" Size="11" Class="text-zinc-600 group-hover:text-amber-400 transition-colors shrink-0" />
-            </div>
-            <div class="text-xl font-bold text-white font-mono">
-                @(Metrics.TotalIngredients.UseAutoCount
-                    ? $"{Ingredients.Count} Botanicals"
-                    : Or(Metrics.TotalIngredients.Value, $"{Ingredients.Count} Botanicals"))
-            </div>
-        </div>
-
-        <div @onclick="OpenEditMetrics"
-             class="group relative p-3 rounded-lg bg-zinc-900/40 hover:bg-zinc-900/70 border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer space-y-0.5"
-             title="Click to edit this metric">
-            <div class="flex items-center justify-between">
-                <span class="text-[10px] text-zinc-400 uppercase font-mono truncate">
-                    @Or(Metrics.DailyServing.Label, "Daily Serving Base")
-                </span>
-                <Icon Name="Edit3" Size="11" Class="text-zinc-600 group-hover:text-amber-400 transition-colors shrink-0" />
-            </div>
-            <div class="text-xl font-bold text-amber-300 font-mono">
-                @Or(Metrics.DailyServing.Value, "20,000 mg (20g)")
-            </div>
-        </div>
-
-        <div @onclick="OpenEditMetrics"
-             class="group relative p-3 rounded-lg bg-zinc-900/40 hover:bg-zinc-900/70 border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer space-y-0.5"
-             title="Click to edit this metric">
-            <div class="flex items-center justify-between">
-                <span class="text-[10px] text-zinc-400 uppercase font-mono truncate">
-                    @Or(Metrics.Bioavailability.Label, "Bioavailability Catalyst")
-                </span>
-                <Icon Name="Edit3" Size="11" Class="text-zinc-600 group-hover:text-amber-400 transition-colors shrink-0" />
-            </div>
-            <div class="text-xl font-bold text-emerald-400 font-mono">
-                @Or(Metrics.Bioavailability.Value, "BioPerine® +2000%")
-            </div>
-        </div>
-
-        <div @onclick="OpenEditMetrics"
-             class="group relative p-3 rounded-lg bg-zinc-900/40 hover:bg-zinc-900/70 border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer space-y-0.5"
-             title="Click to edit this metric">
-            <div class="flex items-center justify-between">
-                <span class="text-[10px] text-zinc-400 uppercase font-mono truncate">
-                    @Or(Metrics.Transparency.Label, "Public Transparency")
-                </span>
-                <Icon Name="Edit3" Size="11" Class="text-zinc-600 group-hover:text-amber-400 transition-colors shrink-0" />
-            </div>
-            <div class="text-xl font-bold text-purple-400 font-mono">
-                @Or(Metrics.Transparency.Value, "100% Unmasked")
-            </div>
+    @* Ingredients *@
+    <div class="afm-section">
+        <div>
+            <h4>Ingredients</h4>
+            <p>@(_products.FirstOrDefault(p => p.Id == _productId)?.Name ?? "Selected product")</p>
         </div>
     </div>
 
-    @* Search and Category Filter *@
-    <div class="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
-        <div class="relative flex-1 max-w-sm">
-            <Icon Name="Search" Size="14" Class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-            <input type="text" placeholder="Filter ingredients, botanical name, or benefit..."
-                   @bind="_search" @bind:event="oninput"
-                   class="w-full pl-8 pr-3 py-1.5 rounded-md bg-zinc-900/80 border border-zinc-800 text-xs text-zinc-200 placeholder-zinc-500 outline-none focus:border-zinc-500" />
+    <div class="afm-card afm-table-card">
+        <div class="afm-toolbar">
+            <div class="afm-search">
+                <Icon Name="Search" Size="16" />
+                <input type="text" class="afm-input" placeholder="Search by ingredient, botanical name or benefit"
+                       @bind="_search" @bind:event="oninput" />
+            </div>
+
+            <div class="afm-select-wrap">
+                <select class="afm-select" @bind="_categoryFilter">
+                    <option value="All">All Categories</option>
+                    <option value="Adaptogens & Vigor">Adaptogens &amp; Vigor</option>
+                    <option value="Nitric Oxide Boosters">Nitric Oxide Boosters</option>
+                    <option value="Vitality & Stamina">Vitality &amp; Stamina</option>
+                    <option value="Absorption & Bioavailability">Absorption &amp; Bioavailability</option>
+                    <option value="Nutrient Base">Nutrient Base</option>
+                    <option value="Botanical">Botanical</option>
+                </select>
+                <ExportButton Title="Formulation ingredients" FileName="nura-formulation" Columns="@(new[] { "Ingredient", "Botanical name", "Category", "Amount", "Standardized extract", "Active compound", "Purpose" })" Rows="IngredientRows" Disabled="@(!FilteredIngredients.Any())" />
+            </div>
         </div>
 
-        <div class="flex items-center gap-2">
-            <ExportButton Title="Formulation ingredients" FileName="nura-formulation" Columns="@(new[] { "Ingredient", "Botanical name", "Category", "Amount", "Standardized extract", "Active compound", "Purpose" })" Rows="IngredientRows" Disabled="@(!FilteredIngredients.Any())" />
-            <select @bind="_categoryFilter"
-                    class="px-2.5 py-1.5 rounded-md bg-zinc-900/80 border border-zinc-800 text-xs text-zinc-200 outline-none focus:border-zinc-500 cursor-pointer">
-                <option value="All">All Categories</option>
-                <option value="Adaptogens & Vigor">Adaptogens &amp; Vigor</option>
-                <option value="Nitric Oxide Boosters">Nitric Oxide Boosters</option>
-                <option value="Vitality & Stamina">Vitality &amp; Stamina</option>
-                <option value="Absorption & Bioavailability">Absorption &amp; Bioavailability</option>
-                <option value="Nutrient Base">Nutrient Base</option>
-                <option value="Botanical">Botanical</option>
-            </select>
-        </div>
-    </div>
-
-    @* Ingredients Table *@
-    <div class="rounded-lg border border-zinc-800 bg-zinc-900/30 overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs font-sans">
+        <div class="afm-scroll">
+            <table class="afm-table">
                 <thead>
-                    <tr class="bg-zinc-900/80 border-b border-zinc-800 text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
-                        <th class="py-2.5 px-3 w-10">#</th>
-                        <th class="py-2.5 px-4">Ingredient &amp; Latin Botanical Name</th>
-                        <th class="py-2.5 px-3">Category</th>
-                        <th class="py-2.5 px-3 text-right">Amount Added</th>
-                        <th class="py-2.5 px-4">Standardized Extract</th>
-                        <th class="py-2.5 px-4">Clinical Mechanism &amp; Purpose</th>
-                        <th class="py-2.5 px-3 text-right w-24">Actions</th>
+                    <tr>
+                        <th>#</th>
+                        <th>Ingredient</th>
+                        <th>Category</th>
+                        <th class="afm-th-right">Amount</th>
+                        <th>Standardized Extract</th>
+                        <th>Purpose</th>
+                        <th class="afm-th-right">Actions</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-zinc-800/60 font-sans">
+                <tbody>
                     @{ var idx = 0; }
                     @foreach (var item in FilteredIngredients)
                     {
                         idx++;
                         var row = item;
-                        <tr @key="@(string.IsNullOrEmpty(item.Id) ? item.Name : item.Id)" class="hover:bg-zinc-800/30 transition-colors">
-                            <td class="py-3 px-3 font-mono text-zinc-500 text-[11px]">@idx</td>
-                            <td class="py-3 px-4">
-                                <div class="font-medium text-zinc-100">@item.Name</div>
+                        <tr @key="@(string.IsNullOrEmpty(item.Id) ? item.Name : item.Id)">
+                            <td class="afm-num">@idx</td>
+                            <td>
+                                <div class="afm-ing-name">@item.Name</div>
                                 @if (!string.IsNullOrEmpty(item.BotanicalName))
                                 {
-                                    <div class="text-[11px] text-zinc-400 italic font-serif">@item.BotanicalName</div>
+                                    <div class="afm-latin">@item.BotanicalName</div>
                                 }
                                 @if (!string.IsNullOrEmpty(item.ActiveCompound))
                                 {
-                                    <div class="text-[10px] text-zinc-500 font-mono">Active: @item.ActiveCompound</div>
+                                    <div class="afm-active"><b>Active:</b> @item.ActiveCompound</div>
                                 }
                             </td>
-                            <td class="py-3 px-3">
-                                <span class="inline-block px-2 py-0.5 rounded text-[10px] font-mono bg-zinc-800/80 border border-zinc-700/60 text-zinc-300">
-                                    @(string.IsNullOrEmpty(item.Category) ? "Botanical" : item.Category)
-                                </span>
-                            </td>
-                            <td class="py-3 px-3 text-right font-mono font-bold text-amber-300">
-                                @item.Amount
-                            </td>
-                            <td class="py-3 px-4 font-mono text-[11px] text-zinc-300">
-                                @(string.IsNullOrEmpty(item.ExtractRatio) ? "—" : item.ExtractRatio)
-                            </td>
-                            <td class="py-3 px-4 text-zinc-300 max-w-xs text-[11px] leading-relaxed">
-                                @(string.IsNullOrEmpty(item.Purpose) ? item.Benefit : item.Purpose)
-                            </td>
-                            <td class="py-3 px-3 text-right">
-                                <div class="flex items-center justify-end gap-1.5">
-                                    <button type="button" @onclick="() => OpenEditIngredient(row)"
-                                            class="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer"
-                                            title="Edit ingredient">
-                                        <Icon Name="Edit3" Size="13" />
+                            <td><span class="afm-chip">@(string.IsNullOrEmpty(item.Category) ? "Botanical" : item.Category)</span></td>
+                            <td class="afm-td-right"><span class="afm-amount">@item.Amount</span></td>
+                            <td class="afm-extract">@(string.IsNullOrEmpty(item.ExtractRatio) ? "—" : item.ExtractRatio)</td>
+                            <td class="afm-purpose">@(string.IsNullOrEmpty(item.Purpose) ? item.Benefit : item.Purpose)</td>
+                            <td class="afm-td-right">
+                                <div class="afm-row-actions">
+                                    <button type="button" class="afm-icon-btn" @onclick="() => OpenEditIngredient(row)" title="Edit ingredient" aria-label="Edit @item.Name">
+                                        <Icon Name="Edit3" Size="16" />
                                     </button>
-                                    <button type="button" @onclick="() => DeleteIngredientAsync(row)"
-                                            class="p-1 rounded bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-400 hover:text-red-200 transition-colors cursor-pointer"
-                                            title="Delete ingredient">
-                                        <Icon Name="Trash2" Size="13" />
+                                    <button type="button" class="afm-icon-btn is-danger" @onclick="() => DeleteIngredientAsync(row)" title="Delete ingredient" aria-label="Delete @item.Name">
+                                        <Icon Name="Trash2" Size="16" />
                                     </button>
                                 </div>
+                            </td>
+                        </tr>
+                    }
+                    @if (!FilteredIngredients.Any())
+                    {
+                        <tr>
+                            <td colspan="7" class="afm-empty">
+                                <strong>No ingredients found</strong>
+                                <span>@(ProductIngredients.Count == 0 ? "Use “Add Ingredient” to build this product's formulation." : "Try a different search or category.")</span>
                             </td>
                         </tr>
                     }
                 </tbody>
             </table>
         </div>
+        <div class="afm-foot">Showing @FilteredIngredients.Count() of @ProductIngredients.Count ingredients</div>
     </div>
-
 </div>
 
 @* ======================================================================= *@
@@ -231,101 +211,102 @@
 @* ======================================================================= *@
 @if (_showIngredientModal)
 {
-    <div @onclick="@(() => _showIngredientModal = false)"
-         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in text-left font-sans">
-        <div @onclick:stopPropagation
-             class="relative w-full max-w-lg bg-[#121215] border border-zinc-800 rounded-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <button @onclick="@(() => _showIngredientModal = false)"
-                    class="absolute top-4 right-4 w-7 h-7 rounded-md bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors">
-                <Icon Name="X" Size="15" />
+    <div class="afm afm-overlay" @onclick="@(() => _showIngredientModal = false)">
+        <div class="afm-modal" @onclick:stopPropagation role="dialog" aria-modal="true">
+            <button type="button" class="afm-close" @onclick="@(() => _showIngredientModal = false)" aria-label="Close">
+                <Icon Name="X" Size="16" />
             </button>
 
-            <div class="space-y-1">
-                <div class="text-[10px] font-mono text-purple-400 uppercase font-medium flex items-center gap-1.5">
-                    <Icon Name="FlaskConical" Size="12" />
-                    <span>@(_editingId is not null ? "Edit Ingredient" : "Add New Ingredient")</span>
+            <div class="afm-modal-head">
+                <div class="afm-eyebrow">
+                    <Icon Name="FlaskConical" Size="13" />
+                    <span>@(_editingId is not null ? "Edit ingredient" : "New ingredient")</span>
                 </div>
-                <h3 class="text-base font-semibold text-zinc-100">
-                    @(_editingId is not null ? $"Configure: {(string.IsNullOrEmpty(_form.Name) ? "Ingredient" : _form.Name)}" : "Add Formulation Ingredient")
-                </h3>
-                <p class="text-xs text-zinc-400">
-                    Configure ingredient name, Latin binomial, amount added per daily serving, and clinical benefits.
-                </p>
+                <h3>@(_editingId is not null ? (string.IsNullOrEmpty(_form.Name) ? "Edit Ingredient" : _form.Name) : "Add Formulation Ingredient")</h3>
+                <p>Name, botanical name, amount per daily serving and clinical benefit.</p>
             </div>
 
-            <form @onsubmit="SaveIngredientAsync" @onsubmit:preventDefault class="space-y-3.5 text-xs">
-                <div class="space-y-1">
-                    <label class="text-zinc-300 font-medium block">
-                        Ingredient Name <span class="text-red-400">*</span>
-                    </label>
-                    <input type="text" required placeholder="e.g. KSM-66® Ashwagandha Extract"
-                           @bind="_form.Name" @bind:event="oninput"
-                           class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-purple-500" />
-                </div>
-
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="space-y-1">
-                        <label class="text-zinc-300 font-medium block">
-                            Amount Added <span class="text-red-400">*</span>
-                        </label>
-                        <input type="text" required placeholder="e.g. 600 mg or 4,000 mg"
-                               @bind="_form.Amount" @bind:event="oninput"
-                               class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 font-mono outline-none focus:border-purple-500" />
-                    </div>
-
-                    <div class="space-y-1">
-                        <label class="text-zinc-300 font-medium block">Category</label>
-                        <select @bind="_form.Category"
-                                class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-purple-500">
-                            <option value="Adaptogens & Vigor">Adaptogens &amp; Vigor</option>
-                            <option value="Nitric Oxide Boosters">Nitric Oxide Boosters</option>
-                            <option value="Vitality & Stamina">Vitality &amp; Stamina</option>
-                            <option value="Absorption & Bioavailability">Absorption &amp; Bioavailability</option>
-                            <option value="Nutrient Base">Nutrient Base</option>
-                            <option value="Botanical">Botanical</option>
+            <form @onsubmit="SaveIngredientAsync" @onsubmit:preventDefault>
+                <div class="afm-modal-body">
+                    <div class="afm-group"><span class="afm-step">1</span><span>Basic details</span></div>
+                    <div class="afm-field">
+                        <label>Product <span class="afm-req">*</span></label>
+                        <select class="afm-select" @bind="_form.ProductId" required>
+                            @foreach (var p in _products)
+                            {
+                                <option value="@p.Id">@p.Name</option>
+                            }
                         </select>
                     </div>
-                </div>
 
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="space-y-1">
-                        <label class="text-zinc-300 font-medium block">Botanical / Latin Name</label>
-                        <input type="text" placeholder="e.g. Withania somnifera"
-                               @bind="_form.BotanicalName" @bind:event="oninput"
-                               class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 italic font-serif outline-none focus:border-purple-500" />
+                    <div class="afm-field">
+                        <label>Ingredient name <span class="afm-req">*</span></label>
+                        <input type="text" class="afm-input" required placeholder="e.g. KSM-66® Ashwagandha Extract"
+                               @bind="_form.Name" @bind:event="oninput" />
                     </div>
 
-                    <div class="space-y-1">
-                        <label class="text-zinc-300 font-medium block">Standardization / Extract</label>
-                        <input type="text" placeholder="e.g. 10:1 Extract, >5% Withanolides"
-                               @bind="_form.ExtractRatio" @bind:event="oninput"
-                               class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 font-mono outline-none focus:border-purple-500" />
+                    <div class="afm-grid2">
+                        <div class="afm-field">
+                            <label>Amount added <span class="afm-req">*</span></label>
+                            <input type="text" class="afm-input" required placeholder="e.g. 600 mg"
+                                   @bind="_form.Amount" @bind:event="oninput" />
+                        </div>
+                        <div class="afm-field">
+                            <label>Category</label>
+                            <select class="afm-select" @bind="_form.Category">
+                                <option value="Adaptogens & Vigor">Adaptogens &amp; Vigor</option>
+                                <option value="Nitric Oxide Boosters">Nitric Oxide Boosters</option>
+                                <option value="Vitality & Stamina">Vitality &amp; Stamina</option>
+                                <option value="Absorption & Bioavailability">Absorption &amp; Bioavailability</option>
+                                <option value="Nutrient Base">Nutrient Base</option>
+                                <option value="Botanical">Botanical</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="afm-group"><span class="afm-step">2</span><span>Botanical details</span></div>
+                    <div class="afm-grid2">
+                        <div class="afm-field">
+                            <label>Botanical (Latin) name</label>
+                            <input type="text" class="afm-input afm-italic" placeholder="e.g. Withania somnifera"
+                                   @bind="_form.BotanicalName" @bind:event="oninput" />
+                        </div>
+                        <div class="afm-field">
+                            <label>Standardization / extract</label>
+                            <input type="text" class="afm-input" placeholder="e.g. 10:1 Extract, >5% Withanolides"
+                                   @bind="_form.ExtractRatio" @bind:event="oninput" />
+                        </div>
+                    </div>
+
+                    <div class="afm-field">
+                        <label>Active compound</label>
+                        <input type="text" class="afm-input" placeholder="e.g. Withanolides & Withaferin A"
+                               @bind="_form.ActiveCompound" @bind:event="oninput" />
+                    </div>
+
+                    <div class="afm-group"><span class="afm-step">3</span><span>Clinical benefit</span></div>
+                    <div class="afm-field">
+                        <label>Clinical mechanism &amp; purpose</label>
+                        <textarea class="afm-textarea" rows="3" placeholder="e.g. Helps lower cortisol, supports testosterone and promotes restorative sleep."
+                                  @bind="_form.Purpose" @bind:event="oninput"></textarea>
+                    </div>
+
+                    <div class="afm-entry-preview" aria-live="polite">
+                        <span class="afm-label">How it will look</span>
+                        <div class="afm-entry-row">
+                            <div>
+                                <div class="afm-ing-name">@(string.IsNullOrWhiteSpace(_form.Name) ? "Ingredient name" : _form.Name)</div>
+                                <div class="afm-latin">@(string.IsNullOrWhiteSpace(_form.BotanicalName) ? "Botanical name" : _form.BotanicalName)</div>
+                            </div>
+                            <span class="afm-amount">@(string.IsNullOrWhiteSpace(_form.Amount) ? "Amount" : _form.Amount)</span>
+                        </div>
+                        <p class="afm-purpose">@(string.IsNullOrWhiteSpace(_form.Purpose) ? "The clinical purpose appears here." : _form.Purpose)</p>
                     </div>
                 </div>
 
-                <div class="space-y-1">
-                    <label class="text-zinc-300 font-medium block">Active Bioactive Compound</label>
-                    <input type="text" placeholder="e.g. Withanolides & Withaferin A"
-                           @bind="_form.ActiveCompound" @bind:event="oninput"
-                           class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-purple-500" />
-                </div>
-
-                <div class="space-y-1">
-                    <label class="text-zinc-300 font-medium block">Clinical Mechanism &amp; Purpose</label>
-                    <textarea rows="3" placeholder="e.g. Downregulates cortisol by 27.9%, supports testosterone biosynthesis, promotes deep restorative sleep."
-                              @bind="_form.Purpose" @bind:event="oninput"
-                              class="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-purple-500 leading-relaxed resize-none"></textarea>
-                </div>
-
-                <div class="pt-2 flex gap-2.5">
-                    <button type="submit"
-                            class="flex-1 py-2 px-3 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs tracking-tight shadow-sm cursor-pointer transition-colors">
-                        @(_editingId is not null ? "Save Changes" : "Add to Formulation")
-                    </button>
-                    <button type="button" @onclick="@(() => _showIngredientModal = false)"
-                            class="px-4 py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white font-medium text-xs cursor-pointer transition-colors">
-                        Cancel
-                    </button>
+                <div class="afm-modal-foot">
+                    <button type="button" class="afm-btn" @onclick="@(() => _showIngredientModal = false)">Cancel</button>
+                    <button type="submit" class="afm-btn afm-btn-primary">@(_editingId is not null ? "Save Changes" : "Add to Formulation")</button>
                 </div>
             </form>
         </div>
@@ -333,224 +314,145 @@
 }
 
 @* ======================================================================= *@
-@* MODAL: EDIT FORMULATION SUMMARY METRICS                                  *@
+@* MODAL: EDIT FORMULATION HIGHLIGHT CARDS                                  *@
 @* ======================================================================= *@
 @if (_showMetricsModal)
 {
-    <div @onclick="@(() => { if (!_savingMetrics) _showMetricsModal = false; })"
-         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in text-left font-sans">
-        <div @onclick:stopPropagation
-             class="relative w-full max-w-2xl bg-[#121215] border border-zinc-800 rounded-xl p-6 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto text-zinc-100">
-            <button disabled="@_savingMetrics" @onclick="@(() => _showMetricsModal = false)"
-                    class="absolute top-4 right-4 w-7 h-7 rounded-md bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors disabled:opacity-50">
-                <Icon Name="X" Size="15" />
+    <div class="afm afm-overlay" @onclick="@(() => { if (!_savingMetrics) _showMetricsModal = false; })">
+        <div class="afm-modal is-wide" @onclick:stopPropagation role="dialog" aria-modal="true">
+            <button type="button" class="afm-close" disabled="@_savingMetrics" @onclick="@(() => _showMetricsModal = false)" aria-label="Close">
+                <Icon Name="X" Size="16" />
             </button>
 
-            @* Header *@
-            <div class="space-y-1">
-                <div class="text-[10px] font-mono text-amber-400 uppercase font-medium flex items-center gap-1.5">
-                    <Icon Name="SlidersHorizontal" Size="12" />
-                    <span>Formulation Telemetry CMS</span>
+            <div class="afm-modal-head">
+                <div class="afm-eyebrow">
+                    <Icon Name="SlidersHorizontal" Size="13" />
+                    <span>Highlights</span>
                 </div>
-                <h3 class="text-base font-semibold text-zinc-100 font-mono uppercase tracking-wider">
-                    Edit Formulation Summary Cards
-                </h3>
-                <p class="text-xs text-zinc-400">
-                    Update the headline figures and badges displayed across the formulation matrix and public transparency dossiers.
-                </p>
+                <h3>Edit Highlight Cards</h3>
+                <p>These four figures appear at the top of the public formulation page.</p>
             </div>
 
-            @* Live Preview Box *@
-            <div class="p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800/80 space-y-2">
-                <div class="text-[10px] uppercase font-mono text-zinc-500 font-semibold tracking-wider flex items-center gap-1.5">
-                    <Icon Name="Eye" Size="12" Class="text-amber-400" />
-                    <span>Live Card Preview</span>
-                </div>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    <div class="p-2.5 rounded-md bg-zinc-900/60 border border-zinc-800 space-y-0.5">
-                        <span class="text-[9px] text-zinc-400 uppercase font-mono block truncate">
-                            @Or(_mf.TotalIngredients.Label, "Total Ingredients")
-                        </span>
-                        <div class="text-base sm:text-lg font-bold text-white font-mono truncate">
-                            @(_mf.TotalIngredients.UseAutoCount
-                                ? $"{Ingredients.Count} Botanicals"
-                                : Or(_mf.TotalIngredients.Value, $"{Ingredients.Count} Botanicals"))
+            <form @onsubmit="SaveMetricsAsync" @onsubmit:preventDefault>
+                <div class="afm-modal-body">
+                    <div class="afm-preview">
+                        <span class="afm-label">Preview</span>
+                        <div class="afm-metrics">
+                            <div class="afm-metric" style="--accent:#1b1233">
+                                <span class="afm-metric-label">@Or(_mf.TotalIngredients.Label, "Total Ingredients")</span>
+                                <span class="afm-metric-value">
+                                    @(_mf.TotalIngredients.UseAutoCount
+                                        ? $"{ProductIngredients.Count} Botanicals"
+                                        : Or(_mf.TotalIngredients.Value, $"{ProductIngredients.Count} Botanicals"))
+                                </span>
+                            </div>
+                            <div class="afm-metric" style="--accent:#b45309">
+                                <span class="afm-metric-label">@Or(_mf.DailyServing.Label, "Daily Serving Base")</span>
+                                <span class="afm-metric-value">@Or(_mf.DailyServing.Value, "20,000 mg (20g)")</span>
+                            </div>
+                            <div class="afm-metric" style="--accent:#15803d">
+                                <span class="afm-metric-label">@Or(_mf.Bioavailability.Label, "Bioavailability Catalyst")</span>
+                                <span class="afm-metric-value">@Or(_mf.Bioavailability.Value, "BioPerine® +2000%")</span>
+                            </div>
+                            <div class="afm-metric" style="--accent:#5e209e">
+                                <span class="afm-metric-label">@Or(_mf.Transparency.Label, "Public Transparency")</span>
+                                <span class="afm-metric-value">@Or(_mf.Transparency.Value, "100% Unmasked")</span>
+                            </div>
                         </div>
-                    </div>
-                    <div class="p-2.5 rounded-md bg-zinc-900/60 border border-zinc-800 space-y-0.5">
-                        <span class="text-[9px] text-zinc-400 uppercase font-mono block truncate">
-                            @Or(_mf.DailyServing.Label, "Daily Serving Base")
-                        </span>
-                        <div class="text-base sm:text-lg font-bold text-amber-300 font-mono truncate">
-                            @Or(_mf.DailyServing.Value, "20,000 mg (20g)")
-                        </div>
-                    </div>
-                    <div class="p-2.5 rounded-md bg-zinc-900/60 border border-zinc-800 space-y-0.5">
-                        <span class="text-[9px] text-zinc-400 uppercase font-mono block truncate">
-                            @Or(_mf.Bioavailability.Label, "Bioavailability Catalyst")
-                        </span>
-                        <div class="text-base sm:text-lg font-bold text-emerald-400 font-mono truncate">
-                            @Or(_mf.Bioavailability.Value, "BioPerine® +2000%")
-                        </div>
-                    </div>
-                    <div class="p-2.5 rounded-md bg-zinc-900/60 border border-zinc-800 space-y-0.5">
-                        <span class="text-[9px] text-zinc-400 uppercase font-mono block truncate">
-                            @Or(_mf.Transparency.Label, "Public Transparency")
-                        </span>
-                        <div class="text-base sm:text-lg font-bold text-purple-400 font-mono truncate">
-                            @Or(_mf.Transparency.Value, "100% Unmasked")
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            @if (!string.IsNullOrEmpty(_metricsError))
-            {
-                <div class="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 flex items-center gap-2">
-                    <Icon Name="AlertCircle" Size="14" Class="shrink-0 text-red-400" />
-                    <span>@_metricsError</span>
-                </div>
-            }
-
-            @* Edit Fields *@
-            <form @onsubmit="SaveMetricsAsync" @onsubmit:preventDefault class="space-y-4 text-xs">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                    @* Card 1: Total Ingredients *@
-                    <div class="p-3.5 rounded-lg bg-zinc-900/30 border border-zinc-800/80 space-y-2.5">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs font-mono font-semibold text-zinc-200 uppercase">
-                                Card 1: Total Ingredients
-                            </span>
-                            <span class="w-2.5 h-2.5 rounded-full bg-white/80"></span>
-                        </div>
-                        <div class="space-y-1">
-                            <label class="text-[11px] text-zinc-400">Card Header Label</label>
-                            <input type="text" placeholder="e.g. Total Ingredients"
-                                   @bind="_mf.TotalIngredients.Label" @bind:event="oninput"
-                                   class="w-full px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500 font-mono text-xs" />
-                        </div>
-                        <div class="space-y-1">
-                            <label class="text-[11px] text-zinc-400">Card Primary Value</label>
-                            <input type="text" disabled="@_mf.TotalIngredients.UseAutoCount" placeholder="e.g. 17 Botanicals"
-                                   @bind="_mf.TotalIngredients.Value" @bind:event="oninput"
-                                   class="w-full px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500 font-mono text-xs disabled:opacity-50" />
-                        </div>
-                        <label class="flex items-center gap-2 pt-0.5 cursor-pointer select-none">
-                            <input type="checkbox" checked="@_mf.TotalIngredients.UseAutoCount"
-                                   @onchange="OnAutoCountChanged"
-                                   class="rounded bg-zinc-950 border-zinc-800 text-purple-600 focus:ring-0" />
-                            <span class="text-[11px] text-zinc-400">
-                                Auto-sync from table count (@Ingredients.Count Botanicals)
-                            </span>
-                        </label>
                     </div>
 
-                    @* Card 2: Daily Serving Base *@
-                    <div class="p-3.5 rounded-lg bg-zinc-900/30 border border-zinc-800/80 space-y-2.5">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs font-mono font-semibold text-amber-300 uppercase">
-                                Card 2: Daily Serving Base
-                            </span>
-                            <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                    @if (!string.IsNullOrEmpty(_metricsError))
+                    {
+                        <div class="afm-notice is-error">
+                            <Icon Name="AlertCircle" Size="16" />
+                            <span>@_metricsError</span>
                         </div>
-                        <div class="space-y-1">
-                            <label class="text-[11px] text-zinc-400">Card Header Label</label>
-                            <input type="text" placeholder="e.g. Daily Serving Base"
-                                   @bind="_mf.DailyServing.Label" @bind:event="oninput"
-                                   class="w-full px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500 font-mono text-xs" />
-                        </div>
-                        <div class="space-y-1">
-                            <label class="text-[11px] text-zinc-400">Card Primary Value</label>
-                            <input type="text" placeholder="e.g. 20,000 mg (20g)"
-                                   @bind="_mf.DailyServing.Value" @bind:event="oninput"
-                                   class="w-full px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-amber-300 outline-none focus:border-amber-500 font-mono text-xs" />
-                        </div>
-                        <p class="text-[10px] text-zinc-500 pt-0.5">
-                            Recommended format: standard mg and gram dosage (e.g. 20,000 mg (20g)).
-                        </p>
-                    </div>
+                    }
 
-                    @* Card 3: Bioavailability Catalyst *@
-                    <div class="p-3.5 rounded-lg bg-zinc-900/30 border border-zinc-800/80 space-y-2.5">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs font-mono font-semibold text-emerald-400 uppercase">
-                                Card 3: Bioavailability Catalyst
-                            </span>
-                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                    <div class="afm-grid2">
+                        <div class="afm-card-edit" style="--accent:#1b1233">
+                            <h4>Card 1 · Total Ingredients</h4>
+                            <div class="afm-field">
+                                <label>Label</label>
+                                <input type="text" class="afm-input" placeholder="e.g. Total Ingredients"
+                                       @bind="_mf.TotalIngredients.Label" @bind:event="oninput" />
+                            </div>
+                            <div class="afm-field">
+                                <label>Value</label>
+                                <input type="text" class="afm-input" disabled="@_mf.TotalIngredients.UseAutoCount" placeholder="e.g. 17 Botanicals"
+                                       @bind="_mf.TotalIngredients.Value" @bind:event="oninput" />
+                            </div>
+                            <label class="afm-check">
+                                <input type="checkbox" checked="@_mf.TotalIngredients.UseAutoCount" @onchange="OnAutoCountChanged" />
+                                <span>Count automatically from the table (@ProductIngredients.Count botanicals)</span>
+                            </label>
                         </div>
-                        <div class="space-y-1">
-                            <label class="text-[11px] text-zinc-400">Card Header Label</label>
-                            <input type="text" placeholder="e.g. Bioavailability Catalyst"
-                                   @bind="_mf.Bioavailability.Label" @bind:event="oninput"
-                                   class="w-full px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500 font-mono text-xs" />
-                        </div>
-                        <div class="space-y-1">
-                            <label class="text-[11px] text-zinc-400">Card Primary Value</label>
-                            <input type="text" placeholder="e.g. BioPerine® +2000%"
-                                   @bind="_mf.Bioavailability.Value" @bind:event="oninput"
-                                   class="w-full px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-emerald-400 outline-none focus:border-emerald-500 font-mono text-xs" />
-                        </div>
-                        <p class="text-[10px] text-zinc-500 pt-0.5">
-                            Highlights key absorption enhancers (e.g. BioPerine® +2000%).
-                        </p>
-                    </div>
 
-                    @* Card 4: Public Transparency *@
-                    <div class="p-3.5 rounded-lg bg-zinc-900/30 border border-zinc-800/80 space-y-2.5">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs font-mono font-semibold text-purple-400 uppercase">
-                                Card 4: Public Transparency
-                            </span>
-                            <span class="w-2.5 h-2.5 rounded-full bg-purple-400"></span>
+                        <div class="afm-card-edit" style="--accent:#b45309">
+                            <h4>Card 2 · Daily Serving</h4>
+                            <div class="afm-field">
+                                <label>Label</label>
+                                <input type="text" class="afm-input" placeholder="e.g. Daily Serving Base"
+                                       @bind="_mf.DailyServing.Label" @bind:event="oninput" />
+                            </div>
+                            <div class="afm-field">
+                                <label>Value</label>
+                                <input type="text" class="afm-input" placeholder="e.g. 20,000 mg (20g)"
+                                       @bind="_mf.DailyServing.Value" @bind:event="oninput" />
+                                <span class="afm-hint">Use mg and grams, e.g. 20,000 mg (20g).</span>
+                            </div>
                         </div>
-                        <div class="space-y-1">
-                            <label class="text-[11px] text-zinc-400">Card Header Label</label>
-                            <input type="text" placeholder="e.g. Public Transparency"
-                                   @bind="_mf.Transparency.Label" @bind:event="oninput"
-                                   class="w-full px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-200 outline-none focus:border-zinc-500 font-mono text-xs" />
-                        </div>
-                        <div class="space-y-1">
-                            <label class="text-[11px] text-zinc-400">Card Primary Value</label>
-                            <input type="text" placeholder="e.g. 100% Unmasked"
-                                   @bind="_mf.Transparency.Value" @bind:event="oninput"
-                                   class="w-full px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-purple-400 outline-none focus:border-purple-500 font-mono text-xs" />
-                        </div>
-                        <p class="text-[10px] text-zinc-500 pt-0.5">
-                            Emphasizes zero proprietary masks (e.g. 100% Unmasked).
-                        </p>
-                    </div>
 
+                        <div class="afm-card-edit" style="--accent:#15803d">
+                            <h4>Card 3 · Bioavailability</h4>
+                            <div class="afm-field">
+                                <label>Label</label>
+                                <input type="text" class="afm-input" placeholder="e.g. Bioavailability Catalyst"
+                                       @bind="_mf.Bioavailability.Label" @bind:event="oninput" />
+                            </div>
+                            <div class="afm-field">
+                                <label>Value</label>
+                                <input type="text" class="afm-input" placeholder="e.g. BioPerine® +2000%"
+                                       @bind="_mf.Bioavailability.Value" @bind:event="oninput" />
+                                <span class="afm-hint">Highlights the key absorption enhancer.</span>
+                            </div>
+                        </div>
+
+                        <div class="afm-card-edit" style="--accent:#5e209e">
+                            <h4>Card 4 · Transparency</h4>
+                            <div class="afm-field">
+                                <label>Label</label>
+                                <input type="text" class="afm-input" placeholder="e.g. Public Transparency"
+                                       @bind="_mf.Transparency.Label" @bind:event="oninput" />
+                            </div>
+                            <div class="afm-field">
+                                <label>Value</label>
+                                <input type="text" class="afm-input" placeholder="e.g. 100% Unmasked"
+                                       @bind="_mf.Transparency.Value" @bind:event="oninput" />
+                                <span class="afm-hint">Shows there are no proprietary blends.</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                @* Action Buttons *@
-                <div class="pt-3 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-zinc-800/80">
-                    <button type="button" disabled="@_savingMetrics" @onclick="ResetMetricsAsync"
-                            class="w-full sm:w-auto px-3 py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                            title="Reset to 4 default cards">
-                        <Icon Name="RotateCcw" Size="13" />
-                        <span>Restore Standard Defaults</span>
+                <div class="afm-modal-foot">
+                    <button type="button" class="afm-btn afm-spacer" disabled="@_savingMetrics" @onclick="ResetMetricsAsync" title="Reset to the 4 default cards">
+                        <Icon Name="RotateCcw" Size="15" />
+                        <span>Restore Defaults</span>
                     </button>
-
-                    <div class="w-full sm:w-auto flex items-center gap-2.5">
-                        <button type="button" disabled="@_savingMetrics" @onclick="@(() => _showMetricsModal = false)"
-                                class="flex-1 sm:flex-none px-4 py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white font-medium text-xs cursor-pointer transition-colors disabled:opacity-50">
-                            Cancel
-                        </button>
-                        <button type="submit" disabled="@_savingMetrics"
-                                class="flex-1 sm:flex-none px-5 py-2 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-semibold text-xs tracking-tight shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50">
-                            @if (_savingMetrics)
-                            {
-                                <Icon Name="RefreshCw" Size="13" Class="animate-spin" />
-                                <span>Saving...</span>
-                            }
-                            else
-                            {
-                                <Icon Name="Save" Size="13" />
-                                <span>Save Metric Highlights</span>
-                            }
-                        </button>
-                    </div>
+                    <button type="button" class="afm-btn" disabled="@_savingMetrics" @onclick="@(() => _showMetricsModal = false)">Cancel</button>
+                    <button type="submit" class="afm-btn afm-btn-primary" disabled="@_savingMetrics">
+                        @if (_savingMetrics)
+                        {
+                            <Icon Name="RefreshCw" Size="15" Class="animate-spin" />
+                            <span>Saving...</span>
+                        }
+                        else
+                        {
+                            <Icon Name="Save" Size="15" />
+                            <span>Save Highlights</span>
+                        }
+                    </button>
                 </div>
             </form>
         </div>
@@ -570,7 +472,7 @@
 
     private bool _showIngredientModal;
     private string? _editingId;
-    private FormulationIngredientDto _form = NewIngredient();
+    private FormulationIngredientDto _form = new() { Category = "Adaptogens & Vigor" };
 
     private bool _showMetricsModal;
     private bool _savingMetrics;
@@ -579,18 +481,38 @@
 
     private static string Or(string? v, string fallback) => string.IsNullOrEmpty(v) ? fallback : v;
 
-    private static FormulationIngredientDto NewIngredient() => new() { Category = "Adaptogens & Vigor" };
+    private List<ProductDto> _products = new();
+    private bool _productsLoading = true;
+    private string _productId = "";
+
+    private string? DefaultProductId => (_products.FirstOrDefault(p => p.Status == "active") ?? _products.FirstOrDefault())?.Id;
+    private List<FormulationIngredientDto> ProductIngredients => Ingredients.Where(i => FormulationScope.Belongs(i, _productId, DefaultProductId)).ToList();
+    private int IngredientCount(string productId) => Ingredients.Count(i => FormulationScope.Belongs(i, productId, DefaultProductId));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var res = await Api.AdminProductsAsync();
+        _products = res.Success ? res.Products.OrderBy(p => p.Price).ToList() : new();
+        _productsLoading = false;
+        _productId = DefaultProductId ?? "";
+        // Legacy rows have no product: pin them to the default product so they stay with it when more products are added.
+        foreach (var i in Ingredients.Where(i => string.IsNullOrEmpty(i.ProductId))) i.ProductId = DefaultProductId;
+    }
+
+    private void SelectProduct(string id) { _productId = id; _categoryFilter = "All"; _search = ""; }
+
+    private FormulationIngredientDto NewIngredient() => new() { Category = "Adaptogens & Vigor", ProductId = _productId };
 
     private static FormulationIngredientDto CloneIngredient(FormulationIngredientDto s) => new()
     {
-        Id = s.Id, Name = s.Name, BotanicalName = s.BotanicalName, Amount = s.Amount, Category = s.Category,
+        Id = s.Id, ProductId = s.ProductId, Name = s.Name, BotanicalName = s.BotanicalName, Amount = s.Amount, Category = s.Category,
         Benefit = s.Benefit, ExtractRatio = s.ExtractRatio, Purpose = s.Purpose, ActiveCompound = s.ActiveCompound,
     };
 
     private static FormulationMetricDto CloneMetric(FormulationMetricDto m) => new() { Label = m.Label, Value = m.Value, UseAutoCount = m.UseAutoCount };
 
     private IEnumerable<IReadOnlyList<string>> IngredientRows() => FilteredIngredients.Select(i => (IReadOnlyList<string>)new[] { i.Name, i.BotanicalName, string.IsNullOrEmpty(i.Category) ? "Botanical" : i.Category, i.Amount, i.ExtractRatio ?? "", i.ActiveCompound ?? "", i.Purpose ?? i.Benefit });
-    private IEnumerable<FormulationIngredientDto> FilteredIngredients => Ingredients.Where(item =>
+    private IEnumerable<FormulationIngredientDto> FilteredIngredients => ProductIngredients.Where(item =>
     {
         var matchesCategory = _categoryFilter == "All" || item.Category == _categoryFilter;
         var matchesSearch = string.IsNullOrWhiteSpace(_search) ||
@@ -639,7 +561,7 @@
                 (!string.IsNullOrEmpty(ing.Id) && ing.Id == _editingId) || ing.Name == _editingId
                     ? new FormulationIngredientDto
                     {
-                        Id = ing.Id, Name = _form.Name, BotanicalName = _form.BotanicalName, Amount = _form.Amount, Category = _form.Category,
+                        Id = ing.Id, ProductId = _form.ProductId, Name = _form.Name, BotanicalName = _form.BotanicalName, Amount = _form.Amount, Category = _form.Category,
                         Benefit = ing.Benefit, ExtractRatio = _form.ExtractRatio, Purpose = _form.Purpose, ActiveCompound = _form.ActiveCompound,
                     }
                     : ing).ToList();
@@ -652,6 +574,8 @@
         }
 
         _showIngredientModal = false;
+        foreach (var i in updated.Where(i => string.IsNullOrEmpty(i.ProductId))) i.ProductId = DefaultProductId;
+        if (!string.IsNullOrEmpty(_form.ProductId)) _productId = _form.ProductId; // follow the ingredient to its product
         await IngredientsChanged.InvokeAsync(updated);
         _feedback = "Saving formulation to cloud...";
         StateHasChanged();
@@ -670,10 +594,13 @@
 
     private async Task ResetIngredientsAsync()
     {
-        if (!await Browser.ConfirmAsync("Reset all formulation ingredients to the 17 standard clinical defaults? Custom entries will be overwritten.")) return;
+        var name = _products.FirstOrDefault(p => p.Id == _productId)?.Name ?? "this product";
+        if (!await Browser.ConfirmAsync($"Reset the formulation of \"{name}\" to the 17 standard clinical defaults? Its custom entries will be overwritten.")) return;
         var defaults = AdminDefaults.Ingredients();
-        await IngredientsChanged.InvokeAsync(defaults);
-        var res = await Api.AdminSaveIngredientsAsync(defaults);
+        foreach (var d in defaults) { d.ProductId = _productId; d.Id = $"{d.Id}-{_productId}"; }
+        var updated = Ingredients.Where(i => !FormulationScope.Belongs(i, _productId, DefaultProductId)).Concat(defaults).ToList();
+        await IngredientsChanged.InvokeAsync(updated);
+        var res = await Api.AdminSaveIngredientsAsync(updated);
         await ShowFeedbackAsync(res.Success ? "✓ Reset to authentic clinical defaults" : $"Error: {res.Message ?? "Could not save the change."}", 3000);
     }
 
@@ -685,7 +612,7 @@
             TotalIngredients = new FormulationMetricDto
             {
                 Label = Or(Metrics.TotalIngredients.Label, "Total Ingredients"),
-                Value = Or(Metrics.TotalIngredients.Value, $"{Ingredients.Count} Botanicals"),
+                Value = Or(Metrics.TotalIngredients.Value, $"{ProductIngredients.Count} Botanicals"),
                 UseAutoCount = Metrics.TotalIngredients.UseAutoCount,
             },
             DailyServing = new FormulationMetricDto { Label = Or(Metrics.DailyServing.Label, "Daily Serving Base"), Value = Or(Metrics.DailyServing.Value, "20,000 mg (20g)") },
@@ -700,7 +627,7 @@
     {
         var on = e.Value is true || (e.Value?.ToString() ?? "").Equals("true", StringComparison.OrdinalIgnoreCase);
         _mf.TotalIngredients.UseAutoCount = on;
-        if (on) _mf.TotalIngredients.Value = $"{Ingredients.Count} Botanicals";
+        if (on) _mf.TotalIngredients.Value = $"{ProductIngredients.Count} Botanicals";
     }
 
     private async Task SaveMetricsAsync()

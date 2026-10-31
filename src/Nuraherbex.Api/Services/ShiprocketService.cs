@@ -21,12 +21,16 @@ public class ShiprocketResult
     public List<TrackingEventDto> TrackingEvents { get; set; } = new();
 }
 
-public class ShiprocketService(HttpClient http, IOptions<ShiprocketOptions> options, ILogger<ShiprocketService> log)
+public class ShiprocketService(HttpClient http, IOptions<ShiprocketOptions> options, ShippingSettingsStore store, ILogger<ShiprocketService> log)
 {
     private static string? _token;
     private static DateTime _tokenExpires = DateTime.MinValue;
     private static readonly SemaphoreSlim _lock = new(1, 1);
-    private readonly ShiprocketOptions _o = options.Value;
+    private readonly ShiprocketOptions _o = store.Apply(options.Value);
+
+    public static void ResetToken() { _token = null; _tokenExpires = DateTime.MinValue; }
+
+    public bool IsConfigured => _o.IsConfigured;
 
     private async Task<string?> GetTokenAsync()
     {
@@ -96,15 +100,7 @@ public class ShiprocketService(HttpClient http, IOptions<ShiprocketOptions> opti
         var shipmentId = created["shipment_id"]?.ToString() ?? "";
         var srOrderId = created["order_id"]?.ToString() ?? "";
 
-        string? awb = null;
-        var courier = "Shiprocket Express";
-        try
-        {
-            var awbRes = await PostAsync($"{_o.ApiUrl}/courier/assign/awb", new { shipment_id = shipmentId }, token);
-            awb = awbRes?["response"]?["data"]?["awb_code"]?.ToString();
-            courier = awbRes?["response"]?["data"]?["courier_name"]?.ToString() ?? courier;
-        }
-        catch (Exception ex) { log.LogWarning("[Shiprocket] AWB auto-assign deferred: {Msg}", ex.Message); }
+        var (awb, courier) = await TryAssignAwbAsync(shipmentId, token);
 
         return new ShiprocketResult
         {
@@ -116,6 +112,65 @@ public class ShiprocketService(HttpClient http, IOptions<ShiprocketOptions> opti
         };
     }
 
+    /// <summary>Asks Shiprocket to pick a courier and issue the AWB, then requests the pickup. A failure is not fatal: the shipment exists and the assignment is retried later.</summary>
+    private async Task<(string? Awb, string Courier)> TryAssignAwbAsync(string shipmentId, string token)
+    {
+        string? awb = null;
+        var courier = "Shiprocket Express";
+        try
+        {
+            var awbRes = await PostAsync($"{_o.ApiUrl}/courier/assign/awb", new { shipment_id = shipmentId }, token);
+            awb = awbRes?["response"]?["data"]?["awb_code"]?.ToString();
+            courier = awbRes?["response"]?["data"]?["courier_name"]?.ToString() ?? courier;
+        }
+        catch (Exception ex) { log.LogWarning("[Shiprocket] AWB auto-assign deferred: {Msg}", ex.Message); }
+
+        if (!string.IsNullOrWhiteSpace(awb))
+        {
+            // Many accounts schedule pickup automatically; asking again can be refused, which is harmless.
+            try { await PostAsync($"{_o.ApiUrl}/courier/generate/pickup", new { shipment_id = new[] { shipmentId } }, token); }
+            catch (Exception ex) { log.LogInformation("[Shiprocket] Pickup request for {Shipment} not needed or refused: {Msg}", shipmentId, ex.Message); }
+        }
+        return (awb, courier);
+    }
+
+    /// <summary>Retries the AWB for a shipment that was created in Shiprocket but had no courier assigned yet. Returns null while it is still unassigned.</summary>
+    public async Task<ShiprocketResult?> AssignPendingAsync(string orderId, string shipmentId, string? shiprocketOrderId)
+    {
+        if (string.IsNullOrWhiteSpace(shipmentId)) return null;
+        var token = await GetTokenAsync();
+        if (token is null) return null;
+        var (awb, courier) = await TryAssignAwbAsync(shipmentId, token);
+        if (string.IsNullOrWhiteSpace(awb)) return null;
+        return new ShiprocketResult
+        {
+            Success = true, ShiprocketOrderId = shiprocketOrderId ?? "", ShiprocketShipmentId = shipmentId, ShiprocketAwb = awb, ShiprocketCourier = courier,
+            DeliveryStatus = "AWB Assigned",
+            TrackingEvents = [new() { Status = $"AWB Assigned via {courier}", Time = Mapping.TimelineStamp(), Done = true, Active = true }],
+        };
+    }
+
+    /// <summary>Admin "Test connection": logs in and reads the pickup locations, so a wrong password or pickup name shows up before the first order.</summary>
+    public async Task<(bool Ok, string Message)> TestAsync()
+    {
+        if (!_o.IsConfigured) return (false, "Enter the Shiprocket email and password (or a token), save, then test.");
+        try
+        {
+            var token = await GetTokenAsync();
+            if (string.IsNullOrWhiteSpace(token)) return (false, "Shiprocket did not return a login token.");
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"{_o.ApiUrl}/settings/company/pickup");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var res = await http.SendAsync(req);
+            if (!res.IsSuccessStatusCode) return (false, $"Logged in, but the pickup locations could not be read (HTTP {(int)res.StatusCode}).");
+            var names = (JsonNode.Parse(await res.Content.ReadAsStringAsync())?["data"]?["shipping_address"]?.AsArray() ?? [])
+                .Select(a => a?["pickup_location"]?.GetValue<string>()).Where(n => !string.IsNullOrWhiteSpace(n)).Cast<string>().ToList();
+            if (names.Count == 0) return (true, "Connected to Shiprocket. No pickup locations are set up in the dashboard yet.");
+            return names.Contains(_o.PickupLocation, StringComparer.OrdinalIgnoreCase)
+                ? (true, $"Connected to Shiprocket. Pickup location \"{_o.PickupLocation}\" found.")
+                : (false, $"Connected, but pickup location \"{_o.PickupLocation}\" does not exist. Available: {string.Join(", ", names)}.");
+        }
+        catch (Exception ex) { return (false, ex.Message); }
+    }
     /// <summary>Returns Shiprocket's raw <c>tracking_data</c> object, or null when unavailable.</summary>
     public async Task<JsonElement?> FetchLiveTrackingAsync(string? awb)
     {

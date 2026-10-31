@@ -17,7 +17,7 @@
             <li><b>Create</b> a task: say what must be done, who does it, by when and how important it is.</li>
             <li><b>Assign</b> it to one person, or tick several people (or a whole department). Each person gets their <em>own copy</em> and is notified.</li>
             <li><b>Work on it</b>: <span class="tk-st todo">To do</span> → <span class="tk-st in_progress">In progress</span>. Use <span class="tk-st blocked">Blocked</span> when you are waiting on someone. Tick the checklist steps as you go.</li>
-            <li>Press <b>Mark done</b> when finished. The person who created it is told. A repeating task creates the next one by itself.</li>
+            <li>Press <b>Mark done</b> when finished. The person who created it is told. A repeating task is created again on its own day, and you are notified the day before with the date.</li>
         </ol>
         <p>Late tasks turn red and the assignee is reminded a day before and when overdue. Comments on a task are visible to everyone involved.</p>
     </details>
@@ -109,16 +109,19 @@
     else
     {
         <div class="tk-rows">
+            @{ var sno = (_page - 1) * _size; }
             @foreach (var t in _items.Skip((_page - 1) * _size).Take(_size))
             {
                 var task = t;
+                sno++;
                 var due = DueInfo(task);
                 var isDone = task.Status == "done";
                 <article class="@($"tk-r p-{task.Priority} {(isDone ? "is-done" : "")}")" @key="task.Id">
-                    @if (isDone) { <button type="button" class="tk-tick on" disabled="@(!task.CanEdit)" title="Marked done by mistake? Click to undo" aria-label="Undo done" @onclick="() => ToggleDoneAsync(task)"><Icon Name="Check" Size="14" /></button> }
+                    @if (isDone && _scope == "upcoming") { <span class="tk-tick on is-view" title="Completed" aria-label="Completed"><Icon Name="Check" Size="14" /></span> }
+                    else if (isDone) { <button type="button" class="tk-tick on" disabled="@(!task.CanEdit)" title="Marked done by mistake? Click to undo" aria-label="Undo done" @onclick="() => ToggleDoneAsync(task)"><Icon Name="Check" Size="14" /></button> }
                     else { <button type="button" class="tk-tick" disabled="@(!task.CanEdit)" title="@(!task.CanEdit ? "You can only view this task" : "Mark as done")" aria-label="Mark task as done" @onclick="() => ToggleDoneAsync(task)"><Icon Name="Check" Size="14" /></button> }
                     <button type="button" class="tk-r-main" @onclick="() => OpenChecklistAsync(task)">
-                        <strong>@task.Title</strong>
+                        <strong><span class="tk-sno" title="Task number">@sno</span>@task.Title</strong>
                         <small>@string.Join(" · ", new[] { task.DepartmentName, task.LeadName is { } ln ? "Lead: " + ln : null, task.Repeat != "none" ? "Repeats " + task.Repeat : null, task.StartAt is { } sa && !isDone && sa.ToLocalTime().Date >= DateTime.Today ? "Starts " + sa.ToLocalTime().ToString("ddd, dd MMM") : null }.Where(x => x is not null))</small>
                         @if (task.LastComment is not null) { <small class="tk-r-note" title="@task.LastComment"><Icon Name="MessageSquare" Size="11" /> <b>@task.LastCommentBy</b>: @task.LastComment</small> }
                     </button>
@@ -132,6 +135,15 @@
                     </div>
                     <span class="@($"tk-due2 {due.Tone}")"><Icon Name="Clock" Size="13" /> @due.Text</span>
                     <span class="tk-person"><i>@Initial(task.AssignedToName)</i><span>@(task.AssignedToName ?? "Unassigned")</span></span>
+                    @if (task.Checklist.Count > 0)
+                    {
+                        <ul class="tk-steps" aria-label="Checklist for @task.Title">
+                            @foreach (var s in task.Checklist)
+                            {
+                                <li class="@(s.Done ? "done" : "")"><span class="@($"tk-mark {(s.Done ? "on" : "")}")"><Icon Name="Check" Size="11" /></span><span>@s.Text</span>@if (s.Done && s.DoneByName is { } by) { <small>@by@(s.DoneAt is { } at ? ", " + AdminFmt.DateTimeShort(at) : "")</small> }</li>
+                            }
+                        </ul>
+                    }
                 </article>
             }
         </div>

@@ -51,6 +51,7 @@ builder.Services.AddScoped<OrderService>();
 builder.Services.AddScoped<OrderOperationLock>();
 builder.Services.AddScoped<ShadowfaxTrackingProcessor>();
 builder.Services.AddHostedService<ShadowfaxReconciliationWorker>();
+builder.Services.AddHostedService<ShiprocketTrackingWorker>();
 builder.Services.AddScoped<PayUService>();
 builder.Services.AddScoped<CustomerAuthService>();
 builder.Services.AddScoped<SettingsService>();
@@ -58,6 +59,7 @@ builder.Services.AddSingleton<TokenService>();
 builder.Services.AddHttpClient<EmailService>();
 builder.Services.AddHttpClient<ShiprocketService>();
 builder.Services.AddHttpClient<ShadowfaxService>(http => http.Timeout = TimeSpan.FromSeconds(25));
+builder.Services.AddSingleton<ShippingSettingsStore>();
 builder.Services.AddScoped<ShippingGateway>();
 builder.Services.AddSingleton<MediaSigner>();
 builder.Services.AddScoped<StaffAvailability>();
@@ -222,5 +224,12 @@ if (swaggerOn)
     });
 }
 app.MapGet("/", () => Results.Redirect(swaggerOn ? "/swagger" : "/api/health"));
+
+// Courier choice/credentials saved from the admin (Shipping setup) override appsettings; load them once the database is ready.
+app.Lifetime.ApplicationStarted.Register(() => _ = Task.Run(async () =>
+{
+    try { await app.Services.GetRequiredService<ShippingSettingsStore>().LoadAsync(app.Services); }
+    catch (Exception ex) { app.Logger.LogWarning(ex, "[Shipping] Saved courier settings could not be loaded; using appsettings."); }
+}));
 
 app.Run();

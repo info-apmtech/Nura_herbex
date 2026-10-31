@@ -158,6 +158,9 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<ApiResult> AdminResetContentAsync() => Call<ApiResult>(HttpMethod.Delete, "api/admin/content", null, Who.Admin);
     public Task<ApiResult> AdminSaveIngredientsAsync(List<FormulationIngredientDto> list) => Call<ApiResult>(HttpMethod.Put, "api/admin/formulation/ingredients", list, Who.Admin);
     public Task<ApiResult> AdminSaveMetricsAsync(FormulationMetricsDto m) => Call<ApiResult>(HttpMethod.Put, "api/admin/formulation/metrics", m, Who.Admin);
+    public Task<ShippingSettingsResponse> AdminShippingSettingsAsync() => Call<ShippingSettingsResponse>(HttpMethod.Get, "api/admin/shipping/settings", null, Who.Admin);
+    public Task<ShippingSettingsResponse> AdminSaveShippingSettingsAsync(ShippingSettingsDto s) => Call<ShippingSettingsResponse>(HttpMethod.Put, "api/admin/shipping/settings", s, Who.Admin);
+    public Task<ApiResult> AdminTestShippingAsync(string provider) => Call<ApiResult>(HttpMethod.Post, "api/admin/shipping/test", new ShippingTestRequest { Provider = provider }, Who.Admin);
     public Task<ProductListResponse> AdminProductsAsync() => Call<ProductListResponse>(HttpMethod.Get, "api/admin/products", null, Who.Admin);
 
     public Task<WhatsAppStatusDto> AdminWhatsAppStatusAsync() => Call<WhatsAppStatusDto>(HttpMethod.Get, "api/admin/whatsapp/status", null, Who.Admin);

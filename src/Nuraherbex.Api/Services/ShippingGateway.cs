@@ -6,26 +6,31 @@ using Nuraherbex.Api.Options;
 namespace Nuraherbex.Api.Services;
 
 /// <summary>
-/// Routes new confirmed orders through Shadowfax while preserving Shiprocket for orders already booked there.
+/// Routes new confirmed orders through the courier the admin enabled (Shiprocket or Shadowfax); orders already booked stay with their courier.
 /// Tracking and cancellation follow the courier recorded on each order.
 /// </summary>
-public class ShippingGateway(ShiprocketService shiprocket, ShadowfaxService shadowfax)
+public class ShippingGateway(ShiprocketService shiprocket, ShadowfaxService shadowfax, ShippingSettingsStore store,
+    Microsoft.Extensions.Options.IOptions<ShippingOptions> shippingOptions, Microsoft.Extensions.Options.IOptions<ShadowfaxOptions> shadowfaxOptions)
 {
     public const string Shiprocket = "Shiprocket";
     public const string Shadowfax = "Shadowfax";
 
-    public string ActiveProvider => Shadowfax;
+    public string ActiveProvider => store.ActiveProvider(shippingOptions.Value);
+
+    public bool AutoBook => store.Apply(shadowfaxOptions.Value).AutoBook;
+
+    public bool IsConfigured(string provider) => provider == Shiprocket ? shiprocket.IsConfigured : shadowfax.IsConfigured;
 
     public string ProviderFor(Order order)
     {
-        if (IsShadowfax(order.Courier)) return Shadowfax;
-        if (string.Equals(order.Courier, Shiprocket, StringComparison.OrdinalIgnoreCase)) return Shiprocket;
-        if (!string.IsNullOrWhiteSpace(order.ShiprocketAwb)
+        var realAwb = !string.IsNullOrWhiteSpace(order.ShiprocketAwb) && !order.ShiprocketAwb.StartsWith("SR-PENDING-");
+        var hasBooking = realAwb
             || !string.IsNullOrWhiteSpace(order.ShiprocketOrderId)
             || !string.IsNullOrWhiteSpace(order.ShiprocketShipmentId)
-            || !string.IsNullOrWhiteSpace(order.ShiprocketCourier))
-            return Shiprocket;
-        return Shadowfax;
+            || !string.IsNullOrWhiteSpace(order.ShiprocketCourier);
+        if (!hasBooking) return ActiveProvider; // nothing booked yet: follow the courier the admin has enabled now
+        if (IsShadowfax(order.Courier)) return Shadowfax;
+        return Shiprocket;
     }
 
     public static bool IsShadowfax(string? courier) => Shadowfax.Equals(courier, StringComparison.OrdinalIgnoreCase);
@@ -48,10 +53,22 @@ public class ShippingGateway(ShiprocketService shiprocket, ShadowfaxService shad
             : clientOrderId;
     }
 
-    public async Task<(ShiprocketResult Result, string Courier)> CreateOrderAsync(Order order, ParcelSpecs parcel, string? clientOrderId = null) =>
-        ProviderFor(order) == Shadowfax
-            ? (await shadowfax.CreateOrderAsync(order, parcel, clientOrderId), Shadowfax)
-            : (await shiprocket.CreateOrderAsync(order, parcel), Shiprocket);
+    public async Task<(ShiprocketResult Result, string Courier)> CreateOrderAsync(Order order, ParcelSpecs parcel, string? clientOrderId = null)
+    {
+        if (ProviderFor(order) == Shadowfax) return (await shadowfax.CreateOrderAsync(order, parcel, clientOrderId), Shadowfax);
+
+        // The shipment already exists in Shiprocket but has no courier/AWB yet: finish that one instead of creating a duplicate order.
+        if (!string.IsNullOrWhiteSpace(order.ShiprocketShipmentId) && order.ShiprocketAwb is { } pending && pending.StartsWith("SR-PENDING-"))
+        {
+            var assigned = await shiprocket.AssignPendingAsync(order.Id, order.ShiprocketShipmentId, order.ShiprocketOrderId);
+            return (assigned ?? new ShiprocketResult
+            {
+                Success = true, ShiprocketOrderId = order.ShiprocketOrderId ?? "", ShiprocketShipmentId = order.ShiprocketShipmentId, ShiprocketAwb = pending,
+                ShiprocketCourier = order.ShiprocketCourier ?? "Shiprocket Express", DeliveryStatus = "Shipment Created",
+            }, Shiprocket);
+        }
+        return (await shiprocket.CreateOrderAsync(order, parcel), Shiprocket);
+    }
 
     public Task<string> GenerateLabelAsync(string awb) => shadowfax.GenerateLabelAsync(awb);
 
@@ -89,5 +106,5 @@ public class ShippingGateway(ShiprocketService shiprocket, ShadowfaxService shad
             dto.ShiprocketTrackUrl = u.GetString();
     }
 
-    public Task<bool?> IsServiceableAsync(string pincode) => shadowfax.IsServiceableAsync(pincode);
+    public Task<bool?> IsServiceableAsync(string pincode) => ActiveProvider == Shadowfax ? shadowfax.IsServiceableAsync(pincode) : Task.FromResult<bool?>(null); // unknown, never blocks checkout
 }

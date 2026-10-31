@@ -39,6 +39,7 @@
 .fm-search button{font-size:.75rem;color:var(--gold)}
 .fm-pills{display:flex;gap:.5rem;overflow-x:auto;padding-bottom:.3rem;scrollbar-width:none}
 .fm-pills::-webkit-scrollbar{display:none}
+.fm-products{margin-bottom:1rem}
 .fm-pill{flex:none;padding:.55rem 1rem;border-radius:9999px;font-size:.78rem;font-weight:600;color:#cfc8de;border:1px solid rgba(255,255,255,.16);background:transparent;transition:all .3s;white-space:nowrap}
 .fm-pill:hover{border-color:var(--gold);color:#fff}
 .fm-pill.is-on{background:linear-gradient(135deg,#f0d596,#d9b86c);border-color:transparent;color:#241532}

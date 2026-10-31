@@ -57,6 +57,17 @@
         <p>Amounts are listed per daily dose (20 g, two scoops). Search or filter by category.</p>
       </header>
 
+      @if (_products.Count > 0)
+      {
+        <div class="fm-pills fm-products" role="tablist" aria-label="Select product">
+          @foreach (var p in _products)
+          {
+            var prod = p;
+            <button @key="prod.Id" role="tab" aria-selected="@(_productId == prod.Id)" @onclick="() => SelectProduct(prod.Id)" class="fm-pill @(_productId == prod.Id ? "is-on" : "")">@prod.Name</button>
+          }
+        </div>
+      }
+
       <div class="fm-toolbar">
         <label class="fm-search"><Icon Name="Search" Size="17" />
           <input type="text" @bind="_searchQuery" @bind:event="oninput" placeholder="Search ingredients, compounds or benefits" aria-label="Search ingredients" />
@@ -214,7 +225,14 @@
         new("Where can I read the lab reports?", "Open the batch lab reports page, choose the batch printed on your jar and you will see its Certificate of Analysis."),
     };
 
-    private List<FormulationIngredientDto> _ingredients = DefaultIngredients();
+    private List<FormulationIngredientDto> _all = DefaultIngredients();
+    private List<ProductDto> _products = new();
+    private string _productId = "";
+    private string? DefaultProductId => _products.FirstOrDefault()?.Id;
+    /// <summary>Ingredients of the selected product (legacy unassigned rows belong to the first product).</summary>
+    private List<FormulationIngredientDto> _ingredients => _products.Count == 0
+        ? _all
+        : _all.Where(i => FormulationScope.Belongs(i, _productId, DefaultProductId)).ToList();
     private FormulationMetricsDto _metrics = new();
     private string _searchQuery = "";
     private string _selectedCategory = "All";
@@ -227,8 +245,10 @@
             var metTask = Api.GetMetricsAsync();
             var ing = await ingTask;
             var met = await metTask;
-            if (ing is { Count: > 0 }) _ingredients = ing;
+            if (ing is { Count: > 0 }) _all = ing;
             if (met is not null) _metrics = met;
+            try { _products = await Api.GetProductsAsync(); } catch { /* no product switcher offline */ }
+            _productId = DefaultProductId ?? "";
         }
         catch
         {
@@ -312,6 +332,8 @@
         category.Contains("Adaptogen") ? "bg-purple-950/40 text-purple-300 border border-purple-500/20" :
         category.Contains("Vitality") ? "bg-rose-950/40 text-rose-300 border border-rose-500/20" :
         "bg-zinc-800/60 text-zinc-300 border border-zinc-700/40";
+
+    private void SelectProduct(string id) { _productId = id; _selectedCategory = "All"; _searchQuery = ""; }
 
     private void ResetFilters() { _searchQuery = ""; _selectedCategory = "All"; }
 

@@ -499,6 +499,8 @@ public class TrustBatchResponse : ApiResult
 public class FormulationIngredientDto
 {
     public string Id { get; set; } = "";
+    /// <summary>Product this ingredient belongs to. Empty on legacy rows, which belong to the first product (see <see cref="FormulationScope"/>).</summary>
+    public string? ProductId { get; set; }
     public string Name { get; set; } = "";
     public string BotanicalName { get; set; } = "";
     public string Amount { get; set; } = "";
@@ -507,6 +509,13 @@ public class FormulationIngredientDto
     public string? ExtractRatio { get; set; }
     public string? Purpose { get; set; }
     public string? ActiveCompound { get; set; }
+}
+
+/// <summary>Resolves which product a formulation row belongs to; unassigned legacy rows fall to the default (first) product.</summary>
+public static class FormulationScope
+{
+    public static bool Belongs(FormulationIngredientDto i, string productId, string? defaultProductId) =>
+        string.IsNullOrEmpty(i.ProductId) ? productId == defaultProductId : i.ProductId == productId;
 }
 
 public class FormulationMetricDto

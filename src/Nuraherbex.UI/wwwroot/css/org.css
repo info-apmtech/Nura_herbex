@@ -354,3 +354,17 @@ button.tk-prog:hover em,button.tk-prog.is-open em{color:#5e209e;font-weight:700}
 .em-afterhours>summary small{margin-left:auto;font-weight:700;color:#5e209e;background:#f3eafc;border-radius:999px;padding:2px 10px}
 .em-ah-body{padding:2px 16px 16px;display:flex;flex-direction:column;gap:12px}
 .em-ah-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+
+/* Checklist steps shown under each task in the list (read-only; tick them from the checklist popup) */
+.tk-steps{grid-column:1/-1;list-style:none;margin:2px 0 0;padding:8px 0 0 48px;border-top:1px dashed #e8def4;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:4px 18px}
+.tk-steps li{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ld-text,#1b1233);min-width:0}
+.tk-steps li>span:nth-of-type(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-steps li.done>span:nth-of-type(2){text-decoration:line-through;color:var(--ld-muted,#6b7280)}
+.tk-steps li small{color:var(--ld-muted,#6b7280);font-size:11px;white-space:nowrap}
+.tk-steps .tk-mark{flex:none;width:16px;height:16px;border-radius:5px;border:1.5px solid #c9b3e6;display:grid;place-items:center;color:transparent}
+.tk-steps .tk-mark.on{background:#5e209e;border-color:#5e209e;color:#fff}
+.tk-tick.is-view{cursor:default;pointer-events:none}
+@media(max-width:1000px){.tk-steps{padding-left:0;grid-template-columns:1fr}}
+
+.tk-sno{display:inline-block;min-width:24px;margin-right:8px;padding:1px 7px;border-radius:6px;background:#f3ecfb;color:#5e209e;font-size:11px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums;vertical-align:1px}
+.tk-r.is-done .tk-sno{text-decoration:none;display:inline-block}

@@ -3,175 +3,25 @@
 
 <div class="space-y-4">
 
-    @* Top Toolbar: Search, Status Filter & Add Order Button *@
-    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div class="flex items-center gap-2.5 flex-1">
-            <div class="relative flex-1 max-w-md">
-                <Icon Name="Search" Size="14" Class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-                <input type="text" @bind="_search" @bind:event="oninput"
-                       placeholder="Search by customer, phone, order ID, or AWB..."
-                       class="w-full pl-8 pr-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 focus:border-zinc-500 text-xs text-zinc-200 placeholder:text-zinc-600 outline-none transition-colors" />
-            </div>
+    <FilterPanel T="OrderDto" Items="Orders" Defs="_defs" Noun="orders" OnFiltered="OnFiltered" />
 
-            <select @bind="_statusFilter"
-                    class="px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 outline-none cursor-pointer focus:border-zinc-500">
-                <option value="all">All Delivery Statuses</option>
-                <option value="in transit">In Transit</option>
-                <option value="delivered">Delivered</option>
-                <option value="order confirmed">Order Confirmed</option>
-            </select>
-        </div>
-
-        <ExportButton Title="Orders" FileName="nura-orders" Columns="@(new[] { "Order ID", "Date", "Customer", "Phone", "Email", "City", "State", "Items", "Subtotal (Rs)", "Discount (Rs)", "Shipping (Rs)", "Total (Rs)", "Payment", "Payment status", "Delivery status", "Courier", "AWB" })" Rows="ExportRows" Disabled="@(FilteredOrders.Count == 0)" />
-            <button @onclick="OpenAddOrder"
-                class="px-3.5 py-1.5 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm">
-            <Icon Name="Plus" Size="14" />
-            <span>Create Test Order</span>
-        </button>
-    </div>
-
-    @* Orders Table *@
-    <div class="rounded-lg border border-zinc-800 bg-zinc-900/30 overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs border-collapse">
-                <thead>
-                    <tr class="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono text-[11px] font-medium tracking-wider uppercase"><th class="px-3 py-3 w-12">S.No</th>
-                        <th class="px-4 py-3">Order ID &amp; Date</th>
-                        <th class="px-4 py-3">Customer Details</th>
-                        <th class="px-4 py-3">Items Ordered</th>
-                        <th class="px-4 py-3">Amount &amp; Payment</th>
-                        <th class="px-4 py-3">Courier AWB</th>
-                        <th class="px-4 py-3">Delivery Status</th>
-                        <th class="px-4 py-3 text-right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-zinc-800/60">
-                    @if (Loading)
-                    {
-                        <tr>
-                            <td colspan="8" class="p-8 text-center text-zinc-500">
-                                <Icon Name="RefreshCw" Size="20" Class="animate-spin mx-auto mb-2 text-zinc-400" />
-                                <span>Loading orders from database...</span>
-                            </td>
-                        </tr>
-                    }
-                    else if (FilteredOrders.Count == 0)
-                    {
-                        <tr>
-                            <td colspan="8" class="p-8 text-center text-zinc-500">
-                                @(Orders.Count == 0
-                                    ? "No customer orders recorded yet. Live orders placed from the storefront or checkout will appear here."
-                                    : "No orders matched your search query.")
-                            </td>
-                        </tr>
-                    }
-                    else
-                    {
-                        _sn = (_page - 1) * _size;
-                        @foreach (var order in FilteredOrders.Skip((_page - 1) * _size).Take(_size))
-                        {
-                            <tr @key="order.Id" class="hover:bg-zinc-800/30 transition-colors">
-                                <td class="px-3 py-4 text-zinc-500 font-mono align-top">@(++_sn)</td>
-                                <td class="px-4 py-3 font-mono font-medium text-zinc-200 whitespace-nowrap">
-                                    <div>@order.Id</div>
-                                    <div class="text-[10px] text-zinc-500 font-sans font-normal mt-0.5">
-                                        @AdminFmt.Date(order.CreatedAt)
-                                    </div>
-                                </td>
-
-                                <td class="px-4 py-3 whitespace-nowrap">
-                                    <div class="font-medium text-zinc-200">@order.CustomerName</div>
-                                    <div class="text-[11px] text-zinc-400 font-mono mt-0.5">
-                                        @order.CustomerPhone
-                                    </div>
-                                    <div class="text-[10px] text-zinc-500 truncate max-w-xs">
-                                        @order.ShippingAddress?.City, @order.ShippingAddress?.State
-                                    </div>
-                                </td>
-
-                                <td class="px-4 py-3">
-                                    @foreach (var item in order.Items)
-                                    {
-                                        <div class="text-xs text-zinc-300">
-                                            <span class="font-medium text-zinc-100">@(item.Quantity)x</span> @item.Name
-                                        </div>
-                                    }
-                                </td>
-
-                                <td class="px-4 py-3 whitespace-nowrap">
-                                    <div class="font-semibold text-zinc-100 text-xs font-mono">
-                                        ₹@AdminFmt.Inr(order.TotalAmount)
-                                    </div>
-                                    <div class="text-[10px] font-mono mt-0.5 flex items-center gap-1">
-                                        @if (order.PaymentStatus == "PAID")
-                                        {
-                                            <Icon Name="CheckCircle2" Size="10" Class="text-emerald-400" />
-                                            <span class="text-emerald-400">ONLINE</span>
-                                        }
-                                        else if (order.PaymentMethod == "COD")
-                                        {
-                                            <span class="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
-                                            <span class="text-zinc-400">COD</span>
-                                        }
-                                        else if (order.PaymentStatus == "FAILED")
-                                        {
-                                            <Icon Name="AlertCircle" Size="10" Class="text-rose-400" />
-                                            <span class="text-rose-400">FAILED</span>
-                                        }
-                                        else
-                                        {
-                                            <Icon Name="Clock" Size="10" Class="text-amber-400" />
-                                            <span class="text-amber-400">ONLINE (Pending)</span>
-                                        }
-                                    </div>
-                                </td>
-
-                                <td class="px-4 py-3 whitespace-nowrap">
-                                    <div class="font-mono text-zinc-300 flex items-center gap-1.5">
-                                        <span>@(string.IsNullOrEmpty(order.ShiprocketAwb) ? "Pending AWB" : order.ShiprocketAwb)</span>
-                                        @if (!string.IsNullOrEmpty(order.ShiprocketAwb))
-                                        {
-                                            var awb = order.ShiprocketAwb!;
-                                            <button @onclick="() => CopyAsync(awb)"
-                                                    class="text-zinc-500 hover:text-zinc-300 transition-colors"
-                                                    title="Copy AWB">
-                                                @if (_copiedText == awb)
-                                                {
-                                                    <Icon Name="Check" Size="12" Class="text-emerald-400" />
-                                                }
-                                                else
-                                                {
-                                                    <Icon Name="Copy" Size="12" />
-                                                }
-                                            </button>
-                                        }
-                                    </div>
-                                    <div class="text-[10px] text-zinc-500 mt-0.5">
-                                        @(string.IsNullOrWhiteSpace(order.ShiprocketCourier) ? order.Courier : order.ShiprocketCourier)
-                                    </div>
-                                </td>
-
-                                <td class="px-4 py-3 whitespace-nowrap">
-                                    <span class="@($"inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium {(order.DeliveryStatus == "Delivered" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : order.DeliveryStatus == "Payment Pending" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" : "bg-zinc-800 text-zinc-300 border border-zinc-700/60")}")">
-                                        <span class="@($"w-1.5 h-1.5 rounded-full {(order.DeliveryStatus == "Delivered" ? "bg-emerald-400" : order.DeliveryStatus == "Payment Pending" ? "bg-amber-400" : "bg-zinc-400")}")"></span>
-                                        <span>@order.DeliveryStatus</span>
-                                    </span>
-                                </td>
-
-                                <td class="px-4 py-3 text-right whitespace-nowrap">
-                                    <button @onclick="() => OpenOrder(order)"
-                                            class="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium transition-colors cursor-pointer">
-                                        Track Progress
-                                    </button>
-                                </td>
-                            </tr>
-                        }
-                    }
-                </tbody>
-            </table>
-        </div>
-    <Pager Total="@FilteredOrders.Count" @bind-Page="_page" @bind-PageSize="_size" Label="orders" />
-    </div>
+    <DataTable TItem="OrderDto" Items="_view" Columns="_cols" Loading="Loading" Title="Orders" FileName="nura-orders" PageSize="10"
+               SearchPlaceholder="Search by customer, phone, order ID or AWB"
+               EmptyText="No customer orders recorded yet. Live orders placed from the storefront or checkout will appear here.">
+        <Toolbar>
+            <button type="button" @onclick="OpenAddOrder"
+                    class="px-3.5 py-1.5 rounded-md bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm">
+                <Icon Name="Plus" Size="14" />
+                <span>Create Test Order</span>
+            </button>
+        </Toolbar>
+        <RowActions Context="order">
+            <button @onclick="() => OpenOrder(order)"
+                    class="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium transition-colors cursor-pointer">
+                Track Progress
+            </button>
+        </RowActions>
+    </DataTable>
 
 </div>
 
@@ -475,17 +325,66 @@
 }
 
 @code {
-    private int _page = 1, _size = 10;
-    private IEnumerable<IReadOnlyList<string>> ExportRows() => FilteredOrders.Select(o => (IReadOnlyList<string>)new[] { o.Id, o.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"), o.CustomerName, o.CustomerPhone, o.CustomerEmail, o.ShippingAddress.City, o.ShippingAddress.State, string.Join("; ", o.Items.Select(i => $"{i.Name} x{i.Quantity}")), o.Subtotal.ToString("0.##"), o.DiscountAmount.ToString("0.##"), o.ShippingFee.ToString("0.##"), o.TotalAmount.ToString("0.##"), o.PaymentMethod, o.PaymentStatus, o.DeliveryStatus, o.ShiprocketCourier ?? "", o.ShiprocketAwb ?? "" });
-
-    private int _sn;
     [Parameter] public List<OrderDto> Orders { get; set; } = new();
     [Parameter] public bool Loading { get; set; }
     [Parameter] public EventCallback OnReload { get; set; }
 
-    private string _search = "";
-    private string _statusFilter = "all";
     private string _copiedText = "";
+    private IReadOnlyList<OrderDto> _view = Array.Empty<OrderDto>();
+    private Task OnFiltered(IReadOnlyList<OrderDto> v) { _view = v; StateHasChanged(); return Task.CompletedTask; }
+
+    private static string Courier(OrderDto o) => string.IsNullOrWhiteSpace(o.ShiprocketCourier) ? o.Courier ?? "" : o.ShiprocketCourier;
+    private static string PaymentLabel(OrderDto o) => o.PaymentStatus == "PAID" ? "Online · paid" : o.PaymentMethod == "COD" ? "COD" : o.PaymentStatus == "FAILED" ? "Online · failed" : "Online · pending";
+    private static string StatusTone(OrderDto o) => o.DeliveryStatus switch { "Delivered" => "good", "Payment Pending" => "warn", _ => "muted" };
+
+    // Filters: every one reads its choices from the orders themselves, with counts.
+    private readonly List<FilterDef<OrderDto>> _defs =
+    [
+        new() { Label = "Order ID / customer", Kind = FilterKind.Text, Value = o => $"{o.Id} {o.CustomerName}", Placeholder = "Order ID or customer name" },
+        new() { Label = "Phone", Kind = FilterKind.Text, Value = o => o.CustomerPhone, Phone = true, Placeholder = "Mobile number" },
+        new() { Label = "AWB", Kind = FilterKind.Text, Value = o => o.ShiprocketAwb, Placeholder = "Courier AWB" },
+        new() { Label = "Delivery status", Kind = FilterKind.Chips, Value = o => o.DeliveryStatus },
+        new() { Label = "Payment", Kind = FilterKind.Chips, Value = PaymentLabel },
+        new() { Label = "Courier", Kind = FilterKind.Select, Value = Courier },
+        new() { Label = "City", Kind = FilterKind.Select, Value = o => o.ShippingAddress?.City },
+        new() { Label = "State", Kind = FilterKind.Select, Value = o => o.ShippingAddress?.State },
+        new() { Label = "Order date", Kind = FilterKind.Date, Date = o => o.CreatedAt.ToLocalTime() },
+        new() { Label = "Amount (Rs)", Kind = FilterKind.Range, Number = o => o.TotalAmount },
+    ];
+
+    private List<DataColumn<OrderDto>> _cols = [];
+
+    protected override void OnInitialized()
+    {
+        _view = Orders;
+        _cols =
+        [
+            new() { Header = "Order ID", Text = o => o.Id, SortKey = o => o.Id, Class = "font-mono" },
+            new() { Header = "Date", Text = o => o.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"), SortKey = o => o.CreatedAt },
+            new() { Header = "Customer", Text = o => o.CustomerName, Cell = o => b => { b.OpenElement(0, "div"); b.AddContent(1, o.CustomerName); b.CloseElement(); b.OpenElement(2, "small"); b.AddContent(3, o.ShippingAddress is null ? "" : $"{o.ShippingAddress.City}, {o.ShippingAddress.State}"); b.CloseElement(); } },
+            new() { Header = "Phone", Text = o => o.CustomerPhone ?? "" },
+            new() { Header = "Email", Text = o => o.CustomerEmail ?? "", Hidden = true },
+            new() { Header = "City", Text = o => o.ShippingAddress?.City ?? "", Hidden = true },
+            new() { Header = "State", Text = o => o.ShippingAddress?.State ?? "", Hidden = true },
+            new() { Header = "Items", Text = o => string.Join("; ", o.Items.Select(i => $"{i.Name} x{i.Quantity}")), Sortable = false },
+            new() { Header = "Subtotal (Rs)", Text = o => o.Subtotal.ToString("0.##"), SortKey = o => o.Subtotal, Align = "right", Hidden = true },
+            new() { Header = "Discount (Rs)", Text = o => o.DiscountAmount.ToString("0.##"), SortKey = o => o.DiscountAmount, Align = "right", Hidden = true },
+            new() { Header = "Shipping (Rs)", Text = o => o.ShippingFee.ToString("0.##"), SortKey = o => o.ShippingFee, Align = "right", Hidden = true },
+            new() { Header = "Total (Rs)", Text = o => o.TotalAmount.ToString("0.##"), SortKey = o => o.TotalAmount, Align = "right", Cell = o => b => b.AddContent(0, "₹" + AdminFmt.Inr(o.TotalAmount)) },
+            new() { Header = "Payment", Text = PaymentLabel, Tone = o => o.PaymentStatus == "PAID" ? "good" : o.PaymentStatus == "FAILED" ? "bad" : o.PaymentMethod == "COD" ? "muted" : "warn" },
+            new() { Header = "Courier", Text = Courier },
+            new() { Header = "AWB", Text = o => o.ShiprocketAwb ?? "", Cell = o => b =>
+                {
+                    var awb = o.ShiprocketAwb;
+                    b.AddContent(0, string.IsNullOrEmpty(awb) ? "Pending AWB" : awb);
+                    if (string.IsNullOrEmpty(awb)) return;
+                    b.OpenElement(1, "button"); b.AddAttribute(2, "type", "button"); b.AddAttribute(3, "title", "Copy AWB"); b.AddAttribute(4, "style", "margin-left:6px;opacity:.6");
+                    b.AddAttribute(5, "onclick", EventCallback.Factory.Create(this, () => CopyAsync(awb)));
+                    b.AddContent(6, _copiedText == awb ? "✓" : "⧉"); b.CloseElement();
+                } },
+            new() { Header = "Delivery status", Text = o => o.DeliveryStatus ?? "", Tone = StatusTone },
+        ];
+    }
 
     private OrderDto? _selected;
     private bool _busy;
@@ -508,17 +407,6 @@
         MarkPaid = false,
         Address = new AddressDto { Country = "India" },
     };
-
-    private List<OrderDto> FilteredOrders => Orders.Where(order =>
-    {
-        var matchesSearch =
-            AdminFmt.Has(order.CustomerName, _search) ||
-            (order.CustomerPhone ?? "").Contains(_search, StringComparison.Ordinal) ||
-            AdminFmt.Has(order.Id, _search) ||
-            AdminFmt.Has(order.ShiprocketAwb, _search);
-        if (_statusFilter == "all") return matchesSearch;
-        return matchesSearch && AdminFmt.Has(order.DeliveryStatus, _statusFilter);
-    }).ToList();
 
     private async Task CopyAsync(string text)
     {

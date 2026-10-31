@@ -46,7 +46,9 @@
 .pg{margin-top:12px}
 .admin-toolbar .dt-export{margin-left:auto}
 
-.dt-cols{width:250px;max-height:340px;overflow:auto;padding:10px}
+.dt-cols{left:0;right:auto;width:250px;max-width:calc(100vw - 32px);max-height:340px;overflow:auto;padding:10px}
+/* The Columns button sits at the left of the bar, so open the menu rightwards: it never slides under the navigation sidebar. */
+.dt-cols,.dt-menu{max-width:calc(100vw - 32px)}
 .dt-cols p{margin:0 0 8px;font-size:11px;line-height:1.4;color:#6b7280}
 .dt-col{display:flex;align-items:center;gap:8px;padding:6px 6px;border-radius:7px;font-size:13px;font-weight:600;color:#1b1233;cursor:pointer}
 .dt-col:hover{background:#faf8fd}

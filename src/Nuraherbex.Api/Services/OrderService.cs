@@ -10,7 +10,6 @@ public partial class OrderService(
     ProductService products,
     ShippingGateway shipping,
     OrderOperationLock operationLock,
-    Microsoft.Extensions.Options.IOptions<Nuraherbex.Api.Options.ShadowfaxOptions> shadowfaxOptions,
     IServiceScopeFactory scopes,
     ILogger<OrderService> log)
 {
@@ -308,7 +307,7 @@ public partial class OrderService(
     /// </summary>
     private void AutoBookInBackground(string orderId)
     {
-        if (!shadowfaxOptions.Value.AutoBook) return;
+        if (!shipping.AutoBook) return;
         _ = Task.Run(async () =>
         {
             try
@@ -324,15 +323,16 @@ public partial class OrderService(
     public async Task AutoBookAsync(string orderId)
     {
         var order = await GetAsync(orderId);
-        if (order is null || shipping.ProviderFor(order) != ShippingGateway.Shadowfax) return;
-        if (!shadowfaxOptions.Value.IsConfigured)
+        if (order is null) return;
+        var provider = shipping.ProviderFor(order);
+        if (!shipping.IsConfigured(provider))
         {
-            log.LogWarning("[Shadowfax] Auto-book skipped for {OrderId}: Shadowfax token is not configured", orderId);
+            log.LogWarning("[{Provider}] Auto-book skipped for {OrderId}: courier credentials are not configured", provider, orderId);
             return;
         }
         if (order.FulfillmentStatus == "PENDING") await MarkReadyAsync(orderId);
         var res = await RetryShipmentAsync(orderId);
-        log.LogInformation("[Shadowfax] Auto-booked {OrderId} → AWB {Awb}", orderId, res.ShiprocketAwb);
+        log.LogInformation("[{Provider}] Auto-booked {OrderId} → AWB {Awb}", provider, orderId, res.ShiprocketAwb);
     }
 
     private static void Apply(Order order, ShiprocketResult res, string courier)

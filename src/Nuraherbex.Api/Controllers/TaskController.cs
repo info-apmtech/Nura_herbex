@@ -67,7 +67,7 @@ public class TaskController(TaskService tasks, RightsService rights) : StaffCont
         var t = await Find(id);
         if (t is null) return NoTask();
         if (!TaskService.CanDelete(t, Me)) return StatusCode(403, new ApiResult { Success = false, Message = "Only the person who created a task, or a manager, can delete it." });
-        await tasks.DeleteAsync(t);
+        await tasks.DeleteAsync(t, stopSeries: true);
         return Ok(new ApiResult { Success = true, Message = "Task deleted" });
     }
 

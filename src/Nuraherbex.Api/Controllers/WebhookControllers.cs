@@ -84,23 +84,14 @@ public class WhatsAppWebhookController(WhatsAppService whatsapp, IWebHostEnviron
 [ApiController]
 [AllowAnonymous]
 [Route("api/webhooks/shiprocket")]
+[Route("api/webhooks/courier-updates")] // Shiprocket refuses webhook URLs containing "shiprocket"; register this one there
 public class ShiprocketWebhookController(
     NuraDbContext db,
     IOptions<ShiprocketOptions> options,
     IServiceScopeFactory scopes,
     ILogger<ShiprocketWebhookController> log) : ControllerBase
 {
-    private static readonly Dictionary<string, (string Status, string Text)> StatusMap = new()
-    {
-        ["6"] = ("IN_TRANSIT", "Shipped & In Transit"),
-        ["7"] = ("DELIVERED", "Delivered to Recipient"),
-        ["8"] = ("CANCELLED", "Shipment Cancelled"),
-        ["9"] = ("RTO", "RTO Initiated"),
-        ["17"] = ("OUT_FOR_DELIVERY", "Out for Delivery"),
-        ["18"] = ("IN_TRANSIT", "In Transit between Hubs"),
-        ["19"] = ("OUT_FOR_DELIVERY", "Out for Delivery"),
-        ["42"] = ("PICKED_UP", "Picked Up by Courier"),
-    };
+    private static Dictionary<string, (string Status, string Text)> StatusMap => ShiprocketStatus.Map;
 
     [HttpPost("webhook")]
     public async Task<IActionResult> Receive([FromBody] System.Text.Json.JsonElement payload)
@@ -126,6 +117,7 @@ public class ShiprocketWebhookController(
         if (payload.TryGetProperty("scans", out var scans) && scans.ValueKind == System.Text.Json.JsonValueKind.Array && scans.GetArrayLength() > 0
             && scans[0].TryGetProperty("location", out var loc)) location = loc.GetString();
 
+        if (ShiprocketStatus.Rank(mapped.Status) < ShiprocketStatus.Rank(order.FulfillmentStatus)) return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" }); // late event: never move an order backwards
         var previous = order.FulfillmentStatus;
         order.FulfillmentStatus = mapped.Status;
         order.DeliveryStatus = mapped.Text;

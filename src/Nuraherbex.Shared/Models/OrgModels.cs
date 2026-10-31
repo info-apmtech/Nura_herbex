@@ -29,6 +29,7 @@ public static class PageCatalog
         new("overview", "Store overview", "Store", Admin, "Store dashboard with orders and customers at a glance."),
         new("orders", "Orders & shipping", "Store", Admin, "All store orders, courier booking, labels, cancellations, order e-mails."),
         new("payments", "Payments", "Store", Admin, "Online payment attempts and settlement."),
+        new("shipping", "Shipping setup", "Store", Admin, "Choose Shiprocket or Shadowfax for new orders and keep their credentials."),
         new("customers", "Customers", "Store", Admin, "Customer accounts and addresses."),
         new("products", "Products", "Store", Admin, "Catalogue, prices and stock."),
         new("coupons", "Coupons", "Store", Admin, "Discount codes."),
@@ -222,6 +223,8 @@ public class TaskDto
     public int ChecklistDone { get; set; }
     public int ChecklistTotal { get; set; }
     public int CommentCount { get; set; }
+    /// <summary>Checklist steps, filled on the list so they can be read under the task without opening it.</summary>
+    public List<TaskChecklistItemDto> Checklist { get; set; } = new();
     /// <summary>Newest comment (shortened), filled on the list so it can be read without opening the task.</summary>
     public string? LastComment { get; set; }
     public string? LastCommentBy { get; set; }

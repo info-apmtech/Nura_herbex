@@ -1,0 +1,127 @@
+@inject ApiClient Api
+
+<div class="afm">
+    <div class="afm-card afm-head">
+        <div class="afm-head-main">
+            <span class="afm-head-icon"><Icon Name="Truck" Size="24" /></span>
+            <div>
+                <h3 class="afm-title"><span>Shipping &amp; tracking setup</span></h3>
+                <p class="afm-sub">Choose the courier that books new orders and keep its login here. You can switch at any time. Orders already booked stay with the courier that booked them, and keep tracking there.</p>
+            </div>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="afm-card afm-products"><p class="afm-empty-note">Loading shipping settings...</p></div>
+    }
+    else if (_s is null)
+    {
+        <div class="afm-notice is-error" role="alert"><Icon Name="AlertCircle" Size="17" /><span>@_error</span> <button type="button" class="afm-btn" @onclick="LoadAsync">Retry</button></div>
+    }
+    else
+    {
+        @if (!string.IsNullOrEmpty(_message))
+        {
+            <div class="afm-notice @(_ok ? "" : "is-error")" role="status"><Icon Name="@(_ok ? "CheckCircle2" : "AlertCircle")" Size="17" /><span>@_message</span></div>
+        }
+
+        <div class="afm-section"><div><h4>Courier for new orders</h4><p>Pick one. It starts booking from the next order after you save.</p></div></div>
+
+        <div class="afm-providers">
+            <button type="button" class="afm-provider @(_s.ActiveProvider == "Shiprocket" ? "is-on" : "")" @onclick='() => _s.ActiveProvider = "Shiprocket"' aria-pressed="@(_s.ActiveProvider == "Shiprocket")">
+                <span class="afm-radio"></span>
+                <span class="afm-provider-body">
+                    <strong>Shiprocket</strong>
+                    <span>Aggregator with many courier partners. Logs in with your Shiprocket email and password.</span>
+                    <em class="afm-state @(_s.Shiprocket.Configured ? "ok" : "warn")">@(_s.Shiprocket.Configured ? "Credentials saved" : "Credentials needed")</em>
+                </span>
+            </button>
+            <button type="button" class="afm-provider @(_s.ActiveProvider == "Shadowfax" ? "is-on" : "")" @onclick='() => _s.ActiveProvider = "Shadowfax"' aria-pressed="@(_s.ActiveProvider == "Shadowfax")">
+                <span class="afm-radio"></span>
+                <span class="afm-provider-body">
+                    <strong>Shadowfax</strong>
+                    <span>Direct courier integration with live tracking callbacks. Uses an API token per environment.</span>
+                    <em class="afm-state @(_s.Shadowfax.Configured ? "ok" : "warn")">@(_s.Shadowfax.Configured ? "Token saved" : "Token needed")</em>
+                </span>
+            </button>
+        </div>
+
+        <div class="afm-forms">
+            <div class="afm-card afm-form @(_s.ActiveProvider == "Shiprocket" ? "is-active" : "")">
+                <div class="afm-form-head"><h4>Shiprocket login</h4>@if (_s.ActiveProvider == "Shiprocket") { <span class="afm-live">In use</span> }</div>
+                <div class="afm-field"><label for="sr-email">Account email</label><input id="sr-email" type="email" class="afm-input" autocomplete="off" placeholder="you@company.com" @bind="_s.Shiprocket.Email" @bind:event="oninput" /></div>
+                <div class="afm-field"><label for="sr-pass">Password</label><input id="sr-pass" type="password" class="afm-input" autocomplete="new-password" placeholder="@(_s.Shiprocket.HasPassword ? "Saved. Leave blank to keep it" : "Shiprocket password")" @bind="_s.Shiprocket.Password" @bind:event="oninput" /></div>
+                <div class="afm-field"><label for="sr-tok">API token <span class="afm-hint">(optional, used instead of the password)</span></label><input id="sr-tok" type="password" class="afm-input" autocomplete="new-password" placeholder="@(_s.Shiprocket.HasToken ? "Saved. Leave blank to keep it" : "Optional")" @bind="_s.Shiprocket.Token" @bind:event="oninput" /></div>
+                <div class="afm-field"><label for="sr-pick">Pickup location name</label><input id="sr-pick" type="text" class="afm-input" placeholder="Same nickname as in Shiprocket → Settings → Pickup Addresses" @bind="_s.Shiprocket.PickupLocation" @bind:event="oninput" /></div>
+                <button type="button" class="afm-btn" disabled="@(_testing is not null)" @onclick='() => TestAsync("Shiprocket")'>
+                    <Icon Name="@(_testing == "Shiprocket" ? "RefreshCw" : "ShieldCheck")" Size="15" Class="@(_testing == "Shiprocket" ? "animate-spin" : "")" /><span>Test saved Shiprocket login</span>
+                </button>
+                @if (_testShiprocket is not null) { <p class="afm-test @(_testShiprocket.Success ? "ok" : "bad")">@_testShiprocket.Message</p> }
+            </div>
+
+            <div class="afm-card afm-form @(_s.ActiveProvider == "Shadowfax" ? "is-active" : "")">
+                <div class="afm-form-head"><h4>Shadowfax account</h4>@if (_s.ActiveProvider == "Shadowfax") { <span class="afm-live">In use</span> }</div>
+                <div class="afm-grid2">
+                    <div class="afm-field"><label for="sf-env">Environment</label>
+                        <select id="sf-env" class="afm-select" @bind="_s.Shadowfax.Env"><option value="production">Production (real shipments)</option><option value="staging">Staging (testing)</option></select></div>
+                    <div class="afm-field"><label for="sf-tier">Service</label>
+                        <select id="sf-tier" class="afm-select" @bind="_s.Shadowfax.ServiceTier"><option value="Regular">Regular</option><option value="Surface">Surface</option></select></div>
+                </div>
+                <div class="afm-field"><label for="sf-tok">Production token</label><input id="sf-tok" type="password" class="afm-input" autocomplete="new-password" placeholder="@(_s.Shadowfax.HasToken ? "Saved. Leave blank to keep it" : "Paste the production API token")" @bind="_s.Shadowfax.Token" @bind:event="oninput" /></div>
+                <div class="afm-field"><label for="sf-stg">Staging token</label><input id="sf-stg" type="password" class="afm-input" autocomplete="new-password" placeholder="@(_s.Shadowfax.HasStagingToken ? "Saved. Leave blank to keep it" : "Optional, for testing")" @bind="_s.Shadowfax.StagingToken" @bind:event="oninput" /></div>
+                <div class="afm-field"><label for="sf-type">Pickup type</label>
+                    <select id="sf-type" class="afm-select" @bind="_s.Shadowfax.OrderType"><option value="warehouse">Warehouse: we hand over at a Shadowfax facility</option><option value="marketplace">Marketplace: Shadowfax collects from us</option></select></div>
+                <button type="button" class="afm-btn" disabled="@(_testing is not null)" @onclick='() => TestAsync("Shadowfax")'>
+                    <Icon Name="@(_testing == "Shadowfax" ? "RefreshCw" : "ShieldCheck")" Size="15" Class="@(_testing == "Shadowfax" ? "animate-spin" : "")" /><span>Test saved Shadowfax token</span>
+                </button>
+                @if (_testShadowfax is not null) { <p class="afm-test @(_testShadowfax.Success ? "ok" : "bad")">@_testShadowfax.Message</p> }
+            </div>
+        </div>
+
+        <div class="afm-card afm-savebar">
+            <label class="afm-check"><input type="checkbox" @bind="_s.AutoBook" /><span><strong>Book the pickup automatically</strong> when an order is confirmed. Turn off to review and book each order yourself.</span></label>
+            <button type="button" class="afm-btn afm-btn-primary" disabled="@_saving" @onclick="SaveAsync">
+                <Icon Name="@(_saving ? "RefreshCw" : "Save")" Size="15" Class="@(_saving ? "animate-spin" : "")" /><span>@(_saving ? "Saving..." : "Save & apply")</span>
+            </button>
+        </div>
+        <p class="afm-hint">Passwords and tokens are never shown again once saved. Webhook tokens and the pickup address stay in the server settings (appsettings). Test buttons use the last saved details, so save first.</p>
+    }
+</div>
+
+@code {
+    private ShippingSettingsDto? _s;
+    private bool _loading = true, _saving, _ok = true;
+    private string? _message, _error, _testing;
+    private ApiResult? _testShiprocket, _testShadowfax;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true; _error = null;
+        var res = await Api.AdminShippingSettingsAsync();
+        _s = res.Success ? res.Settings : null;
+        if (_s is null) _error = res.Message ?? "Could not load the shipping settings.";
+        _loading = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_s is null) return;
+        _saving = true; _message = null;
+        var res = await Api.AdminSaveShippingSettingsAsync(_s);
+        _saving = false;
+        _ok = res.Success;
+        _message = res.Message ?? (res.Success ? "Saved." : "Could not save the shipping settings.");
+        if (res.Success && res.Settings is not null) { _s = res.Settings; _testShiprocket = _testShadowfax = null; }
+    }
+
+    private async Task TestAsync(string provider)
+    {
+        _testing = provider;
+        var res = await Api.AdminTestShippingAsync(provider);
+        if (provider == "Shiprocket") _testShiprocket = res; else _testShadowfax = res;
+        _testing = null;
+    }
+}

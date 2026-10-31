@@ -13,9 +13,9 @@ namespace Nuraherbex.Api.Services;
 /// Shadowfax Forward Logistics API: order creation, tracking, cancellation, and pincode serviceability.
 /// Results reuse <see cref="ShiprocketResult"/> so the order pipeline treats every courier the same way.
 /// </summary>
-public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> options, ILogger<ShadowfaxService> log)
+public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> options, ShippingSettingsStore store, ILogger<ShadowfaxService> log)
 {
-    private readonly ShadowfaxOptions _o = options.Value;
+    private readonly ShadowfaxOptions _o = store.Apply(options.Value);
 
     public bool IsConfigured => _o.IsConfigured;
 

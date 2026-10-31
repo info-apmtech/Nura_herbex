@@ -38,6 +38,7 @@ else
             @if (_activeTab is not ("team" or "tasks" or "reports" or "crm" or "whatsapp")) {<div class="admin-section-heading"><div><span class="admin-eyebrow">STORE OPERATIONS</span><h2>@PageName</h2><p>Manage your @PageName.ToLowerInvariant() in one place.</p></div></div>}
             <div class="admin-legacy">
             @if (_activeTab == "orders") { <AdminOrdersTab Orders="_orders" Loading="_ordersLoading" OnReload="LoadOrdersAsync" /> }
+            else if (_activeTab == "shipping") { <AdminShippingTab /> }
             else if (_activeTab == "payments") { <AdminPaymentsTab Attempts="_payments" Loading="_paymentsLoading" OnReload="LoadPaymentsAsync" /> }
             else if (_activeTab == "customers") { <AdminCustomersTab Customers="_customers" Loading="_customersLoading" OnReload="LoadCustomersAsync" /> }
             else if (_activeTab == "batches") { <AdminBatchesTab Batches="_batches" Loading="_batchesLoading" OnReload="LoadBatchesAsync" /> }
@@ -63,7 +64,7 @@ else
     private record NavItem(string Id, string Label, string Icon, string Group);
     private static readonly NavItem[] AllPages =
     {
-        new("overview", "Overview", "TrendingUp", "MANAGE"), new("orders", "Orders", "ShoppingBag", "MANAGE"), new("payments", "Payments", "CreditCard", "MANAGE"), new("customers", "Customers", "Users", "MANAGE"),
+        new("overview", "Overview", "TrendingUp", "MANAGE"), new("orders", "Orders", "ShoppingBag", "MANAGE"), new("payments", "Payments", "CreditCard", "MANAGE"), new("shipping", "Shipping setup", "Truck", "MANAGE"), new("customers", "Customers", "Users", "MANAGE"),
         new("products", "Products", "Package", "MANAGE"), new("coupons", "Coupons", "Tag", "MANAGE"), new("reviews", "Reviews", "MessageSquare", "MANAGE"),
         new("crm", "Sales dashboard", "BarChart3", "SALES & WORK"), new("leads", "Leads", "Phone", "SALES & WORK"), new("followups", "Follow-ups", "Clock", "SALES & WORK"), new("tasks", "Tasks", "CheckCircle2", "SALES & WORK"),
         new("reports", "Reports", "BarChart3", "ADMIN"), new("whatsapp", "WhatsApp log", "MessageCircle", "ADMIN"), new("team", "Team & organisation", "KeyRound", "ADMIN"),
