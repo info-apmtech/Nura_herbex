@@ -401,6 +401,46 @@
                                                 View reports <Icon Name="ChevronRight" Size="13" />
                                             </span>
                                         </button>
+
+                                    @* Cancel order (only until the courier has collected the parcel) *@
+                                    @if (CanCancel(order))
+                                    {
+                                        <div class="pt-1">
+                                            @if (_cancelId == order.Id)
+                                            {
+                                                <div class="p-3 rounded-md bg-red-500/5 border border-red-500/30 space-y-2.5">
+                                                    <div class="text-xs font-semibold text-red-300">Cancel order #@order.Id?</div>
+                                                    <input type="text" maxlength="300" @bind="_cancelReason" @bind:event="oninput" placeholder="Reason (optional)"
+                                                           class="w-full px-3 py-2 rounded-md bg-black/40 border border-white/10 text-xs text-white placeholder-slate-500 outline-none focus:border-red-400" />
+                                                    @if (order.PaymentStatus == "PAID")
+                                                    {
+                                                        <div class="text-[11px] text-slate-400">Your online payment will be refunded to the original payment method.</div>
+                                                    }
+                                                    <div class="flex gap-2">
+                                                        <button type="button" disabled="@_cancelBusy" @onclick="() => CancelOrderAsync(order)"
+                                                                class="px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-500 text-white text-xs font-semibold cursor-pointer disabled:opacity-50">
+                                                            @(_cancelBusy ? "Cancelling..." : "Yes, cancel order")
+                                                        </button>
+                                                        <button type="button" disabled="@_cancelBusy" @onclick="() => _cancelId = null"
+                                                                class="px-3 py-1.5 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 text-xs font-semibold cursor-pointer">
+                                                            Keep my order
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <button type="button" @onclick="() => StartCancel(order.Id)"
+                                                        class="w-full py-2 px-3 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer">
+                                                    <Icon Name="X" Size="14" /><span>Cancel this order</span>
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+                                    @if (_cancelMsgFor == order.Id && !string.IsNullOrEmpty(_cancelMsg))
+                                    {
+                                        <div class="@($"p-2.5 rounded-md text-xs {(_cancelOk ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-300" : "bg-red-500/10 border border-red-500/30 text-red-300")}")" role="status">@_cancelMsg</div>
+                                    }
                                     </div>
                                 </div>
 
@@ -890,6 +930,27 @@ else
         _submittingReview = false;
         if (response.Success) _reviewSubmitted = true;
         else _reviewError = response.Message ?? "We could not submit your review. Please try again.";
+    }
+
+    private string? _cancelId, _cancelMsg, _cancelMsgFor;
+    private string _cancelReason = "";
+    private bool _cancelBusy, _cancelOk;
+
+    /// <summary>A customer can cancel until the courier has collected the parcel.</summary>
+    private static bool CanCancel(OrderDto o) => o.FulfillmentStatus is "PENDING" or "SHIPMENT_CREATED" or "AWB_ASSIGNED" or "" or null;
+
+    private void StartCancel(string id) { _cancelId = id; _cancelReason = ""; _cancelMsg = null; }
+
+    private async Task CancelOrderAsync(OrderDto order)
+    {
+        _cancelBusy = true; _cancelMsg = null;
+        var res = await Api.CustomerCancelOrderAsync(order.Id, _cancelReason);
+        _cancelBusy = false;
+        _cancelOk = res.Success;
+        _cancelMsgFor = order.Id;
+        _cancelMsg = res.Message ?? (res.Success ? "Order cancelled." : "We could not cancel this order. Please contact support.");
+        _cancelId = null;
+        if (res.Success) await LoadOrdersAsync();
     }
 
     private async Task ReorderAsync(OrderItemDto item)

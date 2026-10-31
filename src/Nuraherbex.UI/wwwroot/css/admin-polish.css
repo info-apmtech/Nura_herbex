@@ -1,0 +1,98 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap");
+
+/* ==========================================================================
+   Admin content area: one corporate typographic and surface system.
+   Scoped to .admin-content so the sidebar and top bar are not touched.
+   Body: Inter. Headings and big figures: Plus Jakarta Sans. Brand: #5e209e.
+   ========================================================================== */
+.admin-main .admin-content {
+  --ap-brand: #5e209e; --ap-brand-dark: #4a1a80; --ap-brand-soft: #f3ecfb;
+  --ap-ink: #1b1233; --ap-body: #3f4756; --ap-muted: #667085; --ap-line: #e8def4; --ap-line-soft: #f1ebf8;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px; line-height: 1.55; color: var(--ap-body);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  max-width: 1560px;
+}
+.admin-main .admin-content :where(button, input, select, textarea) { font-family: inherit; }
+
+/* headings and figures */
+.admin-main .admin-content :is(h1, h2, h3, h4) { font-family: "Plus Jakarta Sans", Inter, sans-serif !important; color: var(--ap-ink); letter-spacing: -.01em; }
+.admin-main .admin-content .admin-section-heading { margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--ap-line-soft); }
+.admin-main .admin-content .admin-section-heading h2 { font-size: 26px !important; font-weight: 800; letter-spacing: -.02em; line-height: 1.2; }
+.admin-main .admin-content .admin-section-heading p { font-size: 14px; color: var(--ap-muted) !important; margin-top: 6px; }
+.admin-main .admin-content .admin-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 1.4px; color: var(--ap-brand); margin-bottom: 8px; }
+.admin-main .admin-content .admin-card h3, .admin-main .admin-content .admin-card-heading h3 { font-size: 16px; font-weight: 700; }
+.admin-main .admin-content .admin-stat > strong, .admin-main .admin-content :is(.ld-stat b, .fu-chip b) { font-family: "Plus Jakarta Sans", Inter, sans-serif; font-weight: 800; letter-spacing: -.02em; }
+
+/* surfaces */
+.admin-main .admin-content :is(.admin-card, .admin-stat, .ld-card, .fu-card, .tk-r, .tk-col, .tk-card) { border-color: var(--ap-line); border-radius: 14px; box-shadow: 0 1px 3px rgba(55, 19, 90, .06); }
+.admin-main .admin-content .admin-card:hover, .admin-main .admin-content .admin-stat:hover { box-shadow: 0 6px 20px rgba(55, 19, 90, .08); transition: box-shadow .2s; }
+
+/* small print: nothing below 12px so every label is readable */
+.admin-main .admin-content :is(small, .admin-cell-note, .admin-help, .admin-stat > small, .admin-card-heading p, .admin-pagination, .admin-count) { font-size: 12.5px; }
+.admin-main .admin-content .admin-legacy [class*="text-[9px]"] { font-size: 11.5px !important; }
+.admin-main .admin-content .admin-legacy [class*="text-[10px]"] { font-size: 12px !important; }
+.admin-main .admin-content .admin-legacy [class*="text-[11px]"] { font-size: 12.5px !important; }
+.admin-main .admin-content .admin-legacy .text-xs { font-size: 13px !important; line-height: 1.5; }
+.admin-main .admin-content .admin-legacy .text-sm { font-size: 14px !important; }
+
+/* tables */
+.admin-main .admin-content :is(.admin-table, .admin-legacy table) { font-size: 13.5px; }
+.admin-main .admin-content :is(.admin-table th, .admin-legacy table:not(.dt-table) th) { background: #faf8fd !important; color: var(--ap-muted) !important; font-size: 11.5px !important; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; padding: 13px 16px; border-bottom: 1px solid var(--ap-line); white-space: nowrap; }
+.admin-main .admin-content :is(.admin-table td, .admin-legacy table:not(.dt-table) td) { padding: 15px 16px; color: var(--ap-body); vertical-align: middle; font-size: 13.5px; }
+.admin-main .admin-content :is(.admin-table tbody tr, .admin-legacy table:not(.dt-table) tbody tr) { transition: background .12s; }
+.admin-main .admin-content :is(.admin-table tbody tr:hover, .admin-legacy table:not(.dt-table) tbody tr:hover) { background: #fcfaff !important; }
+.admin-main .admin-content :is(.admin-table strong, .admin-legacy td strong, .dt-table strong) { color: var(--ap-ink); font-weight: 600; }
+
+/* shared data table (orders, customers, payments, ...): dense but readable */
+.admin-main .admin-content .dt-table { font-size: 13px; }
+.admin-main .admin-content .dt-table th, .admin-main .admin-content .dt-table .dt-sort { font-size: 11.5px; font-weight: 700; letter-spacing: .5px; color: var(--ap-muted); background: #faf8fd; }
+.admin-main .admin-content .dt-table th:not(:has(.dt-sort)) { padding: 12px 14px; }
+.admin-main .admin-content .dt-table .dt-sort { padding: 12px 14px; }
+.admin-main .admin-content .dt-table td { padding: 12px 14px; font-size: 13px; color: var(--ap-body); }
+.admin-main .admin-content .dt-table tbody tr:hover { background: #faf6ff; }
+.admin-main .admin-content .dt-wrap { border-radius: 14px; border-color: var(--ap-line); box-shadow: 0 1px 3px rgba(55, 19, 90, .05); }
+.admin-main .admin-content :is(.dt-search input, .dt-btn, .dt-menu button) { font-family: inherit; }
+.admin-main .admin-content .dt-count, .admin-main .admin-content .dt-foot, .admin-main .admin-content .dt-size select { font-size: 12.5px; }
+
+/* form controls */
+.admin-main .admin-content :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { font-size: 14px; border-radius: 10px; border-color: #ddd0ec; color: var(--ap-ink); }
+.admin-main .admin-content :is(input:not([type=checkbox]):not([type=radio]), select):not(.afm-input):not(.afm-select) { min-height: 40px; }
+.admin-main .admin-content :is(input, select, textarea):focus { border-color: var(--ap-brand) !important; box-shadow: 0 0 0 3px rgba(94, 32, 158, .14) !important; outline: none; }
+.admin-main .admin-content :is(input, textarea)::placeholder { color: #98a2b3; }
+.admin-main .admin-content label { font-weight: 600; color: var(--ap-ink); }
+
+/* buttons */
+.admin-main .admin-content :is(.admin-btn, .ld-btn, .tk-more, .afm-btn) { font-size: 13px !important; font-weight: 600; border-radius: 10px; min-height: 38px; letter-spacing: 0; transition: background .15s, border-color .15s, box-shadow .15s; }
+.admin-main .admin-content :is(.admin-btn-primary, .ld-btn.primary) { background: linear-gradient(135deg, #6a27b0, #5e209e) !important; border-color: #5e209e !important; color: #fff !important; box-shadow: 0 2px 8px rgba(94, 32, 158, .28); }
+.admin-main .admin-content :is(.admin-btn-primary, .ld-btn.primary):hover { background: linear-gradient(135deg, #5e209e, #4a1a80) !important; }
+.admin-main .admin-content :is(.admin-btn, .ld-btn):not(.admin-btn-primary):not(.primary):hover { background: var(--ap-brand-soft); border-color: #d3b9f0; }
+
+/* badges, pills and chips */
+.admin-main .admin-content :is(.admin-badge, .tk-pill, .ld-pill, .fu-pill) { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 4px 10px; letter-spacing: 0; }
+.admin-main .admin-content :is(.fu-chip, .ld-tab, .tk-tab, .admin-legacy [class*="rounded-full"]) { font-size: 13px; }
+
+/* tabs */
+.admin-main .admin-content .tk-tab { font-weight: 600; font-size: 14px; }
+.admin-main .admin-content .tk-tab.is-on { color: var(--ap-brand); }
+
+/* task rows: clearer hierarchy */
+.admin-main .admin-content .tk-r-main strong { font-size: 15px; font-weight: 600; color: var(--ap-ink); }
+.admin-main .admin-content .tk-r-main small { font-size: 12.5px; }
+.admin-main .admin-content .tk-sno { font-size: 12px; }
+.admin-main .admin-content .tk-due2 { font-size: 13px; font-weight: 600; }
+
+/* empty states */
+.admin-main .admin-content :is(.admin-empty, .ld-empty) { color: var(--ap-muted); }
+.admin-main .admin-content :is(.admin-empty h3, .ld-empty strong) { font-size: 16px; color: var(--ap-ink); }
+
+/* sticky action bars and footer */
+.admin-main .admin-footer { font-size: 12px; color: #98a2b3; }
+
+@media (max-width: 640px) {
+  .admin-main .admin-content .admin-section-heading h2 { font-size: 22px !important; }
+  .admin-main .admin-content :is(.admin-table td, .admin-legacy td) { padding: 12px; }
+}
+
+/* numerals that line up in columns (customer table, amounts) */
+.admin-main .admin-content .tabular-nums { font-variant-numeric: tabular-nums; }

@@ -209,6 +209,8 @@ public class TaskDto
     public DateTime? StartAt { get; set; }
     public DateTime? DueAt { get; set; }
     public bool IsOverdue { get; set; }
+    /// <summary>Not started yet (starts after today). Such a task is shown under Upcoming and cannot be completed early.</summary>
+    public bool IsUpcoming { get; set; }
     public long? AssignedToEmployeeId { get; set; }
     public string? AssignedToName { get; set; }
     public long? CreatedByEmployeeId { get; set; }

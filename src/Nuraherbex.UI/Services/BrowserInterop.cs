@@ -50,6 +50,8 @@ public class BrowserInterop(IJSRuntime js)
     }
 
     public async Task<bool> ConfirmAsync(string message) { try { return await js.InvokeAsync<bool>("confirm", message); } catch { return false; } }
+    /// <summary>Browser prompt box; null when the person pressed Cancel.</summary>
+    public async Task<string?> PromptAsync(string message, string defaultValue = "") { try { return await js.InvokeAsync<string?>("prompt", message, defaultValue); } catch { return null; } }
 }
 
 public class FilePick

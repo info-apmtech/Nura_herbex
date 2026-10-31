@@ -51,6 +51,7 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
         LeadId = t.LeadId, LeadName = t.LeadId is { } l ? n.Leads.GetValueOrDefault(l) : null, OrderId = t.OrderId, Tags = t.Tags,
         Repeat = t.Repeat, ChecklistDone = checkDone, ChecklistTotal = checkTotal, CommentCount = comments,
         CreatedAt = t.CreatedAt, UpdatedAt = t.UpdatedAt, CompletedAt = t.CompletedAt, CanEdit = CanEdit(t, c),
+        IsUpcoming = IsUpcoming(t, FollowUpService.TodayStartUtc().AddDays(1)),
     };
 
     public sealed record Filter(string? Scope, string? Assignee, long? DepartmentId, string? Priority, string? Status, string? Search, long? LeadId, bool CreatedByMe, int Take);
@@ -62,11 +63,13 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
         var todayStart = FollowUpService.TodayStartUtc();
         var tomorrow = todayStart.AddDays(1);
         var doneSince = now.AddDays(-DoneWindowDays);
-        var open = visible.Where(t => t.Status != TaskStatuses.Done);
-        // Upcoming: pending work that starts (or is due) today or later, plus what was finished today. Finished ones are for display only.
-        System.Linq.Expressions.Expression<Func<WorkTask, bool>> upcoming = t => t.Status == TaskStatuses.Done
-            ? t.CompletedAt >= todayStart
-            : (t.StartAt != null ? t.StartAt >= todayStart : (t.DueAt != null && t.DueAt >= todayStart));
+        // Upcoming = not started yet: it starts after today, or it is a repeating copy that falls due after today. Finished work never appears here.
+        // Pending = everything unfinished that is not upcoming. The two lists never overlap, so a task is in exactly one of them.
+        System.Linq.Expressions.Expression<Func<WorkTask, bool>> upcoming = t => t.Status != TaskStatuses.Done
+            && (t.StartAt != null ? t.StartAt >= tomorrow : (t.Repeat != TaskRepeats.None && t.DueAt != null && t.DueAt >= tomorrow));
+        System.Linq.Expressions.Expression<Func<WorkTask, bool>> pending = t => t.Status != TaskStatuses.Done
+            && !(t.StartAt != null ? t.StartAt >= tomorrow : (t.Repeat != TaskRepeats.None && t.DueAt != null && t.DueAt >= tomorrow));
+        var open = visible.Where(pending);
 
         // The filters the person picked (who, department, priority, search...) apply to the counts too, so a chip always matches what its list shows.
         // Only the status scope is left out: that is what the chips themselves switch between.
@@ -84,9 +87,8 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
             q = q.Where(t => t.Title.Contains(s) || (t.Tags != null && t.Tags.Contains(s)) || (t.Description != null && t.Description.Contains(s)));
         }
 
-        // Pending shows only what needs attention now: overdue, due today, or no date. Later tasks appear on their own day.
-        // Pending lists everything not finished: tasks that have started first, then upcoming ones (they carry a "Starts ..." label).
-        var qOpen = q.Where(t => t.Status != TaskStatuses.Done);
+        // Pending shows only work that has started. Tasks that start later wait in Upcoming and move here on their own day.
+        var qOpen = q.Where(pending);
         var counts = new TaskCounts
         {
             Open = await qOpen.CountAsync(),
@@ -100,13 +102,13 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
 
         switch (f.Scope)
         {
-            case "overdue": q = q.Where(t => t.Status != TaskStatuses.Done && t.DueAt != null && t.DueAt < now); break;
-            case "today": q = q.Where(t => t.Status != TaskStatuses.Done && t.DueAt != null && t.DueAt >= todayStart && t.DueAt < tomorrow); break;
+            case "overdue": q = qOpen.Where(t => t.DueAt != null && t.DueAt < now); break;
+            case "today": q = qOpen.Where(t => t.DueAt != null && t.DueAt >= todayStart && t.DueAt < tomorrow); break;
             case "done": q = q.Where(t => t.Status == TaskStatuses.Done && t.CompletedAt >= doneSince); break;
-            case "board": q = q.Where(t => t.Status != TaskStatuses.Done || t.CompletedAt >= doneSince); break;
+            case "board": q = q.Where(t => t.Status == TaskStatuses.Done ? t.CompletedAt >= doneSince : !(t.StartAt != null ? t.StartAt >= tomorrow : (t.Repeat != TaskRepeats.None && t.DueAt != null && t.DueAt >= tomorrow))); break;
             case "all": break;
             case "upcoming": q = q.Where(upcoming); break;
-            default: q = q.Where(t => t.Status != TaskStatuses.Done); break;
+            default: q = qOpen; break;
         }
         if (!string.IsNullOrWhiteSpace(f.Status)) q = q.Where(t => t.Status == f.Status);
 
@@ -140,7 +142,8 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
         };
     }
 
-    private static bool IsUpcoming(WorkTask t, DateTime tomorrow) => t.Status != TaskStatuses.Done && (t.StartAt != null ? t.StartAt >= tomorrow : t.DueAt != null && t.DueAt >= tomorrow);
+    /// <summary>Same rule as the Upcoming list, for one task.</summary>
+    private static bool IsUpcoming(WorkTask t, DateTime tomorrow) => t.Status != TaskStatuses.Done && (t.StartAt != null ? t.StartAt >= tomorrow : t.Repeat != TaskRepeats.None && t.DueAt != null && t.DueAt >= tomorrow);
 
     private static int PriorityRank(string p) => p switch { TaskPriorities.Urgent => 4, TaskPriorities.High => 3, TaskPriorities.Normal => 2, _ => 1 };
 
@@ -258,6 +261,7 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
     {
         if (!TaskStatuses.All.Contains(status)) return (false, "Unknown status.");
         if (t.Status == status) return (true, "No change");
+        if (status == TaskStatuses.Done && IsUpcoming(t, FollowUpService.TodayStartUtc().AddDays(1))) return (false, "This task has not started yet. It can be completed from its start day.");
         // Finishing with steps still open needs a written reason, so the creator can see what was skipped and why.
         if (status == TaskStatuses.Done && string.IsNullOrWhiteSpace(note) && await db.TaskChecklistItems.AnyAsync(i => i.TaskId == t.Id && !i.Done))
             return (false, "Some checklist steps are not ticked. Give a reason for each one before marking the task done.");

@@ -177,6 +177,32 @@ public class AdminController(
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
+    /// <summary>Cancels a whole order (courier booking, stock, refund flag, customer e-mail).</summary>
+    [HttpPost("orders/{id}/cancel"), Authorize(Roles = "admin,sales")]
+    public async Task<IActionResult> CancelOrder(string id, [FromQuery] string? reason)
+    {
+        try { return Ok(new ApiResult { Success = true, Message = await orders.CancelOrderAsync(id, reason, byCustomer: false) }); }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResult { Message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Message = ex.Message }); }
+    }
+
+    [HttpPost("orders/{id}/mark-refunded"), Authorize(Roles = "admin,sales")]
+    public async Task<IActionResult> MarkRefunded(string id)
+    {
+        try { await orders.MarkRefundedAsync(id); return Ok(new ApiResult { Success = true, Message = "Refund recorded." }); }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResult { Message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Message = ex.Message }); }
+    }
+
+    /// <summary>Permanently deletes a cancelled/returned (or never-paid) order. Administrators only.</summary>
+    [HttpDelete("orders/{id}"), Authorize(Roles = "admin")]
+    public async Task<IActionResult> DeleteOrder(string id)
+    {
+        try { await orders.DeleteOrderAsync(id); return Ok(new ApiResult { Success = true, Message = $"Order {id} deleted." }); }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResult { Message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Message = ex.Message }); }
+    }
+
     [HttpPost("/api/shipping/{id}/ready"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> MarkReady(string id, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ParcelSpecs? parcel = null)
     {

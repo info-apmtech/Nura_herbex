@@ -77,11 +77,13 @@ public class ShippingGateway(ShiprocketService shiprocket, ShadowfaxService shad
 
     public async Task<string> CancelAsync(Order order, string reason)
     {
-        if (string.IsNullOrWhiteSpace(order.ShiprocketAwb) || order.ShiprocketAwb.StartsWith("SR-PENDING-"))
-            throw new InvalidOperationException("This order has no shipment to cancel.");
-        if (!IsShadowfax(order.Courier))
-            throw new InvalidOperationException("Cancel Shiprocket shipments from the Shiprocket dashboard.");
-        return await shadowfax.CancelAsync(order.ShiprocketAwb, reason);
+        if (IsShadowfax(order.Courier))
+        {
+            if (string.IsNullOrWhiteSpace(order.ShiprocketAwb) || order.ShiprocketAwb.StartsWith("SR-PENDING-"))
+                throw new InvalidOperationException("This order has no shipment to cancel.");
+            return await shadowfax.CancelAsync(order.ShiprocketAwb, reason);
+        }
+        return await shiprocket.CancelAsync(order.ShiprocketAwb, order.ShiprocketOrderId);
     }
 
     /// <summary>Public tracking page for a shipment (used when the courier's own link is not returned).</summary>

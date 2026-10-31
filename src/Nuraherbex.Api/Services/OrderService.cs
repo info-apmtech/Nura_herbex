@@ -276,6 +276,86 @@ public partial class OrderService(
         return msg;
     }
 
+    /// <summary>
+    /// Cancels the whole order: cancels the courier booking (if any), puts stock back, flags a paid online order for refund and tells the customer.
+    /// A customer may cancel only until the courier has collected the parcel; staff may cancel anything that is not delivered, returned or out for delivery.
+    /// </summary>
+    public async Task<string> CancelOrderAsync(string orderId, string? reason, bool byCustomer)
+    {
+        await using var lease = await operationLock.AcquireAsync(orderId);
+        db.ChangeTracker.Clear();
+        var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
+        var s = order.FulfillmentStatus;
+        if (s == "CANCELLED") throw new InvalidOperationException("This order is already cancelled.");
+        if (s is "DELIVERED" or "RTO") throw new InvalidOperationException("A delivered or returned order cannot be cancelled.");
+        if (byCustomer && s is not ("PENDING" or "SHIPMENT_CREATED" or "AWB_ASSIGNED"))
+            throw new InvalidOperationException("Your parcel has already been handed to the courier, so it can no longer be cancelled here. Please contact support.");
+        if (!byCustomer && s == "OUT_FOR_DELIVERY")
+            throw new InvalidOperationException("The parcel is out for delivery and cannot be cancelled now.");
+
+        var why = string.IsNullOrWhiteSpace(reason) ? (byCustomer ? "Cancelled by customer" : "Cancelled by store") : reason.Trim();
+        if (why.Length > 300) why = why[..300];
+
+        var booked = !string.IsNullOrWhiteSpace(order.ShiprocketAwb) || !string.IsNullOrWhiteSpace(order.ShiprocketOrderId);
+        if (booked)
+        {
+            try { await shipping.CancelAsync(order, why); }
+            catch (InvalidOperationException) { throw; }
+            catch (Exception ex) { throw new InvalidOperationException($"The courier could not cancel the shipment right now ({ex.Message}). Please try again shortly."); }
+        }
+
+        var stockWasTaken = order.PaymentStatus is "PAID" or "COD_PENDING" or "COD_COLLECTED";
+        if (stockWasTaken) await products.RestoreStockAsync(order);
+        var refund = order.PaymentStatus == "PAID";
+        if (refund) order.PaymentStatus = "REFUND_PENDING";
+        else if (order.PaymentStatus is "COD_PENDING" or "COD_COLLECTED") order.PaymentStatus = "CANCELLED";
+
+        order.FulfillmentStatus = "CANCELLED";
+        order.DeliveryStatus = "Order Cancelled";
+        order.ShippingLabelUrl = null;
+        order.Notes = string.IsNullOrWhiteSpace(order.Notes) ? why : $"{order.Notes} | {why}";
+        order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto { Status = $"Order Cancelled ({(byCustomer ? "by customer" : "by store")})", Time = Mapping.TimelineStamp(), Done = true, Active = true }];
+        order.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        NotifyStatus(order, "CANCELLED");
+
+        return refund
+            ? $"Order cancelled. Your payment of Rs {order.TotalAmount:N0} will be refunded to the original payment method."
+            : "Order cancelled.";
+    }
+
+    /// <summary>Staff confirm the money was returned to the customer.</summary>
+    public async Task MarkRefundedAsync(string orderId)
+    {
+        await using var lease = await operationLock.AcquireAsync(orderId);
+        db.ChangeTracker.Clear();
+        var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
+        if (order.PaymentStatus != "REFUND_PENDING") throw new InvalidOperationException("This order has no refund waiting.");
+        order.PaymentStatus = "REFUNDED";
+        order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto { Status = "Refund completed", Time = Mapping.TimelineStamp(), Done = true }];
+        order.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Permanently removes an order and its payment records. Only cancelled or returned orders, and online orders that were never paid, can be deleted;
+    /// anything live must be cancelled first, and a refund still owed blocks deletion so it is not forgotten.
+    /// </summary>
+    public async Task DeleteOrderAsync(string orderId)
+    {
+        await using var lease = await operationLock.AcquireAsync(orderId);
+        db.ChangeTracker.Clear();
+        var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
+        if (order.PaymentStatus == "REFUND_PENDING") throw new InvalidOperationException("Refund the customer and press Mark refunded before deleting this order.");
+        var neverPaid = order.PaymentMethod != "COD" && order.PaymentStatus != "PAID";
+        if (order.FulfillmentStatus is not ("CANCELLED" or "RTO") && !neverPaid)
+            throw new InvalidOperationException("Cancel the order first, then delete it.");
+        db.Payments.RemoveRange(db.Payments.Where(p => p.OrderId == orderId));
+        db.PaymentAttempts.RemoveRange(db.PaymentAttempts.Where(p => p.OrderId == orderId));
+        db.Orders.Remove(order);
+        await db.SaveChangesAsync();
+    }
+
     public async Task<Order> MarkReadyAsync(string orderId, ParcelSpecs? parcel = null)
     {
         await using var lease = await operationLock.AcquireAsync(orderId);

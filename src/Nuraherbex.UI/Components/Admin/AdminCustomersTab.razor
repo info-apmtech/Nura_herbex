@@ -10,7 +10,7 @@
                        class="w-full pl-8 pr-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 focus:border-zinc-500 text-xs text-zinc-200 placeholder:text-zinc-600 outline-none transition-colors" />
             </div>
 
-            <span class="text-[11px] text-zinc-500 font-mono hidden md:inline">
+            <span class="text-[11px] text-zinc-500 tabular-nums hidden md:inline">
                 @FilteredCustomers.Count of @Customers.Count accounts
             </span>
         </div>
@@ -30,44 +30,44 @@
     @* Metrics Overview Grid *@
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div class="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-1 text-left">
-            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-mono font-medium flex items-center gap-1.5">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider tabular-nums font-medium flex items-center gap-1.5">
                 <Icon Name="Users" Size="12" Class="text-zinc-400" />
                 <span>Registered Users</span>
             </span>
-            <div class="text-2xl font-semibold text-zinc-100 font-mono tracking-tight">
+            <div class="text-2xl font-semibold text-zinc-100 tabular-nums tracking-tight">
                 @Customers.Count
             </div>
             <span class="text-[11px] text-zinc-500 font-normal">Registered accounts</span>
         </div>
 
         <div class="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-1 text-left">
-            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-mono font-medium flex items-center gap-1.5">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider tabular-nums font-medium flex items-center gap-1.5">
                 <Icon Name="ShoppingBag" Size="12" Class="text-emerald-400" />
                 <span>Active Buyers</span>
             </span>
-            <div class="text-2xl font-semibold text-emerald-400 font-mono tracking-tight">
+            <div class="text-2xl font-semibold text-emerald-400 tabular-nums tracking-tight">
                 @ActiveBuyersCount
             </div>
             <span class="text-[11px] text-emerald-500/80 font-normal">Placed ≥1 Order</span>
         </div>
 
         <div class="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-1 text-left">
-            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-mono font-medium flex items-center gap-1.5">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider tabular-nums font-medium flex items-center gap-1.5">
                 <Icon Name="CreditCard" Size="12" Class="text-amber-400" />
                 <span>Total Member LTV</span>
             </span>
-            <div class="text-2xl font-semibold text-amber-300 font-mono tracking-tight">
+            <div class="text-2xl font-semibold text-amber-300 tabular-nums tracking-tight">
                 ₹@AdminFmt.Inr(TotalLtv)
             </div>
             <span class="text-[11px] text-zinc-500 font-normal">Account Cumulative Spend</span>
         </div>
 
         <div class="p-4 rounded-lg bg-zinc-900/40 border border-zinc-800 space-y-1 text-left">
-            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-mono font-medium flex items-center gap-1.5">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider tabular-nums font-medium flex items-center gap-1.5">
                 <Icon Name="Package" Size="12" Class="text-purple-400" />
                 <span>Account Orders</span>
             </span>
-            <div class="text-2xl font-semibold text-purple-300 font-mono tracking-tight">
+            <div class="text-2xl font-semibold text-purple-300 tabular-nums tracking-tight">
                 @TotalOrdersPlaced
             </div>
             <span class="text-[11px] text-zinc-500 font-normal">Total Linked Purchases</span>
@@ -78,7 +78,7 @@
     <div class="rounded-lg border border-zinc-800 bg-zinc-900/40 overflow-hidden text-left">
         <div class="overflow-x-auto">
             <table class="w-full text-xs">
-                <thead class="bg-zinc-950/70 text-zinc-400 font-mono text-[11px] border-b border-zinc-800">
+                <thead class="bg-zinc-950/70 text-zinc-400 tabular-nums text-[11px] border-b border-zinc-800">
                     <tr><th class="px-3 py-3 text-left font-medium w-12">S.No</th>
                         <th class="px-4 py-3 text-left font-medium">Customer</th>
                         <th class="px-4 py-3 text-left font-medium">Contact</th>
@@ -136,7 +136,7 @@
                                 : null;
 
                             <tr @key="cust.Id" class="hover:bg-zinc-800/30 transition-colors">
-                                <td class="px-3 py-3 text-zinc-500 font-mono">@(++_sn)</td>
+                                <td class="px-3 py-3 text-zinc-500 tabular-nums">@(++_sn)</td>
                                 @* Customer Profile & ID *@
                                 <td class="px-4 py-3">
                                     <div class="flex items-center gap-2.5">
@@ -145,7 +145,7 @@
                                         </div>
                                         <div class="space-y-0.5">
                                             <div class="font-medium text-zinc-100">@name</div>
-                                            <div class="font-mono text-[10px] text-zinc-500">@cust.Id</div>
+                                            <div class="tabular-nums text-[10px] text-zinc-500">@cust.Id</div>
                                         </div>
                                     </div>
                                 </td>
@@ -159,7 +159,7 @@
                                         </div>
                                         @if (!string.IsNullOrEmpty(cust.Phone))
                                         {
-                                            <div class="flex items-center gap-1.5 text-zinc-400 font-mono text-[11px]">
+                                            <div class="flex items-center gap-1.5 text-zinc-400 tabular-nums text-[11px]">
                                                 <Icon Name="Phone" Size="11" Class="text-zinc-500 shrink-0" />
                                                 <span>@cust.Phone</span>
                                             </div>
@@ -168,7 +168,7 @@
                                 </td>
 
                                 @* Registered Date *@
-                                <td class="px-4 py-3 text-zinc-400 font-mono text-[11px] whitespace-nowrap">
+                                <td class="px-4 py-3 text-zinc-400 tabular-nums text-[11px] whitespace-nowrap">
                                     <div class="flex items-center gap-1.5">
                                         <Icon Name="Calendar" Size="11" Class="text-zinc-500" />
                                         <span>@joinDate</span>
@@ -194,21 +194,21 @@
                                 <td class="px-4 py-3 whitespace-nowrap">
                                     @if (orderCount > 0)
                                     {
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-mono font-medium">
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] tabular-nums font-medium">
                                             <Icon Name="CheckCircle2" Size="10" />
                                             <span>@orderCount @(orderCount == 1 ? "order" : "orders")</span>
                                         </span>
                                     }
                                     else
                                     {
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500 font-mono text-[10px]">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500 tabular-nums text-[10px]">
                                             No orders yet
                                         </span>
                                     }
                                 </td>
 
                                 @* Lifetime Spend *@
-                                <td class="px-4 py-3 text-right font-mono whitespace-nowrap font-medium text-zinc-200">
+                                <td class="px-4 py-3 text-right tabular-nums whitespace-nowrap font-medium text-zinc-200">
                                     ₹@AdminFmt.Inr(cust.TotalSpent)
                                 </td>
 
@@ -257,14 +257,14 @@
                         <h3 class="text-base font-semibold text-zinc-100">
                             @scName
                         </h3>
-                        <span class="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-400">
+                        <span class="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] tabular-nums text-zinc-400">
                             @sc.Id
                         </span>
                     </div>
                     <p class="text-xs text-zinc-400 flex items-center gap-2">
                         <span>Registered Member</span>
                         <span>·</span>
-                        <span class="font-mono text-zinc-500">
+                        <span class="tabular-nums text-zinc-500">
                             @(sc.CreatedAt == default ? "Recent" : AdminFmt.DateTimeFull(sc.CreatedAt))
                         </span>
                     </p>
@@ -274,27 +274,27 @@
             @* Profile Information Grid *@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800 space-y-1">
-                    <div class="text-[10px] uppercase font-mono text-zinc-500 flex items-center gap-1.5">
+                    <div class="text-[10px] uppercase tabular-nums text-zinc-500 flex items-center gap-1.5">
                         <Icon Name="Mail" Size="11" />
                         <span>Email Address</span>
                     </div>
-                    <div class="font-mono text-zinc-200 break-all select-all">
+                    <div class="tabular-nums text-zinc-200 break-all select-all">
                         @sc.Email
                     </div>
                 </div>
 
                 <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800 space-y-1">
-                    <div class="text-[10px] uppercase font-mono text-zinc-500 flex items-center gap-1.5">
+                    <div class="text-[10px] uppercase tabular-nums text-zinc-500 flex items-center gap-1.5">
                         <Icon Name="Phone" Size="11" />
                         <span>Contact Phone</span>
                     </div>
-                    <div class="font-mono text-zinc-200 select-all">
+                    <div class="tabular-nums text-zinc-200 select-all">
                         @(string.IsNullOrEmpty(sc.Phone) ? "Not provided" : sc.Phone)
                     </div>
                 </div>
 
                 <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800 space-y-1 sm:col-span-2">
-                    <div class="text-[10px] uppercase font-mono text-zinc-500 flex items-center gap-1.5">
+                    <div class="text-[10px] uppercase tabular-nums text-zinc-500 flex items-center gap-1.5">
                         <Icon Name="MapPin" Size="11" />
                         <span>Default Shipping Address</span>
                     </div>
@@ -317,11 +317,11 @@
             @* Order History *@
             <div class="space-y-2.5 pt-2">
                 <div class="flex items-center justify-between">
-                    <h4 class="text-xs font-semibold text-zinc-200 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <h4 class="text-xs font-semibold text-zinc-200 uppercase tracking-wider tabular-nums flex items-center gap-1.5">
                         <Icon Name="ShoppingBag" Size="12" />
                         <span>Order History (@(sc.Orders.Count > 0 ? sc.Orders.Count : sc.OrdersCount))</span>
                     </h4>
-                    <div class="text-xs font-mono text-zinc-400">
+                    <div class="text-xs tabular-nums text-zinc-400">
                         Total Spent: <strong class="text-emerald-400">₹@AdminFmt.Inr(sc.TotalSpent)</strong>
                     </div>
                 </div>
@@ -330,7 +330,7 @@
                 {
                     <div class="rounded-lg border border-zinc-800 overflow-hidden bg-zinc-950/50">
                         <table class="w-full text-xs">
-                            <thead class="bg-zinc-900 text-zinc-400 font-mono text-[10px] border-b border-zinc-800">
+                            <thead class="bg-zinc-900 text-zinc-400 tabular-nums text-[10px] border-b border-zinc-800">
                                 <tr>
                                     <th class="p-2.5 text-left font-medium">Order ID</th>
                                     <th class="p-2.5 text-left font-medium">Date</th>
@@ -339,7 +339,7 @@
                                     <th class="p-2.5 text-right font-medium">Amount</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-zinc-800/60 font-mono text-zinc-300">
+                            <tbody class="divide-y divide-zinc-800/60 tabular-nums text-zinc-300">
                                 @foreach (var ord in sc.Orders)
                                 {
                                     <tr @key="ord.Id" class="hover:bg-zinc-900/40">

@@ -94,7 +94,7 @@
                             </div>
                             @if (task.LastComment is not null) { <small class="tk-r-note"><b>@task.LastCommentBy</b>: @task.LastComment</small> }
                             <div class="tk-foot"><span>@(task.AssignedToName ?? "Unassigned")</span>@if (task.DepartmentName is { } dn) { <small>@dn</small> }</div>
-                            @if (task.CanEdit && task.Status != "done") { <button type="button" class="ld-btn tk-donebtn" @onclick="() => ToggleDoneAsync(task)" @onclick:stopPropagation="true"><Icon Name="Check" Size="13" /> Mark done</button> }
+                            @if (task.CanEdit && task.Status != "done" && !task.IsUpcoming) { <button type="button" class="ld-btn tk-donebtn" @onclick="() => ToggleDoneAsync(task)" @onclick:stopPropagation="true"><Icon Name="Check" Size="13" /> Mark done</button> }
                         </article>
                     }
                     @if (col.Count == 0) { <p class="tk-none">Nothing here</p> }
@@ -117,12 +117,11 @@
                 var due = DueInfo(task);
                 var isDone = task.Status == "done";
                 <article class="@($"tk-r p-{task.Priority} {(isDone ? "is-done" : "")}")" @key="task.Id">
-                    @if (isDone && _scope == "upcoming") { <span class="tk-tick on is-view" title="Completed" aria-label="Completed"><Icon Name="Check" Size="14" /></span> }
-                    else if (isDone) { <button type="button" class="tk-tick on" disabled="@(!task.CanEdit)" title="Marked done by mistake? Click to undo" aria-label="Undo done" @onclick="() => ToggleDoneAsync(task)"><Icon Name="Check" Size="14" /></button> }
-                    else { <button type="button" class="tk-tick" disabled="@(!task.CanEdit)" title="@(!task.CanEdit ? "You can only view this task" : "Mark as done")" aria-label="Mark task as done" @onclick="() => ToggleDoneAsync(task)"><Icon Name="Check" Size="14" /></button> }
+                    @if (isDone) { <button type="button" class="tk-tick on" disabled="@(!task.CanEdit)" title="Marked done by mistake? Click to undo" aria-label="Undo done" @onclick="() => ToggleDoneAsync(task)"><Icon Name="Check" Size="14" /></button> }
+                    else { <button type="button" class="tk-tick" disabled="@(!task.CanEdit || task.IsUpcoming)" title="@(!task.CanEdit ? "You can only view this task" : task.IsUpcoming ? "Not started yet. You can complete it from its start day" : "Mark as done")" aria-label="Mark task as done" @onclick="() => ToggleDoneAsync(task)"><Icon Name="Check" Size="14" /></button> }
                     <button type="button" class="tk-r-main" @onclick="() => OpenChecklistAsync(task)">
                         <strong><span class="tk-sno" title="Task number">@sno</span>@task.Title</strong>
-                        <small>@string.Join(" · ", new[] { task.DepartmentName, task.LeadName is { } ln ? "Lead: " + ln : null, task.Repeat != "none" ? "Repeats " + task.Repeat : null, task.StartAt is { } sa && !isDone && sa.ToLocalTime().Date >= DateTime.Today ? "Starts " + sa.ToLocalTime().ToString("ddd, dd MMM") : null }.Where(x => x is not null))</small>
+                        <small>@string.Join(" · ", new[] { task.DepartmentName, task.LeadName is { } ln ? "Lead: " + ln : null, task.Repeat != "none" ? "Repeats " + task.Repeat : null, task.IsUpcoming && (task.StartAt ?? task.DueAt) is { } sa ? "Starts " + sa.ToLocalTime().ToString("ddd, dd MMM") : null }.Where(x => x is not null))</small>
                         @if (task.LastComment is not null) { <small class="tk-r-note" title="@task.LastComment"><Icon Name="MessageSquare" Size="11" /> <b>@task.LastCommentBy</b>: @task.LastComment</small> }
                     </button>
                     <div class="tk-r-tags">
@@ -552,6 +551,7 @@
     // ---- status
     private async Task ToggleDoneAsync(TaskDto t)
     {
+        if (t.Status != "done" && t.IsUpcoming) { Say("This task has not started yet. You can complete it from its start day.", false); return; }
         if (t.Status != "done") { await RequestDoneAsync(t.Id, t.Title); return; }
         var res = await Api.AdminTaskStatusAsync(t.Id, "todo");
         Say(res.Message, res.Success);

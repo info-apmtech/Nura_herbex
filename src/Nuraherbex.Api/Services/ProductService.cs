@@ -127,4 +127,16 @@ public class ProductService(NuraDbContext db, IOptions<StoreOptions> store)
             p.UpdatedAt = DateTime.UtcNow;
         }
     }
+
+    /// <summary>Puts the stock back when a confirmed order is cancelled.</summary>
+    public async Task RestoreStockAsync(Order order)
+    {
+        foreach (var item in order.Items)
+        {
+            var p = await db.Products.FirstOrDefaultAsync(x => x.Id == item.Id);
+            if (p is null) continue;
+            p.StockQuantity += item.Quantity;
+            p.UpdatedAt = DateTime.UtcNow;
+        }
+    }
 }

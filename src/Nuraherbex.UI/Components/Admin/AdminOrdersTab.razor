@@ -179,6 +179,33 @@
                             <span>Open / print label</span>
                         </a>
                     }
+                    @if (o.FulfillmentStatus is not ("CANCELLED" or "DELIVERED" or "RTO" or "OUT_FOR_DELIVERY"))
+                    {
+                        <button type="button" disabled="@_busy" @onclick="CancelOrderAsync"
+                                class="px-2.5 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                                title="Cancels the courier booking, restores stock and tells the customer">
+                            <Icon Name="X" Size="12" />
+                            <span>Cancel Order</span>
+                        </button>
+                    }
+                    @if (o.PaymentStatus == "REFUND_PENDING")
+                    {
+                        <button type="button" disabled="@_busy" @onclick="MarkRefundedAsync"
+                                class="px-2.5 py-1.5 rounded-md bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                                title="Press after you have returned the money to the customer">
+                            <Icon Name="CheckCircle2" Size="12" />
+                            <span>Mark Refunded</span>
+                        </button>
+                    }
+                    @if (CanDelete(o))
+                    {
+                        <button type="button" disabled="@_busy" @onclick="DeleteOrderAsync"
+                                class="px-2.5 py-1.5 rounded-md bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                                title="Permanently removes this order">
+                            <Icon Name="Trash2" Size="12" />
+                            <span>Delete Order</span>
+                        </button>
+                    }
                     @if (o.DeliveryStatus != "Delivered")
                     {
                         <button type="button" disabled="@_busy" @onclick="MarkDeliveredAsync"
@@ -496,6 +523,49 @@
         }
         _busy = false;
         await ReloadSelectedAsync();
+    }
+
+    /// <summary>Only cancelled or returned orders, and online orders that were never paid, can be deleted (and not while a refund is owed).</summary>
+    private static bool CanDelete(OrderDto o) =>
+        o.PaymentStatus != "REFUND_PENDING" && (o.FulfillmentStatus is "CANCELLED" or "RTO" || (o.PaymentMethod != "COD" && o.PaymentStatus != "PAID"));
+
+    private async Task CancelOrderAsync()
+    {
+        if (_selected is null) return;
+        var reason = await Browser.PromptAsync($"Cancel order {_selected.Id}? Enter a reason (optional), or press Cancel to keep the order.", "");
+        if (reason is null) return;
+        _busy = true; _actionMessage = null;
+        var res = await Api.AdminCancelOrderAsync(_selected.Id, reason);
+        _actionOk = res.Success;
+        _actionMessage = res.Message ?? (res.Success ? "Order cancelled." : "Could not cancel the order.");
+        _busy = false;
+        await OnReload.InvokeAsync();
+        await ReloadSelectedAsync(false);
+    }
+
+    private async Task MarkRefundedAsync()
+    {
+        if (_selected is null) return;
+        if (!await Browser.ConfirmAsync($"Confirm you have refunded Rs {_selected.TotalAmount:N0} to the customer for order {_selected.Id}?")) return;
+        _busy = true; _actionMessage = null;
+        var res = await Api.AdminMarkRefundedAsync(_selected.Id);
+        _actionOk = res.Success;
+        _actionMessage = res.Message ?? (res.Success ? "Refund recorded." : "Could not record the refund.");
+        _busy = false;
+        await OnReload.InvokeAsync();
+        await ReloadSelectedAsync(false);
+    }
+
+    private async Task DeleteOrderAsync()
+    {
+        if (_selected is null) return;
+        if (!await Browser.ConfirmAsync($"Permanently delete order {_selected.Id}? This removes the order and its payment records and cannot be undone.")) return;
+        _busy = true; _actionMessage = null;
+        var res = await Api.AdminDeleteOrderAsync(_selected.Id);
+        _busy = false;
+        if (res.Success) { CloseOrder(); await OnReload.InvokeAsync(); return; }
+        _actionOk = false;
+        _actionMessage = res.Message ?? "Could not delete the order.";
     }
 
     private async Task CancelShipmentAsync()

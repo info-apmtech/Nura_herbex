@@ -150,6 +150,23 @@ public class ShiprocketService(HttpClient http, IOptions<ShiprocketOptions> opti
         };
     }
 
+    /// <summary>Cancels the shipment (when it has an AWB) and the order in Shiprocket. Throws when Shiprocket refuses, so the store never shows "cancelled" while a parcel is still booked.</summary>
+    public async Task<string> CancelAsync(string? awb, string? shiprocketOrderId)
+    {
+        var token = await GetTokenAsync();
+        if (token is null) return "Shiprocket is not configured, so there was nothing to cancel there.";
+        var realAwb = !string.IsNullOrWhiteSpace(awb) && !awb.StartsWith("SR-PENDING-");
+        var hasOrder = long.TryParse(shiprocketOrderId, out var srId);
+        if (!realAwb && !hasOrder) throw new InvalidOperationException("This order has no Shiprocket shipment to cancel.");
+        if (realAwb) await PostAsync($"{_o.ApiUrl}/orders/cancel/shipment/awbs", new { awbs = new[] { awb } }, token);
+        if (hasOrder)
+        {
+            try { await PostAsync($"{_o.ApiUrl}/orders/cancel", new { ids = new[] { srId } }, token); }
+            catch (Exception ex) when (realAwb) { log.LogWarning("[Shiprocket] Shipment {Awb} cancelled but the order could not be cancelled: {Msg}", awb, ex.Message); }
+        }
+        return "Cancelled in Shiprocket";
+    }
+
     /// <summary>Admin "Test connection": logs in and reads the pickup locations, so a wrong password or pickup name shows up before the first order.</summary>
     public async Task<(bool Ok, string Message)> TestAsync()
     {

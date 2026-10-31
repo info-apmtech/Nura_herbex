@@ -141,6 +141,10 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<ShipmentResponse> AdminRetryShipmentAsync(string orderId) => Call<ShipmentResponse>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/retry-shipment", null, Who.Admin);
     public Task<ShipmentResponse> AdminGenerateShipmentLabelAsync(string orderId) => Call<ShipmentResponse>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/shipping-label", null, Who.Admin);
     public Task<ApiResult> AdminCancelShipmentAsync(string orderId) => Call<ApiResult>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/cancel-shipment", null, Who.Admin);
+    public Task<ApiResult> AdminCancelOrderAsync(string orderId, string? reason) => Call<ApiResult>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/cancel?reason={Uri.EscapeDataString(reason ?? "")}", null, Who.Admin);
+    public Task<ApiResult> AdminMarkRefundedAsync(string orderId) => Call<ApiResult>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/mark-refunded", null, Who.Admin);
+    public Task<ApiResult> AdminDeleteOrderAsync(string orderId) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/orders/{Uri.EscapeDataString(orderId)}", null, Who.Admin);
+    public Task<ApiResult> CustomerCancelOrderAsync(string orderId, string? reason) => Call<ApiResult>(HttpMethod.Post, $"api/auth/my-orders/{Uri.EscapeDataString(orderId)}/cancel?reason={Uri.EscapeDataString(reason ?? "")}", null, Who.Customer);
     public Task<OrderResponse> AdminMarkDeliveredAsync(string orderId) => Call<OrderResponse>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/deliver", null, Who.Admin);
     public Task<ApiResult> AdminSendEmailAsync(string orderId, string type) => Call<ApiResult>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/send-email", new AdminEmailRequest { Type = type }, Who.Admin);
     public Task<PaymentAttemptListResponse> AdminPaymentsAsync() => Call<PaymentAttemptListResponse>(HttpMethod.Get, "api/admin/payments", null, Who.Admin);

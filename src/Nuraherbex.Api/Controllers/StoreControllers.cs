@@ -257,6 +257,18 @@ public class AuthController(CustomerAuthService auth, OrderService orders, Shipp
             await shipping.EnrichTrackingAsync(dto);
         return Ok(new OrderListResponse { Success = true, Count = list.Count, Orders = list });
     }
+
+    /// <summary>The signed-in customer cancels one of their own orders (only until the courier has collected it).</summary>
+    [HttpPost("my-orders/{id}/cancel"), Authorize(Roles = "customer")]
+    public async Task<IActionResult> CancelMyOrder(string id, [FromQuery] string? reason)
+    {
+        var c = await auth.GetAsync(CurrentId ?? "");
+        if (c is null) return NotFound(new ApiResult { Success = false, Message = "Customer not found" });
+        var order = (await orders.ListForCustomerAsync(c.Email, c.Phone ?? "")).FirstOrDefault(o => o.Id == id);
+        if (order is null) return NotFound(new ApiResult { Success = false, Message = "Order not found" });
+        try { return Ok(new ApiResult { Success = true, Message = await orders.CancelOrderAsync(id, reason, byCustomer: true) }); }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
+    }
 }
 
 // ---------------------------------------------------------------------------
