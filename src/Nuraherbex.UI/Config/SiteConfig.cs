@@ -9,7 +9,7 @@ public static class SiteConfig
     public const string CurrencyCode = "INR";
     public const decimal FreeShippingThreshold = 999m;
 
-    public const string ContactPhone = "08888003430";
+    public const string ContactPhone = "9047479047";
     public const string ContactEmail = "care@nuraherbex.com";
     public const string ContactAddress = "Plot No. 79, SF No. 93/51, SV Nagar, Senneerkuppam, Poonamallee-600056";
 

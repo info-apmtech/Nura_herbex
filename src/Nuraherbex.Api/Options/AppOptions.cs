@@ -6,7 +6,7 @@ public class StoreOptions
     public string FrontendUrl { get; set; } = "https://nura.apmiot.com";
     public string ApiPublicUrl { get; set; } = "https://nuraapi.apmiot.com";
     public string SupportEmail { get; set; } = "care@nuraherbex.com";
-    public string SupportPhone { get; set; } = "08888003430";
+    public string SupportPhone { get; set; } = "9047479047";
     public decimal FreeShippingThreshold { get; set; } = 999;
     public decimal FlatShippingFee { get; set; } = 99;
 
