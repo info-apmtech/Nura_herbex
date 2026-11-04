@@ -16,7 +16,8 @@ public partial class OrderService(
     [GeneratedRegex(@"^[1-9][0-9]{5}$")]
     private static partial Regex PincodeRegex();
 
-    public static string NewOrderId() => $"NH-{Guid.NewGuid():N}"[..32].ToUpperInvariant();
+    /// <summary>14-digit numeric order number: yyMMdd + 8 random digits.</summary>
+    public static string NewOrderId() => DateTime.UtcNow.ToString("yyMMdd") + System.Security.Cryptography.RandomNumberGenerator.GetInt32(0, 100_000_000).ToString("D8");
 
     /// <param name="holdUntilPaid">
     /// Public checkout persists the pending order and a payment-attempt snapshot before payment confirmation.

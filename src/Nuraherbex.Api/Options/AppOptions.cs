@@ -9,6 +9,15 @@ public class StoreOptions
     public string SupportPhone { get; set; } = "08888003430";
     public decimal FreeShippingThreshold { get; set; } = 999;
     public decimal FlatShippingFee { get; set; } = 99;
+
+    // Seller details printed on tax invoices. Set these in appsettings (Store section) before issuing real invoices.
+    public string SellerLegalName { get; set; } = "Nura Herbex";
+    public string SellerAddress { get; set; } = "";
+    public string SellerGstin { get; set; } = "";
+    /// <summary>Seller's state (e.g. "Maharashtra"). Same state as the buyer: GST split into CGST + SGST; otherwise IGST. Empty: a single GST line.</summary>
+    public string SellerState { get; set; } = "";
+    /// <summary>GST rate in percent; listed prices are GST-inclusive.</summary>
+    public decimal GstRatePercent { get; set; } = 18;
 }
 
 public class JwtOptions

@@ -21,7 +21,7 @@ else
         <aside class="admin-sidebar @(_mobileMenu ? "is-open" : "")" aria-label="Admin navigation">
             <a class="admin-brand" href="/admin"><img class="admin-brand-logo" src="/_content/Nuraherbex.UI/images/logo-mark.png" alt="" /><span>Nura Herbex<small>STORE ADMINISTRATION</small></span></a>
             <div class="admin-store-label"><span class="admin-store-dot"></span> Your store workspace</div>
-            <nav>@foreach (var group in Navigation.GroupBy(n => n.Group)) { <span class="admin-nav-label">@group.Key</span> @foreach (var item in group) { <button class="admin-nav-item @(_activeTab == item.Id ? "is-active" : "")" aria-current="@(_activeTab == item.Id ? "page" : null)" @onclick="() => Navigate(item.Id)"><Icon Name="@item.Icon" Size="19" /><span>@item.Label</span>@if (item.Id == "orders" && _orders.Any(o => o.FulfillmentStatus == "PENDING")) { <small>@_orders.Count(o => o.FulfillmentStatus == "PENDING")</small> }</button> } }</nav>
+            <nav>@foreach (var group in Navigation.GroupBy(n => n.Group)) { <span class="admin-nav-label">@group.Key</span> @foreach (var item in group) { <button class="admin-nav-item @(_activeTab == item.Id ? "is-active" : "")" aria-current="@(_activeTab == item.Id ? "page" : null)" @onclick="() => Navigate(item.Id)"><Icon Name="@item.Icon" Size="19" /><span>@item.Label</span>@if (BadgeFor(item.Id) is { Count: > 0 } badge) { <small class="@(badge.Urgent ? "is-urgent" : "")" title="@badge.Tip">@(badge.Count > 99 ? "99+" : badge.Count.ToString())</small> }</button> } }</nav>
             <div class="admin-sidebar-bottom"><a class="admin-nav-item" href="/shop"><Icon Name="ExternalLink" Size="18" /> View storefront</a><div class="admin-user"><span class="admin-avatar">@(string.IsNullOrEmpty(AdminAuth.Name) ? "A" : AdminAuth.Name[..1].ToUpperInvariant())</span><span><strong>@(string.IsNullOrEmpty(AdminAuth.Name) ? "Administrator" : AdminAuth.Name)</strong><small>@(AdminAuth.Designation ?? AdminAuth.Email)</small></span><button class="admin-icon-btn" title="Sign out" aria-label="Sign out" @onclick="LogoutAsync"><Icon Name="LogOut" Size="18" /></button></div></div>
         </aside>
         @if (_mobileMenu) { <button class="admin-mobile-backdrop" aria-label="Close navigation" @onclick="() => _mobileMenu = false"></button> }
@@ -90,7 +90,7 @@ else
         if (want != _activeTab) _activeTab = want;
         if (Section is not null && want != Section) Nav.NavigateTo("/admin/" + want, replace: true);
     }
-    private void Navigate(string id) { _mobileMenu = false; Nav.NavigateTo("/admin/" + id); }
+    private void Navigate(string id) { _mobileMenu = false; Nav.NavigateTo("/admin/" + id); _ = RefreshBadgesAsync(); }
     private void RecordError(string key, ApiResult result) { if (result.Success) _loadErrors.Remove(key); else _loadErrors[key] = result.Message ?? "Could not load data."; }
     private async Task RefreshAsync() { _dataLoaded = false; await LoadAllAsync(); }
     private bool _initDone;
@@ -107,6 +107,51 @@ else
     private bool _batchesLoading = true;
     private List<FormulationIngredientDto> _ingredients = AdminDefaults.Ingredients();
     private FormulationMetricsDto _metrics = new();
+
+    // ---- Sidebar counts: what needs attention on each page (orders, leads, follow-ups, tasks) ----
+    private sealed record NavBadge(int Count, bool Urgent, string Tip);
+    private readonly Dictionary<string, NavBadge> _badges = new();
+    private Timer? _badgeTimer;
+
+    private NavBadge? BadgeFor(string page) => page switch
+    {
+        "orders" => _orders.Count(o => o.FulfillmentStatus == "PENDING") is > 0 and var n ? new NavBadge(n, false, $"{n} order(s) waiting to be shipped") : null,
+        _ => _badges.GetValueOrDefault(page),
+    };
+
+    private async Task RefreshBadgesAsync()
+    {
+        if (!AdminAuth.IsAuthenticated) return;
+        var next = new Dictionary<string, NavBadge>();
+        if (AdminAuth.Can("leads"))
+        {
+            var r = await Api.AdminLeadsAsync(take: 1);
+            if (r.Success && r.StatusCounts.GetValueOrDefault(LeadStatuses.New) is > 0 and var n)
+                next["leads"] = new NavBadge(n, false, $"{n} new lead(s) not contacted yet");
+        }
+        if (AdminAuth.Can("followups"))
+        {
+            var r = await Api.AdminFollowUpsAsync();
+            var due = r.Counts.Overdue + r.Counts.Today;
+            if (r.Success && due > 0)
+                next["followups"] = new NavBadge(due, r.Counts.Overdue > 0, $"{r.Counts.Overdue} overdue, {r.Counts.Today} due today");
+        }
+        if (AdminAuth.Can("tasks"))
+        {
+            var r = await Api.AdminTasksAsync();
+            var due = r.Counts.Overdue + r.Counts.DueToday;
+            if (r.Success && due > 0)
+                next["tasks"] = new NavBadge(due, r.Counts.Overdue > 0, $"{r.Counts.Overdue} overdue, {r.Counts.DueToday} due today");
+        }
+        _badges.Clear();
+        foreach (var kv in next) _badges[kv.Key] = kv.Value;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void StartBadgeTimer()
+    {
+        _badgeTimer ??= new Timer(_ => _ = InvokeAsync(RefreshBadgesAsync), null, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+    }
 
     protected override void OnInitialized() => AdminAuth.Changed += OnAuthChanged;
 
@@ -146,6 +191,7 @@ else
     {
         if (_dataLoaded || !AdminAuth.IsAuthenticated) return;
         _dataLoaded = true;
+        StartBadgeTimer();
         var jobs = new List<Task>();
         if (AdminAuth.Can("orders")) jobs.Add(LoadOrdersAsync()); else _ordersLoading = false;
         if (AdminAuth.Can("payments")) jobs.Add(LoadPaymentsAsync()); else _paymentsLoading = false;
@@ -202,5 +248,5 @@ else
     private void OnIngredientsChanged(List<FormulationIngredientDto> list) => _ingredients = list;
     private void OnMetricsChanged(FormulationMetricsDto m) => _metrics = m;
 
-    public void Dispose() => AdminAuth.Changed -= OnAuthChanged;
+    public void Dispose() { AdminAuth.Changed -= OnAuthChanged; _badgeTimer?.Dispose(); }
 }

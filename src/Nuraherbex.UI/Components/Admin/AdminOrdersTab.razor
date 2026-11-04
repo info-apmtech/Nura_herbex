@@ -31,213 +31,196 @@
 @if (_selected is not null)
 {
     var o = _selected;
-    <div @onclick="CloseOrder"
-         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in text-left">
-        <div @onclick:stopPropagation
-             class="relative w-full max-w-lg bg-[#121215] border border-zinc-800 rounded-xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <button @onclick="CloseOrder"
-                    class="absolute top-4 right-4 w-7 h-7 rounded-md bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors">
-                <Icon Name="X" Size="15" />
-            </button>
+    var payText = o.PaymentStatus == "PAID"
+        ? $"Paid{(string.IsNullOrEmpty(o.PaymentRef) ? "" : " · " + o.PaymentRef)}"
+        : o.PaymentMethod == "COD" ? "COD · due on delivery" : "Unpaid · pending gateway";
+    var payTone = o.PaymentStatus == "PAID" ? "is-ok" : o.PaymentMethod == "COD" ? "is-info" : "is-warn";
+    <div @onclick="CloseOrder" class="ot-overlay">
+        <div @onclick:stopPropagation class="ot-dialog" role="dialog" aria-modal="true" aria-label="@($"Order {o.Id}")">
 
-            <div class="space-y-1">
-                <div class="text-[10px] font-mono text-zinc-400 uppercase font-medium">
-                    Courier AWB Telemetry
+            <header class="ot-head">
+                <div class="ot-head-text">
+                    <span class="ot-eyebrow">Order tracking</span>
+                    <h3>Order @o.Id</h3>
+                    <p>@o.CustomerName · @o.CustomerPhone</p>
                 </div>
-                <h3 class="text-base font-semibold text-zinc-100">
-                    Order @o.Id
-                </h3>
-                <p class="text-xs text-zinc-500">
-                    Customer: @o.CustomerName (@o.CustomerPhone)
-                </p>
-            </div>
+                <div class="ot-head-chips">
+                    <span class="@($"ot-chip {payTone}")">@payText</span>
+                    <span class="ot-chip">@(string.IsNullOrWhiteSpace(o.DeliveryStatus) ? o.FulfillmentStatus : o.DeliveryStatus)</span>
+                </div>
+                <button type="button" @onclick="CloseOrder" class="ot-x" aria-label="Close"><Icon Name="X" Size="16" /></button>
+            </header>
 
-            @* Courier info card *@
-            <div class="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800 text-xs space-y-1.5 font-mono">
-                <div class="flex justify-between">
-                    <span class="text-zinc-500">Payment Status</span>
-                    <span class="@($"font-medium {(o.PaymentStatus == "PAID" ? "text-emerald-400" : o.PaymentMethod == "COD" ? "text-blue-400" : "text-amber-400")}")">
-                        @(o.PaymentStatus == "PAID"
-                            ? $"PAID ({(string.IsNullOrEmpty(o.PaymentRef) ? "Verified" : o.PaymentRef)})"
-                            : o.PaymentMethod == "COD"
-                                ? "COD (Due on Delivery)"
-                                : "UNPAID (Pending Gateway)")
-                    </span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-zinc-500">Courier Partner</span>
-                    <span class="text-zinc-200 font-medium">@(string.IsNullOrEmpty(o.ShiprocketCourier) ? (o.Courier ?? "Pending Assignment") : o.ShiprocketCourier)</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-zinc-500">AWB Tracking Code</span>
-                    <span class="text-zinc-200 font-medium flex items-center gap-1.5">
-                        <span>@(string.IsNullOrEmpty(o.ShiprocketAwb) ? "Awaiting Payment/Dispatch" : o.ShiprocketAwb)</span>
-                        @if (!string.IsNullOrEmpty(o.ShiprocketAwb))
-                        {
-                            var awb = o.ShiprocketAwb!;
-                            <button @onclick="() => CopyAsync(awb)" class="text-zinc-500 hover:text-zinc-300 transition-colors" title="Copy AWB">
-                                @if (_copiedText == awb)
+            <div class="ot-body">
+                @* ---------------- left: shipment details + milestones ---------------- *@
+                <div class="ot-col">
+                    <dl class="ot-facts">
+                        <div><dt>Courier</dt><dd>@(string.IsNullOrEmpty(o.ShiprocketCourier) ? (o.Courier ?? "Pending assignment") : o.ShiprocketCourier)</dd></div>
+                        <div>
+                            <dt>AWB / tracking code</dt>
+                            <dd>
+                                <span>@(string.IsNullOrEmpty(o.ShiprocketAwb) ? "Not assigned yet" : o.ShiprocketAwb)</span>
+                                @if (!string.IsNullOrEmpty(o.ShiprocketAwb))
                                 {
-                                    <Icon Name="Check" Size="12" Class="text-emerald-400" />
+                                    var awb = o.ShiprocketAwb!;
+                                    <button type="button" @onclick="() => CopyAsync(awb)" class="ot-copy" title="Copy AWB" aria-label="Copy AWB">
+                                        @if (_copiedText == awb) { <Icon Name="Check" Size="13" /> } else { <Icon Name="Copy" Size="13" /> }
+                                    </button>
                                 }
-                                else
-                                {
-                                    <Icon Name="Copy" Size="12" />
-                                }
-                            </button>
-                        }
-                    </span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-zinc-500">Destination</span>
-                    <span class="text-zinc-300">@o.ShippingAddress?.City, @o.ShippingAddress?.Pincode</span>
-                </div>
-            </div>
-
-            @* Milestone Timeline *@
-            <div class="space-y-2.5 pt-1">
-                <span class="text-xs font-semibold text-zinc-200 block uppercase tracking-wider">
-                    Logistics Milestones
-                </span>
-                <div class="space-y-3 pl-2 border-l border-zinc-800 ml-2">
-                    @foreach (var ev in o.DeliveryTrackingEvents)
-                    {
-                        <div class="relative pl-3.5 space-y-0.5">
-                            <span class="@($"absolute -left-[5px] top-1.5 w-2 h-2 rounded-full {(ev.Active ? "bg-white ring-2 ring-zinc-700" : ev.Done ? "bg-emerald-500" : "bg-zinc-700")}")"></span>
-                            <div class="@($"text-xs font-medium {(ev.Active ? "text-white" : ev.Done ? "text-zinc-200" : "text-zinc-500")}")">
-                                @ev.Status
-                            </div>
-                            <div class="text-[10px] text-zinc-500 font-mono">
-                                @ev.Time
-                            </div>
+                            </dd>
                         </div>
-                    }
-                </div>
-            </div>
+                        <div><dt>Destination</dt><dd>@o.ShippingAddress?.City, @o.ShippingAddress?.State @o.ShippingAddress?.Pincode</dd></div>
+                        <div><dt>Order total</dt><dd>₹@o.TotalAmount.ToString("N0")</dd></div>
+                    </dl>
 
-            @* Order actions (Blazor admin additions: courier retry, delivery, e-mail, WhatsApp) *@
-            <div class="space-y-2 pt-1 border-t border-zinc-800/80">
-                <span class="text-xs font-semibold text-zinc-200 block uppercase tracking-wider pt-3">
-                    Order Actions
-                </span>
+                    <section class="ot-timeline-box">
+                        <h4>Logistics milestones</h4>
+                        @if (o.DeliveryTrackingEvents.Count == 0)
+                        {
+                            <p class="ot-empty">No courier updates yet.</p>
+                        }
+                        else
+                        {
+                            <ol class="ot-timeline">
+                                @foreach (var ev in o.DeliveryTrackingEvents)
+                                {
+                                    <li class="@($"{(ev.Active ? "is-active" : ev.Done ? "is-done" : "")}")">
+                                        <span class="ot-dot"></span>
+                                        <div class="ot-ev">@ev.Status</div>
+                                        @if (!string.IsNullOrWhiteSpace(ev.Time)) { <div class="ot-time">@ev.Time</div> }
+                                    </li>
+                                }
+                            </ol>
+                        }
+                    </section>
+                </div>
+
+                @* ---------------- right: actions ---------------- *@
+                <div class="ot-col">
+            @* Order actions, grouped by purpose: Shipping, Documents & messages, Status, Danger zone *@
+            <div class="oa">
+                <h4 class="oa-title">Order actions</h4>
 
                 @if (!string.IsNullOrEmpty(_actionMessage))
                 {
-                    <div class="@($"p-2.5 rounded-lg text-xs flex items-center gap-2 {(_actionOk ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border border-red-500/20 text-red-400")}")">
-                        <Icon Name="@(_actionOk ? "CheckCircle2" : "AlertCircle")" Size="14" Class="shrink-0" />
+                    <div class="@($"oa-msg {(_actionOk ? "is-ok" : "is-bad")}")" role="status">
+                        <Icon Name="@(_actionOk ? "CheckCircle2" : "AlertCircle")" Size="15" Class="shrink-0" />
                         <span>@_actionMessage</span>
                     </div>
                 }
 
-                <div class="flex flex-wrap gap-2">
-                    @if (string.IsNullOrEmpty(o.ShiprocketAwb) && o.FulfillmentStatus == "PENDING")
-                    {
-                        @if (o.PaymentMethod == "COD" || o.PaymentStatus == "PAID")
+                @* ---- Shipping ---- *@
+                @{
+                    var canBook = string.IsNullOrEmpty(o.ShiprocketAwb) && o.FulfillmentStatus == "PENDING";
+                    var shadowfaxLive = o.Courier == "Shadowfax" && !string.IsNullOrEmpty(o.ShiprocketAwb) && o.FulfillmentStatus is not ("CANCELLED" or "DELIVERED" or "RTO");
+                    var canLabel = shadowfaxLive && o.FulfillmentStatus is not ("PICKED_UP" or "IN_TRANSIT" or "OUT_FOR_DELIVERY");
+                }
+                @if (canBook || canLabel || !string.IsNullOrWhiteSpace(_shippingLabelUrl))
+                {
+                    <section class="oa-group">
+                        <h5>Shipping</h5>
+                        @if (canBook)
                         {
-                            @if (o.FulfillmentReadyAt is null)
+                            @if (o.PaymentMethod == "COD" || o.PaymentStatus == "PAID")
                             {
-                                <div class="w-full grid grid-cols-2 gap-2 text-xs text-zinc-300">
-                                    <label>Weight (kg)<input type="number" min="0.001" step="0.001" @bind="_parcelWeight" class="w-full bg-zinc-800 rounded p-2" /></label>
-                                    <label>Length (cm)<input type="number" min="0.01" step="0.01" @bind="_parcelLength" class="w-full bg-zinc-800 rounded p-2" /></label>
-                                    <label>Width (cm)<input type="number" min="0.01" step="0.01" @bind="_parcelBreadth" class="w-full bg-zinc-800 rounded p-2" /></label>
-                                    <label>Height (cm)<input type="number" min="0.01" step="0.01" @bind="_parcelHeight" class="w-full bg-zinc-800 rounded p-2" /></label>
+                                @if (o.FulfillmentReadyAt is null)
+                                {
+                                    <p class="oa-hint">Step 1: enter the packed parcel size, then press Mark packed.</p>
+                                    <div class="oa-fields">
+                                        <label>Weight (kg)<input type="number" min="0.001" step="0.001" @bind="_parcelWeight" /></label>
+                                        <label>Length (cm)<input type="number" min="0.01" step="0.01" @bind="_parcelLength" /></label>
+                                        <label>Width (cm)<input type="number" min="0.01" step="0.01" @bind="_parcelBreadth" /></label>
+                                        <label>Height (cm)<input type="number" min="0.01" step="0.01" @bind="_parcelHeight" /></label>
+                                    </div>
+                                }
+                                else { <p class="oa-hint">Parcel is packed. Book the courier pickup.</p> }
+                                <div class="oa-row">
+                                    @if (o.FulfillmentReadyAt is null)
+                                    {
+                                        <button type="button" disabled="@_busy" @onclick="MarkReadyAsync" class="oa-btn oa-primary"><Icon Name="CheckCircle2" Size="14" /><span>Mark packed</span></button>
+                                    }
+                                    <button type="button" disabled="@(_busy || o.FulfillmentReadyAt is null)" @onclick="RetryShipmentAsync" class="oa-btn oa-primary"><Icon Name="Truck" Size="14" /><span>Book / retry pickup</span></button>
                                 </div>
-                                <button type="button" disabled="@_busy" @onclick="MarkReadyAsync" class="px-2.5 py-1.5 rounded-md bg-zinc-800 text-zinc-200 text-xs">Mark packed</button>
                             }
-                            <button type="button" disabled="@(_busy || o.FulfillmentReadyAt is null)" @onclick="RetryShipmentAsync"
-                                    class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
-                                <Icon Name="Truck" Size="12" />
-                                <span>Book / Retry Pickup</span>
-                            </button>
+                            else
+                            {
+                                <p class="oa-hint is-warn">Verify the online payment before shipping this order.</p>
+                            }
                         }
-                        else
+                        @if (canLabel || !string.IsNullOrWhiteSpace(_shippingLabelUrl))
                         {
-                            <span class="px-2.5 py-1.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">Verify online payment before shipping.</span>
+                            <div class="oa-row">
+                                @if (canLabel)
+                                {
+                                    <button type="button" disabled="@_busy" @onclick="GenerateShipmentLabelAsync" class="oa-btn oa-neutral"><Icon Name="FileText" Size="14" /><span>Generate PDF label</span></button>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_shippingLabelUrl))
+                                {
+                                    <a href="@_shippingLabelUrl" target="_blank" rel="noopener noreferrer" class="oa-btn oa-neutral"><Icon Name="ExternalLink" Size="14" /><span>Open / print label</span></a>
+                                }
+                            </div>
                         }
-                    }
-                    @if (o.Courier == "Shadowfax" && !string.IsNullOrEmpty(o.ShiprocketAwb) && o.FulfillmentStatus is not ("CANCELLED" or "DELIVERED" or "RTO"))
-                    {
-                        @if (o.FulfillmentStatus is not ("PICKED_UP" or "IN_TRANSIT" or "OUT_FOR_DELIVERY"))
-                        {
-                            <button type="button" disabled="@_busy" @onclick="GenerateShipmentLabelAsync"
-                                    class="px-2.5 py-1.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
-                                <Icon Name="FileText" Size="12" />
-                                <span>Generate PDF label</span>
-                            </button>
-                        }
-                        <button type="button" disabled="@_busy" @onclick="CancelShipmentAsync"
-                                class="px-2.5 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
-                            <Icon Name="AlertCircle" Size="12" />
-                            <span>Cancel Shipment</span>
-                        </button>
-                    }
-                    @if (!string.IsNullOrWhiteSpace(_shippingLabelUrl))
-                    {
-                        <a href="@_shippingLabelUrl" target="_blank" rel="noopener noreferrer"
-                           class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors">
-                            <Icon Name="ExternalLink" Size="12" />
-                            <span>Open / print label</span>
-                        </a>
-                    }
-                    @if (o.FulfillmentStatus is not ("CANCELLED" or "DELIVERED" or "RTO" or "OUT_FOR_DELIVERY"))
-                    {
-                        <button type="button" disabled="@_busy" @onclick="CancelOrderAsync"
-                                class="px-2.5 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                                title="Cancels the courier booking, restores stock and tells the customer">
-                            <Icon Name="X" Size="12" />
-                            <span>Cancel Order</span>
-                        </button>
-                    }
-                    @if (o.PaymentStatus == "REFUND_PENDING")
-                    {
-                        <button type="button" disabled="@_busy" @onclick="MarkRefundedAsync"
-                                class="px-2.5 py-1.5 rounded-md bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                                title="Press after you have returned the money to the customer">
-                            <Icon Name="CheckCircle2" Size="12" />
-                            <span>Mark Refunded</span>
-                        </button>
-                    }
-                    @if (CanDelete(o))
-                    {
-                        <button type="button" disabled="@_busy" @onclick="DeleteOrderAsync"
-                                class="px-2.5 py-1.5 rounded-md bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                                title="Permanently removes this order">
-                            <Icon Name="Trash2" Size="12" />
-                            <span>Delete Order</span>
-                        </button>
-                    }
-                    @if (o.DeliveryStatus != "Delivered")
-                    {
-                        <button type="button" disabled="@_busy" @onclick="MarkDeliveredAsync"
-                                class="px-2.5 py-1.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
-                            <Icon Name="CheckCircle2" Size="12" />
-                            <span>Mark Delivered</span>
-                        </button>
-                    }
-                    <button type="button" disabled="@_busy" @onclick="@(() => SendEmailAsync("confirmation"))"
-                            class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
-                        <Icon Name="Mail" Size="12" />
-                        <span>Send Confirmation Email</span>
-                    </button>
-                    <button type="button" disabled="@_busy" @onclick="@(() => SendEmailAsync("delivered"))"
-                            class="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
-                        <Icon Name="Mail" Size="12" />
-                        <span>Send Delivered Email</span>
-                    </button>
-                    <button type="button" disabled="@_busy" @onclick="SendWhatsAppUpdateAsync"
-                            class="px-2.5 py-1.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
-                        <Icon Name="MessageCircle" Size="12" />
-                        <span>WhatsApp update</span>
-                    </button>
+                    </section>
+                }
+
+                @* ---- Documents & customer messages ---- *@
+                <section class="oa-group">
+                    <h5>Invoice &amp; customer messages</h5>
+                    <div class="oa-row">
+                        <button type="button" disabled="@_busy" @onclick="OpenInvoiceAsync" class="oa-btn oa-info" title="Opens the GST invoice (18% GST included in the price)"><Icon Name="FileText" Size="14" /><span>View GST invoice</span></button>
+                        <button type="button" disabled="@_busy" @onclick="@(() => SendEmailAsync("confirmation"))" class="oa-btn oa-neutral"><Icon Name="Mail" Size="14" /><span>Email: order confirmation</span></button>
+                        <button type="button" disabled="@_busy" @onclick="@(() => SendEmailAsync("delivered"))" class="oa-btn oa-neutral"><Icon Name="Mail" Size="14" /><span>Email: delivered</span></button>
+                        <button type="button" disabled="@_busy" @onclick="SendWhatsAppUpdateAsync" class="oa-btn oa-success"><Icon Name="MessageCircle" Size="14" /><span>Send WhatsApp update</span></button>
+                    </div>
+                </section>
+
+                @* ---- Status ---- *@
+                @if (o.DeliveryStatus != "Delivered" || o.PaymentStatus == "REFUND_PENDING")
+                {
+                    <section class="oa-group">
+                        <h5>Order status</h5>
+                        <div class="oa-row">
+                            @if (o.DeliveryStatus != "Delivered")
+                            {
+                                <button type="button" disabled="@_busy" @onclick="MarkDeliveredAsync" class="oa-btn oa-success"><Icon Name="CheckCircle2" Size="14" /><span>Mark as delivered</span></button>
+                            }
+                            @if (o.PaymentStatus == "REFUND_PENDING")
+                            {
+                                <button type="button" disabled="@_busy" @onclick="MarkRefundedAsync" class="oa-btn oa-warn" title="Press after you have returned the money to the customer"><Icon Name="CheckCircle2" Size="14" /><span>Mark as refunded</span></button>
+                            }
+                        </div>
+                    </section>
+                }
+
+                @* ---- Danger zone: kept apart so it cannot be pressed by mistake ---- *@
+                @{
+                    var canCancelOrder = o.FulfillmentStatus is not ("CANCELLED" or "DELIVERED" or "RTO" or "OUT_FOR_DELIVERY");
+                }
+                @if (shadowfaxLive || canCancelOrder || CanDelete(o))
+                {
+                    <section class="oa-group oa-danger-zone">
+                        <h5>Cancel or remove</h5>
+                        <div class="oa-row">
+                            @if (shadowfaxLive)
+                            {
+                                <button type="button" disabled="@_busy" @onclick="CancelShipmentAsync" class="oa-btn oa-danger"><Icon Name="AlertCircle" Size="14" /><span>Cancel shipment</span></button>
+                            }
+                            @if (canCancelOrder)
+                            {
+                                <button type="button" disabled="@_busy" @onclick="CancelOrderAsync" class="oa-btn oa-danger" title="Cancels the courier booking, restores stock and tells the customer"><Icon Name="X" Size="14" /><span>Cancel order</span></button>
+                            }
+                            @if (CanDelete(o))
+                            {
+                                <button type="button" disabled="@_busy" @onclick="DeleteOrderAsync" class="oa-btn oa-danger" title="Permanently removes this order"><Icon Name="Trash2" Size="14" /><span>Delete order</span></button>
+                            }
+                        </div>
+                    </section>
+                }
+            </div>
                 </div>
             </div>
 
-            <div class="pt-2">
-                <button @onclick="CloseOrder"
-                        class="w-full py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-medium transition-colors cursor-pointer">
-                    Close Tracking
-                </button>
-            </div>
+            <footer class="ot-foot"><button type="button" @onclick="CloseOrder" class="oa-btn oa-neutral">Close</button></footer>
         </div>
     </div>
 }
@@ -566,6 +549,16 @@
         if (res.Success) { CloseOrder(); await OnReload.InvokeAsync(); return; }
         _actionOk = false;
         _actionMessage = res.Message ?? "Could not delete the order.";
+    }
+
+    private async Task OpenInvoiceAsync()
+    {
+        if (_selected is null) return;
+        _busy = true; _actionMessage = null;
+        var res = await Api.AdminInvoiceUrlAsync(_selected.Id);
+        _busy = false;
+        if (res.Success && !string.IsNullOrEmpty(res.Data)) await Browser.OpenUrlAsync(res.Data);
+        else { _actionOk = false; _actionMessage = res.Message ?? "Could not open the invoice."; }
     }
 
     private async Task CancelShipmentAsync()

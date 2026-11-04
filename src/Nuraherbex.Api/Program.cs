@@ -62,6 +62,7 @@ builder.Services.AddHttpClient<ShadowfaxService>(http => http.Timeout = TimeSpan
 builder.Services.AddSingleton<ShippingSettingsStore>();
 builder.Services.AddScoped<ShippingGateway>();
 builder.Services.AddSingleton<MediaSigner>();
+builder.Services.AddSingleton<InvoiceService>();
 builder.Services.AddScoped<StaffAvailability>();
 builder.Services.AddScoped<LeadService>();
 builder.Services.Configure<FollowUpOptions>(cfg.GetSection(FollowUpOptions.Section));

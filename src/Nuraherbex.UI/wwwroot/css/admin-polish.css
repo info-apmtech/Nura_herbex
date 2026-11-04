@@ -96,3 +96,108 @@
 
 /* numerals that line up in columns (customer table, amounts) */
 .admin-main .admin-content .tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* ==========================================================================
+   Order actions: grouped panels + soft, light button colours.
+   One colour = one meaning: purple = main step, blue = documents, green = positive/notify,
+   amber = needs attention, red = cancel/remove (kept in its own "danger" group), grey = everything else.
+   ========================================================================== */
+.admin-theme .oa { display: grid; gap: 12px; padding-top: 14px; border-top: 1px solid #ece6f5; }
+.admin-theme .oa-title { font-size: 15px !important; font-weight: 700; color: #1b1233; margin: 0; }
+.admin-theme .oa-group { border: 1px solid #ece6f5; background: #fcfbfe; border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; }
+.admin-theme .oa-group > h5 { margin: 0; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #6b5c85; }
+.admin-theme .oa-danger-zone { background: #fffafa; border-color: #f6dcdc; }
+.admin-theme .oa-danger-zone > h5 { color: #a2504d; }
+.admin-theme .oa-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-theme .oa-hint { margin: 0; font-size: 12.5px; color: #667085; }
+.admin-theme .oa-hint.is-warn { color: #8a5a0b; background: #fff7e6; border: 1px solid #f6e3b4; border-radius: 8px; padding: 8px 10px; }
+.admin-theme .oa-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.admin-theme .oa-fields label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: #4b5563; }
+.admin-theme .oa-fields input { padding: 8px 10px !important; min-height: 36px; font-size: 13.5px; }
+.admin-theme .oa-msg { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; font-size: 13px; border: 1px solid; }
+.admin-theme .oa-msg.is-ok { background: #effaf3; border-color: #cdebd8; color: #1f7a45; }
+.admin-theme .oa-msg.is-bad { background: #fef2f2; border-color: #f5cfcf; color: #b03a3a; }
+
+.admin-theme .oa-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 8px 14px; border-radius: 9px; border: 1px solid transparent; font-size: 13px; font-weight: 600; line-height: 1.2; text-decoration: none; cursor: pointer; transition: background .15s, border-color .15s, box-shadow .15s; }
+.admin-theme .oa-btn:hover:not(:disabled) { box-shadow: 0 1px 4px rgba(55, 19, 90, .12); }
+.admin-theme .oa-btn:disabled { opacity: .5; cursor: not-allowed; }
+.admin-theme .oa-btn:focus-visible { outline: 3px solid #cdb4ee; outline-offset: 2px; }
+.admin-theme .oa-neutral { background: #f5f5f8; border-color: #e3e3ea; color: #3f4756 !important; }
+.admin-theme .oa-neutral:hover:not(:disabled) { background: #ececf2; }
+.admin-theme .oa-primary { background: #efe5fb; border-color: #dcc8f4; color: #4a1a80 !important; }
+.admin-theme .oa-primary:hover:not(:disabled) { background: #e4d5f7; }
+.admin-theme .oa-info { background: #e8f1fd; border-color: #cfe1f8; color: #1d4f91 !important; }
+.admin-theme .oa-info:hover:not(:disabled) { background: #dbe9fb; }
+.admin-theme .oa-success { background: #e8f7ee; border-color: #cbebd7; color: #1f7a45 !important; }
+.admin-theme .oa-success:hover:not(:disabled) { background: #dbf1e4; }
+.admin-theme .oa-warn { background: #fff4de; border-color: #f6e0b0; color: #8a5a0b !important; }
+.admin-theme .oa-warn:hover:not(:disabled) { background: #ffedc8; }
+.admin-theme .oa-danger { background: #fdeeee; border-color: #f6d3d3; color: #b03a3a !important; }
+.admin-theme .oa-danger:hover:not(:disabled) { background: #fbe0e0; }
+.admin-theme .oa-close { width: 100%; }
+.admin-theme .oa-btn svg { flex-shrink: 0; }
+
+/* ==========================================================================
+   Store content (website copy) editor: clear sans-serif type, readable sizes,
+   sentence-case headings instead of tiny uppercase / monospace labels.
+   ========================================================================== */
+.admin-theme .cms-pro { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; color: #3f4756; }
+.admin-theme .cms-pro * { font-family: inherit !important; }
+.admin-theme .cms-pro h2 { font-size: 20px !important; font-weight: 700; color: #1b1233 !important; letter-spacing: -.01em; }
+.admin-theme .cms-pro h3 { font-size: 16px !important; font-weight: 700; text-transform: none !important; letter-spacing: -.005em !important; color: #1b1233 !important; }
+.admin-theme .cms-pro p { font-size: 13.5px !important; color: #667085 !important; }
+.admin-theme .cms-pro label { font-size: 13px !important; font-weight: 600 !important; color: #344054 !important; margin-bottom: 4px; }
+.admin-theme .cms-pro :is(input, textarea) { font-size: 14px !important; line-height: 1.5; font-weight: 400 !important; color: #1f2937 !important; border-radius: 9px; }
+.admin-theme .cms-pro textarea { line-height: 1.6; }
+.admin-theme .cms-pro :is(input, textarea)::placeholder { color: #9aa1ad; }
+.admin-theme .cms-pro [class*="font-mono"] { font-size: 12.5px !important; font-weight: 600 !important; letter-spacing: .02em; color: #6b5c85 !important; }
+.admin-theme .cms-pro [class*="bg-zinc-9"] { border-color: #e8def4 !important; }
+.admin-theme .cms-pro .rounded-lg { border-radius: 14px; }
+.admin-theme .cms-pro button { font-size: 13px !important; font-weight: 600 !important; }
+
+/* ==========================================================================
+   Order tracking dialog: wide two-column layout (shipment + milestones | actions)
+   ========================================================================== */
+.admin-theme .ot-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(20, 12, 36, .55); backdrop-filter: blur(3px); text-align: left; }
+.admin-theme .ot-dialog { width: min(980px, 100%); max-height: calc(100vh - 40px); display: flex; flex-direction: column; background: #fff; border: 1px solid #e8def4; border-radius: 16px; box-shadow: 0 24px 70px rgba(40, 14, 70, .28); overflow: hidden; }
+.admin-theme .ot-head { display: flex; align-items: flex-start; gap: 16px; padding: 18px 22px; border-bottom: 1px solid #efe9f7; background: #faf7fe; }
+.admin-theme .ot-head-text { flex: 1; min-width: 0; }
+.admin-theme .ot-eyebrow { display: block; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6b5c85; }
+.admin-theme .ot-head h3 { margin: 2px 0 0; font-size: 19px !important; font-weight: 800; color: #1b1233; word-break: break-all; font-variant-numeric: tabular-nums; }
+.admin-theme .ot-head p { margin: 2px 0 0; font-size: 13px; color: #667085; }
+.admin-theme .ot-head-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; max-width: 46%; padding-top: 2px; }
+.admin-theme .ot-chip { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #eef0f4; color: #475467; border: 1px solid #e1e4ea; }
+.admin-theme .ot-chip.is-ok { background: #e8f7ee; color: #1f7a45; border-color: #cbebd7; }
+.admin-theme .ot-chip.is-info { background: #e8f1fd; color: #1d4f91; border-color: #cfe1f8; }
+.admin-theme .ot-chip.is-warn { background: #fff4de; color: #8a5a0b; border-color: #f6e0b0; }
+.admin-theme .ot-x { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; border: 1px solid #e3e3ea; background: #fff; color: #667085; cursor: pointer; flex-shrink: 0; }
+.admin-theme .ot-x:hover { background: #f5f5f8; color: #1b1233; }
+.admin-theme .ot-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px; padding: 18px 22px; overflow-y: auto; align-items: start; }
+.admin-theme .ot-col { display: grid; gap: 14px; min-width: 0; }
+.admin-theme .ot-facts { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #ece6f5; border: 1px solid #ece6f5; border-radius: 12px; overflow: hidden; }
+.admin-theme .ot-facts > div { background: #fff; padding: 10px 12px; min-width: 0; }
+.admin-theme .ot-facts dt { font-size: 11.5px; font-weight: 600; color: #6b5c85; text-transform: uppercase; letter-spacing: .04em; }
+.admin-theme .ot-facts dd { margin: 3px 0 0; font-size: 14px; font-weight: 600; color: #1b1233; display: flex; align-items: center; gap: 6px; word-break: break-word; }
+.admin-theme .ot-copy { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; border: 1px solid #e3e3ea; background: #f5f5f8; color: #667085; cursor: pointer; }
+.admin-theme .ot-timeline-box { border: 1px solid #ece6f5; border-radius: 12px; padding: 12px 14px; background: #fcfbfe; }
+.admin-theme .ot-timeline-box h4 { margin: 0 0 10px; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #6b5c85; }
+.admin-theme .ot-empty { margin: 0; font-size: 13px; color: #667085; }
+.admin-theme .ot-timeline { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid #e8def4; display: grid; gap: 12px; max-height: 300px; overflow-y: auto; }
+.admin-theme .ot-timeline li { position: relative; padding-left: 12px; }
+.admin-theme .ot-dot { position: absolute; left: -21px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: #d5cde3; border: 2px solid #fff; }
+.admin-theme .ot-timeline li.is-done .ot-dot { background: #2fa866; }
+.admin-theme .ot-timeline li.is-active .ot-dot { background: #5e209e; box-shadow: 0 0 0 3px #e4d5f7; }
+.admin-theme .ot-ev { font-size: 13.5px; font-weight: 600; color: #98a2b3; }
+.admin-theme .ot-timeline li.is-done .ot-ev, .admin-theme .ot-timeline li.is-active .ot-ev { color: #1b1233; }
+.admin-theme .ot-time { font-size: 12px; color: #667085; margin-top: 1px; }
+.admin-theme .ot-foot { display: none; padding: 12px 22px; border-top: 1px solid #efe9f7; }
+.admin-theme .ot-col > .oa { border-top: 0; padding-top: 0; }
+@media (max-width: 820px) {
+  .admin-theme .ot-body { grid-template-columns: 1fr; }
+  .admin-theme .ot-head-chips { display: none; }
+  .admin-theme .ot-foot { display: block; }
+  .admin-theme .ot-foot .oa-btn { width: 100%; }
+}
+
+/* sidebar count badges: gold = to do, red = something is overdue */
+.admin-theme .admin-nav-item small.is-urgent { background: #e5484d; color: #fff; }

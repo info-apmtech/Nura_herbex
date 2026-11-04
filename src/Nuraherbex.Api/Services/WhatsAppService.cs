@@ -317,7 +317,7 @@ public partial class WhatsAppService(
     // Auto-reply: "NH-123456" or "track" returns the live order status
     // ---------------------------------------------------------------------
 
-    [GeneratedRegex(@"NH-\d{6}", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b\d{14}\b|NH-[0-9A-F]{6,32}", RegexOptions.IgnoreCase)]
     private static partial Regex OrderIdRegex();
 
     private async Task AutoReplyAsync(string phone, string text)

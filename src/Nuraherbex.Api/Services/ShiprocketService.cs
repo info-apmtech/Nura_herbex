@@ -43,7 +43,13 @@ public class ShiprocketService(HttpClient http, IOptions<ShiprocketOptions> opti
         {
             if (_token is not null && DateTime.UtcNow < _tokenExpires) return _token;
             var res = await http.PostAsJsonAsync($"{_o.ApiUrl}/auth/login", new { email = _o.Email, password = _o.Password });
-            if (!res.IsSuccessStatusCode) throw new InvalidOperationException("Failed to authenticate with Shiprocket API");
+            if (!res.IsSuccessStatusCode)
+            {
+                string? reason = null;
+                try { reason = JsonNode.Parse(await res.Content.ReadAsStringAsync())?["message"]?.ToString(); } catch { /* body is not JSON */ }
+                log.LogWarning("[Shiprocket] Login for {Email} was refused: HTTP {Status} {Reason}", _o.Email, (int)res.StatusCode, reason);
+                throw new InvalidOperationException($"Shiprocket refused the login for {_o.Email} (HTTP {(int)res.StatusCode}{(string.IsNullOrWhiteSpace(reason) ? "" : ": " + reason)}). Re-enter the Shiprocket password under Admin > Shipping, save, then press Test.");
+            }
             var json = JsonNode.Parse(await res.Content.ReadAsStringAsync());
             _token = json?["token"]?.GetValue<string>();
             _tokenExpires = DateTime.UtcNow.AddDays(9); // tokens last 10 days

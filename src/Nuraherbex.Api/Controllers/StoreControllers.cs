@@ -258,6 +258,18 @@ public class AuthController(CustomerAuthService auth, OrderService orders, Shipp
         return Ok(new OrderListResponse { Success = true, Count = list.Count, Orders = list });
     }
 
+    /// <summary>Signed link to the GST invoice of one of the signed-in customer's own orders.</summary>
+    [HttpGet("my-orders/{id}/invoice"), Authorize(Roles = "customer")]
+    public async Task<IActionResult> MyOrderInvoice(string id, [FromServices] InvoiceService invoices)
+    {
+        var c = await auth.GetAsync(CurrentId ?? "");
+        if (c is null) return NotFound(new ApiResult { Success = false, Message = "Customer not found" });
+        var order = (await orders.ListForCustomerAsync(c.Email, c.Phone ?? "")).FirstOrDefault(o => o.Id == id);
+        if (order is null) return NotFound(new ApiResult { Success = false, Message = "Order not found" });
+        if (order.FulfillmentStatus == "CANCELLED") return BadRequest(new ApiResult { Success = false, Message = "No invoice is available for a cancelled order." });
+        return Ok(new ApiResult<string> { Success = true, Data = invoices.Url(order.Id) });
+    }
+
     /// <summary>The signed-in customer cancels one of their own orders (only until the courier has collected it).</summary>
     [HttpPost("my-orders/{id}/cancel"), Authorize(Roles = "customer")]
     public async Task<IActionResult> CancelMyOrder(string id, [FromQuery] string? reason)

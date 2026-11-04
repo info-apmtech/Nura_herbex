@@ -402,6 +402,16 @@
                                             </span>
                                         </button>
 
+                                    @* GST invoice (18% GST included in the price) *@
+                                    @if (order.FulfillmentStatus != "CANCELLED")
+                                    {
+                                        <button type="button" disabled="@(_invoiceBusyId == order.Id)" @onclick="() => OpenInvoiceAsync(order)"
+                                                class="w-full py-2 rounded-md bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-slate-200 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50">
+                                            <Icon Name="ExternalLink" Size="13" /><span>@(_invoiceBusyId == order.Id ? "Opening..." : "View GST invoice")</span>
+                                        </button>
+                                        @if (_invoiceErrorFor == order.Id) { <div class="text-xs text-red-300">@_invoiceError</div> }
+                                    }
+
                                     @* Cancel order (only until the courier has collected the parcel) *@
                                     @if (CanCancel(order))
                                     {
@@ -938,6 +948,17 @@ else
 
     /// <summary>A customer can cancel until the courier has collected the parcel.</summary>
     private static bool CanCancel(OrderDto o) => o.FulfillmentStatus is "PENDING" or "SHIPMENT_CREATED" or "AWB_ASSIGNED" or "" or null;
+
+    private string? _invoiceBusyId, _invoiceError, _invoiceErrorFor;
+
+    private async Task OpenInvoiceAsync(OrderDto order)
+    {
+        _invoiceBusyId = order.Id; _invoiceError = null; _invoiceErrorFor = null;
+        var res = await Api.CustomerInvoiceUrlAsync(order.Id);
+        _invoiceBusyId = null;
+        if (res.Success && !string.IsNullOrEmpty(res.Data)) await Browser.OpenUrlAsync(res.Data);
+        else { _invoiceErrorFor = order.Id; _invoiceError = res.Message ?? "Could not open the invoice."; }
+    }
 
     private void StartCancel(string id) { _cancelId = id; _cancelReason = ""; _cancelMsg = null; }
 

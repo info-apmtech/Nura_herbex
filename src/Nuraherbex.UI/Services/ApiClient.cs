@@ -145,6 +145,10 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<ApiResult> AdminMarkRefundedAsync(string orderId) => Call<ApiResult>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/mark-refunded", null, Who.Admin);
     public Task<ApiResult> AdminDeleteOrderAsync(string orderId) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/orders/{Uri.EscapeDataString(orderId)}", null, Who.Admin);
     public Task<ApiResult> CustomerCancelOrderAsync(string orderId, string? reason) => Call<ApiResult>(HttpMethod.Post, $"api/auth/my-orders/{Uri.EscapeDataString(orderId)}/cancel?reason={Uri.EscapeDataString(reason ?? "")}", null, Who.Customer);
+    /// <summary>Full URL of a signed, short-lived GST invoice link, or null with the failure in <c>Message</c>.</summary>
+    public async Task<ApiResult<string>> CustomerInvoiceUrlAsync(string orderId) => Absolute(await Call<ApiResult<string>>(HttpMethod.Get, $"api/auth/my-orders/{Uri.EscapeDataString(orderId)}/invoice", null, Who.Customer));
+    public async Task<ApiResult<string>> AdminInvoiceUrlAsync(string orderId) => Absolute(await Call<ApiResult<string>>(HttpMethod.Get, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/invoice", null, Who.Admin));
+    private ApiResult<string> Absolute(ApiResult<string> r) { if (r.Success && !string.IsNullOrEmpty(r.Data)) r.Data = Url(r.Data); return r; }
     public Task<OrderResponse> AdminMarkDeliveredAsync(string orderId) => Call<OrderResponse>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/deliver", null, Who.Admin);
     public Task<ApiResult> AdminSendEmailAsync(string orderId, string type) => Call<ApiResult>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/send-email", new AdminEmailRequest { Type = type }, Who.Admin);
     public Task<PaymentAttemptListResponse> AdminPaymentsAsync() => Call<PaymentAttemptListResponse>(HttpMethod.Get, "api/admin/payments", null, Who.Admin);

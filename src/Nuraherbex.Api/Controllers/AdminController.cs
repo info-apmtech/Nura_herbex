@@ -211,6 +211,16 @@ public class AdminController(
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Message = ex.Message }); }
     }
 
+    /// <summary>Signed link to the GST invoice for any order.</summary>
+    [HttpGet("orders/{id}/invoice"), Authorize(Roles = "admin,sales")]
+    public async Task<IActionResult> OrderInvoice(string id, [FromServices] InvoiceService invoices)
+    {
+        var order = await orders.GetAsync(id);
+        return order is null
+            ? NotFound(new ApiResult { Success = false, Message = "Order not found" })
+            : Ok(new ApiResult<string> { Success = true, Data = invoices.Url(order.Id) });
+    }
+
     [HttpPost("orders/{id}/deliver"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> Deliver(string id)
     {

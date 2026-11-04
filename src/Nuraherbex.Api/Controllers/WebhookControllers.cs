@@ -94,13 +94,30 @@ public class ShiprocketWebhookController(
     private static Dictionary<string, (string Status, string Text)> StatusMap => ShiprocketStatus.Map;
 
     [HttpPost("webhook")]
-    public async Task<IActionResult> Receive([FromBody] System.Text.Json.JsonElement payload)
+    public async Task<IActionResult> Receive()
     {
         var expected = options.Value.WebhookToken;
-        var supplied = Request.Headers["x-api-key"].FirstOrDefault() ?? Request.Headers.Authorization.FirstOrDefault();
+        var supplied = (Request.Headers["x-api-key"].FirstOrDefault() ?? Request.Headers.Authorization.FirstOrDefault())?.Trim();
+        if (supplied != null && supplied.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) supplied = supplied[7..].Trim();
         if (string.IsNullOrWhiteSpace(expected)) return StatusCode(503);
-        if (supplied != expected)
+        if (supplied != expected.Trim())
             return Unauthorized(new ApiResult { Success = false, Message = "Unauthorized webhook request" });
+
+        // Shiprocket's "Test Webhook" may send an empty or non-JSON body; accept anything and answer 200.
+        System.Text.Json.JsonElement payload;
+        try
+        {
+            using var reader = new StreamReader(Request.Body, Encoding.UTF8);
+            var raw = await reader.ReadToEndAsync();
+            if (string.IsNullOrWhiteSpace(raw)) return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
+            payload = System.Text.Json.JsonDocument.Parse(raw).RootElement.Clone();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
+        }
+        if (payload.ValueKind != System.Text.Json.JsonValueKind.Object)
+            return Ok(new ApiResult { Success = true, Message = "Webhook processed successfully" });
 
         string? Str(string name) => payload.TryGetProperty(name, out var v) ? v.ToString() : null;
         var awb = Str("awb") ?? Str("awb_code");

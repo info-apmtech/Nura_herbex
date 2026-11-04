@@ -54,7 +54,7 @@ public class ShippingSettingsController(
             Shiprocket = new ShiprocketSettingsDto
             {
                 Email = r.Shiprocket.Email.Trim(), PickupLocation = r.Shiprocket.PickupLocation.Trim(),
-                Password = string.IsNullOrWhiteSpace(r.Shiprocket.Password) ? old?.Shiprocket.Password ?? "" : r.Shiprocket.Password,
+                Password = string.IsNullOrWhiteSpace(r.Shiprocket.Password) ? old?.Shiprocket.Password ?? "" : r.Shiprocket.Password.Trim(),
                 Token = string.IsNullOrWhiteSpace(r.Shiprocket.Token) ? old?.Shiprocket.Token ?? "" : r.Shiprocket.Token.Trim(),
             },
             Shadowfax = new ShadowfaxSettingsDto

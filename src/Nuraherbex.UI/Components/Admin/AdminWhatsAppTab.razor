@@ -152,7 +152,7 @@
             <form class="wl-form" @onsubmit="SendAsync" @onsubmit:preventDefault>
                 <div class="wl-two">
                     <label>Phone number <small>with country code</small><input type="tel" required placeholder="+91 98765 43210" @bind="_send.Phone" @bind:event="oninput" /></label>
-                    <label>Order ID <small>optional</small><input type="text" placeholder="NH-123456" @bind="_orderId" @bind:event="oninput" /></label>
+                    <label>Order ID <small>optional</small><input type="text" placeholder="26110412345678" @bind="_orderId" @bind:event="oninput" /></label>
                 </div>
                 @{ var sw = WindowInfo(LastInboundFor(_send.Phone)); }
                 @if (Last10(_send.Phone).Length >= 7)
