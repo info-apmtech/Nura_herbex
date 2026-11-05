@@ -242,7 +242,14 @@ public partial class OrderService(
         db.ChangeTracker.Clear();
         var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
         if (!ShippingGateway.IsShadowfax(order.Courier))
-            throw new InvalidOperationException("Shipping labels are available here for Shadowfax shipments only.");
+        {
+            if (string.IsNullOrWhiteSpace(order.ShiprocketShipmentId))
+                throw new InvalidOperationException("This order has no Shiprocket shipment yet. Book the shipment first.");
+            order.ShippingLabelUrl = await shipping.GenerateShiprocketLabelAsync(order.ShiprocketShipmentId);
+            order.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return order.ShippingLabelUrl;
+        }
         if (string.IsNullOrWhiteSpace(order.ShiprocketAwb) || order.ShiprocketAwb.StartsWith("SR-PENDING-", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("This order does not have a Shadowfax AWB yet. Book the shipment first.");
         if (order.FulfillmentStatus is "CANCELLED" or "PICKED_UP" or "IN_TRANSIT" or "OUT_FOR_DELIVERY" or "DELIVERED" or "RTO")

@@ -21,6 +21,8 @@ public class ShiprocketResult
     public List<TrackingEventDto> TrackingEvents { get; set; } = new();
 }
 
+public record ShiprocketCourierOption(string Courier, string Rate, string Days, string Etd, bool SupportsCod);
+
 public class ShiprocketService(HttpClient http, IOptions<ShiprocketOptions> options, ShippingSettingsStore store, ILogger<ShiprocketService> log)
 {
     private static string? _token;
@@ -210,6 +212,71 @@ public class ShiprocketService(HttpClient http, IOptions<ShiprocketOptions> opti
             return doc.RootElement.TryGetProperty("tracking_data", out var td) ? td.Clone() : null;
         }
         catch { return null; }
+    }
+
+    private static string? FindString(JsonNode? node, string key) => node switch
+    {
+        JsonObject o => o.TryGetPropertyValue(key, out var v) && v is not null ? v.ToString() : o.Select(p => FindString(p.Value, key)).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)),
+        JsonArray a => a.Select(n => FindString(n, key)).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)),
+        _ => null,
+    };
+
+    private async Task<string> RequireTokenAsync() =>
+        await GetTokenAsync() ?? throw new InvalidOperationException("Shiprocket is not configured. Add the API user email and password under Admin > Shipping.");
+
+    /// <summary>GET courier/serviceability: couriers that can deliver to a pincode, with rate and ETD. Pickup pincode comes from the configured pickup location.</summary>
+    public async Task<List<ShiprocketCourierOption>> CheckServiceabilityAsync(string deliveryPincode, decimal weightKg, bool cod)
+    {
+        var token = await RequireTokenAsync();
+        string? pickupPin = null;
+        using (var pr = new HttpRequestMessage(HttpMethod.Get, $"{_o.ApiUrl}/settings/company/pickup"))
+        {
+            pr.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var pres = await http.SendAsync(pr);
+            if (pres.IsSuccessStatusCode)
+                pickupPin = (JsonNode.Parse(await pres.Content.ReadAsStringAsync())?["data"]?["shipping_address"]?.AsArray() ?? [])
+                    .FirstOrDefault(a => string.Equals(a?["pickup_location"]?.GetValue<string>(), _o.PickupLocation, StringComparison.OrdinalIgnoreCase))?["pin_code"]?.ToString();
+        }
+        if (string.IsNullOrWhiteSpace(pickupPin)) throw new InvalidOperationException($"Pickup location \"{_o.PickupLocation}\" was not found in Shiprocket, so its pincode is unknown.");
+
+        var url = $"{_o.ApiUrl}/courier/serviceability/?pickup_postcode={Uri.EscapeDataString(pickupPin)}&delivery_postcode={Uri.EscapeDataString(deliveryPincode)}&weight={weightKg.ToString(System.Globalization.CultureInfo.InvariantCulture)}&cod={(cod ? 1 : 0)}";
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var res = await http.SendAsync(req);
+        var text = await res.Content.ReadAsStringAsync();
+        if (!res.IsSuccessStatusCode) throw new InvalidOperationException(JsonNode.Parse(text)?["message"]?.ToString() ?? $"Serviceability check failed (HTTP {(int)res.StatusCode}).");
+        return (JsonNode.Parse(text)?["data"]?["available_courier_companies"]?.AsArray() ?? [])
+            .Select(c => new ShiprocketCourierOption(
+                c?["courier_name"]?.ToString() ?? "", c?["rate"]?.ToString() ?? "", c?["estimated_delivery_days"]?.ToString() ?? "", c?["etd"]?.ToString() ?? "", c?["cod"]?.ToString() == "1"))
+            .ToList();
+    }
+
+    /// <summary>POST manifests/generate then manifests/print: returns the manifest PDF URL for the shipments.</summary>
+    public async Task<string> GenerateManifestAsync(string shipmentId, string? shiprocketOrderId)
+    {
+        var token = await RequireTokenAsync();
+        var gen = await PostAsync($"{_o.ApiUrl}/manifests/generate", new { shipment_id = new[] { shipmentId } }, token);
+        var url = FindString(gen, "manifest_url");
+        if (string.IsNullOrWhiteSpace(url) && long.TryParse(shiprocketOrderId, out var srId))
+            url = FindString(await PostAsync($"{_o.ApiUrl}/manifests/print", new { order_ids = new[] { srId } }, token), "manifest_url");
+        return string.IsNullOrWhiteSpace(url) ? throw new InvalidOperationException("Shiprocket did not return a manifest URL.") : url;
+    }
+
+    /// <summary>POST courier/generate/label: returns the label PDF URL.</summary>
+    public async Task<string> GenerateLabelAsync(string shipmentId)
+    {
+        var token = await RequireTokenAsync();
+        var url = FindString(await PostAsync($"{_o.ApiUrl}/courier/generate/label", new { shipment_id = new[] { shipmentId } }, token), "label_url");
+        return string.IsNullOrWhiteSpace(url) ? throw new InvalidOperationException("Shiprocket did not return a label URL. The shipment needs an AWB first.") : url;
+    }
+
+    /// <summary>POST orders/print/invoice: returns Shiprocket's invoice PDF URL for the order.</summary>
+    public async Task<string> PrintInvoiceAsync(string shiprocketOrderId)
+    {
+        if (!long.TryParse(shiprocketOrderId, out var srId)) throw new InvalidOperationException("This order has no Shiprocket order id.");
+        var token = await RequireTokenAsync();
+        var url = FindString(await PostAsync($"{_o.ApiUrl}/orders/print/invoice", new { ids = new[] { srId } }, token), "invoice_url");
+        return string.IsNullOrWhiteSpace(url) ? throw new InvalidOperationException("Shiprocket did not return an invoice URL.") : url;
     }
 
     private async Task<JsonNode?> PostAsync(string url, object body, string token)

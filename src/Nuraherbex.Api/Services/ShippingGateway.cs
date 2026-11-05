@@ -71,6 +71,10 @@ public class ShippingGateway(ShiprocketService shiprocket, ShadowfaxService shad
     }
 
     public Task<string> GenerateLabelAsync(string awb) => shadowfax.GenerateLabelAsync(awb);
+    public Task<string> GenerateShiprocketLabelAsync(string shipmentId) => shiprocket.GenerateLabelAsync(shipmentId);
+    public Task<string> GenerateShiprocketManifestAsync(string shipmentId, string? shiprocketOrderId) => shiprocket.GenerateManifestAsync(shipmentId, shiprocketOrderId);
+    public Task<string> PrintShiprocketInvoiceAsync(string shiprocketOrderId) => shiprocket.PrintInvoiceAsync(shiprocketOrderId);
+    public Task<List<ShiprocketCourierOption>> ShiprocketServiceabilityAsync(string pincode, decimal weightKg, bool cod) => shiprocket.CheckServiceabilityAsync(pincode, weightKg, cod);
 
     public Task<JsonElement?> FetchLiveTrackingAsync(string? courier, string? awb) =>
         IsShadowfax(courier) ? shadowfax.FetchLiveTrackingAsync(awb) : shiprocket.FetchLiveTrackingAsync(awb);

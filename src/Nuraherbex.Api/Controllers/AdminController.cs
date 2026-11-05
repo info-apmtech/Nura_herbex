@@ -168,6 +168,37 @@ public class AdminController(
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
+    /// <summary>Shiprocket manifest PDF for the order's shipment (manifests/generate + manifests/print).</summary>
+    [HttpPost("orders/{id}/manifest"), Authorize(Roles = "admin,sales")]
+    public async Task<IActionResult> ShiprocketManifest(string id, [FromServices] ShippingGateway shipping)
+    {
+        var order = await orders.GetAsync(id);
+        if (order is null) return NotFound(new ApiResult { Success = false, Message = "Order not found" });
+        if (ShippingGateway.IsShadowfax(order.Courier) || string.IsNullOrWhiteSpace(order.ShiprocketShipmentId))
+            return BadRequest(new ApiResult { Success = false, Message = "Manifests are available for booked Shiprocket shipments only." });
+        try { return Ok(new ApiResult<string> { Success = true, Data = await shipping.GenerateShiprocketManifestAsync(order.ShiprocketShipmentId, order.ShiprocketOrderId) }); }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
+    }
+
+    /// <summary>Shiprocket's own invoice PDF (orders/print/invoice).</summary>
+    [HttpGet("orders/{id}/shiprocket-invoice"), Authorize(Roles = "admin,sales")]
+    public async Task<IActionResult> ShiprocketInvoice(string id, [FromServices] ShippingGateway shipping)
+    {
+        var order = await orders.GetAsync(id);
+        if (order is null) return NotFound(new ApiResult { Success = false, Message = "Order not found" });
+        try { return Ok(new ApiResult<string> { Success = true, Data = await shipping.PrintShiprocketInvoiceAsync(order.ShiprocketOrderId ?? "") }); }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
+    }
+
+    /// <summary>Shiprocket couriers and rates for a delivery pincode (courier/serviceability).</summary>
+    [HttpGet("shipping/serviceability"), Authorize(Roles = "admin,sales")]
+    public async Task<IActionResult> ShiprocketServiceability([FromQuery] string pincode, [FromQuery] decimal weight, [FromQuery] bool cod, [FromServices] ShippingGateway shipping)
+    {
+        if (string.IsNullOrWhiteSpace(pincode)) return BadRequest(new ApiResult { Success = false, Message = "Pincode is required." });
+        try { return Ok(new ApiResult<List<ShiprocketCourierOption>> { Success = true, Data = await shipping.ShiprocketServiceabilityAsync(pincode.Trim(), weight > 0 ? weight : 0.5m, cod) }); }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
+    }
+
     [HttpPost("/api/shipping/{id}/cancel"), Authorize(Roles = "admin,sales")]
     [HttpPost("orders/{id}/cancel-shipment"), Authorize(Roles = "admin,sales")]
     public async Task<IActionResult> CancelShipment(string id, [FromQuery] string? reason)
