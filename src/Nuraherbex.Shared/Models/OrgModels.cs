@@ -24,6 +24,9 @@ public static class PageCatalog
     [
         new("crm", "Sales dashboard", "Sales & CRM", Crm, "Lead flow, conversion, sales from leads, reply speed and who needs attention."),
         new("leads", "Leads & chat", "Sales & CRM", Crm, "WhatsApp leads, chat, replies, orders for a lead, owner changes."),
+        new("interested", "Hot leads", "Sales & CRM", Crm, "Leads who showed interest and are close to ordering: chat, replies, follow-ups and creating their order."),
+        new("care", "Customer care", "Sales & CRM", Crm, "Paid customers: order updates, chat and support, shown with the sales person who converted them."),
+        new("campaigns", "Ad campaigns", "Sales & CRM", Crm, "Facebook and Instagram ad leads by campaign and ad: leads, customers, sales, spend and cost per lead. Own records: only the leads assigned to the person. Everyone's records: every ad lead, plus spend and Meta sync."),
         new("followups", "Follow-ups", "Sales & CRM", Crm, "Calls and messages to do, reminders, the 15-day journey and its report."),
         new("tasks", "Tasks", "Work", Crm, "Team tasks with owners, due dates, checklists and comments."),
         new("overview", "Store overview", "Store", Admin, "Store dashboard with orders and customers at a glance."),
@@ -37,7 +40,7 @@ public static class PageCatalog
         new("batches", "Batch reports", "Store", Admin, "Product batch / lab reports."),
         new("formulation", "Formulation", "Store", Admin, "Ingredient and metric content."),
         new("content", "Store content", "Store", Admin, "Website text and images."),
-        new("reports", "Reports", "Admin", Admin, "Orders, leads, follow-ups, WhatsApp, tasks, customers and payments reports with CSV, Excel and PDF export."),
+        new("reports", "Reports", "Admin", Crm, "Own records: only the person's own lead, follow-up and task reports. Everyone's records: every report for every employee (orders, leads, follow-ups, WhatsApp, tasks, customers, payments) with CSV, Excel and PDF export."),
         new("whatsapp", "WhatsApp log", "Admin", Admin, "Raw WhatsApp message log and manual sending."),
         new("team", "Team & organisation", "Admin", Admin, "People, departments, designations and page rights, plus assistant and journey settings."),
     ];
@@ -56,7 +59,7 @@ public static class PageCatalog
     /// <summary>What people get when they have no designation yet: the same four CRM pages, own records only.</summary>
     public static readonly IReadOnlyDictionary<string, int> DefaultStaff = new Dictionary<string, int>
     {
-        ["crm"] = 1, ["leads"] = 1, ["followups"] = 1, ["tasks"] = 1,
+        ["crm"] = 1, ["leads"] = 1, ["interested"] = 1, ["care"] = 1, ["followups"] = 1, ["tasks"] = 1,
     };
 
     public static Dictionary<string, int> AllFull() => Pages.ToDictionary(p => p.Key, _ => Full);
@@ -85,13 +88,13 @@ public static class PageCatalog
     /// <summary>Ready-made starting points for the rights editor.</summary>
     public static readonly (string Name, string Hint, Dictionary<string, int> Rights)[] Presets =
     [
-        ("Sales executive", "Works own leads, follow-ups and tasks", new() { ["crm"] = 1, ["leads"] = 1, ["followups"] = 1, ["tasks"] = 1 }),
-        ("Sales manager", "Sees and manages the whole sales team", new() { ["crm"] = 2, ["leads"] = 2, ["followups"] = 2, ["tasks"] = 2, ["customers"] = 1, ["orders"] = 1, ["team"] = 1, ["reports"] = 1 }),
-        ("Customer support", "Helps customers, checks orders and reviews", new() { ["leads"] = 1, ["followups"] = 1, ["tasks"] = 1, ["customers"] = 1, ["orders"] = 1, ["reviews"] = 2 }),
+        ("Sales executive", "Works own leads, hot leads, customers, follow-ups and tasks", new() { ["crm"] = 1, ["leads"] = 1, ["interested"] = 1, ["care"] = 1, ["followups"] = 1, ["tasks"] = 1 }),
+        ("Sales manager", "Sees and manages the whole sales team", new() { ["crm"] = 2, ["leads"] = 2, ["interested"] = 2, ["care"] = 2, ["followups"] = 2, ["tasks"] = 2, ["customers"] = 1, ["orders"] = 1, ["team"] = 1, ["reports"] = 2, ["campaigns"] = 2 }),
+        ("Customer support", "Looks after paid customers, checks orders and reviews", new() { ["leads"] = 1, ["care"] = 1, ["followups"] = 1, ["tasks"] = 1, ["customers"] = 1, ["orders"] = 1, ["reviews"] = 2 }),
         ("Operations", "Packs and ships orders, manages stock", new() { ["tasks"] = 1, ["overview"] = 1, ["orders"] = 2, ["payments"] = 1, ["customers"] = 1, ["products"] = 2, ["batches"] = 2, ["coupons"] = 1 }),
         ("Marketing", "Runs campaigns, coupons, reviews and website content", new() { ["leads"] = 1, ["followups"] = 1, ["tasks"] = 1, ["customers"] = 1, ["reviews"] = 2, ["coupons"] = 2, ["content"] = 2, ["whatsapp"] = 1 }),
         ("Designer", "Creates banners, creatives and product visuals", new() { ["tasks"] = 1, ["products"] = 1, ["content"] = 2, ["formulation"] = 1 }),
-        ("Read-only", "Can look but not change anything", new() { ["crm"] = 1, ["leads"] = 1, ["followups"] = 1, ["tasks"] = 1, ["overview"] = 1, ["orders"] = 1, ["customers"] = 1, ["products"] = 1 }),
+        ("Read-only", "Can look but not change anything", new() { ["crm"] = 1, ["leads"] = 1, ["interested"] = 1, ["care"] = 1, ["followups"] = 1, ["tasks"] = 1, ["overview"] = 1, ["orders"] = 1, ["customers"] = 1, ["products"] = 1 }),
         ("Everything", "Full access to every page", AllFull()),
     ];
 }

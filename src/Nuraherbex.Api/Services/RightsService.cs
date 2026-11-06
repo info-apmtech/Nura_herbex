@@ -116,13 +116,17 @@ public static class PageRules
 
         // team and organisation
         if (Is("/api/admin/employees") || Is("/api/admin/departments") || Is("/api/admin/designations") || Is("/api/admin/rights")) return For(m, "team");
-        if (path == "/api/admin/ai/reply-settings") return Read(m) ? For(m, "leads", "followups") : For(m, "team");
+        if (path == "/api/admin/ai/reply-settings") return Read(m) ? For(m, "leads", "interested", "care", "followups") : For(m, "team");
         if (path == "/api/admin/followups/settings") return Read(m) ? For(m, "followups") : For(m, "team");
-        if (path is "/api/admin/leads/settings" or "/api/admin/leads/after-hours") return For(m, "team");
+        if (path == "/api/admin/leads/settings") return For(m, "team");
+        if (path == "/api/admin/library") return Read(m) ? For(m, "leads", "interested", "care", "followups") : For(m, "team"); // everyone who chats lists the files; Team rights add and delete them
+        if (path.StartsWith("/api/admin/library/")) return For(m, "team");
+        if (path == "/api/admin/leads/templates") return Read(m) ? For(m, "leads", "interested", "care", "followups") : For(m, "team"); // everyone who chats reads them; Team rights edit them
 
         // sales and work
         if (Is("/api/admin/crm")) return For(m, "crm");
-        if (Is("/api/admin/leads")) return For(m, "leads");
+        if (Is("/api/admin/ads")) return For(m, "campaigns"); // the controller limits "own records" to the person's leads and keeps Meta sync for everyone's-records
+        if (Is("/api/admin/leads")) return For(m, "leads", "interested", "care"); // the controller checks the page that fits the person (lead, hot lead or customer)
         if (Is("/api/admin/followups")) return For(m, "followups");
         if (Is("/api/admin/tasks")) return For(m, "tasks");
         if (Is("/api/admin/shipping")) return For(m, "shipping");

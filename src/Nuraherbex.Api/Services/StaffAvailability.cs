@@ -11,10 +11,15 @@ namespace Nuraherbex.Api.Services;
 public class StaffAvailability(NuraDbContext db)
 {
     /// <summary>A staff member who has not checked in for this long is treated as signed out.</summary>
-    public static readonly TimeSpan OnlineWindow = TimeSpan.FromMinutes(2);
+    public static readonly TimeSpan OnlineWindow = TimeSpan.FromMinutes(5); // browsers slow timers in background tabs; 2 minutes wrongly marked people away
 
     public static DateTime OnlineCutoff() => DateTime.UtcNow - OnlineWindow;
     public static bool IsOnline(Employee e) => e.IsActive && e.LastSeenAt is { } s && s >= OnlineCutoff();
+
+    /// <summary>Like <see cref="CheckInAsync"/> but skips the write if they checked in within the last 20 seconds. Used on every staff request.</summary>
+    public Task TouchAsync(long employeeId) =>
+        db.Employees.Where(e => e.Id == employeeId && (e.LastSeenAt == null || e.LastSeenAt < DateTime.UtcNow.AddSeconds(-20)))
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.LastSeenAt, DateTime.UtcNow));
 
     /// <summary>Marks the person as present. Called on sign-in and by every portal check-in.</summary>
     public Task CheckInAsync(long employeeId) =>

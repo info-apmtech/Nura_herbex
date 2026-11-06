@@ -12,14 +12,15 @@ namespace Nuraherbex.Api.Controllers;
 [Authorize(Roles = "admin,sales")]
 public class ReportController(ReportService reports, RightsService rights) : StaffControllerBase(rights)
 {
-    /// <summary>Who may open a report and whose records it covers. Administrators and people with full Reports access see everything;
-    /// everyone else gets the leads, follow-ups and tasks reports for the pages they work on, limited to their own records unless they manage that page.</summary>
+    /// <summary>Who may open a report and whose records it covers. Administrators and people with "everyone's records" on Reports see everything;
+    /// everyone else gets the leads, follow-ups and tasks reports (for pages they work on, or with "own records" on Reports), limited to their own records unless they manage that page.</summary>
     private (bool Allowed, long? OwnerOnly, string? Scope) Access(string key)
     {
         if (IsAdmin || CanAll("reports")) return (true, null, null);
         var page = key switch { "leads" => "leads", "followups" => "followups", "tasks" => "tasks", _ => null };
-        if (page is null || Level(page) < 1) return (false, null, null);
+        if (page is null) return (false, null, null);
         if (CanAll(page)) return (true, null, null);
+        if (Level(page) < 1 && Level("reports") < 1) return (false, null, null); // "Reports: own records" opens these three, limited to the person's own
         return MyId is { } me ? (true, me, "Showing your own records only.") : (false, null, null);
     }
 

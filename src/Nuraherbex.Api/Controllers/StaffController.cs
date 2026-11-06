@@ -42,7 +42,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     {
         var q = db.Employees.AsNoTracking().Where(e => e.IsActive);
         List<long>? allowed = null;
-        if (forPage is "leads" or "followups") allowed = await rightsService.EmployeesWithPageAsync(forPage);
+        if (forPage is "leads" or "followups" or "interested" or "care") allowed = await rightsService.EmployeesWithPageAsync(forPage);
         else if (forPage is null) allowed = await rightsService.EmployeesWithPageAsync("leads"); // the original meaning: people who can own leads
         if (allowed is not null) q = q.Where(e => allowed.Contains(e.Id));
         var team = await q.OrderBy(e => e.Name).Select(e => new EmployeeDto { Id = e.Id, Name = e.Name, Role = e.Role, IsActive = true, DepartmentId = e.DepartmentId, IsOnline = e.LastSeenAt != null && e.LastSeenAt >= StaffAvailability.OnlineCutoff(), WhatsAppActive = e.WhatsAppActive }).ToListAsync();
@@ -59,15 +59,40 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
 
     // ---- Leads -----------------------------------------------------------------------
 
-    /// <param name="assignee">admin only: "unassigned", "me" or an employee id. Sales users always get just their own leads.</param>
-    [HttpGet("leads")]
-    public async Task<LeadListResponse> Leads([FromQuery] string? status, [FromQuery] string? source, [FromQuery] string? q, [FromQuery] string? assignee, [FromQuery] int take = 100)
+    /// <summary>Which page's rights cover a person: paid customers are Customer care, interested leads are Hot leads, everyone else is Leads.</summary>
+    private static string PageOf(Lead l) => l.CustomerSince != null ? LeadViews.Care : l.Status == LeadStatuses.Interested ? LeadViews.Interested : LeadViews.Leads;
+
+    private static IQueryable<Lead> InView(IQueryable<Lead> q, string view) => view switch
     {
-        var baseQuery = db.Leads.AsNoTracking().AsQueryable();
-        if (!CanAll("leads")) baseQuery = baseQuery.Where(l => l.AssignedToEmployeeId == MyId);
+        LeadViews.Care => q.Where(l => l.CustomerSince != null),
+        LeadViews.Interested => q.Where(l => l.CustomerSince == null && l.Status == LeadStatuses.Interested),
+        _ => q.Where(l => l.CustomerSince == null && l.Status != LeadStatuses.Interested),
+    };
+
+    /// <param name="view">leads (new and follow-up), interested (hot leads) or care (paid customers).</param>
+    /// <param name="assignee">managers only: "unassigned", "me" or an employee id. Everyone else always gets just their own people.</param>
+    [HttpGet("leads")]
+    public async Task<LeadListResponse> Leads([FromQuery] string? status, [FromQuery] string? source, [FromQuery] string? q, [FromQuery] string? assignee, [FromQuery] int take = 100, [FromQuery] string? view = null)
+    {
+        view = LeadViews.All.Contains(view ?? "") ? view! : LeadViews.Leads;
+        if (Level(view) < 1) return new LeadListResponse { Success = false, Message = "Your designation does not give you access to this page." };
+
+        // Counts for the panel tabs: how many people sit in each panel the caller may open (scoped to their own when they only see their own).
+        var viewCounts = new Dictionary<string, int>();
+        foreach (var v in LeadViews.All)
+        {
+            if (Level(v) < 1) continue;
+            var vq = InView(db.Leads.AsNoTracking(), v);
+            if (!CanAll(v)) vq = vq.Where(l => l.AssignedToEmployeeId == MyId);
+            viewCounts[v] = await vq.CountAsync();
+        }
+
+        var baseQuery = InView(db.Leads.AsNoTracking(), view);
+        if (!CanAll(view)) baseQuery = baseQuery.Where(l => l.AssignedToEmployeeId == MyId);
         else if (assignee == "unassigned") baseQuery = baseQuery.Where(l => l.AssignedToEmployeeId == null);
         else if (assignee == "me") baseQuery = baseQuery.Where(l => l.AssignedToEmployeeId == MyId);
         else if (long.TryParse(assignee, out var aid)) baseQuery = baseQuery.Where(l => l.AssignedToEmployeeId == aid);
+        var scopeQuery = baseQuery; // before search, for the unread total
 
         if (!string.IsNullOrWhiteSpace(source)) baseQuery = baseQuery.Where(l => l.Source == source);
         if (!string.IsNullOrWhiteSpace(q))
@@ -102,8 +127,9 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
             {
                 var dto = r.l.ToDto(r.c);
                 dto.AssignedToName = r.l.AssignedToEmployeeId is { } eid ? names.GetValueOrDefault(eid) : null;
+                dto.ConvertedByName = r.l.ConvertedByEmployeeId is { } cid ? names.GetValueOrDefault(cid) : null;
                 if (nextFu.TryGetValue(r.l.Id, out var nf)) dto.NextFollowUpAt = nf;
-                if (orderStats.TryGetValue(r.l.Id, out var os)) { dto.OrderCount = os.Count; dto.LifetimeValue = os.Value; dto.LastOrderAt = os.Last; }
+                if (orderStats.TryGetValue(r.l.Id, out var os)) { dto.OrderCount = os.Count; dto.LifetimeValue = os.Value; dto.LastOrderAt = os.Last; dto.OpenOrders = os.Open; }
                 if (lastByLead.TryGetValue(r.l.Id, out var m))
                 {
                     dto.LastMessage = string.IsNullOrEmpty(m.Body) ? Mapping.MessageLabel(m.Type) : m.Body.Length > 90 ? m.Body[..(char.IsHighSurrogate(m.Body[89]) ? 89 : 90)] + "…" : m.Body;
@@ -113,7 +139,9 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
             }).ToList(),
             Total = await filtered.CountAsync(),
             StatusCounts = counts.ToDictionary(c => c.Key, c => c.N),
-            UnassignedCount = CanAll("leads") ? await db.Leads.CountAsync(l => l.AssignedToEmployeeId == null) : 0,
+            ViewCounts = viewCounts,
+            UnreadTotal = await db.Conversations.AsNoTracking().Where(c => c.UnreadCount > 0 && scopeQuery.Any(l => l.Id == c.LeadId)).SumAsync(c => (int?)c.UnreadCount) ?? 0,
+            UnassignedCount = CanAll(view) ? await InView(db.Leads.AsNoTracking(), view).CountAsync(l => l.AssignedToEmployeeId == null) : 0,
         };
     }
 
@@ -133,7 +161,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         return await db.Orders.AsNoTracking().Where(o => forms.Contains(o.CustomerPhone)).OrderByDescending(o => o.CreatedAt).Take(50).ToListAsync();
     }
 
-    private sealed record OrderStat(int Count, decimal Value, DateTime? Last);
+    private sealed record OrderStat(int Count, decimal Value, DateTime? Last, int Open);
 
     private async Task<Dictionary<long, OrderStat>> OrderStatsAsync(IEnumerable<Lead> page)
     {
@@ -146,7 +174,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         foreach (var l in list)
         {
             var mine = orders.Where(o => Last10(o.CustomerPhone) == Last10(l.Phone) && Counts(o)).ToList();
-            if (mine.Count > 0) result[l.Id] = new OrderStat(mine.Count, mine.Sum(o => o.TotalAmount), mine.Max(o => o.CreatedAt));
+            if (mine.Count > 0) result[l.Id] = new OrderStat(mine.Count, mine.Sum(o => o.TotalAmount), mine.Max(o => o.CreatedAt), mine.Count(o => o.FulfillmentStatus != "DELIVERED"));
         }
         return result;
     }
@@ -206,7 +234,10 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     private async Task<Lead?> FindLeadAsync(long id)
     {
         var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == id);
-        return lead is null || (!CanAll("leads") && lead.AssignedToEmployeeId != MyId) ? null : lead;
+        if (lead is null) return null;
+        var page = PageOf(lead); // customers follow Customer care rights, interested leads follow Hot leads rights
+        if (Level(page) < 1) return null;
+        return !CanAll(page) && lead.AssignedToEmployeeId != MyId ? null : lead;
     }
 
     private static NotFoundObjectResult NoLead() => new(new ApiResult { Success = false, Message = "Lead not found" });
@@ -219,6 +250,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         var convo = await db.Conversations.FirstOrDefaultAsync(c => c.LeadId == id);
         var dto = lead.ToDto(convo);
         if (lead.AssignedToEmployeeId is { } eid) dto.AssignedToName = await db.Employees.AsNoTracking().Where(e => e.Id == eid).Select(e => e.Name).FirstOrDefaultAsync();
+        if (lead.ConvertedByEmployeeId is { } cid) dto.ConvertedByName = await db.Employees.AsNoTracking().Where(e => e.Id == cid).Select(e => e.Name).FirstOrDefaultAsync();
         if (convo is { UnreadCount: > 0 }) { convo.UnreadCount = 0; await db.SaveChangesAsync(); }
 
         var messages = await db.WhatsAppMessages.AsNoTracking().Where(m => m.LeadId == id).OrderByDescending(m => m.CreatedAt).Take(200).ToListAsync();
@@ -232,6 +264,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         var leadOrders = await OrdersForAsync(lead);
         var counted = leadOrders.Where(Counts).ToList();
         dto.OrderCount = counted.Count; dto.LifetimeValue = counted.Sum(o => o.TotalAmount); dto.LastOrderAt = counted.Select(o => (DateTime?)o.CreatedAt).Max();
+        dto.OpenOrders = counted.Count(o => o.FulfillmentStatus != "DELIVERED");
         return Ok(new LeadDetailResponse
         {
             Success = true, Lead = dto,
@@ -245,14 +278,35 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
                 ToName = a.ToEmployeeId is { } t ? names.GetValueOrDefault(t) ?? "Former employee" : null,
                 Reason = a.Reason, ChangedBy = a.ChangedBy, CreatedAt = a.CreatedAt,
             }).ToList(),
+            Audit = BuildAudit(history, assignments, names),
         });
+    }
+
+    private static bool IsAutomatic(string? who) => string.IsNullOrEmpty(who) || who is "auto" or "system" or "journey";
+
+    /// <summary>Merges status and owner changes into one timeline so "who moved this, and when" is answered in one place.</summary>
+    private static List<LeadAuditDto> BuildAudit(List<LeadStatusHistory> status, List<LeadAssignmentHistory> owners, Dictionary<long, string> names)
+    {
+        string Who(long? id) => id is { } i ? names.GetValueOrDefault(i) ?? "Former employee" : "nobody";
+        var rows = status.Select(h => new LeadAuditDto
+        {
+            Kind = "status", CreatedAt = h.CreatedAt, Actor = string.IsNullOrEmpty(h.ChangedBy) ? "system" : h.ChangedBy, Automatic = IsAutomatic(h.ChangedBy), Detail = h.Note,
+            Summary = h.FromStatus is null ? $"Status set to {h.ToStatus}" : $"Status {h.FromStatus} → {h.ToStatus}",
+        }).Concat(owners.Select(a => new LeadAuditDto
+        {
+            Kind = "owner", CreatedAt = a.CreatedAt, Actor = string.IsNullOrEmpty(a.ChangedBy) ? "system" : a.ChangedBy, Automatic = IsAutomatic(a.ChangedBy), Detail = a.Reason,
+            Summary = a.FromEmployeeId is null ? $"Assigned to {Who(a.ToEmployeeId)}" : $"Owner {Who(a.FromEmployeeId)} → {Who(a.ToEmployeeId)}",
+        }));
+        return rows.OrderByDescending(r => r.CreatedAt).ToList();
     }
 
     [HttpPut("leads/{id:long}/status")]
     public async Task<IActionResult> LeadStatus(long id, LeadStatusRequest r)
     {
         if (!LeadStatuses.All.Contains(r.Status)) return BadRequest(new ApiResult { Success = false, Message = "Unknown status" });
-        if (await FindLeadAsync(id) is null) return NoLead();
+        var lead = await FindLeadAsync(id);
+        if (lead is null) return NoLead();
+        if (LeadService.StatusBlock(lead, r.Status) is { } blocked) return BadRequest(new ApiResult { Success = false, Message = blocked });
         await leads.ChangeStatusAsync(id, r.Status, r.Note, MyName);
         return Ok(new ApiResult { Success = true, Message = "Status updated" });
     }
@@ -276,7 +330,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         var lead = await FindLeadAsync(id);
         if (lead is null) return NoLead();
         if (r.Status is not ("opted_in" or "unknown")) return BadRequest(new ApiResult { Success = false, Message = "Use opted_in or unknown." });
-        if (lead.ConsentStatus == "opted_out" && r.Status == "opted_in" && !CanAll("leads"))
+        if (lead.ConsentStatus == "opted_out" && r.Status == "opted_in" && !CanAll(PageOf(lead)))
             return BadRequest(new ApiResult { Success = false, Message = "This customer sent STOP. Only an administrator can restore consent, and only if the customer asked." });
         lead.ConsentStatus = r.Status; lead.ConsentAt = DateTime.UtcNow; lead.ConsentSource = $"recorded by {MyName}"; lead.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
@@ -289,14 +343,14 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     {
         var lead = await FindLeadAsync(id);
         if (lead is null) return NoLead();
-        if (r.EmployeeId is null && !CanAll("leads")) return StatusCode(403, new ApiResult { Success = false, Message = "Only an administrator can unassign a lead." });
+        if (r.EmployeeId is null && !CanAll(PageOf(lead))) return StatusCode(403, new ApiResult { Success = false, Message = "Only an administrator can unassign a lead." });
         if (r.EmployeeId is { } target)
         {
             var emp = await db.Employees.AsNoTracking().FirstOrDefaultAsync(e => e.Id == target && e.IsActive);
             if (emp is null) return BadRequest(new ApiResult { Success = false, Message = "That employee is not active." });
-            if (!CanAll("leads") && emp.Role != EmployeeRoles.Sales) return BadRequest(new ApiResult { Success = false, Message = "Leads can only be transferred to a sales employee." });
+            if (!CanAll(PageOf(lead)) && emp.Role != EmployeeRoles.Sales) return BadRequest(new ApiResult { Success = false, Message = "Leads can only be transferred to a sales employee." });
         }
-        await leads.AssignAsync(lead, r.EmployeeId, string.IsNullOrWhiteSpace(r.Reason) ? (CanAll("leads") ? "Assigned by manager" : "Transferred by owner") : r.Reason, MyName);
+        await leads.AssignAsync(lead, r.EmployeeId, string.IsNullOrWhiteSpace(r.Reason) ? (CanAll(PageOf(lead)) ? "Assigned by manager" : "Transferred by owner") : r.Reason, MyName);
         await db.SaveChangesAsync();
         return Ok(new ApiResult { Success = true, Message = r.EmployeeId is null ? "Lead unassigned" : "Lead assigned" });
     }
@@ -316,6 +370,78 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         var ok = await whatsapp.SendTextAsync(lead.Phone, r.Text.Trim(), sentBy: MyName);
         if (ok) log.LogInformation("[Lead] {Who} replied to lead {Id}", MyName, id);
         return Ok(new ApiResult { Success = ok, Message = ok ? "Message sent" : whatsapp.LastError ?? "Message could not be sent. Check the WhatsApp credentials in the server configuration." });
+    }
+
+    /// <summary>Whether a free-form message (text, file or link) may go out now: not opted out and inside the 24-hour window. Otherwise why not.</summary>
+    private async Task<string?> CannotSendFreeFormAsync(Lead lead)
+    {
+        if (lead.ConsentStatus == "opted_out") return "This customer opted out of messages.";
+        var window = await db.Conversations.AsNoTracking().Where(c => c.LeadId == lead.Id).Select(c => c.ServiceWindowExpiresAt).FirstOrDefaultAsync();
+        return window is null || window < DateTime.UtcNow
+            ? "The 24-hour window is closed. Send an approved template first; once the customer replies you can send files and messages again."
+            : null;
+    }
+
+    /// <summary>Send a file from the library: as the WhatsApp attachment itself, or as a message with its link. Only inside the 24-hour window.</summary>
+    [HttpPost("leads/{id:long}/send-file")]
+    public async Task<IActionResult> SendFile(long id, SendFileRequest r, [FromServices] LibraryService library, [FromServices] Microsoft.Extensions.Options.IOptions<Nuraherbex.Api.Options.StoreOptions> store)
+    {
+        var lead = await FindLeadAsync(id);
+        if (lead is null) return NoLead();
+        if (await CannotSendFreeFormAsync(lead) is { } why) return BadRequest(new ApiResult { Success = false, Message = why });
+        var publicBase = string.IsNullOrWhiteSpace(store.Value.ApiPublicUrl) ? $"{Request.Scheme}://{Request.Host}" : store.Value.ApiPublicUrl;
+        var file = await library.FindAsync(r.FileId ?? "", publicBase);
+        if (file is null) return NotFound(new ApiResult { Success = false, Message = "That file is no longer in the library." });
+        var caption = string.IsNullOrWhiteSpace(r.Caption) ? null : r.Caption.Trim()[..Math.Min(r.Caption.Trim().Length, 900)];
+
+        bool ok;
+        if (r.Mode == "link")
+            ok = await whatsapp.SendTextAsync(lead.Phone, (caption is null ? "" : caption + "\n") + $"{file.Title}: {file.Url}", sentBy: MyName);
+        else
+        {
+            if (!file.CanAttach) return BadRequest(new ApiResult { Success = false, Message = $"This {LibraryKinds.Label(file.Kind).ToLowerInvariant()} is too large for WhatsApp to deliver as an attachment. Send it as a link instead." });
+            ok = await whatsapp.SendFileAsync(lead.Phone, file.Kind, file.Url, file.FileName, caption, file.Title, MyName);
+        }
+        if (ok) { await library.CountSentAsync(file.Id); log.LogInformation("[Lead] {Who} sent library file {File} to lead {Id} ({Mode})", MyName, file.Title, id, r.Mode); }
+        return Ok(new ApiResult { Success = ok, Message = ok ? (r.Mode == "link" ? "Link sent" : "File sent") : whatsapp.LastError ?? "The file could not be sent. Check the WhatsApp credentials in the server configuration." });
+    }
+
+    /// <summary>
+    /// Send an approved WhatsApp template. The only message allowed to start a chat or reopen one after the 24-hour window; the customer's reply reopens it.
+    /// Name, sender and order values are filled in here, the rest comes from the person sending.
+    /// </summary>
+    [HttpPost("leads/{id:long}/send-template")]
+    public async Task<IActionResult> SendTemplate(long id, SendTemplateRequest r, [FromServices] MessageTemplateService templates)
+    {
+        var lead = await FindLeadAsync(id);
+        if (lead is null) return NoLead();
+        if (lead.ConsentStatus == "opted_out") return BadRequest(new ApiResult { Success = false, Message = "This customer opted out of messages." });
+        var def = MetaTemplates.Find(r.Name);
+        if (def is null) return BadRequest(new ApiResult { Success = false, Message = "Unknown template." });
+        if (!(await templates.GetAsync()).ApprovedMetaTemplates.Contains(def.Name))
+            return BadRequest(new ApiResult { Success = false, Message = "Meta has not approved this template yet. An administrator marks it approved in Messages & templates after Meta accepts it." });
+
+        var orderId = (await OrdersForAsync(lead)).FirstOrDefault(Counts)?.Id ?? (await OrdersForAsync(lead)).FirstOrDefault()?.Id;
+        var values = new List<string>();
+        for (var i = 0; i < def.Params.Length; i++)
+        {
+            var p = def.Params[i];
+            string? v = p.Kind switch
+            {
+                "name" => LeadService.FirstName(lead.Name, lead.Phone),
+                "agent" => MyName,
+                "order" => orderId,
+                _ => i < r.Params.Count ? r.Params[i] : null,
+            };
+            v = string.Join(' ', (v ?? "").Split(['\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries)).Trim();
+            if (v.Length == 0) return BadRequest(new ApiResult { Success = false, Message = p.Kind == "order" ? "This template mentions an order, but this person has no order yet." : $"Fill in: {p.Label}." });
+            if (v.Length > 120) return BadRequest(new ApiResult { Success = false, Message = $"“{p.Label}” is too long (120 characters at most)." });
+            values.Add(v);
+        }
+
+        var ok = await whatsapp.SendTemplateAsync(lead.Phone, def.Name, values, orderId, MyName, def.Filled(values));
+        if (ok) log.LogInformation("[Lead] {Who} sent template {Template} to lead {Id}", MyName, def.Name, id);
+        return Ok(new ApiResult { Success = ok, Message = ok ? "Template sent. When the customer replies you can message them freely again." : whatsapp.LastError ?? "The template could not be sent. Check that Meta has approved it under this exact name." });
     }
 
     // ---- Reply assistant ------------------------------------------------------------------------
@@ -457,7 +583,8 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
 
         // A deactivated person, or one who can no longer work leads, must not keep leads silently.
         var moved = 0;
-        var canWorkLeads = emp.IsActive && emp.Role == EmployeeRoles.Sales && (await rightsService.EmployeesWithPageAsync("leads")).Contains(emp.Id);
+        var canWorkLeads = emp.IsActive && emp.Role == EmployeeRoles.Sales
+            && (await rightsService.EmployeesWithPageAsync("leads")).Concat(await rightsService.EmployeesWithPageAsync("interested")).Concat(await rightsService.EmployeesWithPageAsync("care")).Contains(emp.Id);
         if ((wasActive && !emp.IsActive) || !canWorkLeads)
             moved = await leads.ReassignOpenLeadsAsync(emp.Id, spreadAcrossTeam: true, MyName);
         return Ok(new EmployeeResponse { Success = true, Message = moved > 0 ? $"Employee updated; {moved} open lead(s) were reassigned." : "Employee updated", Employee = emp.ToDto() });
@@ -486,16 +613,15 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         return Ok(new ApiResult { Success = true, Message = moved > 0 ? $"{emp.Name} removed; {moved} open lead(s) were reassigned." : $"{emp.Name} removed." });
     }
 
-    [HttpGet("leads/after-hours")]
-    public async Task<AfterHoursResponse> GetAfterHours() => new() { Success = true, Settings = await leads.GetAfterHoursAsync() };
+    /// <summary>The message library: automatic replies and ready-made replies per stage. Everyone who works leads or customers may read it; only Team rights change it.</summary>
+    [HttpGet("leads/templates")]
+    public async Task<MessageTemplatesResponse> GetTemplates([FromServices] MessageTemplateService templates) => new() { Success = true, Settings = await templates.GetAsync() };
 
-    [HttpPut("leads/after-hours")]
-    public async Task<IActionResult> SaveAfterHours(AfterHoursSettings r)
+    [HttpPut("leads/templates")]
+    public async Task<IActionResult> SaveTemplates(MessageTemplatesSettings r, [FromServices] MessageTemplateService templates)
     {
-        if (r.Enabled && string.IsNullOrWhiteSpace(r.Message)) return BadRequest(new ApiResult { Success = false, Message = "Write the message customers should receive." });
-        if (r.Message.Length > 1000) return BadRequest(new ApiResult { Success = false, Message = "The message is too long (1000 characters at most)." });
-        await leads.SaveAfterHoursAsync(new AfterHoursSettings { Enabled = r.Enabled, Message = r.Message.Trim() });
-        return Ok(new ApiResult { Success = true, Message = r.Enabled ? "After-hours reply saved. Customers who write when nobody is active will get it." : "After-hours reply is off." });
+        if (await templates.SaveAsync(r) is { } error) return BadRequest(new ApiResult { Success = false, Message = error });
+        return Ok(new ApiResult { Success = true, Message = "Messages saved." });
     }
 
     [HttpPut("leads/settings")]

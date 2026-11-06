@@ -23,9 +23,10 @@ await using var db = new NuraDbContext(dbOptions);
 var waOptions = Options.Create(new WhatsAppOptions { AccessToken = "x", PhoneNumberId = "1", DefaultCountryCode = "91" });
 var fuOptions = new FollowUpOptions();
 fuOptions.Templates["day3-usage"] = new FollowUpTemplate { Name = "usage_check", Params = ["name"] };
-var leads = new LeadService(db, waOptions, NullLogger<LeadService>.Instance);
+var msgTemplates = new MessageTemplateService(db);
+var leads = new LeadService(db, waOptions, NullLogger<LeadService>.Instance, new StaffAvailability(db), msgTemplates);
 var wa = new WhatsAppService(db, http, leads, waOptions, NullLogger<WhatsAppService>.Instance);
-var svc = new FollowUpService(db, leads, wa, Options.Create(fuOptions), Options.Create(new StoreOptions { FrontendUrl = "https://shop.test" }), NullLogger<FollowUpService>.Instance);
+var svc = new FollowUpService(db, leads, wa, Options.Create(fuOptions), Options.Create(new StoreOptions { FrontendUrl = "https://shop.test" }), NullLogger<FollowUpService>.Instance, waOptions, msgTemplates);
 
 // A fixed "now": Monday 12 Oct 2026, 11:00 IST (05:30 UTC).
 var now = new DateTime(2026, 10, 12, 5, 30, 0, DateTimeKind.Utc);
@@ -33,7 +34,7 @@ FollowUpService.Clock = () => now;
 var ist = TimeZoneInfo.FindSystemTimeZoneById(OperatingSystem.IsWindows() ? "India Standard Time" : "Asia/Kolkata");
 DateTime Ist(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(utc, ist);
 
-db.Employees.AddRange(new Employee { Name = "Priya", Email = "p@x.test", Role = "sales" }, new Employee { Name = "Karthik", Email = "k@x.test", Role = "sales" });
+db.Employees.AddRange(new Employee { Name = "Priya", Email = "p@x.test", Role = "sales", LastSeenAt = DateTime.UtcNow, WhatsAppActive = true }, new Employee { Name = "Karthik", Email = "k@x.test", Role = "sales", LastSeenAt = DateTime.UtcNow, WhatsAppActive = true });
 await db.SaveChangesAsync();
 var priya = db.Employees.First(e => e.Name == "Priya").Id; var karthik = db.Employees.First(e => e.Name == "Karthik").Id;
 // Go-live was yesterday, so test orders (created "today") count.
@@ -130,7 +131,7 @@ Check(none is null && errPast is not null, "A follow-up in the past is rejected"
 var (noAccess, errOwner) = await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = lead.Id, Type = "call", DueAt = now.AddDays(1) }, "Karthik", false, karthik);
 Check(noAccess is null && errOwner == "Lead not found.", "A sales user cannot schedule on a colleague's lead");
 var fresh = await db.Leads.FirstAsync(l => l.Phone == "919876500002");
-fresh.Status = LeadStatuses.New; fresh.AssignedToEmployeeId = priya; await db.SaveChangesAsync();
+fresh.Status = LeadStatuses.New; fresh.CustomerSince = null; fresh.AssignedToEmployeeId = priya; await db.SaveChangesAsync(); // a plain lead: customers stay customers
 var (mine, _) = await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = fresh.Id, Type = "call", DueAt = now.AddDays(5), Notes = "Wants 3-month pack" }, "Priya", false, priya);
 Check(mine is not null && mine.RemindAt == mine.DueAt.AddDays(-2) && mine.AssignedToEmployeeId == priya, "Manual follow-up is owned by the lead owner with a 2-day reminder");
 Check((await db.Leads.FirstAsync(l => l.Id == fresh.Id)).Status == LeadStatuses.FollowUp, "Scheduling moves a new lead to Follow-up");
@@ -363,6 +364,139 @@ Check(assistant.GuideFor(rl, "I want to buy 2 packs", prods, [], orderTa.Reply, 
 var healthTa = assistant.GuideFor(rl, "Is it okay with my diabetes tablets?", prods, []);
 var healthTamil = assistant.GuideFor(rl, "Is it okay with my diabetes tablets?", prods, [], healthTa.Reply, "tamil");
 Check(healthTamil.NeedsReview && healthTamil.Intent == "Health question" && healthTamil.Reply.Contains("மருத்துவ"), "A health reply stays flagged for review in Tamil");
+
+// ---- 15. Customer care: a paid order makes a customer; who converted; who looks after them; messages that fit who is writing ----
+{
+    async Task Presence(long id, bool online) { var e = await db.Employees.FirstAsync(x => x.Id == id); e.LastSeenAt = online ? DateTime.UtcNow : null; await db.SaveChangesAsync(); }
+    Order Paid(string id, string phone, string name, string fulfillment = "PENDING") { var o = MakeOrder(id, phone, fulfillment, awb: null); o.PaymentStatus = "PAID"; o.PaymentMethod = "ONLINE"; o.CustomerName = name; return o; }
+    await Presence(priya, true); await Presence(karthik, true);
+
+    var interested = new Lead { Phone = "919811100001", Name = "Ravi Kumar", Source = "whatsapp", Status = LeadStatuses.Interested, AssignedToEmployeeId = priya };
+    db.Leads.Add(interested); await db.SaveChangesAsync();
+    Check(LeadService.StatusBlock(interested, LeadStatuses.Converted) is not null, "A lead cannot be marked Converted by hand");
+
+    var o1 = Paid("NH-CC1", "9811100001", "Ravi Kumar"); db.Orders.Add(o1); await db.SaveChangesAsync();
+    var cust = await leads.UpsertFromOrderAsync(o1);
+    Check(cust.CustomerSince is not null && cust.Status == LeadStatuses.Converted, "A paid order turns the lead into a customer");
+    Check(cust.ConvertedByEmployeeId == priya && cust.AssignedToEmployeeId == priya, "The sales person who owned the lead is recorded as the converter and keeps the customer while available");
+    Check(LeadService.StatusBlock(cust, LeadStatuses.Interested) is not null, "A customer cannot be moved back to a lead status");
+    var since = cust.CustomerSince;
+    await leads.UpsertFromOrderAsync(o1);
+    Check((await db.Leads.FirstAsync(l => l.Id == cust.Id)).CustomerSince == since, "Running again does not change who converted or when");
+
+    await Presence(priya, false);
+    db.Leads.Add(new Lead { Phone = "919811100002", Name = "Mina Devi", Status = LeadStatuses.Interested, AssignedToEmployeeId = priya }); await db.SaveChangesAsync();
+    var o2 = Paid("NH-CC2", "9811100002", "Mina Devi"); db.Orders.Add(o2); await db.SaveChangesAsync();
+    var c2 = await leads.UpsertFromOrderAsync(o2);
+    Check(c2.ConvertedByEmployeeId == priya && c2.AssignedToEmployeeId == karthik, "When the converter is away an available person takes the customer and the converter stays recorded");
+
+    var o3 = Paid("NH-CC3", "9811100003", "Web Buyer"); db.Orders.Add(o3); await db.SaveChangesAsync();
+    var c3 = await leads.UpsertFromOrderAsync(o3);
+    Check(c3.ConvertedByEmployeeId is null && c3.AssignedToEmployeeId == karthik, "A website order has no converter and goes to an available person");
+
+    await Presence(karthik, false);
+    var o4 = Paid("NH-CC4", "9811100004", "Late Buyer"); db.Orders.Add(o4); await db.SaveChangesAsync();
+    var c4 = await leads.UpsertFromOrderAsync(o4);
+    Check(c4.CustomerSince is not null && c4.AssignedToEmployeeId is null, "With nobody available the customer waits unassigned");
+    await Presence(priya, true);
+    Check(await leads.AssignCustomersAsync() >= 1 && (await db.Leads.FirstAsync(l => l.Id == c4.Id)).AssignedToEmployeeId == priya, "An unowned customer goes to the next available person");
+
+    // messages that fit who is writing (nobody is online now, so after-hours applies)
+    await Presence(priya, false);
+    var newLead = new Lead { Phone = "919811100005", Name = "Sathish Kumar", Status = LeadStatuses.New }; db.Leads.Add(newLead); await db.SaveChangesAsync();
+    var hi = await leads.GreetingAsync(newLead);
+    Check(hi is not null && hi.Contains("Sathish") && !hi.Contains("track", StringComparison.OrdinalIgnoreCase), "A lead's greeting is professional and offers no order tracking");
+    var away = await leads.AfterHoursReplyAsync(newLead);
+    Check(away is not null && away.Contains("Sathish") && !away.Contains("track", StringComparison.OrdinalIgnoreCase), "The after-hours reply to a lead offers no order tracking");
+    var awayHot = await leads.AfterHoursReplyAsync(new Lead { Id = 9999, Phone = "919811100006", Name = "Hot Lead", Status = LeadStatuses.Interested });
+    Check(awayHot is not null && awayHot.Contains("interest") && !awayHot.Contains("track", StringComparison.OrdinalIgnoreCase), "Interested leads get their own after-hours wording, without tracking");
+    var awayCust = await leads.AfterHoursReplyAsync(c2);
+    Check(awayCust is not null && awayCust.Contains("track") && awayCust.Contains("NH-CC2"), "A customer with an order on its way is offered tracking after hours");
+    var greetCust = await leads.GreetingAsync(c2);
+    Check(greetCust is not null && greetCust.Contains("NH-CC2") && greetCust.Contains("track"), "A customer's greeting mentions the order on its way");
+    o2.FulfillmentStatus = "DELIVERED"; await db.SaveChangesAsync();
+    var awayDone = await leads.AfterHoursReplyAsync(c2);
+    var greetDone = await leads.GreetingAsync(c2);
+    Check(awayDone is not null && !awayDone.Contains("track", StringComparison.OrdinalIgnoreCase) && greetDone is not null && !greetDone.Contains("track", StringComparison.OrdinalIgnoreCase), "Once every order is delivered customers are no longer offered tracking");
+
+    // the one-time welcome after the first paid order: inside the 24-hour window it goes as text, and only once
+    await Presence(priya, true);
+    db.Conversations.Add(new Conversation { LeadId = cust.Id, LastInboundAt = now, ServiceWindowExpiresAt = now.AddHours(5) });
+    await db.SaveChangesAsync();
+    sent.Clear();
+    await svc.RunCycleAsync();
+    Check(sent.Count(s => s.Contains("919811100001") && s.Contains("thank you for your order NH-CC1")) == 1 && (await db.Leads.FirstAsync(l => l.Id == cust.Id)).WelcomeSentAt is not null, "A new customer gets the welcome message once, inside the 24-hour window");
+    await svc.RunCycleAsync();
+    Check(sent.Count(s => s.Contains("thank you for your order NH-CC1")) == 1, "The welcome is not sent twice");
+    Check(!sent.Any(s => s.Contains("919811100002") && s.Contains("thank you for your order")), "No welcome is sent outside the window without an approved template");
+
+    // message library: defaults, editing, validation
+    var tmpl = new MessageTemplateService(db);
+    var lib = await tmpl.GetAsync();
+    Check(MessageDefaults.Automatic().All(a => lib.Items.Any(i => i.Key == a.Key)) && lib.Items.Any(i => i.Group == "reply" && i.Stage == MessageStages.Customer), "The message library starts with every automatic message and ready-made replies per stage");
+    lib.Items.First(i => i.Key == MessageKeys.GreetingLead).Body = "Namaste {name}!";
+    Check(await tmpl.SaveAsync(lib) is null && (await leads.GreetingAsync(newLead))! == "Namaste Sathish!", "An edited automatic message is used straight away");
+    lib.Items.First(i => i.Key == MessageKeys.GreetingLead).Body = " ";
+    Check(await tmpl.SaveAsync(lib) is not null, "An automatic message cannot be saved empty");
+}
+
+await AdsChecks.RunAsync(db, Check);
+
+// ---- 16. File library, sending files, approved WhatsApp templates -------------------------------------------------
+{
+    var libDir = Path.Combine(Path.GetTempPath(), "nura-lib-" + Guid.NewGuid().ToString("N")[..8]);
+    var lib = new LibraryService(db, Options.Create(new WhatsAppOptions { LibraryPath = libDir }), NullLogger<LibraryService>.Instance);
+    LibraryFileDto? pdf;
+    await using (var ms = new MemoryStream(LibraryService.SamplePdf()))
+    {
+        var (f, _) = await lib.AddAsync(ms, "Usage Guide.pdf", "Usage guide", "How to take it", "Admin", "https://api.test");
+        pdf = f;
+    }
+    Check(pdf is not null && pdf.Kind == LibraryKinds.Pdf && pdf.Url.StartsWith($"https://api.test/api/library/{pdf.Id}/") && pdf.Url.EndsWith("/Usage%20Guide.pdf"), "A PDF is added to the library with its own public link");
+    await using (var junk = new MemoryStream([1, 2, 3, 4]))
+        Check((await lib.AddAsync(junk, "tool.exe", "x", null, "Admin", "https://api.test")).File is null, "A program file is refused");
+    await using (var fake = new MemoryStream("MZ this is not a pdf"u8.ToArray()))
+        Check((await lib.AddAsync(fake, "guide.pdf", "x", null, "Admin", "https://api.test")).File is null, "A file that is not really a PDF is refused");
+    await using (var empty = new MemoryStream())
+        Check((await lib.AddAsync(empty, "empty.pdf", "x", null, "Admin", "https://api.test")).File is null, "An empty file is refused");
+    var token = pdf!.Url.Split('/')[^2];
+    var opened = await lib.OpenAsync(pdf.Id, token);
+    Check(opened is not null && File.Exists(opened.Value.Path) && opened.Value.Mime == "application/pdf", "The public link opens the file");
+    Check(await lib.OpenAsync(pdf.Id, new string('0', token.Length)) is null && await lib.OpenAsync("nope", token) is null, "A wrong token or id opens nothing");
+    Check((await lib.UpdateAsync(pdf.Id, "Stamix guide", "New text", "https://api.test"))?.Title == "Stamix guide", "A file can be renamed");
+    Check(LibraryKinds.CanAttach(LibraryKinds.Video, 20L * 1024 * 1024) == false && LibraryKinds.CanAttach(LibraryKinds.Video, 10L * 1024 * 1024) && LibraryKinds.CanAttach(LibraryKinds.Pdf, 50L * 1024 * 1024), "Videos over 16 MB can only go as a link; PDFs up to 100 MB can be attached");
+
+    sent.Clear();
+    await wa.SendFileAsync("9811100009", LibraryKinds.Pdf, pdf.Url, "Usage Guide.pdf", "Here is the guide", "Stamix guide", "Priya");
+    Check(sent.Count == 1 && sent[0].Contains("\"type\":\"document\"") && sent[0].Contains("\"filename\":\"Usage Guide.pdf\"") && sent[0].Contains(pdf.Url) && sent[0].Contains("Here is the guide"), "A PDF goes out as a WhatsApp document with its link, name and caption");
+    sent.Clear();
+    await wa.SendFileAsync("9811100009", LibraryKinds.Video, "https://api.test/v.mp4", "v.mp4", null, "Product video", "Priya");
+    Check(sent.Count == 1 && sent[0].Contains("\"type\":\"video\"") && !sent[0].Contains("filename") && !sent[0].Contains("caption"), "A video goes out as a WhatsApp video without a caption field");
+    var fileMsg = await db.WhatsAppMessages.OrderByDescending(m => m.Id).FirstAsync();
+    Check(fileMsg.Type == "file" && fileMsg.Body!.StartsWith("📎 Product video") && fileMsg.SentBy == "Priya", "The chat records the file as a message from the sender");
+    sent.Clear();
+    await wa.SendTemplateAsync("9811100009", "nura_feedback", ["Asha"], null, "Priya", "Hello Asha, how are you?");
+    var tplMsg = await db.WhatsAppMessages.OrderByDescending(m => m.Id).FirstAsync();
+    Check(sent[0].Contains("nura_feedback") && tplMsg.Body == "[template:nura_feedback] Hello Asha, how are you?", "A template is shown in the chat as the text the customer reads");
+
+    Check(MetaTemplates.All.Select(t => t.Name).Distinct().Count() == MetaTemplates.All.Length, "Template names are unique");
+    Check(MetaTemplates.All.All(t => Enumerable.Range(1, t.Params.Length).All(i => t.Body.Contains("{{" + i + "}}")) && !t.Body.Contains("{{" + (t.Params.Length + 1) + "}}")), "Every template uses each of its variables and none more");
+    Check(MetaTemplates.All.All(t => !t.Body.StartsWith("{{") && !t.Body.TrimEnd().EndsWith("}}") && !t.Sampled().Contains("{{")), "No template starts or ends with a variable (Meta rejects that)");
+    Check(MetaTemplates.All.All(t => t.Category is MetaTemplates.Utility or MetaTemplates.Marketing) && MetaTemplates.All.Any(t => t.Stage == MessageStages.Customer) && MetaTemplates.All.Any(t => t.Stage == MessageStages.Interested), "Templates cover leads, interested leads and customers");
+
+    var lib2 = await new MessageTemplateService(db).GetAsync();
+    lib2.ApprovedMetaTemplates = ["nura_feedback", "made_up", "nura_feedback"];
+    Check(await new MessageTemplateService(db).SaveAsync(lib2) is null && (await new MessageTemplateService(db).GetAsync()).ApprovedMetaTemplates.SequenceEqual(["nura_feedback"]), "Only real templates can be marked approved, once each");
+
+    await using var seedDb = new NuraDbContext(new DbContextOptionsBuilder<NuraDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+    var seedLib = new LibraryService(seedDb, Options.Create(new WhatsAppOptions { LibraryPath = Path.Combine(libDir, "seed") }), NullLogger<LibraryService>.Instance);
+    await seedLib.SeedSamplesAsync();
+    var seeded = await seedLib.ListAsync("https://api.test");
+    await seedLib.SeedSamplesAsync();
+    Check(seeded.Count >= 1 && seeded.Any(s => s.Kind == LibraryKinds.Pdf) && (await seedLib.ListAsync("https://api.test")).Count == seeded.Count, "Sample files are added once, and not again after they are deleted or changed");
+    Check(await lib.DeleteAsync(pdf.Id) && await lib.OpenAsync(pdf.Id, token) is null && !File.Exists(opened.Value.Path), "Deleting a file removes it and closes its link");
+    try { Directory.Delete(libDir, true); } catch { /* temp folder */ }
+}
 
 Console.WriteLine($"\n{checks} follow-up checks passed. No external services contacted.");
 

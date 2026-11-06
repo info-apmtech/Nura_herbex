@@ -21,6 +21,7 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
     public DbSet<Lead> Leads => Set<Lead>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<LeadSourceEvent> LeadSourceEvents => Set<LeadSourceEvent>();
+    public DbSet<AdInsightDaily> AdInsights => Set<AdInsightDaily>();
     public DbSet<LeadStatusHistory> LeadStatusHistory => Set<LeadStatusHistory>();
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<FollowUp> FollowUps => Set<FollowUp>();
@@ -232,6 +233,22 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.HasKey(x => x.Id);
             e.Property(x => x.Source).HasMaxLength(32);
             e.HasIndex(x => x.LeadId);
+        });
+
+        b.Entity<AdInsightDaily>(e =>
+        {
+            e.ToTable("ad_insights_daily");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Date).HasColumnType("date");
+            e.Property(x => x.AdId).HasMaxLength(40);
+            e.Property(x => x.AdName).HasMaxLength(300);
+            e.Property(x => x.AdSetId).HasMaxLength(40);
+            e.Property(x => x.AdSetName).HasMaxLength(300);
+            e.Property(x => x.CampaignId).HasMaxLength(40);
+            e.Property(x => x.CampaignName).HasMaxLength(300);
+            e.Property(x => x.Spend).HasPrecision(18, 2);
+            e.HasIndex(x => new { x.Date, x.AdId }).IsUnique();
+            e.HasIndex(x => x.CampaignId);
         });
 
         b.Entity<LeadStatusHistory>(e =>

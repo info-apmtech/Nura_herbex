@@ -11,10 +11,14 @@
     <div class="org-tabs" role="tablist">
         <button type="button" role="tab" aria-selected="@(_tab == "people")" class="@(_tab == "people" ? "is-active" : "")" @onclick='() => _tab = "people"'><Icon Name="Users" Size="15" /> People</button>
         <button type="button" role="tab" aria-selected="@(_tab == "departments")" class="@(_tab == "departments" ? "is-active" : "")" @onclick='() => _tab = "departments"'><Icon Name="MapPin" Size="15" /> Departments</button>
+        <button type="button" role="tab" aria-selected="@(_tab == "files")" class="@(_tab == "files" ? "is-active" : "")" @onclick='() => _tab = "files"'><Icon Name="FileText" Size="15" /> File library</button>
+        <button type="button" role="tab" aria-selected="@(_tab == "messages")" class="@(_tab == "messages" ? "is-active" : "")" @onclick='() => _tab = "messages"'><Icon Name="MessageCircle" Size="15" /> Messages &amp; templates</button>
         <button type="button" role="tab" aria-selected="@(_tab == "designations")" class="@(_tab == "designations" ? "is-active" : "")" @onclick='() => _tab = "designations"'><Icon Name="ShieldCheck" Size="15" /> Designations &amp; page rights</button>
     </div>
     @if (_tab == "people") { <AdminEmployeesTab /> }
     else if (_tab == "departments") { <AdminDepartmentsPanel /> }
+    else if (_tab == "messages") { <AdminMessageTemplates /> }
+    else if (_tab == "files") { <AdminFileLibrary /> }
     else { <AdminDesignationsPanel /> }
 </div>
 

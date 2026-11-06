@@ -31,6 +31,9 @@ public abstract class StaffControllerBase(RightsService rightsService) : Control
             context.Result = Unauthorized(new ApiResult { Success = false, Message = "This account has been deactivated." });
             return;
         }
+        // Any activity proves the person is here, not only the bell's 30-second poll (which browsers throttle in background tabs).
+        if (MyId is { } me && !Request.Path.Value!.EndsWith("/presence/offline", StringComparison.OrdinalIgnoreCase))
+            await context.HttpContext.RequestServices.GetRequiredService<StaffAvailability>().TouchAsync(me);
         await next();
     }
 }

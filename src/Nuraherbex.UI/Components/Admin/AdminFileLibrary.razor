@@ -1,0 +1,169 @@
+@inject ApiClient Api
+@inject BrowserInterop Browser
+
+@* File library: upload a PDF, video or image once; staff then send it to customers from the chat, as a WhatsApp attachment or as a link. *@
+<div class="ld em fl">
+    <div class="em-head">
+        <div>
+            <h3>File library</h3>
+            <p>Upload a guide, video or report once. Your team sends it from the chat with one click, as a WhatsApp attachment or as a link. Deleting a file closes its link.</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="@($"em-note {(_ok ? "ok" : "bad")}")" role="status"><Icon Name="@(_ok ? "CheckCircle2" : "AlertCircle")" Size="15" /><span>@_message</span><button type="button" class="em-x" aria-label="Dismiss" @onclick="() => _message = null"><Icon Name="X" Size="14" /></button></div>
+    }
+
+    <form class="ld-card fl-upload" @onsubmit="UploadAsync" @onsubmit:preventDefault>
+        <h4>Add a file</h4>
+        <div class="fl-drop @(_picked is null ? "" : "has-file")">
+            <label class="fl-pick">
+                <Icon Name="Upload" Size="18" />
+                <span>@(_picked is null ? "Choose a PDF, video or image" : _picked.Name)</span>
+                <small>@(_picked is null ? "PDF, MP4, JPG, PNG, Word, Excel, PowerPoint · up to 100 MB" : Size(_picked.Size))</small>
+                <InputFile OnChange="OnPicked" accept=".pdf,.mp4,.3gp,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" disabled="@_busy" />
+            </label>
+        </div>
+        <div class="em-grid">
+            <label>Title <small class="em-hint">what your team sees</small><input type="text" maxlength="120" @bind="_title" @bind:event="oninput" placeholder="e.g. Stamix usage guide" /></label>
+            <label>Description <small class="em-hint">optional</small><input type="text" maxlength="400" @bind="_desc" @bind:event="oninput" placeholder="When to send it" /></label>
+        </div>
+        <p class="fu-hint">WhatsApp delivers videos up to 16 MB and images up to 5 MB as attachments. Larger files can still be sent as a link.</p>
+        <div class="ld-actions">
+            <button type="submit" class="ld-btn primary" disabled="@(_busy || _picked is null)">@(_busy ? "Uploading…" : "Upload to the library")</button>
+        </div>
+    </form>
+
+    @if (_loading) { <div class="ld-card ld-empty">Loading…</div> }
+    else if (_files.Count == 0) { <div class="ld-card ld-empty"><strong>No files yet</strong>Add your first guide or video above.</div> }
+    else
+    {
+        <div class="fl-grid">
+            @foreach (var f in _files)
+            {
+                var file = f;
+                <article class="fl-card" @key="file.Id">
+                    <div class="@($"fl-thumb {file.Kind}")" aria-hidden="true">
+                        @if (file.Kind == LibraryKinds.Image) { <img src="@file.Url" alt="" loading="lazy" /> }
+                        else { <span>@KindEmoji(file.Kind)</span> }
+                        <b>@LibraryKinds.Label(file.Kind)</b>
+                    </div>
+                    @if (_editing == file.Id)
+                    {
+                        <div class="fl-body">
+                            <input type="text" maxlength="120" aria-label="Title" @bind="_editTitle" @bind:event="oninput" />
+                            <input type="text" maxlength="400" aria-label="Description" placeholder="Description (optional)" @bind="_editDesc" @bind:event="oninput" />
+                            <div class="fl-actions">
+                                <button type="button" class="ld-btn primary" disabled="@_busy" @onclick="() => SaveEditAsync(file)">Save</button>
+                                <button type="button" class="ld-btn" @onclick="() => _editing = null">Cancel</button>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="fl-body">
+                            <strong>@file.Title</strong>
+                            @if (!string.IsNullOrWhiteSpace(file.Description)) { <p>@file.Description</p> }
+                            <small>@file.FileName · @Size(file.Size) · @AdminFmt.DateTimeShort(file.CreatedAt) · @file.UploadedBy</small>
+                            <div class="fl-tags">
+                                <span class="ld-pill converted">Sent @file.TimesSent time@(file.TimesSent == 1 ? "" : "s")</span>
+                                @if (!file.CanAttach) { <span class="ld-pill follow-up" title="Too large to deliver as a WhatsApp attachment">Link only</span> }
+                            </div>
+                            <div class="fl-actions">
+                                <a class="ld-btn" href="@file.Url" target="_blank" rel="noopener"><Icon Name="ExternalLink" Size="13" /> Open</a>
+                                <button type="button" class="ld-btn" @onclick="() => CopyAsync(file)"><Icon Name="Copy" Size="13" /> @(_copied == file.Id ? "Copied" : "Copy link")</button>
+                                <button type="button" class="ld-btn" @onclick="() => StartEdit(file)"><Icon Name="Edit3" Size="13" /> Rename</button>
+                                @if (_removing == file.Id)
+                                {
+                                    <span class="em-confirm">Delete? <button type="button" class="ld-btn danger" disabled="@_busy" @onclick="() => DeleteAsync(file)">Yes</button> <button type="button" class="ld-btn" @onclick="() => _removing = null">Keep</button></span>
+                                }
+                                else { <button type="button" class="ld-btn danger-outline" aria-label="Delete @file.Title" @onclick="() => _removing = file.Id"><Icon Name="Trash2" Size="13" /></button> }
+                            </div>
+                        </div>
+                    }
+                </article>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<LibraryFileDto> _files = new();
+    private IBrowserFile? _picked;
+    private string _title = "", _desc = "";
+    private string? _message, _editing, _removing, _copied;
+    private string _editTitle = "", _editDesc = "";
+    private bool _loading = true, _busy, _ok;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var res = await Api.AdminLibraryAsync();
+        if (res.Success) _files = res.Files; else Say(res.Message ?? "Could not load the library.", false);
+        _loading = false;
+    }
+
+    private void Say(string? text, bool ok) { _message = text; _ok = ok; }
+
+    private void OnPicked(InputFileChangeEventArgs e)
+    {
+        _picked = e.File;
+        if (string.IsNullOrWhiteSpace(_title)) _title = System.IO.Path.GetFileNameWithoutExtension(e.File.Name);
+    }
+
+    private async Task UploadAsync()
+    {
+        if (_picked is null) return;
+        _busy = true; StateHasChanged();
+        try
+        {
+            await using var stream = _picked.OpenReadStream(LibraryKinds.MaxUpload);
+            var res = await Api.AdminLibraryUploadAsync(_title, _desc, _picked.Name, _picked.ContentType, stream);
+            Say(res.Message, res.Success);
+            if (res.Success) { _picked = null; _title = ""; _desc = ""; await LoadAsync(); }
+        }
+        catch (IOException) { Say("That file is larger than 100 MB.", false); }
+        _busy = false;
+    }
+
+    private void StartEdit(LibraryFileDto f) { _editing = f.Id; _editTitle = f.Title; _editDesc = f.Description ?? ""; _removing = null; }
+
+    private async Task SaveEditAsync(LibraryFileDto f)
+    {
+        _busy = true;
+        var res = await Api.AdminLibraryUpdateAsync(f.Id, new LibraryUpdateRequest { Title = _editTitle, Description = _editDesc });
+        Say(res.Message, res.Success);
+        if (res.Success) { _editing = null; await LoadAsync(); }
+        _busy = false;
+    }
+
+    private async Task DeleteAsync(LibraryFileDto f)
+    {
+        _busy = true;
+        var res = await Api.AdminLibraryDeleteAsync(f.Id);
+        Say(res.Message, res.Success);
+        _removing = null;
+        if (res.Success) await LoadAsync();
+        _busy = false;
+    }
+
+    private async Task CopyAsync(LibraryFileDto f)
+    {
+        await Browser.CopyToClipboardAsync(f.Url);
+        _copied = f.Id;
+        StateHasChanged();
+        await Task.Delay(1800);
+        if (_copied == f.Id) { _copied = null; StateHasChanged(); }
+    }
+
+    internal static string KindEmoji(string kind) => kind switch { LibraryKinds.Video => "🎬", LibraryKinds.Image => "🖼️", LibraryKinds.Pdf => "📄", _ => "📎" };
+
+    internal static string Size(long bytes) => bytes switch
+    {
+        >= 1024 * 1024 => $"{bytes / 1024.0 / 1024.0:0.#} MB",
+        >= 1024 => $"{bytes / 1024.0:0} KB",
+        _ => $"{bytes} B",
+    };
+}

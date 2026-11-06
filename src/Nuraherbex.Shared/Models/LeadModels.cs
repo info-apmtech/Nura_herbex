@@ -38,6 +38,14 @@ public class LeadDto
     public long? AssignedToEmployeeId { get; set; }
     public string? AssignedToName { get; set; }
     public DateTime? AssignedAt { get; set; }
+    /// <summary>Set when the first paid (or cash-on-delivery) order is placed. Such a person is a customer and is looked after in Customer care.</summary>
+    public DateTime? CustomerSince { get; set; }
+    public bool IsCustomer => CustomerSince is not null;
+    /// <summary>The sales person who owned the lead when it became a customer (null for a plain website order).</summary>
+    public long? ConvertedByEmployeeId { get; set; }
+    public string? ConvertedByName { get; set; }
+    /// <summary>Confirmed orders that are not delivered, cancelled or returned yet.</summary>
+    public int OpenOrders { get; set; }
     /// <summary>Soonest pending follow-up, if any.</summary>
     public DateTime? NextFollowUpAt { get; set; }
     /// <summary>Orders placed by this customer (matched by phone) and what they are worth.</summary>
@@ -63,6 +71,17 @@ public class LeadListResponse : ApiResult
     public int UnassignedCount { get; set; }
     /// <summary>Lead count per status (ignores the status filter, honours search/source).</summary>
     public Dictionary<string, int> StatusCounts { get; set; } = new();
+    /// <summary>People in each panel the caller may open: leads, interested, care (ignores search and filters).</summary>
+    public Dictionary<string, int> ViewCounts { get; set; } = new();
+    /// <summary>Unread customer messages in this panel.</summary>
+    public int UnreadTotal { get; set; }
+}
+
+/// <summary>The three panels over the same people: new and follow-up leads, interested leads, and paid customers.</summary>
+public static class LeadViews
+{
+    public const string Leads = "leads", Interested = "interested", Care = "care";
+    public static readonly string[] All = [Leads, Interested, Care];
 }
 
 public class LeadDetailResponse : ApiResult
@@ -71,6 +90,8 @@ public class LeadDetailResponse : ApiResult
     public List<WhatsAppMessageDto> Messages { get; set; } = new();
     public List<LeadStatusHistoryDto> History { get; set; } = new();
     public List<LeadAssignmentDto> Assignments { get; set; } = new();
+    /// <summary>Every status and owner change in one newest-first list: what changed, who or what did it, and when.</summary>
+    public List<LeadAuditDto> Audit { get; set; } = new();
     public List<FollowUpDto> FollowUps { get; set; } = new();
     public List<LeadOrderDto> Orders { get; set; } = new();
 }
@@ -92,6 +113,18 @@ public class LeadAssignmentDto
     public string? ToName { get; set; }
     public string? Reason { get; set; }
     public string ChangedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+}
+
+public class LeadAuditDto
+{
+    /// <summary>"status" or "owner".</summary>
+    public string Kind { get; set; } = "";
+    public string Summary { get; set; } = "";
+    public string? Detail { get; set; }
+    public string Actor { get; set; } = "";
+    /// <summary>True when the system made the change (background worker, journey, order), not a person.</summary>
+    public bool Automatic { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -183,15 +216,114 @@ public class LeadConsentRequest
     public string Status { get; set; } = "opted_in";
 }
 
-/// <summary>The automatic reply a new WhatsApp message gets when nobody on the team is active (Sundays, holidays, nights).</summary>
-public class AfterHoursSettings
+// ---------------------------------------------------------------------------
+// Message templates: automatic replies and ready-made replies for every stage of a person
+// ---------------------------------------------------------------------------
+
+/// <summary>Where a person is in the journey. Decides which messages fit.</summary>
+public static class MessageStages
 {
-    public const string DefaultMessage = "Hello {name}, thank you for contacting Nura Herbex 🌿\nOur team is away right now (Sunday, holiday or outside working hours). We have received your message and will reply as soon as we are back.\nIn the meantime, send *track* or your order ID (e.g. NH-123456) to get your order status.";
-    public bool Enabled { get; set; } = true;
-    public string Message { get; set; } = DefaultMessage;
+    public const string New = "new", Interested = "interested", FollowUp = "follow-up", NotInterested = "not-interested", Customer = "customer";
+    public static readonly string[] All = [New, Interested, FollowUp, NotInterested, Customer];
+    public static string Label(string s) => s switch { New => "New leads", Interested => "Interested leads", FollowUp => "Follow-up leads", NotInterested => "Not interested", Customer => "Customers", _ => s };
+
+    /// <summary>The stage that fits a lead (a paid customer always counts as a customer).</summary>
+    public static string Of(string leadStatus, bool isCustomer) => isCustomer ? Customer : leadStatus switch
+    {
+        LeadStatuses.Interested => Interested, LeadStatuses.FollowUp => FollowUp, LeadStatuses.NotInterested => NotInterested, _ => New,
+    };
 }
 
-public class AfterHoursResponse : ApiResult
+/// <summary>Keys of the messages the system sends by itself. Their text can be edited but they cannot be deleted.</summary>
+public static class MessageKeys
 {
-    public AfterHoursSettings Settings { get; set; } = new();
+    public const string AfterHoursLead = "afterhours.lead", AfterHoursInterested = "afterhours.interested",
+        AfterHoursCustomerOpen = "afterhours.customer-open", AfterHoursCustomer = "afterhours.customer",
+        GreetingLead = "greeting.lead", GreetingCustomerOpen = "greeting.customer-open", GreetingCustomer = "greeting.customer",
+        Delivered = "delivered.customer", Welcome = "welcome.customer";
+}
+
+public class MessageTemplateDto
+{
+    /// <summary>A <see cref="MessageKeys"/> value for automatic messages, a generated id for ready-made replies.</summary>
+    public string Key { get; set; } = "";
+    /// <summary>auto (sent by the system) | reply (picked by staff in the chat)</summary>
+    public string Group { get; set; } = "reply";
+    public string Stage { get; set; } = MessageStages.New;
+    public string Title { get; set; } = "";
+    public string Body { get; set; } = "";
+    /// <summary>When it is sent, shown under automatic messages.</summary>
+    public string? Hint { get; set; }
+    public bool Enabled { get; set; } = true;
+}
+
+public class MessageTemplatesSettings
+{
+    /// <summary>Send the after-hours reply when nobody on the team is active.</summary>
+    public bool AfterHoursEnabled { get; set; } = true;
+    public List<MessageTemplateDto> Items { get; set; } = new();
+    /// <summary>Names of the <see cref="MetaTemplates"/> Meta has approved. Only these can be sent from the chat.</summary>
+    public List<string> ApprovedMetaTemplates { get; set; } = new();
+}
+
+public class MessageTemplatesResponse : ApiResult
+{
+    public MessageTemplatesSettings Settings { get; set; } = new();
+}
+
+/// <summary>Placeholders: {name} first name, {agent} the staff member, {order} the latest order id.</summary>
+public static class MessageDefaults
+{
+    public const string OldAfterHoursText = "Hello {name}, thank you for contacting Nura Herbex 🌿\nOur team is away right now (Sunday, holiday or outside working hours). We have received your message and will reply as soon as we are back.\nIn the meantime, send *track* or your order ID (e.g. NH-123456) to get your order status.";
+
+    private static MessageTemplateDto Auto(string key, string stage, string title, string hint, string body) =>
+        new() { Key = key, Group = "auto", Stage = stage, Title = title, Hint = hint, Body = body };
+    private static MessageTemplateDto Reply(string stage, string title, string body) =>
+        new() { Key = "reply-" + Guid.NewGuid().ToString("N")[..8], Group = "reply", Stage = stage, Title = title, Body = body };
+
+    public static List<MessageTemplateDto> Automatic() =>
+    [
+        Auto(MessageKeys.AfterHoursLead, MessageStages.New, "After hours · new and follow-up leads", "A lead writes while nobody is active. No order tracking is offered.",
+            "Hello {name}, thank you for contacting Nura Herbex 🌿\nOur team is away right now (Sunday, holiday or outside working hours). We have received your message and will reply as soon as we are back."),
+        Auto(MessageKeys.AfterHoursInterested, MessageStages.Interested, "After hours · interested leads", "An interested lead writes while nobody is active.",
+            "Hello {name}, thank you for your interest in Nura Herbex 🌿\nOur team is away right now (Sunday, holiday or outside working hours). Your message is saved and your advisor will reply first thing when we are back, with everything you need to place your order."),
+        Auto(MessageKeys.AfterHoursCustomerOpen, MessageStages.Customer, "After hours · customer with an order on its way", "A customer writes while nobody is active and an order is not delivered yet. Offers order tracking.",
+            "Hello {name}, thank you for being a Nura Herbex customer 🌿\nOur care team is away right now (Sunday, holiday or outside working hours) and will reply as soon as we are back.\nTo check your order {order} right now, send *track* and we will share its latest status."),
+        Auto(MessageKeys.AfterHoursCustomer, MessageStages.Customer, "After hours · customer, all orders delivered", "A customer writes while nobody is active and every order is delivered.",
+            "Hello {name}, thank you for being a Nura Herbex customer 🌿\nOur care team is away right now (Sunday, holiday or outside working hours). We have received your message and will reply as soon as we are back."),
+        Auto(MessageKeys.GreetingLead, MessageStages.New, "Greeting · leads", "A lead says hi, or asks to track an order they do not have.",
+            "Hello {name}, welcome to Nura Herbex 🌿\nThank you for reaching out. A member of our team will be with you shortly to help."),
+        Auto(MessageKeys.GreetingCustomerOpen, MessageStages.Customer, "Greeting · customer with an order on its way", "A customer says hi while an order is not delivered yet.",
+            "Hello {name}, welcome back to Nura Herbex 🌿\nYour order {order} is on its way to you. Send *track* any time for its latest status, or tell us how we can help."),
+        Auto(MessageKeys.GreetingCustomer, MessageStages.Customer, "Greeting · customer, all orders delivered", "A customer says hi and every order is delivered.",
+            "Hello {name}, welcome back to Nura Herbex 🌿\nThank you for being our customer. Tell us how we can help and our care team will reply shortly."),
+        Auto(MessageKeys.Delivered, MessageStages.Customer, "Track request after delivery", "A customer asks to track but the order is already delivered.",
+            "Hello {name}, your order {order} has been delivered 🌿\nIf anything is not right, reply here and our care team will help you."),
+        Auto(MessageKeys.Welcome, MessageStages.Customer, "Welcome as a customer", "Sent once, right after the first paid order. Outside the 24-hour window it goes as the approved WhatsApp template.",
+            "Hello {name}, thank you for your order {order} with Nura Herbex 🌿\nI am {agent} from our customer care team and I will look after you from here. Message us on this number any time for order updates or help with your product."),
+    ];
+
+    public static List<MessageTemplateDto> Replies() =>
+    [
+        Reply(MessageStages.New, "First reply", "Hello {name}, thank you for contacting Nura Herbex 🌿 I am {agent}. How can I help you today?"),
+        Reply(MessageStages.New, "Share product details", "Hi {name}, Stamix is a herbal wellness powder made with traditional ingredients and tested in a lab for every batch. Would you like me to share the benefits, how to use it and the price?"),
+        Reply(MessageStages.New, "Ask for a good time to call", "Hi {name}, may I call you to understand what you need and suggest the right pack? Please tell me a time that suits you."),
+        Reply(MessageStages.Interested, "Pack options and price", "Hi {name}, happy to help you choose. Shall I share our pack options with the price and the current offer?"),
+        Reply(MessageStages.Interested, "How to order", "Hi {name}, ordering is easy: tell me the pack you would like and your delivery address and I will create the order. You can pay online or choose cash on delivery."),
+        Reply(MessageStages.Interested, "Gentle nudge", "Hi {name}, just checking whether you had any questions about Stamix. I am glad to help you decide and place your order whenever you are ready."),
+        Reply(MessageStages.FollowUp, "Friendly reminder", "Hi {name}, following up on our earlier chat about Stamix. Would you like to go ahead, or is there anything I can clarify?"),
+        Reply(MessageStages.FollowUp, "Last check-in", "Hi {name}, I do not want to disturb you, so this is my last note. If you would like to try Stamix later, just reply here and I will help you."),
+        Reply(MessageStages.NotInterested, "Polite close", "Thank you for your time, {name}. If you ever want to know more about Nura Herbex, message us here any time. Wishing you good health 🌿"),
+        Reply(MessageStages.Customer, "Thank you for your order", "Hi {name}, thank you for ordering from Nura Herbex 🌿 Your order {order} is confirmed and I will keep you updated until it reaches you."),
+        Reply(MessageStages.Customer, "How to use", "Hi {name}, for the best results take Stamix as printed on the pack, at the same time each day. Reply here if you need help with the routine."),
+        Reply(MessageStages.Customer, "Ask for feedback", "Hi {name}, how are you finding Stamix? Your feedback helps us look after you better. Reply here any time."),
+        Reply(MessageStages.Customer, "Reorder reminder", "Hi {name}, your pack will be finishing soon. Would you like me to arrange your next order?"),
+        Reply(MessageStages.Customer, "Apology for a problem", "Hi {name}, I am sorry for the trouble with your order {order}. I am looking into it right now and will update you shortly."),
+    ];
+
+    public static string Fill(string body, string? name, string? agent = null, string? order = null)
+    {
+        var first = string.IsNullOrWhiteSpace(name) ? "there" : name.Trim().Split(' ')[0];
+        return body.Replace("{name}", first).Replace("{agent}", string.IsNullOrWhiteSpace(agent) ? "our team" : agent.Trim()).Replace("{order}", string.IsNullOrWhiteSpace(order) ? "your order" : order.Trim());
+    }
 }

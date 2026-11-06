@@ -1,129 +1,227 @@
 @inject ApiClient Api
 @inject AdminSession AdminAuth
 
-<div class="ld em">
-    <div class="em-head">
-        <div><h3>Designations &amp; page rights</h3><p>A designation is a job title such as <em>Sales Executive</em>. It decides which pages its people can open. Changes apply straight away, with no need to sign in again.</p></div>
-        <div class="em-head-actions"><button type="button" class="ld-btn primary" @onclick="StartCreate"><Icon Name="Plus" Size="14" /> Add designation</button></div>
-    </div>
-
+<div class="ld em dg">
     @if (!string.IsNullOrEmpty(_message))
     {
         <div class="@($"em-note {(_ok ? "ok" : "bad")}")" role="status"><Icon Name="@(_ok ? "CheckCircle2" : "AlertCircle")" Size="15" /><span>@_message</span><button type="button" class="em-x" aria-label="Dismiss" @onclick="() => _message = null"><Icon Name="X" Size="14" /></button></div>
     }
 
-    @if (_form is not null)
+    @if (_form is null)
     {
-        <form class="ld-card em-form" @onsubmit="SaveAsync" @onsubmit:preventDefault>
-            <h4>@(_editingId is null ? "New designation" : "Edit designation")</h4>
-            <div class="em-grid">
-                <label>Name<input type="text" required maxlength="120" @bind="_form.Name" @bind:event="oninput" placeholder="e.g. Sales Executive" /></label>
-                <label>Department
-                    <select @bind="_form.DepartmentId">
-                        <option value="@((long?)null)">Any department</option>
-                        @foreach (var d in _departments.Where(x => x.IsActive || x.Id == _form.DepartmentId)) { <option value="@d.Id">@d.Name</option> }
-                    </select>
-                </label>
-                <label>Seniority <small class="em-hint">1 junior – 10 top</small><input type="number" min="1" max="10" @bind="_form.Level" /></label>
-                <label>Short description<input type="text" maxlength="400" @bind="_form.Description" @bind:event="oninput" placeholder="Optional" /></label>
-                <label class="em-check"><input type="checkbox" @bind="_form.IsActive" /> <span>Active (can be given to people)</span></label>
+        @* ───────────── LIST ───────────── *@
+        <div class="dg-head">
+            <div>
+                <h3>Designations &amp; page rights</h3>
+                <p>A designation is a job title such as <em>Sales Executive</em>. It decides which pages its people can open, and whether they see only their own records or everyone's. Changes apply straight away.</p>
             </div>
+            <button type="button" class="ld-btn primary" @onclick="StartCreate"><Icon Name="Plus" Size="14" /> Add designation</button>
+        </div>
 
-            <div class="org-presets">
-                <span>Start from</span>
-                @foreach (var p in _catalog.Presets)
+        <div class="dg-tools">
+            <label class="dg-search"><Icon Name="Search" Size="15" /><input type="search" placeholder="Search designations" aria-label="Search designations" @bind="_search" @bind:event="oninput" /></label>
+            <div class="dg-chips" role="group" aria-label="Filter by department">
+                <button type="button" class="@(_deptFilter == "all" ? "is-on" : "")" aria-pressed="@(_deptFilter == "all")" @onclick='() => _deptFilter = "all"'>All <b>@_items.Count</b></button>
+                @foreach (var key in DepartmentKeys)
                 {
-                    var preset = p;
-                    <button type="button" class="ld-tab" title="@preset.Hint" @onclick="() => ApplyPreset(preset)">@preset.Name</button>
+                    var k = key;
+                    <button type="button" class="@(_deptFilter == k.Key ? "is-on" : "")" aria-pressed="@(_deptFilter == k.Key)" @onclick="() => _deptFilter = k.Key">@k.Label <b>@k.Count</b></button>
                 }
-                <button type="button" class="ld-tab" @onclick="() => _form.Rights = new()">Clear all</button>
             </div>
+        </div>
 
-            <div class="org-matrix" role="group" aria-label="Page rights">
-                @foreach (var g in _catalog.Pages.GroupBy(p => p.Group))
+        @if (_loading) { <div class="ld-card ld-empty">Loading…</div> }
+        else if (_items.Count == 0) { <div class="ld-card ld-empty"><strong>No designations yet</strong>Add one, pick the pages it needs, then give it to people.</div> }
+        else if (Visible.Count == 0) { <div class="ld-card ld-empty"><strong>No match</strong>Try a different search or department.</div> }
+        else
+        {
+            <div class="dg-list" role="list">
+                <div class="dg-row dg-row-head" aria-hidden="true"><span>Designation</span><span>Department</span><span>Seniority</span><span>People</span><span>Page access</span><span></span></div>
+                @foreach (var d in Visible)
                 {
-                    <div class="org-group">@g.Key</div>
-                    @foreach (var p in g)
-                    {
-                        var pg = p;
-                        var cur = _form.Rights.GetValueOrDefault(pg.Key);
-                        var mine = AdminAuth.Level(pg.Key);
-                        <div class="org-row">
-                            <div class="org-page"><strong>@pg.Label</strong><small>@pg.Description</small></div>
-                            <div class="org-levels">
-                                <button type="button" class="@(cur == 0 ? "is-on none" : "")" @onclick="() => SetLevel(pg.Key, 0)">No access</button>
-                                <button type="button" class="@(cur == 1 ? "is-on" : "")" disabled="@(mine < 1)" title="@(mine < 1 ? "You do not have this access yourself" : "")" @onclick="() => SetLevel(pg.Key, 1)">@pg.LimitedLabel</button>
-                                <button type="button" class="@(cur == 2 ? "is-on" : "")" disabled="@(mine < 2)" title="@(mine < 2 ? "You do not have this access yourself" : "")" @onclick="() => SetLevel(pg.Key, 2)">@pg.FullLabel</button>
+                    var des = d;
+                    var sum = Summarise(des.Rights);
+                    <div class="@($"dg-row {(des.IsActive ? "" : "is-off")}")" role="listitem" @key="des.Id">
+                        <div class="dg-name">
+                            <span class="dg-tile" style="background:@Tint(des.Id)"><Icon Name="ShieldCheck" Size="17" /></span>
+                            <div>
+                                <strong>@des.Name @if (!des.IsActive) { <span class="dg-pill off">Inactive</span> }</strong>
+                                <small>@(string.IsNullOrWhiteSpace(des.Description) ? "No description" : des.Description)</small>
                             </div>
                         </div>
-                    }
+                        <div class="dg-cell" data-label="Department">@(des.DepartmentName ?? "Any department")</div>
+                        <div class="dg-cell" data-label="Seniority"><span class="dg-level" title="Seniority @des.Level of 10"><i style="width:@(des.Level * 10)%"></i></span> @des.Level/10</div>
+                        <div class="dg-cell" data-label="People"><Icon Name="Users" Size="13" /> @des.EmployeeCount</div>
+                        <div class="dg-cell dg-access" data-label="Page access">
+                            <span class="dg-chip full" title="Everyone's records / view and change">@sum.Full full</span>
+                            <span class="dg-chip part" title="Own records / view only">@sum.Limited limited</span>
+                            <span class="dg-chip none" title="No access">@sum.None none</span>
+                        </div>
+                        <div class="dg-actions">
+                            @if (_removingId == des.Id)
+                            {
+                                <span class="dg-confirm">Delete this?
+                                    <button type="button" class="ld-btn danger" disabled="@_busy" @onclick="() => RemoveAsync(des)">Yes, delete</button>
+                                    <button type="button" class="ld-btn" @onclick="() => _removingId = null">Keep</button></span>
+                            }
+                            else
+                            {
+                                <button type="button" class="ld-btn primary" @onclick="() => StartEdit(des)"><Icon Name="Edit3" Size="13" /> Edit rights</button>
+                                <button type="button" class="ld-btn" title="Create a new designation with the same settings" aria-label="@("Duplicate " + des.Name)" @onclick="() => StartDuplicate(des)"><Icon Name="Copy" Size="13" /></button>
+                                <button type="button" class="ld-btn danger-outline" aria-label="@("Delete " + des.Name)" @onclick="() => _removingId = des.Id"><Icon Name="Trash2" Size="13" /></button>
+                            }
+                        </div>
+                    </div>
                 }
             </div>
-            <div class="ld-actions">
-                <span class="org-count">@_form.Rights.Count(r => r.Value > 0) of @_catalog.Pages.Count pages</span>
-                <button type="button" class="ld-btn" @onclick="() => _form = null">Cancel</button>
-                <button type="submit" class="ld-btn primary" disabled="@_busy">@(_busy ? "Saving…" : "Save designation")</button>
-            </div>
-        </form>
+        }
     }
-
-    @if (_loading) { <div class="ld-card ld-empty">Loading…</div> }
-    else if (_items.Count == 0) { <div class="ld-card ld-empty"><strong>No designations yet</strong>Add one, pick the pages it needs, then give it to people.</div> }
     else
     {
-        @foreach (var grp in _items.GroupBy(i => i.DepartmentName ?? "Any department").OrderBy(g => g.Key == "Any department" ? 1 : 0).ThenBy(g => g.Key))
-        {
-            <section class="org-section">
-                <h4 class="org-section-title">@grp.Key <small>@grp.Count() designation@(grp.Count() == 1 ? "" : "s") · @grp.Sum(x => x.EmployeeCount) people</small></h4>
-                <div class="org-cards">
-                    @foreach (var d in grp.OrderByDescending(x => x.Level).ThenBy(x => x.Name))
-                    {
-                        var des = d;
-                        var granted = des.Rights.Where(r => r.Value > 0).ToList();
-                        <article class="org-card @(des.IsActive ? "" : "is-off")" @key="des.Id">
-                            <header>
-                                <span class="org-tile" style="background:@Tint(des.Id)"><Icon Name="ShieldCheck" Size="18" /></span>
-                                <div><h4>@des.Name</h4><p>@(string.IsNullOrWhiteSpace(des.Description) ? "No description" : des.Description)</p></div>
-                                <span class="@($"ld-pill {(des.IsActive ? "converted" : "not-interested")}")">@(des.IsActive ? "Active" : "Inactive")</span>
-                            </header>
-                            <div class="org-meter" title="@granted.Count of @_catalog.Pages.Count pages"><span style="width:@(_catalog.Pages.Count == 0 ? 0 : granted.Count * 100 / _catalog.Pages.Count)%"></span></div>
-                            <div class="org-meter-label"><span>@granted.Count of @_catalog.Pages.Count pages</span><span>Seniority @des.Level/10 · <strong>@des.EmployeeCount</strong> @(des.EmployeeCount == 1 ? "person" : "people")</span></div>
-                            <div class="org-chips">
-                                @foreach (var kv in granted.OrderByDescending(r => r.Value).Take(7)) { <span class="org-chip @(kv.Value == 2 ? "full" : "")" title="@PageCatalogLabel(kv.Key, kv.Value)">@PageName(kv.Key)</span> }
-                                @if (granted.Count > 7) { <span class="org-chip">+@(granted.Count - 7) more</span> }
-                                @if (granted.Count == 0) { <span class="org-muted">No pages</span> }
-                            </div>
-                            <footer>
-                                @if (_removingId == des.Id)
-                                {
-                                    <span class="em-confirm">Delete @des.Name?
-                                        <button type="button" class="ld-btn danger" disabled="@_busy" @onclick="() => RemoveAsync(des)">Yes, delete</button>
-                                        <button type="button" class="ld-btn" @onclick="() => _removingId = null">Keep</button></span>
-                                }
-                                else
-                                {
-                                    <button type="button" class="ld-btn" @onclick="() => StartEdit(des)"><Icon Name="Edit3" Size="13" /> Edit rights</button>
-                                    <button type="button" class="ld-btn danger-outline" @onclick="() => _removingId = des.Id"><Icon Name="Trash2" Size="13" /> Delete</button>
-                                }
-                            </footer>
-                        </article>
-                    }
+        @* ───────────── EDITOR ───────────── *@
+        <form class="dg-editor" @onsubmit="SaveAsync" @onsubmit:preventDefault>
+            <div class="dg-bar">
+                <div class="dg-bar-main">
+                    <button type="button" class="ld-btn" @onclick="RequestLeave"><Icon Name="ArrowLeft" Size="14" /> Back to designations</button>
+                    <nav class="dg-crumb" aria-label="Breadcrumb">
+                        <span>Designations</span><Icon Name="ChevronRight" Size="12" />
+                        <strong>@(string.IsNullOrWhiteSpace(_form.Name) ? (_editingId is null ? "New designation" : "Untitled") : _form.Name)</strong>
+                    </nav>
+                    @if (Dirty) { <span class="dg-dirty" role="status"><i></i> Unsaved changes</span> }
                 </div>
-            </section>
-        }
+                <div class="dg-bar-actions">
+                    <button type="button" class="ld-btn" @onclick="RequestLeave">Cancel</button>
+                    <button type="submit" class="ld-btn primary" disabled="@(_busy || (!Dirty && _editingId is not null))"><Icon Name="Save" Size="14" /> @(_busy ? "Saving…" : _editingId is null ? "Create designation" : "Save changes")</button>
+                </div>
+            </div>
+
+            @if (_confirmLeave)
+            {
+                <div class="dg-leave" role="alertdialog" aria-label="Discard changes">
+                    <span><Icon Name="AlertCircle" Size="15" /> You have unsaved changes. Leave without saving?</span>
+                    <span><button type="button" class="ld-btn" @onclick="() => _confirmLeave = false">Keep editing</button>
+                    <button type="button" class="ld-btn danger" @onclick="Leave">Discard changes</button></span>
+                </div>
+            }
+
+            <div class="dg-tabs" role="tablist">
+                <button type="button" role="tab" aria-selected="@(_tab == "details")" class="@(_tab == "details" ? "is-on" : "")" @onclick='() => _tab = "details"'>1 · Details</button>
+                <button type="button" role="tab" aria-selected="@(_tab == "access")" class="@(_tab == "access" ? "is-on" : "")" @onclick='() => _tab = "access"'>2 · Page access <b>@Granted</b>/@_catalog.Pages.Count</button>
+            </div>
+
+            @if (_tab == "details")
+            {
+                <section class="ld-card dg-card">
+                    <div class="dg-grid">
+                        <label>Name<input type="text" required maxlength="120" @bind="_form.Name" @bind:event="oninput" placeholder="e.g. Sales Executive" /></label>
+                        <label>Department
+                            <select @bind="_form.DepartmentId">
+                                <option value="@((long?)null)">Any department</option>
+                                @foreach (var d in _departments.Where(x => x.IsActive || x.Id == _form.DepartmentId)) { <option value="@d.Id">@d.Name</option> }
+                            </select>
+                        </label>
+                        <label>Seniority <small class="dg-hint">1 junior to 10 top. Only orders the lists.</small><input type="number" min="1" max="10" @bind="_form.Level" @bind:event="oninput" /></label>
+                        <label class="dg-wide">Short description<input type="text" maxlength="400" @bind="_form.Description" @bind:event="oninput" placeholder="Optional" /></label>
+                        <label class="dg-check"><input type="checkbox" @bind="_form.IsActive" /> <span>Active <small class="dg-hint">Inactive designations cannot be given to people.</small></span></label>
+                        <div class="dg-ro"><span>People with this designation</span><strong><Icon Name="Users" Size="14" /> @_editingCount</strong></div>
+                    </div>
+                    <div class="dg-next"><button type="button" class="ld-btn primary" @onclick='() => _tab = "access"'>Next: choose page access <Icon Name="ChevronRight" Size="14" /></button></div>
+                </section>
+            }
+            else
+            {
+                <section class="ld-card dg-card">
+                    <div class="dg-explain">
+                        <Icon Name="Info" Size="15" />
+                        <p><strong>Own records</strong>: the person sees only the leads, follow-ups, tasks or reports assigned to them. <strong>Everyone's records</strong>: they see every employee's. Store and admin pages use <strong>View only</strong> or <strong>View and change</strong>.</p>
+                    </div>
+
+                    <div class="dg-presets">
+                        <span>Start from</span>
+                        @foreach (var p in _catalog.Presets)
+                        {
+                            var preset = p;
+                            <button type="button" class="dg-chipbtn" title="@preset.Hint" @onclick="() => ApplyPreset(preset)">@preset.Name</button>
+                        }
+                        <button type="button" class="dg-chipbtn" @onclick="() => { _form.Rights = new(); }">Clear all</button>
+                    </div>
+
+                    <div class="dg-filterbar">
+                        <label class="dg-search"><Icon Name="Search" Size="15" /><input type="search" placeholder="Find a page" aria-label="Find a page" @bind="_pageFilter" @bind:event="oninput" /></label>
+                        <span class="dg-live" aria-live="polite"><b>@Granted</b> of @_catalog.Pages.Count pages granted</span>
+                        <span class="dg-links"><button type="button" @onclick="ExpandAll">Expand all</button><button type="button" @onclick="CollapseAll">Collapse all</button></span>
+                    </div>
+
+                    <div class="dg-matrix" role="group" aria-label="Page rights">
+                        @foreach (var g in PageGroups)
+                        {
+                            var group = g;
+                            var open = !_collapsed.Contains(group.Key) || !string.IsNullOrWhiteSpace(_pageFilter);
+                            var granted = group.Count(p => _form.Rights.GetValueOrDefault(p.Key) > 0);
+                            <div class="dg-group">
+                                <div class="dg-group-head">
+                                    <button type="button" class="dg-group-toggle" aria-expanded="@open" @onclick="() => ToggleGroup(group.Key)"><Icon Name="@(open ? "ChevronDown" : "ChevronRight")" Size="14" /> @group.Key <small>@granted of @group.Count() granted</small></button>
+                                    <span class="dg-setall" role="group" aria-label="@("Set every page in " + group.Key)">
+                                        <em>Set all</em>
+                                        <button type="button" @onclick="() => SetGroup(group, 0)">None</button>
+                                        <button type="button" @onclick="() => SetGroup(group, 1)">Limited</button>
+                                        <button type="button" @onclick="() => SetGroup(group, 2)">Full</button>
+                                    </span>
+                                </div>
+                                @if (open)
+                                {
+                                    @foreach (var p in group)
+                                    {
+                                        var pg = p;
+                                        var cur = _form.Rights.GetValueOrDefault(pg.Key);
+                                        var mine = AdminAuth.Level(pg.Key);
+                                        <div class="@($"dg-page {(cur > 0 ? "has" : "")}")" @key="pg.Key">
+                                            <div class="dg-page-text">
+                                                <strong>@pg.Label</strong>
+                                                <small>@pg.Description</small>
+                                                @if (cur > 0) { <small class="dg-effect">@Effect(pg, cur)</small> }
+                                            </div>
+                                            <div class="dg-seg" role="radiogroup" aria-label="@("Access to " + pg.Label)">
+                                                <button type="button" role="radio" aria-checked="@(cur == 0)" class="@(cur == 0 ? "is-on none" : "")" @onclick="() => SetLevel(pg.Key, 0)">No access</button>
+                                                <button type="button" role="radio" aria-checked="@(cur == 1)" class="@(cur == 1 ? "is-on" : "")" disabled="@(mine < 1)" title="@(mine < 1 ? "You do not have this access yourself" : "")" @onclick="() => SetLevel(pg.Key, 1)">@pg.LimitedLabel</button>
+                                                <button type="button" role="radio" aria-checked="@(cur == 2)" class="@(cur == 2 ? "is-on" : "")" disabled="@(mine < 2)" title="@(mine < 2 ? "You do not have this access yourself" : "")" @onclick="() => SetLevel(pg.Key, 2)">@pg.FullLabel</button>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        }
+                        @if (!PageGroups.Any()) { <div class="dg-nopage">No page matches “@_pageFilter”.</div> }
+                    </div>
+                </section>
+            }
+
+            <div class="dg-savebar">
+                <button type="button" class="ld-btn" @onclick="RequestLeave">Cancel</button>
+                <button type="submit" class="ld-btn primary" disabled="@(_busy || (!Dirty && _editingId is not null))"><Icon Name="Save" Size="14" /> @(_busy ? "Saving…" : _editingId is null ? "Create" : "Save")</button>
+            </div>
+        </form>
     }
 </div>
 
 @code {
     private static readonly string[] Tints = ["#235b40", "#2f6f8f", "#7a5aa6", "#b5792a", "#a24b5a", "#3f7d7a", "#5b6f2c"];
     private static string Tint(long id) => Tints[(int)(id % Tints.Length)];
+
+    private sealed record DeptKey(string Key, string Label, int Count);
+    private sealed record RightsSummary(int Full, int Limited, int None);
+
     private List<DesignationDto> _items = new();
     private List<DepartmentDto> _departments = new();
     private RightsCatalogResponse _catalog = new();
     private DesignationSaveRequest? _form;
+    private string _baseline = "";
     private long? _editingId, _removingId;
-    private bool _loading = true, _busy, _ok;
+    private int _editingCount;
+    private bool _loading = true, _busy, _ok, _confirmLeave;
     private string? _message;
+    private string _tab = "details", _search = "", _deptFilter = "all", _pageFilter = "";
+    private readonly HashSet<string> _collapsed = new();
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -138,18 +236,100 @@
         _loading = false;
     }
 
-    private string PageName(string key) => _catalog.Pages.FirstOrDefault(p => p.Key == key)?.Label ?? key;
-    private string PageCatalogLabel(string key, int level) => PageName(key) + ": " + PageCatalog.LevelLabel(key, level);
     private void Say(string? text, bool ok) { _message = text; _ok = ok; }
 
-    private void StartCreate() { _editingId = null; _removingId = null; _form = new() { Rights = new(PageCatalog.DefaultStaff) }; }
-    private void StartEdit(DesignationDto d) { _editingId = d.Id; _removingId = null; _form = new() { Name = d.Name, Description = d.Description, DepartmentId = d.DepartmentId, Level = d.Level, IsActive = d.IsActive, Rights = new(d.Rights) }; }
+    // ---- list helpers ----
+    private IEnumerable<DeptKey> DepartmentKeys =>
+        _items.GroupBy(i => i.DepartmentId?.ToString() ?? "none")
+            .OrderBy(g => g.Key == "none" ? 1 : 0).ThenBy(g => g.First().DepartmentName)
+            .Select(g => new DeptKey(g.Key, g.First().DepartmentName ?? "Any department", g.Count()));
+
+    private List<DesignationDto> Visible
+    {
+        get
+        {
+            var q = _search.Trim();
+            return _items
+                .Where(i => _deptFilter == "all" || (i.DepartmentId?.ToString() ?? "none") == _deptFilter)
+                .Where(i => q.Length == 0 || i.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || (i.DepartmentName ?? "").Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || (i.Description ?? "").Contains(q, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(i => i.DepartmentName ?? "~").ThenByDescending(i => i.Level).ThenBy(i => i.Name).ToList();
+        }
+    }
+
+    private RightsSummary Summarise(Dictionary<string, int> rights)
+    {
+        var full = _catalog.Pages.Count(p => rights.GetValueOrDefault(p.Key) >= 2);
+        var limited = _catalog.Pages.Count(p => rights.GetValueOrDefault(p.Key) == 1);
+        return new RightsSummary(full, limited, Math.Max(0, _catalog.Pages.Count - full - limited));
+    }
+
+    // ---- editor state ----
+    private static string Snapshot(DesignationSaveRequest f) =>
+        string.Join("|", f.Name?.Trim(), f.Description?.Trim(), f.DepartmentId, f.Level, f.IsActive,
+            string.Join(",", f.Rights.Where(r => r.Value > 0).OrderBy(r => r.Key).Select(r => r.Key + "=" + r.Value)));
+
+    private bool Dirty => _form is not null && Snapshot(_form) != _baseline;
+    private int Granted => _form is null ? 0 : _catalog.Pages.Count(p => _form.Rights.GetValueOrDefault(p.Key) > 0);
+
+    private IEnumerable<IGrouping<string, PageDefDto>> PageGroups
+    {
+        get
+        {
+            var q = _pageFilter.Trim();
+            return _catalog.Pages
+                .Where(p => q.Length == 0 || p.Label.Contains(q, StringComparison.OrdinalIgnoreCase) || p.Description.Contains(q, StringComparison.OrdinalIgnoreCase))
+                .GroupBy(p => p.Group);
+        }
+    }
+
+    private static string Effect(PageDefDto p, int level) => (p.Kind == "crm", level) switch
+    {
+        (true, 1) => "Sees only records assigned to them.",
+        (true, _) => "Sees every employee's records and can reassign them.",
+        (false, 1) => "Can open and read, but not change anything.",
+        _ => "Can open, read and change.",
+    };
+
+    private void Open(DesignationSaveRequest form, long? id, int people)
+    {
+        _form = form; _editingId = id; _editingCount = people; _baseline = id is null ? "" : Snapshot(form);
+        _removingId = null; _confirmLeave = false; _tab = "details"; _pageFilter = ""; _message = null;
+    }
+
+    private void StartCreate() => Open(new() { Rights = new(PageCatalog.DefaultStaff) }, null, 0);
+
+    private void StartDuplicate(DesignationDto d) => Open(new()
+    {
+        Name = d.Name + " (copy)", Description = d.Description, DepartmentId = d.DepartmentId, Level = d.Level, IsActive = d.IsActive,
+        Rights = d.Rights.Where(r => r.Value > 0).ToDictionary(r => r.Key, r => Math.Min(r.Value, AdminAuth.Level(r.Key))).Where(r => r.Value > 0).ToDictionary(r => r.Key, r => r.Value),
+    }, null, 0);
+
+    private void StartEdit(DesignationDto d) => Open(new() { Name = d.Name, Description = d.Description, DepartmentId = d.DepartmentId, Level = d.Level, IsActive = d.IsActive, Rights = new(d.Rights) }, d.Id, d.EmployeeCount);
+
+    private void RequestLeave() { if (Dirty) _confirmLeave = true; else Leave(); }
+    private void Leave() { _form = null; _editingId = null; _confirmLeave = false; }
 
     private void SetLevel(string page, int level)
     {
         if (_form is null) return;
         if (level == 0) _form.Rights.Remove(page); else _form.Rights[page] = level;
     }
+
+    private void SetGroup(IGrouping<string, PageDefDto> group, int level)
+    {
+        if (_form is null) return;
+        foreach (var p in group)
+        {
+            var allowed = Math.Min(level, AdminAuth.Level(p.Key));
+            SetLevel(p.Key, allowed);
+        }
+    }
+
+    private void ToggleGroup(string key) { if (!_collapsed.Remove(key)) _collapsed.Add(key); }
+    private void ExpandAll() => _collapsed.Clear();
+    private void CollapseAll() { foreach (var g in _catalog.Pages.Select(p => p.Group).Distinct()) _collapsed.Add(g); _pageFilter = ""; }
 
     /// <summary>A preset only fills in what the signed-in person may grant, so it never overreaches.</summary>
     private void ApplyPreset(RightsPresetDto p)
@@ -165,7 +345,8 @@
         _busy = true;
         var res = await Api.AdminSaveDesignationAsync(_editingId, _form);
         Say(res.Message, res.Success);
-        if (res.Success) { _form = null; await LoadAsync(); }
+        if (res.Success) { Leave(); await LoadAsync(); }
+        else _confirmLeave = false;
         _busy = false;
     }
 

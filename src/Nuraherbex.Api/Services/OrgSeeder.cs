@@ -14,6 +14,7 @@ public static class OrgSeeder
     {
         await FirstRunAsync(db, log);
         await AddMarketingAndDesignAsync(db, log);
+        await AddHotLeadsAndCareRightsAsync(db, log);
         if (!string.IsNullOrWhiteSpace(testStaffPassword)) await AddTestStaffAsync(db, log, testStaffPassword);
     }
 
@@ -91,6 +92,35 @@ public static class OrgSeeder
             log.LogInformation("[Org] Marketing and Design departments added");
         }
         catch (Exception ex) { log.LogWarning(ex, "[Org] Marketing and Design setup skipped"); }
+    }
+
+    private const string HotCareFlag = "org.hotLeadsCareRights";
+
+    /// <summary>
+    /// Hot leads and Customer care became pages of their own. Once, every designation that could work leads gets the same level on both, so nobody
+    /// loses sight of the people they already handle. Afterwards the company sets them freely (a flag stops this from running again).
+    /// </summary>
+    private static async Task AddHotLeadsAndCareRightsAsync(NuraDbContext db, ILogger log)
+    {
+        try
+        {
+            if (await db.SiteSettings.AnyAsync(s => s.Key == HotCareFlag)) return;
+            var changed = 0;
+            foreach (var d in await db.Designations.ToListAsync())
+            {
+                var rights = PageCatalog.FromJson(d.RightsJson);
+                var leads = rights.GetValueOrDefault("leads");
+                if (leads < 1) continue;
+                var touched = false;
+                if (!rights.ContainsKey("interested")) { rights["interested"] = leads; touched = true; }
+                if (!rights.ContainsKey("care")) { rights["care"] = leads; touched = true; }
+                if (touched) { d.RightsJson = PageCatalog.ToJson(rights); changed++; }
+            }
+            db.SiteSettings.Add(new SiteSetting { Key = HotCareFlag, Value = "true" });
+            await db.SaveChangesAsync();
+            if (changed > 0) { RightsService.Invalidate(); log.LogInformation("[Org] Hot leads and Customer care rights added to {Count} designation(s)", changed); }
+        }
+        catch (Exception ex) { log.LogWarning(ex, "[Org] Hot leads / Customer care rights skipped"); }
     }
 
     /// <summary>

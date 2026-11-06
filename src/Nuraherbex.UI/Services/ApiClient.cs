@@ -175,8 +175,8 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<WhatsAppMessageListResponse> AdminWhatsAppMessagesAsync(int take = 100) => Call<WhatsAppMessageListResponse>(HttpMethod.Get, $"api/admin/whatsapp/messages?take={take}", null, Who.Admin);
     public Task<ApiResult> AdminWhatsAppSendAsync(WhatsAppSendRequest r) => Call<ApiResult>(HttpMethod.Post, "api/admin/whatsapp/send", r, Who.Admin);
 
-    public Task<LeadListResponse> AdminLeadsAsync(string? status = null, string? source = null, string? q = null, string? assignee = null, int take = 100) =>
-        Call<LeadListResponse>(HttpMethod.Get, $"api/admin/leads?take={take}&status={Uri.EscapeDataString(status ?? "")}&source={Uri.EscapeDataString(source ?? "")}&q={Uri.EscapeDataString(q ?? "")}&assignee={Uri.EscapeDataString(assignee ?? "")}", null, Who.Admin);
+    public Task<LeadListResponse> AdminLeadsAsync(string? status = null, string? source = null, string? q = null, string? assignee = null, int take = 100, string view = "leads") =>
+        Call<LeadListResponse>(HttpMethod.Get, $"api/admin/leads?take={take}&status={Uri.EscapeDataString(status ?? "")}&source={Uri.EscapeDataString(source ?? "")}&q={Uri.EscapeDataString(q ?? "")}&assignee={Uri.EscapeDataString(assignee ?? "")}&view={Uri.EscapeDataString(view)}", null, Who.Admin);
     public Task<ApiResult> AdminLeadAssignAsync(long id, LeadAssignRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/assign", r, Who.Admin);
     public Task<ApiResult> AdminLeadReplyAsync(long id, string text) => Call<ApiResult>(HttpMethod.Post, $"api/admin/leads/{id}/reply", new LeadReplyRequest { Text = text }, Who.Admin);
     public Task<EmployeeListResponse> AdminTeamAsync(string? forPage = null) => Call<EmployeeListResponse>(HttpMethod.Get, forPage is null ? "api/admin/team" : $"api/admin/team?for={forPage}", null, Who.Admin);
@@ -207,8 +207,40 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<ApiResult> AdminSetEmployeeWhatsAppAsync(long id, bool active) => Call<ApiResult>(HttpMethod.Put, $"api/admin/employees/{id}/whatsapp", new WhatsAppActiveRequest { Active = active }, Who.Admin);
     public Task<ApiResult> AdminRemoveEmployeeAsync(long id, bool spreadLeads) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/employees/{id}?reassign={(spreadLeads ? "auto" : "unassigned")}", null, Who.Admin);
     public Task<ApiResult> AdminLeadSettingsAsync(bool autoAssign) => Call<ApiResult>(HttpMethod.Put, "api/admin/leads/settings", new LeadSettingsRequest { AutoAssign = autoAssign }, Who.Admin);
-    public Task<AfterHoursResponse> AdminAfterHoursAsync() => Call<AfterHoursResponse>(HttpMethod.Get, "api/admin/leads/after-hours", null, Who.Admin);
-    public Task<ApiResult> AdminSaveAfterHoursAsync(AfterHoursSettings s) => Call<ApiResult>(HttpMethod.Put, "api/admin/leads/after-hours", s, Who.Admin);
+    public Task<MessageTemplatesResponse> AdminMessageTemplatesAsync() => Call<MessageTemplatesResponse>(HttpMethod.Get, "api/admin/leads/templates", null, Who.Admin);
+    public Task<ApiResult> AdminSaveMessageTemplatesAsync(MessageTemplatesSettings s) => Call<ApiResult>(HttpMethod.Put, "api/admin/leads/templates", s, Who.Admin);
+
+    // File library and sending files / approved templates from the chat
+    public Task<LibraryListResponse> AdminLibraryAsync() => Call<LibraryListResponse>(HttpMethod.Get, "api/admin/library", null, Who.Admin);
+    public Task<LibraryFileResponse> AdminLibraryUpdateAsync(string id, LibraryUpdateRequest r) => Call<LibraryFileResponse>(HttpMethod.Put, $"api/admin/library/{Uri.EscapeDataString(id)}", r, Who.Admin);
+    public Task<ApiResult> AdminLibraryDeleteAsync(string id) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/library/{Uri.EscapeDataString(id)}", null, Who.Admin);
+    public Task<ApiResult> AdminLeadSendFileAsync(long leadId, SendFileRequest r) => Call<ApiResult>(HttpMethod.Post, $"api/admin/leads/{leadId}/send-file", r, Who.Admin);
+    public Task<ApiResult> AdminLeadSendTemplateAsync(long leadId, SendTemplateRequest r) => Call<ApiResult>(HttpMethod.Post, $"api/admin/leads/{leadId}/send-template", r, Who.Admin);
+
+    /// <summary>Uploads a PDF, video or image to the library (multipart). The stream is read straight from the browser file.</summary>
+    public async Task<LibraryFileResponse> AdminLibraryUploadAsync(string title, string? description, string fileName, string contentType, Stream content)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, "api/admin/library");
+            if (!string.IsNullOrEmpty(tokens.AdminToken)) req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AdminToken);
+            var form = new MultipartFormDataContent { { new StringContent(title ?? ""), "title" }, { new StringContent(description ?? ""), "description" } };
+            var file = new StreamContent(content);
+            if (!string.IsNullOrWhiteSpace(contentType)) file.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            form.Add(file, "file", fileName);
+            req.Content = form;
+            using var res = await http.SendAsync(req);
+            var text = await res.Content.ReadAsStringAsync();
+            LibraryFileResponse? parsed = null;
+            try { parsed = JsonSerializer.Deserialize<LibraryFileResponse>(text, J); } catch { /* not JSON */ }
+            if (parsed is not null) { if (!res.IsSuccessStatusCode) parsed.Success = false; return parsed; }
+            return new LibraryFileResponse { Success = false, Message = res.StatusCode == System.Net.HttpStatusCode.RequestEntityTooLarge ? "The server refused a file that large. Try a smaller file." : Describe((int)res.StatusCode) };
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
+        {
+            return new LibraryFileResponse { Success = false, Message = "The upload did not finish. Check your connection and try again." };
+        }
+    }
     public Task<LeadOrderResponse> AdminLeadOrderAsync(long id, LeadOrderRequest r) => Call<LeadOrderResponse>(HttpMethod.Post, $"api/admin/leads/{id}/order", r, Who.Admin);
     public Task<CrmDashboardResponse> AdminCrmDashboardAsync(int days) => Call<CrmDashboardResponse>(HttpMethod.Get, $"api/admin/crm/dashboard?days={days}", null, Who.Admin);
     public Task<ReplySuggestionResponse> AdminSuggestReplyAsync(long id, ReplySuggestRequest r) => Call<ReplySuggestionResponse>(HttpMethod.Post, $"api/admin/leads/{id}/suggest-reply", r, Who.Admin);
@@ -239,6 +271,15 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<ApiResult> AdminReadAllNotificationsAsync() => Call<ApiResult>(HttpMethod.Put, "api/admin/notifications/read-all", new { }, Who.Admin);
     public Task<ApiResult> AdminReadNotificationAsync(long id) => Call<ApiResult>(HttpMethod.Put, $"api/admin/notifications/{id}/read", new { }, Who.Admin);
     public Task<LeadDetailResponse> AdminLeadDetailAsync(long id) => Call<LeadDetailResponse>(HttpMethod.Get, $"api/admin/leads/{id}", null, Who.Admin);
+    // Ad campaigns report (Facebook / Instagram ads) and its Meta sync
+    public Task<AdsReportResponse> AdminAdsReportAsync(string from, string to, string? campaign = null, string? ad = null, string? sourceType = null, string? status = null, string? owner = null, string? q = null, bool customersOnly = false) =>
+        Call<AdsReportResponse>(HttpMethod.Get, $"api/admin/ads/report?from={Uri.EscapeDataString(from)}&to={Uri.EscapeDataString(to)}&campaign={Uri.EscapeDataString(campaign ?? "")}&ad={Uri.EscapeDataString(ad ?? "")}&sourceType={Uri.EscapeDataString(sourceType ?? "")}&status={Uri.EscapeDataString(status ?? "")}&owner={Uri.EscapeDataString(owner ?? "")}&q={Uri.EscapeDataString(q ?? "")}&customersOnly={(customersOnly ? "true" : "false")}", null, Who.Admin);
+    public Task<AdsStatusResponse> AdminAdsStatusAsync() => Call<AdsStatusResponse>(HttpMethod.Get, "api/admin/ads/status", null, Who.Admin);
+    public Task<ApiResult> AdminAdsSyncAsync() => Call<ApiResult>(HttpMethod.Post, "api/admin/ads/sync", null, Who.Admin);
+    public Task<MetaConnectionResponse> AdminMetaConnectionAsync() => Call<MetaConnectionResponse>(HttpMethod.Get, "api/admin/ads/connection", null, Who.Admin);
+    public Task<MetaConnectionResponse> AdminSaveMetaConnectionAsync(MetaConnectionSaveRequest r) => Call<MetaConnectionResponse>(HttpMethod.Put, "api/admin/ads/connection", r, Who.Admin);
+    public Task<MetaConnectionResponse> AdminTestMetaConnectionAsync() => Call<MetaConnectionResponse>(HttpMethod.Post, "api/admin/ads/connection/test", null, Who.Admin);
+    public Task<MetaConnectionResponse> AdminDisconnectMetaAsync() => Call<MetaConnectionResponse>(HttpMethod.Delete, "api/admin/ads/connection", null, Who.Admin);
     public Task<ApiResult> AdminLeadStatusAsync(long id, LeadStatusRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/status", r, Who.Admin);
     public Task<ApiResult> AdminLeadNotesAsync(long id, LeadNotesRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/notes", r, Who.Admin);
     public Task<AdminProductListResponse> AdminCatalogAsync() => Call<AdminProductListResponse>(HttpMethod.Get, "api/admin/catalog/products", null, Who.Admin);

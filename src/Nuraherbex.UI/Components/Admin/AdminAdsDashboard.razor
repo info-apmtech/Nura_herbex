@@ -1,0 +1,625 @@
+@implements IDisposable
+@using System.Globalization
+@inject ApiClient Api
+@inject AdminSession AdminAuth
+@inject NavigationManager Nav
+
+@* Ad campaigns: which leads and customers came from Facebook / Instagram Click-to-WhatsApp ads, per campaign and ad. *@
+<div class="ld ad">
+    @* ───────── Header: what this is, and the live Meta sync ───────── *@
+    <header class="ad-hero">
+        <div class="ad-hero-text">
+            <span class="ad-eyebrow">@(AdminAuth.CanAll("campaigns") ? "Meta ads" : "My ad leads")</span>
+            <h3>Ad campaigns</h3>
+            <p>See which campaign and ad each lead came from, how many became customers, what they bought and what it cost.</p>
+        </div>
+
+        @if (_st is not null)
+        {
+            <div class="@($"ad-sync {SyncTone}")" role="group" aria-label="Meta sync">
+                <div class="ad-sync-top">
+                    <span class="ad-sync-dot" aria-hidden="true"></span>
+                    <div class="ad-sync-text">
+                        <strong>@SyncTitle</strong>
+                        <small>@SyncDetail</small>
+                    </div>
+                </div>
+                @if (_st.CanSync || _st.CanConnect)
+                {
+                    <div class="ad-sync-actions">
+                        <button type="button" class="ld-btn primary ad-syncbtn" disabled="@(_syncing || _st.Syncing)" @onclick="SyncOrConnectAsync">
+                            <Icon Name="RefreshCw" Size="14" Class="@(_syncing || _st.Syncing ? "animate-spin" : "")" />
+                            @(_syncing || _st.Syncing ? "Syncing…" : _st.Configured ? "Sync now" : "Connect Meta")
+                        </button>
+                        @if (_st.CanConnect)
+                        {
+                            <button type="button" class="@($"ld-btn ad-setbtn {(_showConn ? "is-on" : "")}")" aria-expanded="@_showConn" @onclick="ToggleConn"><Icon Name="KeyRound" Size="14" /> Meta settings</button>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </header>
+
+    @if (!string.IsNullOrEmpty(_notice))
+    {
+        <div class="@($"ad-notice {(_noticeOk ? "ok" : "bad")}")" role="status"><span>@_notice</span><button type="button" class="ad-x" aria-label="Dismiss" @onclick="() => _notice = null"><Icon Name="X" Size="14" /></button></div>
+    }
+    @if (_st is { Configured: true } && !string.IsNullOrEmpty(_st.LastError))
+    {
+        <div class="ad-notice bad" role="alert"><span><strong>The last Meta sync failed.</strong> @_st.LastError @(_st.CanConnect ? "Check the ad account and token in Meta settings." : "Ask an administrator to check the Meta connection.")</span></div>
+    }
+
+    @* ───────── Meta connection (administrators): the ad account and token are entered here ───────── *@
+    @if (_st is { CanConnect: true } && _showConn)
+    {
+        <section class="ad-conn" aria-label="Meta connection">
+            <form class="ad-conn-form" @onsubmit="SaveConnectionAsync" @onsubmit:preventDefault>
+                <div class="ad-conn-head">
+                    <span class="ad-conn-ico"><Icon Name="KeyRound" Size="20" /></span>
+                    <div>
+                        <h4>@(_st.Configured ? "Meta connection" : "Connect your Meta ad account")</h4>
+                        <p>@(_st.Configured ? "Update the ad account or token. Numbers refresh by themselves every " + _st.IntervalMinutes + " minutes." : "Add your ad account and an access token to bring in real campaign names, spend and cost per lead. It refreshes by itself every " + _st.IntervalMinutes + " minutes.")</p>
+                    </div>
+                    <button type="button" class="ad-x" aria-label="Close" @onclick="() => _showConn = false"><Icon Name="X" Size="16" /></button>
+                </div>
+                <div class="ad-conn-grid">
+                    <label>Ad account ID
+                        <input type="text" inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="30" placeholder="e.g. 1234567890123456" @bind="_fAccount" @bind:event="oninput" />
+                        <small>The number next to your account name in Ads Manager.</small>
+                    </label>
+                    <label>Access token
+                        <input type="password" autocomplete="new-password" spellcheck="false" placeholder="@(_conn.HasToken ? "Saved (ends …" + _conn.TokenHint + "). Leave blank to keep it." : "Paste the token")" @bind="_fToken" @bind:event="oninput" />
+                        <small>@(_conn.Source == "server" ? "Currently taken from the server settings. Saving here overrides it." : "Stored encrypted. It is never shown again.")</small>
+                    </label>
+                    <label class="ad-conn-ver">API version
+                        <input type="text" maxlength="8" placeholder="v21.0" @bind="_fVersion" @bind:event="oninput" />
+                        <small>Leave as is unless Meta asks you to change it.</small>
+                    </label>
+                </div>
+                @if (!string.IsNullOrEmpty(_connMsg))
+                {
+                    <div class="@($"ad-conn-msg {(_connOk ? "ok" : "bad")}")" role="status"><Icon Name="@(_connOk ? "CheckCircle2" : "AlertCircle")" Size="15" /><span>@_connMsg</span></div>
+                }
+                <div class="ad-conn-actions">
+                    <button type="submit" class="ld-btn primary" disabled="@_connBusy">@(_connBusy ? "Working…" : "Save and connect")</button>
+                    <button type="button" class="ld-btn" disabled="@(_connBusy || !_conn.HasToken)" title="Ask Meta about the saved account, without changing anything" @onclick="TestConnectionAsync">Test connection</button>
+                    @if (_conn.Source == "app") { <button type="button" class="ld-btn danger-outline" disabled="@_connBusy" @onclick="DisconnectAsync">Disconnect</button> }
+                </div>
+            </form>
+            <aside class="ad-conn-help" aria-label="How to find these">
+                <h5>Where to find them</h5>
+                <ol>
+                    <li><strong>Ad account ID:</strong> in <em>Meta Ads Manager</em>, open the account menu at the top left. The number under the account name is the ID.</li>
+                    <li><strong>Access token:</strong> in <em>Meta Business Settings → Users → System users</em>, add a system user, assign it your ad account (view access is enough), then <em>Generate new token</em> and tick <code>ads_read</code>.</li>
+                    <li>Paste both here and press <strong>Save and connect</strong>. We check them with Meta right away.</li>
+                </ol>
+            </aside>
+        </section>
+    }
+    else if (_st is { Configured: false, CanConnect: false })
+    {
+        <div class="ad-note"><Icon Name="Info" Size="14" /> Meta is not connected yet, so campaigns show as “Unnamed” and there is no spend. Ask an administrator to connect it in <em>Meta settings</em>.</div>
+    }
+
+    @* ───────── Filters ───────── *@
+    <section class="ad-filters" aria-label="Filters">
+        <div class="ad-filters-top">
+            <div class="ad-presets" role="group" aria-label="Period">
+                @foreach (var p in Presets)
+                {
+                    var preset = p;
+                    <button type="button" class="@(_preset == preset.Key ? "is-on" : "")" aria-pressed="@(_preset == preset.Key)" @onclick="() => SetPresetAsync(preset.Key)">@preset.Label</button>
+                }
+            </div>
+            @if (_preset == "custom")
+            {
+                <div class="ad-dates">
+                    <label><span>From</span><input type="date" value="@_from" max="@_to" @onchange="e => SetDateAsync(true, e.Value?.ToString())" /></label>
+                    <label><span>To</span><input type="date" value="@_to" min="@_from" @onchange="e => SetDateAsync(false, e.Value?.ToString())" /></label>
+                </div>
+            }
+            <div class="ad-filters-end">
+                <label class="em-switch ad-switch" title="Show only people who have placed a paid order">
+                    <input type="checkbox" checked="@_customersOnly" @onchange="e => SetAsync(_ => _customersOnly = e.Value is true, null)" />
+                    <span class="em-track"><span class="em-knob"></span></span>
+                    <span class="em-switch-label">Customers only</span>
+                </label>
+                @if (HasFilters) { <button type="button" class="ld-btn" @onclick="ResetAsync"><Icon Name="X" Size="13" /> Reset filters</button> }
+            </div>
+        </div>
+        <div class="ad-fields">
+            <label class="ad-field"><span>Campaign</span>
+                <select value="@_campaign" @onchange="OnCampaignChanged">
+                    <option value="">All campaigns</option>
+                    @foreach (var o in _r?.Filters.Campaigns ?? new()) { <option value="@o.Value" selected="@(o.Value == _campaign)">@o.Label</option> }
+                </select>
+            </label>
+            <label class="ad-field"><span>Ad</span>
+                <select value="@_ad" @onchange="e => SetAsync(v => _ad = v, e.Value?.ToString())">
+                    <option value="">All ads</option>
+                    @foreach (var o in _r?.Filters.Ads ?? new()) { <option value="@o.Value" selected="@(o.Value == _ad)">@o.Label</option> }
+                </select>
+            </label>
+            <label class="ad-field"><span>Type</span>
+                <select value="@_sourceType" @onchange="e => SetAsync(v => _sourceType = v, e.Value?.ToString())">
+                    <option value="">Ads and posts</option><option value="ad">Ads</option><option value="post">Posts</option>
+                </select>
+            </label>
+            <label class="ad-field"><span>Stage</span>
+                <select value="@_status" @onchange="e => SetAsync(v => _status = v, e.Value?.ToString())">
+                    <option value="">Every stage</option>
+                    <option value="new">New</option><option value="follow-up">Follow-up</option><option value="interested">Hot lead</option>
+                    <option value="customer">Customer</option><option value="not-interested">Not interested</option>
+                </select>
+            </label>
+            @if (AdminAuth.CanAll("campaigns") && (_r?.Filters.Owners.Count ?? 0) > 0)
+            {
+                <label class="ad-field"><span>Owner</span>
+                    <select value="@_owner" @onchange="e => SetAsync(v => _owner = v, e.Value?.ToString())">
+                        <option value="">Everyone</option>
+                        @foreach (var o in _r!.Filters.Owners) { <option value="@o.Value" selected="@(o.Value == _owner)">@o.Label</option> }
+                    </select>
+                </label>
+            }
+            <div class="ad-field ad-search">
+                <span>Search</span>
+                <div class="ad-search-box">
+                    <Icon Name="Search" Size="15" />
+                    <input type="text" inputmode="search" autocomplete="off" placeholder="Name, phone, ad or campaign" aria-label="Search people, ads and campaigns" value="@_q" @onchange="e => SetAsync(v => _q = v, e.Value?.ToString())" />
+                    @if (_q != "") { <button type="button" class="ad-search-clear" aria-label="Clear the search" @onclick='() => SetAsync(v => _q = v, "")'><Icon Name="X" Size="13" /></button> }
+                </div>
+            </div>
+        </div>
+    </section>
+
+    @if (_r is null)
+    {
+        <div class="ld-card ld-empty">@(_error ?? "Loading the report…")</div>
+    }
+    else
+    {
+        var k = _r.Kpis;
+        @if (!string.IsNullOrEmpty(_r.ScopeNote)) { <div class="ad-note"><Icon Name="Info" Size="14" /> @_r.ScopeNote</div> }
+
+
+        @if (k.AdLeads == 0 && !HasFilters)
+        {
+            <section class="ad-empty">
+                <Icon Name="TrendingUp" Size="34" />
+                <h4>No ad leads in this period</h4>
+                <p>People appear here when they start a WhatsApp chat from a Facebook or Instagram Click-to-WhatsApp ad. Try a longer period, or check that the ad's “Send message” button opens WhatsApp.</p>
+            </section>
+        }
+        else
+        {
+            @* ───────── Headline numbers ───────── *@
+            <section class="ad-kpis" aria-label="Headline numbers">
+                <article class="ad-kpi"><span class="ad-ico blue"><Icon Name="Users" Size="18" /></span><div><span>Leads from ads</span><strong>@k.AdLeads.ToString("N0")</strong><small>@_r.Period</small></div></article>
+                <article class="ad-kpi"><span class="ad-ico violet"><Icon Name="Flame" Size="18" /></span><div><span>Hot leads</span><strong>@k.HotLeads.ToString("N0")</strong><small>interested, not ordered yet</small></div></article>
+                <article class="ad-kpi"><span class="ad-ico green"><Icon Name="HeartPulse" Size="18" /></span><div><span>Customers</span><strong>@k.Customers.ToString("N0")</strong><div class="ad-meter" title="@k.ConversionPercent% of ad leads became customers"><i style="width:@k.ConversionPercent%"></i></div><small>@k.ConversionPercent% conversion</small></div></article>
+                <article class="ad-kpi"><span class="ad-ico gold"><Icon Name="ShoppingBag" Size="18" /></span><div><span>Sales from ad leads</span><strong>@Money(k.Revenue)</strong><small>@k.Orders order@(k.Orders == 1 ? "" : "s")@(k.Orders > 0 ? " · average " + Money(k.AverageOrderValue) : "")</small></div></article>
+            </section>
+
+            @if (k.HasSpend)
+            {
+                <section class="ad-kpis ad-kpis-sm" aria-label="Cost and reach">
+                    <article class="ad-kpi sm"><div><span>Ad spend</span><strong>@Money(k.Spend)</strong><small>@k.Clicks.ToString("N0") clicks</small></div></article>
+                    <article class="ad-kpi sm"><div><span>Cost per lead</span><strong>@(k.CostPerLead is { } cpl ? Money(cpl) : "—")</strong><small>spend ÷ ad leads</small></div></article>
+                    <article class="ad-kpi sm"><div><span>Cost per customer</span><strong>@(k.CostPerCustomer is { } cpc ? Money(cpc) : "—")</strong><small>spend ÷ customers</small></div></article>
+                    <article class="@($"ad-kpi sm {(k.Roas is >= 1 ? "good" : k.Roas is not null ? "weak" : "")}")"><div><span>Return on ad spend</span><strong>@(k.Roas is { } roas ? roas.ToString("0.0#", CultureInfo.InvariantCulture) + "×" : "—")</strong><small>sales ÷ spend</small></div></article>
+                    <article class="ad-kpi sm"><div><span>Reach</span><strong>@Compact(k.Impressions)</strong><small>impressions</small></div></article>
+                    <article class="ad-kpi sm"><div><span>Chats started</span><strong>@k.Conversations.ToString("N0")</strong><small>counted by Meta</small></div></article>
+                </section>
+            }
+            else if (_r.CostHidden)
+            {
+                <div class="ad-note"><Icon Name="Info" Size="14" /> Cost figures are hidden while you filter by stage, owner, search, customers or ad type, because spend cannot be split that way. Clear those filters to see spend and cost per lead.</div>
+            }
+
+            @* ───────── Trend and funnel ───────── *@
+            <div class="ad-two">
+                <section class="ad-card" aria-label="Trend">
+                    <header>
+                        <h4>@(_r.TrendWeekly ? "Leads per week" : "Leads per day")</h4>
+                        <span class="ad-legend"><i class="a"></i> Leads <i class="b"></i> Customers @if (k.HasSpend) { <i class="c"></i> <text>Spend</text> }</span>
+                    </header>
+                    @if (_r.Trend.All(t => t.Leads == 0 && t.Customers == 0 && t.Spend == 0))
+                    {
+                        <p class="ad-none">Nothing to chart for these filters.</p>
+                    }
+                    else
+                    {
+                        var tmax = Math.Max(1, _r.Trend.Max(t => Math.Max(t.Leads, t.Customers)));
+                        <div class="ad-chart" role="img" aria-label="Leads and customers over the period">
+                            <div class="ad-grid"><span>@tmax</span><span>@(tmax / 2)</span><span>0</span></div>
+                            <div class="ad-cols">
+                                @for (var i = 0; i < _r.Trend.Count; i++)
+                                {
+                                    var t = _r.Trend[i];
+                                    <div class="ad-col" title="@Tip(t, k.HasSpend)">
+                                        <div class="ad-bars"><span class="a" style="height:@Pct(t.Leads, tmax)%"></span><span class="b" style="height:@Pct(t.Customers, tmax)%"></span></div>
+                                        <small>@(_r.Trend.Count <= 14 || i % Math.Max(1, _r.Trend.Count / 8) == 0 ? t.Day : "")</small>
+                                    </div>
+                                }
+                            </div>
+                            @if (k.HasSpend && SpendLine is { Length: > 0 } line)
+                            {
+                                <svg class="ad-spend" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline points="@line" /></svg>
+                            }
+                        </div>
+                    }
+                </section>
+
+                <section class="ad-card" aria-label="Funnel">
+                    <header><h4>Where ad leads are now</h4><span>Share of @k.AdLeads.ToString("N0") ad leads</span></header>
+                    @{ var fmax = Math.Max(1, _r.Funnel.Max(f => f.Count)); }
+                    <div class="ad-funnel">
+                        @foreach (var f in _r.Funnel)
+                        {
+                            <div class="ad-frow">
+                                <span>@StageLabel(f.Status)</span>
+                                <div><i class="@($"s-{f.Status}")" style="width:@Pct(f.Count, fmax)%"></i></div>
+                                <b>@f.Count.ToString("N0")</b><small>@Pct(f.Count, Math.Max(1, k.AdLeads))%</small>
+                            </div>
+                        }
+                    </div>
+                </section>
+            </div>
+
+            @* ───────── Tables ───────── *@
+            <section class="ad-card ad-table" aria-label="Campaigns">
+                <header><h4>Campaigns</h4><span>Click a campaign to filter the whole page to it. Click a heading to sort.</span></header>
+                <DataTable TItem="AdsCampaignRow" Items="_r.Campaigns" Columns="_campaignCols" Searchable="false" PageSize="10" Title="Ad campaigns" FileName="nura-ad-campaigns"
+                           ExportMeta="@ExportMeta" EmptyText="No campaigns for these filters." RowClass="@(c => c.Key == _campaign ? "ad-row-on ad-click" : "ad-click")" OnRowClick="PickCampaignAsync" />
+            </section>
+
+            <section class="ad-card ad-table" aria-label="Ads">
+                <header><h4>Ads</h4><span>Each ad or post, with its own leads and customers. Click to filter.</span></header>
+                <DataTable TItem="AdsAdRow" Items="_r.Ads" Columns="_adCols" Searchable="false" PageSize="10" Title="Ads" FileName="nura-ads"
+                           ExportMeta="@ExportMeta" EmptyText="No ads for these filters." RowClass="@(a => a.Key == _ad ? "ad-row-on ad-click" : "ad-click")" OnRowClick="PickAdAsync" />
+            </section>
+
+            <section class="ad-card ad-table" aria-label="People">
+                <header>
+                    <h4>People from ads</h4>
+                    <span>@(_r.PeopleTotal > _r.People.Count ? $"Showing the latest {_r.People.Count:N0} of {_r.PeopleTotal:N0}. Narrow the filters to see the rest." : "Click a person to open their chat.")</span>
+                </header>
+                <DataTable TItem="AdsPersonRow" Items="_r.People" Columns="_peopleCols" Searchable="true" SearchPlaceholder="Search these people" PageSize="25" Title="People from ads" FileName="nura-ad-people"
+                           ExportMeta="@ExportMeta" EmptyText="Nobody matches these filters." RowClass="@(_ => "ad-click")" OnRowClick="OpenPerson" />
+            </section>
+        }
+    }
+</div>
+
+@code {
+    private sealed record Preset(string Key, string Label);
+    private static readonly Preset[] Presets = [new("today", "Today"), new("7", "7D"), new("30", "30D"), new("90", "90D"), new("custom", "Custom")];
+
+    private AdsReportResponse? _r;
+    private AdsStatusResponse? _st;
+    private string _preset = "30", _from = "", _to = "";
+    private string _campaign = "", _ad = "", _sourceType = "", _status = "", _owner = "", _q = "";
+    private bool _customersOnly, _syncing, _noticeOk;
+    private string? _error, _notice;
+    private int _version; // drops answers that arrive after a newer request
+
+    // Meta connection panel and live sync
+    private bool _showConn, _connBusy, _connOk, _disposed;
+    private string _fAccount = "", _fToken = "", _fVersion = "v21.0";
+    private string? _connMsg;
+    private MetaConnectionDto _conn = new();
+    private Timer? _timer;
+    private DateTime? _seenSync;
+
+    public void Dispose() { _disposed = true; _timer?.Dispose(); }
+
+    private List<DataColumn<AdsCampaignRow>> _campaignCols = [];
+    private List<DataColumn<AdsAdRow>> _adCols = [];
+    private List<DataColumn<AdsPersonRow>> _peopleCols = [];
+
+    private bool HasFilters => _campaign != "" || _ad != "" || _sourceType != "" || _status != "" || _owner != "" || _q != "" || _customersOnly;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ApplyPreset("30");
+        BuildColumns(false);
+        await Task.WhenAll(LoadAsync(), LoadStatusAsync());
+        _seenSync = _st?.LastSyncAt;
+        if (_st is { CanConnect: true })
+        {
+            await LoadConnectionAsync();
+            _showConn = !_st.Configured; // first visit: show the connect form
+        }
+        // Refresh the status every 15 seconds so "synced 3 min ago" stays true; reload the numbers when a new sync has landed.
+        _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+    }
+
+    private async Task PollAsync()
+    {
+        if (_disposed || _syncing) return;
+        await LoadStatusAsync();
+        if (_st?.LastSyncAt != _seenSync) { _seenSync = _st?.LastSyncAt; await LoadAsync(); }
+    }
+
+    // ---- loading -------------------------------------------------------------------------------
+
+    private async Task LoadAsync()
+    {
+        var version = ++_version;
+        var res = await Api.AdminAdsReportAsync(_from, _to, _campaign, _ad, _sourceType, _status, _owner, _q, _customersOnly);
+        if (version != _version) return;
+        if (res.Success) { _r = res; _error = null; BuildColumns(res.Kpis.HasSpend); }
+        else _error = res.Message ?? "Could not load the report.";
+        StateHasChanged();
+    }
+
+    private async Task LoadStatusAsync()
+    {
+        var s = await Api.AdminAdsStatusAsync();
+        if (s.Success) _st = s;
+        StateHasChanged();
+    }
+
+    private async Task SyncAsync()
+    {
+        _syncing = true; _notice = null; StateHasChanged();
+        var res = await Api.AdminAdsSyncAsync();
+        _notice = res.Message ?? (res.Success ? "Synced." : "The sync failed."); _noticeOk = res.Success;
+        _syncing = false;
+        await Task.WhenAll(LoadStatusAsync(), LoadAsync());
+        _seenSync = _st?.LastSyncAt;
+    }
+
+    /// <summary>The main button: sync when connected, otherwise open the connect form (or explain who can connect).</summary>
+    private async Task SyncOrConnectAsync()
+    {
+        if (_st is { Configured: true }) { await SyncAsync(); return; }
+        if (_st is { CanConnect: true }) { await LoadConnectionAsync(); _showConn = true; return; }
+        _notice = "Meta is not connected yet. Ask an administrator to connect it in Meta settings."; _noticeOk = false;
+    }
+
+    // ---- Meta connection -----------------------------------------------------------------------
+
+    private async Task LoadConnectionAsync()
+    {
+        var res = await Api.AdminMetaConnectionAsync();
+        if (!res.Success) return;
+        _conn = res.Connection;
+        _fAccount = _conn.AdAccountId; _fVersion = string.IsNullOrWhiteSpace(_conn.ApiVersion) ? "v21.0" : _conn.ApiVersion; _fToken = "";
+    }
+
+    private async Task ToggleConn()
+    {
+        _showConn = !_showConn;
+        if (_showConn) { _connMsg = null; await LoadConnectionAsync(); }
+    }
+
+    private async Task SaveConnectionAsync()
+    {
+        _connBusy = true; _connMsg = null; StateHasChanged();
+        var res = await Api.AdminSaveMetaConnectionAsync(new MetaConnectionSaveRequest { AdAccountId = _fAccount, AccessToken = _fToken, ApiVersion = _fVersion });
+        _connMsg = res.Message; _connOk = res.Success && (res.Message?.StartsWith("Saved. ") ?? false);
+        if (res.Success)
+        {
+            _conn = res.Connection; _fToken = "";
+            await LoadStatusAsync();
+            if (_connOk)
+            {
+                // Connected: bring the numbers in straight away instead of waiting for the next scheduled sync.
+                _connMsg += " Syncing now…"; StateHasChanged();
+                await SyncAsync();
+                _showConn = false;
+            }
+        }
+        _connBusy = false;
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        _connBusy = true; _connMsg = null; StateHasChanged();
+        var res = await Api.AdminTestMetaConnectionAsync();
+        _connMsg = res.Message; _connOk = res.Success;
+        if (res.Success) { _conn = res.Connection; await LoadStatusAsync(); }
+        _connBusy = false;
+    }
+
+    private async Task DisconnectAsync()
+    {
+        _connBusy = true;
+        var res = await Api.AdminDisconnectMetaAsync();
+        _connMsg = res.Message; _connOk = res.Success;
+        if (res.Success) { _conn = res.Connection; _fToken = ""; await Task.WhenAll(LoadStatusAsync(), LoadAsync()); }
+        _connBusy = false;
+    }
+
+    // ---- sync status text ----------------------------------------------------------------------
+
+    private string SyncTone => _st is null ? "" : _st.Syncing || _syncing ? "busy" : !_st.Configured ? "off" : string.IsNullOrEmpty(_st.LastError) ? "ok" : "bad";
+
+    private string SyncTitle
+    {
+        get
+        {
+            if (_st is null) return "";
+            if (!_st.Configured) return "Meta not connected";
+            if (_st.Syncing || _syncing) return "Syncing with Meta…";
+            if (!string.IsNullOrEmpty(_st.LastError)) return "Meta sync problem";
+            return string.IsNullOrWhiteSpace(_st.AccountName) ? "Meta connected" : "Meta connected · " + _st.AccountName;
+        }
+    }
+
+    private string SyncDetail
+    {
+        get
+        {
+            if (_st is null) return "";
+            if (!_st.Configured) return _st.CanConnect ? "Connect it to see real campaign names, spend and cost per lead." : "Campaigns show as “Unnamed” and there is no spend.";
+            if (_st.Syncing || _syncing) return "Fetching the latest numbers…";
+            var last = _st.LastSyncAt is { } ls ? "Updated " + Ago(ls) : "Not synced yet";
+            var next = _st.NextSyncAt is { } n ? " · next in " + Until(n) : "";
+            return last + " · every " + _st.IntervalMinutes + " min" + next;
+        }
+    }
+
+    private static string Ago(DateTime utc)
+    {
+        var s = (DateTime.UtcNow - utc).TotalSeconds;
+        return s < 45 ? "just now" : s < 3600 ? $"{Math.Max(1, (int)Math.Round(s / 60))} min ago" : s < 86400 ? $"{(int)(s / 3600)} h ago" : $"{(int)(s / 86400)} d ago";
+    }
+
+    private static string Until(DateTime utc)
+    {
+        var s = (utc - DateTime.UtcNow).TotalSeconds;
+        return s < 60 ? "under a minute" : $"{(int)Math.Ceiling(s / 60)} min";
+    }
+
+    // ---- filters -------------------------------------------------------------------------------
+
+    private void ApplyPreset(string key)
+    {
+        _preset = key;
+        var today = DateTime.Now.Date;
+        if (key == "custom") { if (_from == "") _from = today.AddDays(-29).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture); if (_to == "") _to = today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture); return; }
+        var days = key == "today" ? 1 : int.Parse(key, CultureInfo.InvariantCulture);
+        _from = today.AddDays(-(days - 1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        _to = today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    }
+
+    private Task SetPresetAsync(string key) { ApplyPreset(key); return key == "custom" ? Task.CompletedTask : LoadAsync(); }
+
+    private Task SetDateAsync(bool isFrom, string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return Task.CompletedTask;
+        if (isFrom) _from = value; else _to = value;
+        return LoadAsync();
+    }
+
+    private Task SetAsync(Action<string> set, string? value) { set(value ?? ""); return LoadAsync(); }
+
+    private Task OnCampaignChanged(ChangeEventArgs e) { _campaign = e.Value?.ToString() ?? ""; _ad = ""; return LoadAsync(); }
+
+    private Task ResetAsync()
+    {
+        _campaign = _ad = _sourceType = _status = _owner = _q = "";
+        _customersOnly = false;
+        return LoadAsync();
+    }
+
+    private Task PickCampaignAsync(AdsCampaignRow row) { _campaign = _campaign == row.Key ? "" : row.Key; _ad = ""; return LoadAsync(); }
+
+    private Task PickAdAsync(AdsAdRow row)
+    {
+        if (_ad == row.Key) { _ad = ""; return LoadAsync(); }
+        _ad = row.Key;
+        if (row.CampaignKey != "") _campaign = row.CampaignKey;
+        return LoadAsync();
+    }
+
+    private void OpenPerson(AdsPersonRow p) =>
+        Nav.NavigateTo($"/admin/{(p.IsCustomer ? "care" : p.Status == LeadStatuses.Interested ? "interested" : "leads")}?open={p.LeadId}");
+
+    // ---- tables --------------------------------------------------------------------------------
+
+    private IEnumerable<string> ExportMeta
+    {
+        get
+        {
+            var meta = new List<string> { "Period: " + (_r?.Period ?? "") };
+            if (_campaign != "") meta.Add("Campaign: " + (_r?.Filters.Campaigns.FirstOrDefault(c => c.Value == _campaign)?.Label ?? _campaign));
+            if (_ad != "") meta.Add("Ad: " + (_r?.Filters.Ads.FirstOrDefault(c => c.Value == _ad)?.Label ?? _ad));
+            if (_sourceType != "") meta.Add("Type: " + _sourceType);
+            if (_status != "") meta.Add("Stage: " + StageLabel(_status));
+            if (_customersOnly) meta.Add("Customers only");
+            if (_q != "") meta.Add("Search: " + _q);
+            return meta;
+        }
+    }
+
+    private void BuildColumns(bool spend)
+    {
+        string Rs(decimal v) => v.ToString("N0", CultureInfo.InvariantCulture);
+        string Dec(decimal? v) => v is { } d ? d.ToString("N2", CultureInfo.InvariantCulture) : "—";
+
+        _campaignCols =
+        [
+            new() { Header = "Campaign", Text = c => c.Campaign, Cell = c => b => { b.OpenElement(0, "strong"); b.AddContent(1, c.Campaign); b.CloseElement(); b.OpenElement(2, "small"); b.AddAttribute(3, "class", "ad-sub"); b.AddContent(4, c.Ads + (c.Ads == 1 ? " ad" : " ads")); b.CloseElement(); } },
+            new() { Header = "Leads", Text = c => c.Leads.ToString(), SortKey = c => c.Leads, Align = "right" },
+            new() { Header = "Hot", Text = c => c.Hot.ToString(), SortKey = c => c.Hot, Align = "right" },
+            new() { Header = "Customers", Text = c => c.Customers.ToString(), SortKey = c => c.Customers, Align = "right" },
+            new() { Header = "Conversion", Text = c => c.Leads == 0 ? "—" : c.ConversionPercent + "%", SortKey = c => c.ConversionPercent, Align = "right" },
+            new() { Header = "Sales (Rs)", Text = c => Rs(c.Revenue), SortKey = c => c.Revenue, Align = "right" },
+        ];
+        if (spend)
+            _campaignCols.AddRange(
+            [
+                new() { Header = "Spend (Rs)", Text = c => Rs(c.Spend), SortKey = c => c.Spend, Align = "right" },
+                new() { Header = "Cost / lead (Rs)", Text = c => Dec(c.CostPerLead), SortKey = c => c.CostPerLead ?? decimal.MaxValue, Align = "right" },
+                new() { Header = "Cost / customer (Rs)", Text = c => Dec(c.CostPerCustomer), SortKey = c => c.CostPerCustomer ?? decimal.MaxValue, Align = "right" },
+                new() { Header = "ROAS", Text = c => c.Roas is { } r ? r.ToString("0.0#", CultureInfo.InvariantCulture) + "x" : "—", SortKey = c => c.Roas ?? -1m, Align = "right" },
+            ]);
+
+        _adCols =
+        [
+            new() { Header = "Ad", Text = a => a.Ad, Cell = a => b => { b.OpenElement(0, "strong"); b.AddContent(1, a.Ad); b.CloseElement(); b.OpenElement(2, "small"); b.AddAttribute(3, "class", "ad-sub"); b.AddContent(4, a.Campaign); b.CloseElement(); } },
+            new() { Header = "Type", Text = a => a.AdType == "post" ? "Post" : "Ad", Tone = a => a.AdType == "post" ? "info" : "muted" },
+            new() { Header = "Leads", Text = a => a.Leads.ToString(), SortKey = a => a.Leads, Align = "right" },
+            new() { Header = "Hot", Text = a => a.Hot.ToString(), SortKey = a => a.Hot, Align = "right" },
+            new() { Header = "Customers", Text = a => a.Customers.ToString(), SortKey = a => a.Customers, Align = "right" },
+            new() { Header = "Conversion", Text = a => a.Leads == 0 ? "—" : a.ConversionPercent + "%", SortKey = a => a.ConversionPercent, Align = "right" },
+            new() { Header = "Sales (Rs)", Text = a => Rs(a.Revenue), SortKey = a => a.Revenue, Align = "right" },
+        ];
+        if (spend)
+            _adCols.AddRange(
+            [
+                new() { Header = "Spend (Rs)", Text = a => Rs(a.Spend), SortKey = a => a.Spend, Align = "right" },
+                new() { Header = "Cost / lead (Rs)", Text = a => Dec(a.CostPerLead), SortKey = a => a.CostPerLead ?? decimal.MaxValue, Align = "right" },
+            ]);
+
+        _peopleCols =
+        [
+            new() { Header = "Person", Text = p => p.Name + " +" + p.Phone, Cell = p => b => { b.OpenElement(0, "strong"); b.AddContent(1, p.Name); b.CloseElement(); b.OpenElement(2, "small"); b.AddAttribute(3, "class", "ad-sub"); b.AddContent(4, "+" + p.Phone); b.CloseElement(); } },
+            new() { Header = "Campaign", Text = p => p.Campaign },
+            new() { Header = "Ad", Text = p => p.Ad },
+            new() { Header = "Platform", Text = p => p.Platform, Hidden = true },
+            new() { Header = "Type", Text = p => p.AdType == "post" ? "Post" : "Ad", Hidden = true },
+            new() { Header = "First message", Text = p => FuFmt.Local(p.FirstAdContactAt).ToString("dd MMM yyyy", CultureInfo.InvariantCulture), SortKey = p => p.FirstAdContactAt },
+            new() { Header = "Stage", Text = p => StageLabel(p.Status), Tone = p => p.Status switch { "customer" => "good", "interested" => "info", "follow-up" => "warn", "not-interested" => "muted", _ => "info" } },
+            new() { Header = "Owner", Text = p => p.OwnerName ?? "Unassigned" },
+            new() { Header = "Orders", Text = p => p.Orders.ToString(), SortKey = p => p.Orders, Align = "right" },
+            new() { Header = "Sales (Rs)", Text = p => Rs(p.Revenue), SortKey = p => p.Revenue, Align = "right" },
+            new() { Header = "Last contact", Text = p => FuFmt.Local(p.LastContactAt).ToString("dd MMM yyyy", CultureInfo.InvariantCulture), SortKey = p => p.LastContactAt, Hidden = true },
+        ];
+    }
+
+    // ---- helpers -------------------------------------------------------------------------------
+
+    private static string Tip(AdsTrendPoint t, bool spend) =>
+        $"{t.Day}: {t.Leads} lead{(t.Leads == 1 ? "" : "s")}, {t.Customers} customer{(t.Customers == 1 ? "" : "s")}" + (spend ? ", " + Money(t.Spend) + " spend" : "");
+
+    private static string Money(decimal v) => "₹" + AdminFmt.Inr(v);
+
+    private static string Compact(long n) => n >= 10_000_000 ? (n / 10_000_000.0).ToString("0.#", CultureInfo.InvariantCulture) + " Cr"
+        : n >= 100_000 ? (n / 100_000.0).ToString("0.#", CultureInfo.InvariantCulture) + " L"
+        : n >= 1_000 ? (n / 1_000.0).ToString("0.#", CultureInfo.InvariantCulture) + "K" : n.ToString(CultureInfo.InvariantCulture);
+
+    private static string Pct(int part, int whole) => whole <= 0 ? "0" : (100.0 * part / whole).ToString("0.#", CultureInfo.InvariantCulture);
+
+    private static string StageLabel(string s) => s switch
+    {
+        "new" => "New", "follow-up" => "Follow-up", "interested" => "Hot lead", "customer" => "Customer", "not-interested" => "Not interested", _ => s,
+    };
+
+    /// <summary>Spend per bucket drawn as a line over the bars, scaled to its own maximum.</summary>
+    private string SpendLine
+    {
+        get
+        {
+            if (_r is null || _r.Trend.Count == 0) return "";
+            var max = _r.Trend.Max(t => t.Spend);
+            if (max <= 0) return "";
+            var n = _r.Trend.Count;
+            return string.Join(" ", _r.Trend.Select((t, i) => $"{((i + 0.5) / n * 100).ToString("0.##", CultureInfo.InvariantCulture)},{(100 - (double)(t.Spend / max) * 92 - 4).ToString("0.##", CultureInfo.InvariantCulture)}"));
+        }
+    }
+}

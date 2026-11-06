@@ -2,20 +2,61 @@
 @inject ApiClient Api
 @inject AdminSession AdminAuth
 @inject NavigationManager Nav
+@inject BrowserInterop Browser
 
-<div class="ld">
+<div class="@($"ld ld-mode-{Mode} {(_v2 ? "ld-v2" : "")}")">
 
-    @* Pipeline summary — doubles as the status filter *@
-    <div class="ld-kpis">
-        <button type="button" class="@KpiClass("")" @onclick='() => SetStatusAsync("")'>
-            <i style="background:#235b40"></i><span>All leads</span><strong>@Total</strong><small>@ConversionText</small>
+    @* Which panel you are in, with a switch to the others you may open, and the look toggle *@
+    <div class="ld-topbar">
+        <div class="ld-views" role="tablist" aria-label="Panels">
+            @foreach (var v in LeadViews.All.Where(x => AdminAuth.Can(x)))
+            {
+                var view = v;
+                <button type="button" role="tab" aria-selected="@(view == Mode)" class="@($"ld-view {(view == Mode ? "is-active" : "")}")" @onclick="() => GoTo(view)">
+                    <Icon Name="@PanelIcon(view)" Size="15" /><span>@PanelName(view)</span>
+                    @if (_viewCounts.TryGetValue(view, out var vc)) { <b>@vc</b> }
+                </button>
+            }
+        </div>
+        <button type="button" class="@($"ld-look {(_v2 ? "is-on" : "")}")" aria-pressed="@_v2" title="Switch between the classic and the new look. Your choice is remembered on this device." @onclick="ToggleLookAsync">
+            <Icon Name="Sparkles" Size="14" /> @(_v2 ? "New look" : "Try the new look")
         </button>
-        @foreach (var s in KpiStatuses)
+    </div>
+
+    @if (!string.IsNullOrEmpty(_notice))
+    {
+        <div class="ld-banner ld-notice" role="status"><Icon Name="CheckCircle2" Size="15" /><span>@_notice</span><button type="button" class="ld-x" aria-label="Dismiss" @onclick="() => _notice = null"><Icon Name="X" Size="14" /></button></div>
+    }
+
+    @* Summary — doubles as the filter *@
+    <div class="ld-kpis">
+        @if (Mode == LeadViews.Leads)
         {
-            var status = s;
-            <button type="button" class="@KpiClass(status)" @onclick="() => SetStatusAsync(status)">
-                <i style="background:@Accent(status)"></i><span>@Label(status)</span><strong>@_counts.GetValueOrDefault(status)</strong><small>@KpiHint(status)</small>
+            <button type="button" class="@KpiClass("")" @onclick='() => SetStatusAsync("")'>
+                <i style="background:#235b40"></i><span>All leads</span><strong>@Total</strong><small>Not yet interested or ordered</small>
             </button>
+            @foreach (var s in KpiStatuses)
+            {
+                var status = s;
+                <button type="button" class="@KpiClass(status)" @onclick="() => SetStatusAsync(status)">
+                    <i style="background:@Accent(status)"></i><span>@Label(status)</span><strong>@_counts.GetValueOrDefault(status)</strong><small>@KpiHint(status)</small>
+                </button>
+            }
+        }
+        else
+        {
+            <button type="button" class="@QuickClass("")" @onclick='() => _quick = ""'>
+                <i style="background:#235b40"></i><span>@(Mode == LeadViews.Care ? "Customers" : "Hot leads")</span><strong>@Total</strong><small>@(Mode == LeadViews.Care ? "Paid customers" : "Showed interest, not ordered yet")</small>
+            </button>
+            <button type="button" class="@QuickClass("unread")" @onclick='() => _quick = "unread"'>
+                <i style="background:#2b6a98"></i><span>Unread</span><strong>@_unreadTotal</strong><small>Messages waiting for a reply</small>
+            </button>
+            @if (Mode == LeadViews.Care)
+            {
+                <button type="button" class="@QuickClass("open")" @onclick='() => _quick = "open"'>
+                    <i style="background:#c8932e"></i><span>Order on the way</span><strong>@_leads.Count(x => x.OpenOrders > 0)</strong><small>Not delivered yet</small>
+                </button>
+            }
         }
     </div>
 
@@ -24,8 +65,75 @@
         <div class="ld-banner danger" style="border-radius:10px;border:1px solid #f6d2cd"><Icon Name="AlertCircle" Size="15" /><span>@_error</span></div>
     }
 
-    <div class="@($"ld-work {(_selected?.Lead is not null ? "is-detail" : "")}")">
+    <div class="@($"ld-work {(_selected?.Lead is not null ? "is-detail" : "")} {(_v2 ? "ld-board-mode" : "")}")">
 
+        @if (_v2)
+        {
+            @* ───────── New look: pipeline board ───────── *@
+            <section class="ld-board" aria-label="@PanelName(Mode) board">
+                <div class="ld-board-bar">
+                    <div class="ld-search">
+                        <Icon Name="Search" Size="15" />
+                        <input type="search" placeholder="Search name, phone or email" aria-label="Search" @bind="_query" @bind:event="oninput" @bind:after="SearchAsync" />
+                    </div>
+                    @if (Everyone)
+                    {
+                        <select class="ld-assignee" aria-label="Filter by owner" value="@_assignee" @onchange="OnAssigneeFilterChanged">
+                            <option value="">@(Mode == LeadViews.Care ? "All care owners" : "All owners")</option>
+                            <option value="unassigned">Unassigned (@_unassigned)</option>
+                            @foreach (var t in _team) { <option value="@t.Id">@t.Name</option> }
+                        </select>
+                    }
+                    <button type="button" class="@($"ld-chip2 {(_quick == "unread" ? "is-on" : "")}")" aria-pressed="@(_quick == "unread")" @onclick='() => _quick = _quick == "unread" ? "" : "unread"'><Icon Name="MessageCircle" Size="13" /> Unread <b>@_unreadTotal</b></button>
+                    <span class="ld-board-total"><strong>@Total</strong> @(Mode == LeadViews.Care ? "customers" : Mode == LeadViews.Interested ? "hot leads" : "leads")</span>
+                    <button type="button" class="ld-refresh" title="Refresh" aria-label="Refresh" @onclick="() => LoadAsync(true)"><Icon Name="RefreshCw" Size="14" Class="@(_loading ? "animate-spin" : "")" /></button>
+                </div>
+
+                @if (_loading && _leads.Count == 0) { <div class="ld-empty">Loading…</div> }
+                else
+                {
+                    <div class="ld-cols">
+                        @foreach (var col in BoardColumns())
+                        {
+                            <div class="ld-col" style="--col:@col.Color">
+                                <header><span class="ld-col-dot"></span><strong>@col.Title</strong><b>@col.Items.Count</b><small>@col.Hint</small></header>
+                                <div class="ld-col-body">
+                                    @foreach (var l in col.Items)
+                                    {
+                                        var lead = l;
+                                        <button type="button" @key="lead.Id" @onclick="() => OpenAsync(lead.Id)" class="@($"ld-bcard {(_selected?.Lead?.Id == lead.Id ? "is-selected" : "")} {(lead.UnreadCount > 0 ? "has-unread" : "")}")">
+                                            <span class="ld-bcard-top">
+                                                <span class="ld-avatar" style="background:@AvatarColor(lead)">@Initials(lead)</span>
+                                                <span class="ld-bcard-who"><strong>@lead.Name</strong><small>+@lead.Phone</small></span>
+                                                <span class="ld-bcard-time">@ListTime(lead.LastContactAt)</span>
+                                            </span>
+                                            <span class="ld-bcard-msg">@(lead.LastMessageDirection == "outbound" ? "You: " : "")@(lead.LastMessage ?? lead.FirstMessage ?? "No messages yet")</span>
+                                            @if (lead.IsCustomer) { <span class="ld-bcard-conv"><Icon Name="HeartPulse" Size="12" />Converted by <strong>@(lead.ConvertedByName ?? "website order")</strong></span> }
+                                            <span class="ld-bcard-tags">
+                                                @if (lead.UnreadCount > 0) { <span class="ld-unread">@lead.UnreadCount new</span> }
+                                                @if (lead.OpenOrders > 0) { <span class="ld-pill ld-open"><Icon Name="Truck" Size="10" />On the way</span> }
+                                                @if (lead.NextFollowUpAt is { } nf) { <span class="@($"ld-pill ld-fu {(nf < DateTime.UtcNow ? "late" : "")}")"><Icon Name="Clock" Size="10" />@FuFmt.Due(nf)</span> }
+                                                @if (lead.OrderCount > 0) { <span class="ld-pill ld-cust">₹@AdminFmt.Inr(lead.LifetimeValue)</span> }
+                                                @if (lead.ConsentStatus == "opted_out") { <span class="ld-pill ld-stop">Opted out</span> }
+                                            </span>
+                                            <span class="ld-bcard-foot">
+                                                <span class="ld-src">@SourceLabel(lead.Source)@(string.IsNullOrEmpty(lead.SourceDetail) ? "" : " · " + lead.SourceDetail)</span>
+                                                @if (lead.AssignedToEmployeeId is null && Everyone) { <span class="ld-pill ld-unowned">Unassigned</span> }
+                                                else if (Everyone && !string.IsNullOrEmpty(lead.AssignedToName)) { <span class="ld-owner-chip" title="Owner">@lead.AssignedToName</span> }
+                                            </span>
+                                        </button>
+                                    }
+                                    @if (col.Items.Count == 0) { <p class="ld-col-empty">Nobody here</p> }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+            <button type="button" class="ld-backdrop" aria-label="Close details" tabindex="-1" @onclick="CloseDetail"></button>
+        }
+        else
+        {
         @* ───────── Lead list ───────── *@
         <section class="ld-list" aria-label="Leads">
             <div class="ld-list-head">
@@ -36,20 +144,32 @@
                         <Icon Name="RefreshCw" Size="14" Class="@(_loading ? "animate-spin" : "")" />
                     </button>
                 </div>
-                @if (AdminAuth.CanAll("leads"))
+                @if (Everyone)
                 {
                     <select class="ld-assignee" aria-label="Filter by owner" value="@_assignee" @onchange="OnAssigneeFilterChanged">
-                        <option value="">All owners</option>
+                        <option value="">@(Mode == LeadViews.Care ? "All care owners" : "All owners")</option>
                         <option value="unassigned">Unassigned (@_unassigned)</option>
                         @foreach (var t in _team) { <option value="@t.Id">@t.Name</option> }
                     </select>
                 }
                 <div class="ld-tabs" role="tablist">
-                    <button type="button" role="tab" class="@TabClass("")" @onclick='() => SetStatusAsync("")'>All <b>@Total</b></button>
-                    @foreach (var s in LeadStatuses.All)
+                    @if (Mode == LeadViews.Leads)
                     {
-                        var status = s;
-                        <button type="button" role="tab" class="@TabClass(status)" @onclick="() => SetStatusAsync(status)">@Label(status) <b>@_counts.GetValueOrDefault(status)</b></button>
+                        <button type="button" role="tab" class="@TabClass("")" @onclick='() => SetStatusAsync("")'>All <b>@Total</b></button>
+                        @foreach (var s in KpiStatuses)
+                        {
+                            var status = s;
+                            <button type="button" role="tab" class="@TabClass(status)" @onclick="() => SetStatusAsync(status)">@Label(status) <b>@_counts.GetValueOrDefault(status)</b></button>
+                        }
+                    }
+                    else
+                    {
+                        <button type="button" role="tab" class="@($"ld-tab {(_quick == "" ? "is-active" : "")}")" @onclick='() => _quick = ""'>All <b>@Total</b></button>
+                        <button type="button" role="tab" class="@($"ld-tab {(_quick == "unread" ? "is-active" : "")}")" @onclick='() => _quick = "unread"'>Unread <b>@_unreadTotal</b></button>
+                        @if (Mode == LeadViews.Care)
+                        {
+                            <button type="button" role="tab" class="@($"ld-tab {(_quick == "open" ? "is-active" : "")}")" @onclick='() => _quick = "open"'>Order on the way <b>@_leads.Count(x => x.OpenOrders > 0)</b></button>
+                        }
                     }
                 </div>
             </div>
@@ -57,18 +177,19 @@
             <div class="ld-rows">
                 @if (_loading && _leads.Count == 0)
                 {
-                    <div class="ld-empty">Loading leads…</div>
+                    <div class="ld-empty">Loading…</div>
                 }
-                else if (_leads.Count == 0)
+                else if (VisibleLeads.Count == 0)
                 {
+                    var plain = string.IsNullOrWhiteSpace(_query) && _statusFilter == "" && _quick == "";
                     <div class="ld-empty">
-                        <strong>@(string.IsNullOrWhiteSpace(_query) && _statusFilter == "" ? "No leads yet" : "No matching leads")</strong>
-                        @(string.IsNullOrWhiteSpace(_query) && _statusFilter == "" ? "New enquiries appear here automatically as soon as someone messages your WhatsApp Business number." : "Try a different search or status filter.")
+                        <strong>@(plain ? EmptyTitle : "Nobody matches")</strong>
+                        @(plain ? EmptyHint : "Try a different search or filter.")
                     </div>
                 }
                 else
                 {
-                    @foreach (var l in _leads)
+                    @foreach (var l in VisibleLeads)
                     {
                         var lead = l;
                         <button type="button" @key="lead.Id" @onclick="() => OpenAsync(lead.Id)"
@@ -83,11 +204,16 @@
                                     <span class="ld-row-preview">@(lead.LastMessageDirection == "outbound" ? "You: " : "")@(lead.LastMessage ?? lead.FirstMessage ?? "No messages yet")</span>
                                     @if (lead.UnreadCount > 0) { <span class="ld-unread">@lead.UnreadCount</span> }
                                 </span>
+                                @if (lead.IsCustomer)
+                                {
+                                    <span class="ld-conv-line"><Icon Name="HeartPulse" Size="11" />Converted by <strong>@(lead.ConvertedByName ?? "website order")</strong></span>
+                                }
                                 <span class="ld-row-meta">
                                     <span class="@($"ld-pill {lead.Status}")">@Label(lead.Status)</span>
+                                    @if (lead.OpenOrders > 0) { <span class="ld-pill ld-open" title="An order is not delivered yet"><Icon Name="Truck" Size="10" />On the way</span> }
                                     <span class="ld-src"><Icon Name="MessageCircle" Size="11" />@SourceLabel(lead.Source)@(string.IsNullOrEmpty(lead.SourceDetail) ? "" : " · " + lead.SourceDetail)</span>
-                                    @if (lead.AssignedToEmployeeId is null && AdminAuth.CanAll("leads")) { <span class="ld-pill ld-unowned">Unassigned</span> }
-                                    else if (AdminAuth.CanAll("leads")) { <span class="ld-src">· @lead.AssignedToName</span> }
+                                    @if (lead.AssignedToEmployeeId is null && Everyone) { <span class="ld-pill ld-unowned">Unassigned</span> }
+                                    else if (Everyone) { <span class="ld-src">· @(lead.IsCustomer ? "Care: " : "")@lead.AssignedToName</span> }
                                     @if (lead.OrderCount > 0) { <span class="ld-pill ld-cust" title="Lifetime value"><Icon Name="Package" Size="10" />@lead.OrderCount order@(lead.OrderCount == 1 ? "" : "s") · ₹@AdminFmt.Inr(lead.LifetimeValue)</span> }
                                     @if (lead.NextFollowUpAt is { } nf) { <span class="@($"ld-pill ld-fu {(nf < DateTime.UtcNow ? "late" : "")}")" title="Next follow-up"><Icon Name="Clock" Size="10" />@FuFmt.Due(nf)</span> }
                                     @if (lead.ConsentStatus == "opted_out") { <span class="ld-pill ld-stop">Opted out</span> }
@@ -98,16 +224,17 @@
                 }
             </div>
         </section>
+        }
 
-        @* ───────── Lead detail ───────── *@
+        @* ───────── Lead detail (a slide-in panel in the new look) ───────── *@
         <section class="ld-detail" aria-label="Lead detail">
             @if (_selected?.Lead is null)
             {
                 <div class="ld-none">
                     <div>
                         <Icon Name="MessageCircle" Size="44" />
-                        <strong>Select a lead</strong>
-                        Open a conversation to reply on WhatsApp, update the status and keep notes.
+                        <strong>@(Mode == LeadViews.Care ? "Select a customer" : "Select a lead")</strong>
+                        @(Mode == LeadViews.Care ? "Open a conversation to follow up, share order updates and keep notes." : "Open a conversation to reply on WhatsApp, update the status and keep notes.")
                     </div>
                 </div>
             }
@@ -121,15 +248,31 @@
                         <strong>@lead.Name</strong>
                         <span>+@lead.Phone · @SourceLabel(lead.Source)@(string.IsNullOrEmpty(lead.SourceDetail) ? "" : " · " + lead.SourceDetail)</span>
                     </div>
-                    <select class="ld-status-select" aria-label="Lead status" disabled="@_busy" value="@lead.Status" @onchange="OnStatusChanged">
-                        @foreach (var s in LeadStatuses.All) { <option value="@s" selected="@(s == lead.Status)">@Label(s)</option> }
-                    </select>
+                    @if (lead.IsCustomer)
+                    {
+                        <span class="ld-pill converted" title="A lead becomes a customer when a paid order is placed">Customer</span>
+                    }
+                    else
+                    {
+                        <select class="ld-status-select" aria-label="Lead status" title="Mark who is interested. A lead becomes a customer when a paid order is placed." disabled="@_busy" value="@lead.Status" @onchange="OnStatusChanged">
+                            @foreach (var s in EditableStatuses) { <option value="@s" selected="@(s == lead.Status)">@Label(s)</option> }
+                        </select>
+                    }
                 </header>
 
+                @if (lead.IsCustomer)
+                {
+                    <div class="ld-conv-banner">
+                        <Icon Name="HeartPulse" Size="16" />
+                        <span>Converted to a customer by <strong>@(lead.ConvertedByName ?? "a website order")</strong>@(lead.CustomerSince is { } since ? " on " + AdminFmt.DateTimeShort(since) : "")</span>
+                        @if (lead.OpenOrders > 0) { <span class="ld-pill ld-open"><Icon Name="Truck" Size="10" />@lead.OpenOrders order@(lead.OpenOrders == 1 ? "" : "s") on the way</span> }
+                    </div>
+                }
+
                 <div class="ld-owner">
-                    <span>@(AdminAuth.CanAll("leads") ? "Owner" : "Transfer to")</span>
+                    <span>@(Everyone ? (lead.IsCustomer ? "Care owner" : "Owner") : "Transfer to")</span>
                     <select aria-label="Lead owner" disabled="@_busy" @onchange="OnOwnerChanged">
-                        @if (AdminAuth.CanAll("leads"))
+                        @if (Everyone)
                         {
                             <option value="" selected="@(lead.AssignedToEmployeeId is null)">Unassigned</option>
                             @foreach (var t in _team) { <option value="@t.Id" selected="@(lead.AssignedToEmployeeId == t.Id)">@t.Name</option> }
@@ -166,7 +309,45 @@
                         }
                         else
                         {
-                            <div class="ld-banner warn"><Icon Name="Clock" Size="15" /><span>24-hour window closed. Only approved templates can be sent until the customer messages again.</span></div>
+                            <div class="ld-banner warn"><Icon Name="Clock" Size="15" /><span>24-hour window closed. WhatsApp only lets you send an approved template now. When the customer replies, you can send messages, files and videos again.</span></div>
+                        }
+
+                        @if (lead.ConsentStatus != "opted_out" && !WindowOpen(lead))
+                        {
+                            <div class="ld-tplsend">
+                                <div class="ld-tplsend-head"><strong><Icon Name="Send" Size="14" /> Send an approved template</strong><small>Pick one, check the preview, send.</small></div>
+                                @if (ApprovedTemplates.Count == 0)
+                                {
+                                    <p class="fu-hint">No templates are approved yet. An administrator submits them to Meta from <em>Team &amp; organisation → Messages &amp; templates</em> and marks them approved there.</p>
+                                }
+                                else
+                                {
+                                    <div class="ld-tplsend-list">
+                                        @foreach (var td in ApprovedTemplates)
+                                        {
+                                            var def = td;
+                                            <button type="button" class="@($"ld-tplopt {(_pickedTpl?.Name == def.Name ? "is-picked" : "")}")" @onclick="() => PickTemplate(def, lead)">
+                                                <strong>@def.Title</strong><small>@MessageStages.Label(def.Stage)</small>
+                                            </button>
+                                        }
+                                    </div>
+                                    @if (_pickedTpl is { } pt)
+                                    {
+                                        <div class="ld-tplsend-form">
+                                            @for (var pi = 0; pi < pt.Params.Length; pi++)
+                                            {
+                                                var idx = pi; var prm = pt.Params[pi];
+                                                if (prm.Kind == "text")
+                                                {
+                                                    <label>@prm.Label<input type="text" maxlength="120" value="@_tplValues[idx]" placeholder="@prm.Sample" @oninput="e => _tplValues[idx] = e.Value?.ToString() ?? string.Empty" /></label>
+                                                }
+                                            }
+                                            <div class="ld-tplsend-preview" aria-label="Preview">@pt.Filled(PreviewValues(pt, lead))</div>
+                                            <button type="button" class="ld-btn primary" disabled="@(_busy || !TemplateReady(pt))" @onclick="() => SendTemplateAsync(lead)"><Icon Name="Send" Size="13" /> Send template</button>
+                                        </div>
+                                    }
+                                }
+                            </div>
                         }
 
                         <div class="ld-scroll">
@@ -196,7 +377,7 @@
                                         @if (isTemplate)
                                         {
                                             <span class="ld-tpl">Template message</span>
-                                            <span class="ld-tpl-body">@m.Body</span>
+                                            <span class="ld-tpl-body">@TemplateText(m.Body)</span>
                                         }
                                         else if (!string.IsNullOrEmpty(m.Body))
                                         {
@@ -245,6 +426,47 @@
                             </div>
                         }
 
+                        @if (CanReply(lead) && _filesOpen)
+                        {
+                            <div class="ld-filepanel" role="menu" aria-label="Files to send">
+                                @if (_library.Count == 0) { <span class="fu-hint">No files yet. An administrator adds them in Team &amp; organisation → File library.</span> }
+                                @foreach (var lf in _library)
+                                {
+                                    var file = lf;
+                                    <div class="ld-fileitem">
+                                        <span class="ld-filekind">@AdminFileLibrary.KindEmoji(file.Kind)</span>
+                                        <div><strong>@file.Title</strong><small>@LibraryKinds.Label(file.Kind) · @AdminFileLibrary.Size(file.Size)@(file.CanAttach ? "" : " · link only")</small></div>
+                                        <button type="button" class="ld-btn primary" disabled="@(_busy || !file.CanAttach)" title="@(file.CanAttach ? "Send the file itself on WhatsApp" : "Too large to send as an attachment")" @onclick="() => SendFileAsync(file, false)">Send file</button>
+                                        <button type="button" class="ld-btn" disabled="@_busy" title="Send a message with the file's link" @onclick="() => SendFileAsync(file, true)">Send link</button>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        @if (CanReply(lead))
+                        {
+                            <div class="ld-tplbar">
+                                <button type="button" class="@($"ra-chip {(_filesOpen ? "strong" : "")}")" aria-expanded="@_filesOpen" @onclick="ToggleFiles"><Icon Name="FileText" Size="13" /> Files &amp; videos</button>
+                                @if (_templates.Count > 0)
+                                {
+                                    <button type="button" class="@($"ra-chip {(_tplOpen ? "strong" : "")}")" aria-expanded="@_tplOpen" @onclick="() => _tplOpen = !_tplOpen"><Icon Name="FileText" Size="13" /> Ready-made replies · @MessageStages.Label(StageOf(lead))</button>
+                                }
+                                @if (_tplOpen && _templates.Count > 0)
+                                {
+                                    <div class="ld-tplpanel" role="menu">
+                                        @foreach (var t in TemplatesFor(lead))
+                                        {
+                                            var tpl = t;
+                                            <button type="button" role="menuitem" class="ld-tplitem" @onclick="() => UseTemplate(tpl)">
+                                                <strong>@tpl.Title</strong><small>@MessageDefaults.Fill(tpl.Body, lead.Name, AdminAuth.Name, _selected.Orders.FirstOrDefault()?.Id)</small>
+                                            </button>
+                                        }
+                                        @if (!TemplatesFor(lead).Any()) { <span class="fu-hint">No ready-made replies for this stage yet.</span> }
+                                    </div>
+                                }
+                            </div>
+                        }
+
                         <form class="ld-composer" @onsubmit="ReplyAsync" @onsubmit:preventDefault>
                             <textarea rows="@ReplyRows" aria-label="Type a message" disabled="@(_busy || !CanReply(lead))" maxlength="1500"
                                       placeholder="@(lead.ConsentStatus == "opted_out" ? "Customer opted out" : WindowOpen(lead) ? "Type a message, or use the suggested reply" : "24-hour window closed")"
@@ -262,11 +484,23 @@
                                 <dt>Name</dt><dd>@lead.Name</dd>
                                 <dt>Phone</dt><dd>+@lead.Phone</dd>
                                 <dt>Email</dt><dd>@(string.IsNullOrEmpty(lead.Email) ? "—" : lead.Email)</dd>
-                                <dt>Customer</dt><dd>@(string.IsNullOrEmpty(lead.CustomerId) ? "Not a customer yet" : lead.CustomerId)</dd>
+                                <dt>Store account</dt><dd>@(string.IsNullOrEmpty(lead.CustomerId) ? "None (guest checkout or not ordered)" : lead.CustomerId)</dd>
                             </dl>
                         </div>
+                        @if (lead.IsCustomer)
+                        {
+                            <div class="ld-card">
+                                <h4>Customer care</h4>
+                                <dl class="ld-dl">
+                                    <dt>Converted by</dt><dd><strong>@(lead.ConvertedByName ?? "A website order")</strong></dd>
+                                    <dt>Customer since</dt><dd>@(lead.CustomerSince is { } cs ? AdminFmt.DateTimeShort(cs) : "—")</dd>
+                                    <dt>Care owner</dt><dd>@(lead.AssignedToName ?? "Unassigned")</dd>
+                                    <dt>Orders on the way</dt><dd>@lead.OpenOrders</dd>
+                                </dl>
+                            </div>
+                        }
                         <div class="ld-card">
-                            <h4>Lead</h4>
+                            <h4>@(lead.IsCustomer ? "Lead history" : "Lead")</h4>
                             <dl class="ld-dl">
                                 <dt>Status</dt><dd><span class="@($"ld-pill {lead.Status}")">@Label(lead.Status)</span></dd>
                                 <dt>Source</dt><dd>@SourceLabel(lead.Source)@(string.IsNullOrEmpty(lead.SourceDetail) ? "" : " · " + lead.SourceDetail)</dd>
@@ -374,6 +608,22 @@
                             }
                         </div>
                         <div class="ld-card wide">
+                            <h4>Audit trail</h4>
+                            @if (_selected.Audit.Count == 0) { <p class="ld-muted">No changes recorded yet.</p> }
+                            else
+                            {
+                                <ul class="ld-tl">
+                                    @foreach (var a in _selected.Audit)
+                                    {
+                                        <li>
+                                            <strong>@a.Summary</strong>
+                                            <small>@AdminFmt.DateTimeShort(a.CreatedAt) · @(a.Automatic ? "system (" + a.Actor + ")" : a.Actor)@(string.IsNullOrEmpty(a.Detail) ? "" : " · " + a.Detail)</small>
+                                        </li>
+                                    }
+                                </ul>
+                            }
+                        </div>
+                        <div class="ld-card wide">
                             <h4>Status history</h4>
                             <ul class="ld-tl">
                                 @foreach (var h in _selected.History)
@@ -404,8 +654,14 @@
 
 @code {
     private void NewTaskFor(long leadId) => Nav.NavigateTo("/admin/tasks?lead=" + leadId);
-    private bool Everyone => AdminAuth.CanAll("leads");
-    private static readonly string[] KpiStatuses = [LeadStatuses.New, LeadStatuses.Interested, LeadStatuses.FollowUp, LeadStatuses.Converted];
+    /// <summary>Which panel this is: leads (new and follow-up), interested (hot leads) or care (paid customers).</summary>
+    [Parameter] public string Mode { get; set; } = LeadViews.Leads;
+
+    /// <summary>May see and manage everyone's people in this panel, not just their own.</summary>
+    private bool Everyone => AdminAuth.CanAll(Mode);
+    private static readonly string[] KpiStatuses = [LeadStatuses.New, LeadStatuses.FollowUp, LeadStatuses.NotInterested];
+    /// <summary>A lead becomes a customer only through a paid order, so "Converted" is not a choice here.</summary>
+    private static readonly string[] EditableStatuses = [LeadStatuses.New, LeadStatuses.Interested, LeadStatuses.FollowUp, LeadStatuses.NotInterested];
     private static readonly string[] Palette = ["#235b40", "#2f6f8f", "#7a5aa6", "#b5792a", "#a24b5a", "#3f7d7a", "#5b6f2c"];
 
     private readonly CancellationTokenSource _cts = new();
@@ -426,12 +682,174 @@
     private string? _toast;
     private bool _loading = true;
     private bool _busy;
+    private bool _v2;
+    private string? _notice;
+    private string _quick = ""; // "", "unread" or "open" (hot leads and customers)
+    private Dictionary<string, int> _viewCounts = new();
+    private int _unreadTotal;
+    private List<MessageTemplateDto> _templates = new();
+    private bool _tplOpen;
+
+    // Files from the library, and approved WhatsApp templates for when the 24-hour window is closed
+    private List<string> _approved = new();
+    private List<LibraryFileDto> _library = new();
+    private bool _filesOpen;
+    private MetaTemplateDef? _pickedTpl;
+    private List<string> _tplValues = new();
+
+    private List<MetaTemplateDef> ApprovedTemplates =>
+        MetaTemplates.All.Where(t => _approved.Contains(t.Name)).OrderBy(t => _selected?.Lead is { } l && t.Stage == StageOf(l) ? 0 : 1).ToList();
+
+    private static string TemplateText(string? body)
+    {
+        var text = body ?? "";
+        var i = text.IndexOf("] ", StringComparison.Ordinal);
+        return text.StartsWith("[template:") && i > 0 ? text[(i + 2)..] : text;
+    }
+
+    private void PickTemplate(MetaTemplateDef def, LeadDto lead)
+    {
+        _pickedTpl = def;
+        _tplValues = def.Params.Select(_ => "").ToList();
+    }
+
+    private string? LatestOrderId => _selected?.Orders.FirstOrDefault()?.Id;
+
+    private List<string> PreviewValues(MetaTemplateDef def, LeadDto lead) =>
+        def.Params.Select((p, i) => p.Kind switch
+        {
+            "name" => MessageDefaults.Fill("{name}", lead.Name),
+            "agent" => string.IsNullOrWhiteSpace(AdminAuth.Name) ? "our team" : AdminAuth.Name,
+            "order" => LatestOrderId ?? "…",
+            _ => string.IsNullOrWhiteSpace(_tplValues.ElementAtOrDefault(i)) ? "…" : _tplValues[i].Trim(),
+        }).ToList();
+
+    private bool TemplateReady(MetaTemplateDef def) =>
+        def.Params.Select((p, i) => p.Kind switch { "order" => LatestOrderId is not null, "text" => !string.IsNullOrWhiteSpace(_tplValues.ElementAtOrDefault(i)), _ => true }).All(x => x);
+
+    private async Task SendTemplateAsync(LeadDto lead)
+    {
+        if (_pickedTpl is not { } def) return;
+        _busy = true;
+        var res = await Api.AdminLeadSendTemplateAsync(lead.Id, new SendTemplateRequest { Name = def.Name, Params = def.Params.Select((p, i) => p.Kind == "text" ? _tplValues.ElementAtOrDefault(i) ?? "" : "").ToList() });
+        _toast = res.Message;
+        if (res.Success) { _pickedTpl = null; _notice = res.Message; }
+        await RefreshDetailAsync(lead.Id, keepNotes: true);
+        await LoadAsync(false);
+        _busy = false;
+    }
+
+    private async Task ToggleFiles()
+    {
+        _filesOpen = !_filesOpen;
+        _tplOpen = false;
+        if (_filesOpen && _library.Count == 0)
+        {
+            var res = await Api.AdminLibraryAsync();
+            if (res.Success) _library = res.Files; else _toast = res.Message;
+        }
+    }
+
+    private async Task SendFileAsync(LibraryFileDto file, bool asLink)
+    {
+        if (_selected?.Lead is not { } lead) return;
+        _busy = true;
+        var res = await Api.AdminLeadSendFileAsync(lead.Id, new SendFileRequest { FileId = file.Id, Mode = asLink ? "link" : "attachment" });
+        _toast = res.Success ? null : res.Message;
+        if (res.Success) { _filesOpen = false; _notice = $"{(asLink ? "Link to" : "File")} “{file.Title}” sent to {lead.Name}."; }
+        await RefreshDetailAsync(lead.Id, keepNotes: true);
+        await LoadAsync(false);
+        _busy = false;
+    }
 
     private int Total => _counts.Values.Sum();
-    private string ConversionText => Total == 0 ? "No leads yet" : $"{Math.Round(100.0 * _counts.GetValueOrDefault(LeadStatuses.Converted) / Total)}% converted";
+
+    private const string LookKey = "nura.leads.newlook";
+
+    private async Task ToggleLookAsync()
+    {
+        _v2 = !_v2;
+        await Browser.SetLocalAsync(LookKey, _v2 ? "1" : "0");
+    }
+
+    private void GoTo(string view) { if (view != Mode) Nav.NavigateTo("/admin/" + view); }
+
+    private static string PanelName(string view) => view switch { LeadViews.Interested => "Hot leads", LeadViews.Care => "Customer care", _ => "Leads" };
+    private static string PanelIcon(string view) => view switch { LeadViews.Interested => "Flame", LeadViews.Care => "HeartPulse", _ => "Phone" };
+
+    /// <summary>The panel a person belongs in right now.</summary>
+    private static string ViewOf(LeadDto l) => l.IsCustomer ? LeadViews.Care : l.Status == LeadStatuses.Interested ? LeadViews.Interested : LeadViews.Leads;
+    private static string StageOf(LeadDto l) => MessageStages.Of(l.Status, l.IsCustomer);
+
+    private List<LeadDto> VisibleLeads => _quick switch
+    {
+        "unread" => _leads.Where(l => l.UnreadCount > 0).ToList(),
+        "open" => _leads.Where(l => l.OpenOrders > 0).ToList(),
+        _ => _leads,
+    };
+
+    private sealed record BoardColumn(string Title, string Hint, string Color, List<LeadDto> Items);
+
+    /// <summary>The pipeline board: leads by status, hot leads by whose turn it is, customers by what needs doing.</summary>
+    private List<BoardColumn> BoardColumns()
+    {
+        var all = VisibleLeads;
+        static bool NeedsUs(LeadDto l) => l.UnreadCount > 0 || l.LastMessageDirection == "inbound";
+        switch (Mode)
+        {
+            case LeadViews.Care:
+                return
+                [
+                    new("Needs a reply", "Customer wrote last", "#d97706", all.Where(NeedsUs).ToList()),
+                    new("Order on the way", "Not delivered yet", "#2563eb", all.Where(l => !NeedsUs(l) && l.OpenOrders > 0).ToList()),
+                    new("All good", "Delivered, nothing waiting", "#16a34a", all.Where(l => !NeedsUs(l) && l.OpenOrders == 0).ToList()),
+                ];
+            case LeadViews.Interested:
+                return
+                [
+                    new("Needs a reply", "Lead wrote last", "#d97706", all.Where(NeedsUs).ToList()),
+                    new("Follow-up booked", "A call or message is scheduled", "#2563eb", all.Where(l => !NeedsUs(l) && l.NextFollowUpAt is not null).ToList()),
+                    new("Waiting on them", "We replied, nothing booked", "#64748b", all.Where(l => !NeedsUs(l) && l.NextFollowUpAt is null).ToList()),
+                ];
+            default:
+                return
+                [
+                    new("New", "Awaiting a first reply", Accent(LeadStatuses.New), all.Where(l => l.Status == LeadStatuses.New).ToList()),
+                    new("Follow-up", "Needs a callback", Accent(LeadStatuses.FollowUp), all.Where(l => l.Status == LeadStatuses.FollowUp).ToList()),
+                    new("Not interested", "Closed for now", "#94a3b8", all.Where(l => l.Status == LeadStatuses.NotInterested).ToList()),
+                ];
+        }
+    }
+
+    private string QuickClass(string quick) => $"ld-kpi {(_quick == quick ? "is-active" : "")}";
+
+    private string EmptyTitle => Mode switch { LeadViews.Care => "No customers yet", LeadViews.Interested => "No hot leads yet", _ => "No leads yet" };
+    private string EmptyHint => Mode switch
+    {
+        LeadViews.Care => "A lead appears here as soon as their first paid order is placed, including website orders.",
+        LeadViews.Interested => "Leads you mark as Interested appear here, ready for follow-up and an order.",
+        _ => "New enquiries appear here automatically as soon as someone messages your WhatsApp Business number.",
+    };
+
+    /// <summary>Ready-made replies that fit this person's stage first, then the rest.</summary>
+    private IEnumerable<MessageTemplateDto> TemplatesFor(LeadDto l)
+    {
+        var stage = StageOf(l);
+        return _templates.Where(t => t.Group == "reply" && t.Stage == stage);
+    }
+
+    private void UseTemplate(MessageTemplateDto t)
+    {
+        if (_selected?.Lead is not { } lead) return;
+        _reply = MessageDefaults.Fill(t.Body, lead.Name, AdminAuth.Name, _selected.Orders.FirstOrDefault()?.Id);
+        _tplOpen = false;
+    }
 
     protected override async Task OnInitializedAsync()
     {
+        _v2 = await Browser.GetLocalAsync(LookKey) == "1";
+        var tpl = await Api.AdminMessageTemplatesAsync();
+        if (tpl.Success) { _templates = tpl.Settings.Items; _approved = tpl.Settings.ApprovedMetaTemplates; }
         await Task.WhenAll(LoadAsync(true), LoadTeamAsync(), LoadAssistantSettingsAsync());
         // Arrived from a follow-up or notification: open that lead straight away.
         var q = Nav.ToAbsoluteUri(Nav.Uri).Query;
@@ -460,9 +878,9 @@
     private async Task LoadAsync(bool spinner)
     {
         if (spinner) { _loading = true; StateHasChanged(); }
-        var res = await Api.AdminLeadsAsync(_statusFilter, null, _query, _assignee);
+        var res = await Api.AdminLeadsAsync(_statusFilter, null, _query, _assignee, 100, Mode);
         if (_cts.IsCancellationRequested) return;
-        if (res.Success) { _leads = res.Leads; _counts = res.StatusCounts; _unassigned = res.UnassignedCount; _error = null; }
+        if (res.Success) { _leads = res.Leads; _counts = res.StatusCounts; _unassigned = res.UnassignedCount; _viewCounts = res.ViewCounts; _unreadTotal = res.UnreadTotal; _error = null; }
         else _error = res.Message ?? "Could not load leads.";
         _loading = false;
         StateHasChanged();
@@ -470,7 +888,7 @@
 
     private async Task LoadTeamAsync()
     {
-        var res = await Api.AdminTeamAsync();
+        var res = await Api.AdminTeamAsync(Mode);
         if (res.Success) _team = res.Employees;
     }
 
@@ -482,12 +900,12 @@
         if (_selected?.Lead is not { } lead) return;
         var raw = e.Value?.ToString() ?? "";
         long? target = long.TryParse(raw, out var id) ? id : null;
-        if (target is null && !AdminAuth.CanAll("leads")) return; // placeholder option
+        if (target is null && !Everyone) return; // placeholder option
         if (target == lead.AssignedToEmployeeId) return;
         _busy = true;
         var res = await Api.AdminLeadAssignAsync(lead.Id, new LeadAssignRequest { EmployeeId = target });
         _toast = res.Message;
-        if (res.Success && !AdminAuth.CanAll("leads")) { _selected = null; } // no longer theirs
+        if (res.Success && !Everyone) { _selected = null; } // no longer theirs
         else await RefreshDetailAsync(lead.Id, keepNotes: true);
         await LoadAsync(false);
         _busy = false;
@@ -511,6 +929,19 @@
         if (_cts.IsCancellationRequested) return;
         if (!res.Success || res.Lead is null) { _toast = res.Message ?? "Could not load lead."; return; }
         var sameLead = _selected?.Lead?.Id == id;
+
+        // The person now belongs in another panel (marked interested, or placed a paid order).
+        var home = ViewOf(res.Lead);
+        if (home != Mode)
+        {
+            if (!sameLead && AdminAuth.Can(home)) { Nav.NavigateTo($"/admin/{home}?open={id}"); return; } // opened from a link: follow them
+            _selected = null;
+            _notice = AdminAuth.Can(home)
+                ? $"{res.Lead.Name} is now in {PanelName(home)}."
+                : $"{res.Lead.Name} moved to {PanelName(home)}, which your designation cannot open.";
+            StateHasChanged();
+            return;
+        }
         var prevNotes = _notes;
         _selected = res;
         _notes = keepNotes && sameLead ? prevNotes : res.Lead.Notes ?? "";
@@ -685,7 +1116,7 @@
         LeadStatuses.New => "New",
         LeadStatuses.Interested => "Interested",
         LeadStatuses.FollowUp => "Follow-up",
-        LeadStatuses.Converted => "Converted",
+        LeadStatuses.Converted => "Customer",
         LeadStatuses.NotInterested => "Not interested",
         _ => status,
     };

@@ -172,15 +172,18 @@ public partial class WhatsAppService(
             return;
         }
 
+        var sentAway = false;
         if (_o.CanSend)
         {
-            try { if (await leads.AfterHoursReplyAsync(lead) is { } away) await SendTextAsync(from, away, null, "auto"); }
+            try { if (await leads.AfterHoursReplyAsync(lead) is { } away) sentAway = await SendTextAsync(from, away, null, "auto"); }
             catch (Exception ex) { log.LogWarning(ex, "[WhatsApp] After-hours reply failed for {Phone}", from); }
         }
 
-        if (_o.AutoReplyEnabled && _o.CanSend && type is "text" or "button" or "interactive")
+        // The after-hours message already greeted them, so a greeting on top would be a second, redundant message.
+        var greetingOnly = (body ?? "").Trim().ToLowerInvariant() is "hi" or "hello" or "hey" or "help";
+        if (_o.AutoReplyEnabled && _o.CanSend && type is "text" or "button" or "interactive" && !(sentAway && greetingOnly))
         {
-            try { await AutoReplyAsync(from, body ?? ""); }
+            try { await AutoReplyAsync(from, body ?? "", lead); }
             catch (Exception ex) { log.LogWarning(ex, "[WhatsApp] Auto-reply failed for {Phone}", from); }
         }
     }
@@ -320,34 +323,33 @@ public partial class WhatsAppService(
     [GeneratedRegex(@"\b\d{14}\b|NH-[0-9A-F]{6,32}", RegexOptions.IgnoreCase)]
     private static partial Regex OrderIdRegex();
 
-    private async Task AutoReplyAsync(string phone, string text)
+    /// <summary>
+    /// Leads get a professional greeting and never order tracking. A paying customer can send "track" while an order is on its way
+    /// (once it is delivered they get a short note instead). Typing an order id always returns that order, as before.
+    /// </summary>
+    private async Task AutoReplyAsync(string phone, string text, Lead lead)
     {
         var lowered = text.Trim().ToLowerInvariant();
-        Order? order = null;
-
         var match = OrderIdRegex().Match(text);
         if (match.Success)
         {
             var oid = match.Value.ToUpperInvariant();
-            order = await db.Orders.AsNoTracking().FirstOrDefaultAsync(o => o.Id == oid);
-        }
-        else if (lowered is "track" or "status" or "order" or "my order" or "where is my order")
-        {
-            var tail = phone.Length >= 10 ? phone[^10..] : phone;
-            order = await db.Orders.AsNoTracking().Where(o => o.CustomerPhone.EndsWith(tail)).OrderByDescending(o => o.CreatedAt).FirstOrDefaultAsync();
-            if (order is null)
-            {
-                await SendTextAsync(phone, "We couldn't find an order linked to this WhatsApp number. Reply with your order ID (e.g. NH-123456) and we'll check it for you.");
-                return;
-            }
-        }
-        else if (lowered is "hi" or "hello" or "hey" or "help")
-        {
-            await SendTextAsync(phone, "Welcome to Nura Herbex 🌿\nReply with your *order ID* (e.g. NH-123456) or send *track* to get your latest order status.");
+            var byId = await db.Orders.AsNoTracking().FirstOrDefaultAsync(o => o.Id == oid);
+            if (byId is not null) await SendTextAsync(phone, BuildStatusText(byId), byId.Id);
             return;
         }
 
-        if (order is not null) await SendTextAsync(phone, BuildStatusText(order), order.Id);
+        var wantsTrack = lowered is "track" or "status" or "order" or "my order" or "where is my order";
+        var wantsGreeting = lowered is "hi" or "hello" or "hey" or "help";
+        if (!wantsTrack && !wantsGreeting) return;
+
+        var who = await leads.AudienceAsync(lead);
+        if (wantsTrack && who.IsCustomer)
+        {
+            if (who.OpenOrder is { } open) { await SendTextAsync(phone, BuildStatusText(open), open.Id); return; }
+            if (who.LatestOrder is { } last && await leads.DeliveredReplyAsync(lead, last) is { } delivered) { await SendTextAsync(phone, delivered, last.Id); return; }
+        }
+        if (await leads.GreetingAsync(lead) is { } greeting) await SendTextAsync(phone, greeting);
     }
 
     public static string BuildStatusText(Order o)
@@ -381,7 +383,26 @@ public partial class WhatsAppService(
             type = "text", text = new { preview_url = false, body = text },
         }, "text", text, orderId, sentBy);
 
-    public Task<bool> SendTemplateAsync(string phone, string template, IEnumerable<string> bodyParams, string? orderId = null, string? sentBy = null) =>
+    /// <summary>
+    /// Sends a library file as a WhatsApp document, video or image that Meta fetches from <paramref name="url"/> (it must be a public https link).
+    /// Only allowed inside the 24-hour window, like any free-form message.
+    /// </summary>
+    public Task<bool> SendFileAsync(string phone, string kind, string url, string fileName, string? caption, string title, string? sentBy = null)
+    {
+        var type = kind == LibraryKinds.Video ? "video" : kind == LibraryKinds.Image ? "image" : "document";
+        var media = new Dictionary<string, object?> { ["link"] = url };
+        if (type == "document") media["filename"] = fileName;
+        if (!string.IsNullOrWhiteSpace(caption)) media["caption"] = caption.Trim();
+        var payload = new Dictionary<string, object?>
+        {
+            ["messaging_product"] = "whatsapp", ["recipient_type"] = "individual", ["to"] = NormalizePhone(phone), ["type"] = type, [type] = media,
+        };
+        var body = $"📎 {title} ({LibraryKinds.Label(kind)})" + (string.IsNullOrWhiteSpace(caption) ? "" : "\n" + caption.Trim());
+        return SendAsync(phone, payload, "file", body, null, sentBy);
+    }
+
+    /// <param name="preview">The message as the customer reads it, shown in the chat. Without it the chat shows the values.</param>
+    public Task<bool> SendTemplateAsync(string phone, string template, IEnumerable<string> bodyParams, string? orderId = null, string? sentBy = null, string? preview = null) =>
         SendAsync(phone, new
         {
             messaging_product = "whatsapp", to = NormalizePhone(phone), type = "template",
@@ -390,7 +411,7 @@ public partial class WhatsAppService(
                 name = template, language = new { code = _o.TemplateLanguage },
                 components = new[] { new { type = "body", parameters = bodyParams.Select(p => new { type = "text", text = p }).ToArray() } },
             },
-        }, "template", $"[template:{template}] {string.Join(" | ", bodyParams)}", orderId, sentBy);
+        }, "template", $"[template:{template}] {preview ?? string.Join(" | ", bodyParams)}", orderId, sentBy);
 
     // ---------------------------------------------------------------------
     // Monthly sending limit (admin-controlled)

@@ -10,7 +10,7 @@ namespace Nuraherbex.Api.Services;
 /// CRM lead capture. One lead per normalised phone number; repeat enquiries append a source event and
 /// refresh the conversation instead of creating a duplicate.
 /// </summary>
-public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, ILogger<LeadService> log, StaffAvailability availability)
+public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, ILogger<LeadService> log, StaffAvailability availability, MessageTemplateService templates)
 {
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase) { "stop", "unsubscribe", "stop all", "opt out", "optout" };
     private static readonly HashSet<string> StartWords = new(StringComparer.OrdinalIgnoreCase) { "start", "subscribe", "opt in", "optin" };
@@ -106,40 +106,76 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     // After-hours reply: nobody active (Sunday, holiday, night) -> the customer still gets an answer
     // ---------------------------------------------------------------------
 
-    private const string AfterHoursKey = "leads.afterhours";
     private static readonly TimeSpan AfterHoursRepeat = TimeSpan.FromHours(12);
 
-    public async Task<AfterHoursSettings> GetAfterHoursAsync()
+    /// <summary>Who is writing: a lead (with its stage) or a paying customer, and the order a customer is still waiting for.</summary>
+    public sealed record Audience(string Stage, Order? OpenOrder, Order? LatestOrder)
     {
-        var row = await db.SiteSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == AfterHoursKey);
-        if (row is null) return new AfterHoursSettings();
-        try { return System.Text.Json.JsonSerializer.Deserialize<AfterHoursSettings>(row.Value, NuraJson.Options) ?? new AfterHoursSettings(); }
-        catch (System.Text.Json.JsonException) { return new AfterHoursSettings(); }
+        public bool IsCustomer => Stage == MessageStages.Customer;
     }
 
-    public async Task SaveAfterHoursAsync(AfterHoursSettings s)
+    /// <summary>Orders match by phone as typed (10 digits, or with 91 / 0 in front).</summary>
+    public static string[] PhoneForms(string phone)
     {
-        var json = System.Text.Json.JsonSerializer.Serialize(s, NuraJson.Options);
-        var row = await db.SiteSettings.FirstOrDefaultAsync(x => x.Key == AfterHoursKey);
-        if (row is null) db.SiteSettings.Add(new SiteSetting { Key = AfterHoursKey, Value = json });
-        else { row.Value = json; row.UpdatedAt = DateTime.UtcNow; }
-        await db.SaveChangesAsync();
+        var d = new string((phone ?? "").Where(char.IsDigit).ToArray());
+        var l = d.Length > 10 ? d[^10..] : d;
+        return [l, "91" + l, "0" + l, "+91" + l, phone ?? ""];
+    }
+
+    /// <summary>Confirmed orders (paid or cash on delivery) that are not cancelled or returned.</summary>
+    public static bool IsConfirmed(Order o) => o.PaymentStatus is "PAID" or "COD_PENDING" or "COD_COLLECTED" && o.FulfillmentStatus is not ("CANCELLED" or "RTO");
+
+    /// <summary>The first word of a name, or "there" when the lead only has a phone number.</summary>
+    public static string FirstName(string? name, string? phone) =>
+        string.IsNullOrWhiteSpace(name) || name == phone ? "there" : name.Trim().Split(' ')[0];
+
+    public async Task<Audience> AudienceAsync(Lead lead)
+    {
+        var stage = MessageStages.Of(lead.Status, lead.CustomerSince is not null);
+        if (stage != MessageStages.Customer) return new Audience(stage, null, null);
+        var forms = PhoneForms(lead.Phone);
+        var orders = (await db.Orders.AsNoTracking().Where(o => forms.Contains(o.CustomerPhone)).OrderByDescending(o => o.CreatedAt).Take(20).ToListAsync()).Where(IsConfirmed).ToList();
+        return new Audience(stage, orders.FirstOrDefault(o => o.FulfillmentStatus != "DELIVERED"), orders.FirstOrDefault());
     }
 
     /// <summary>
     /// The text to send for a new inbound WhatsApp message, or null when none is needed: the feature is off, the customer opted out,
     /// somebody is signed in and WhatsApp active (they will answer), or this customer already got it in the last 12 hours.
+    /// The text depends on who is writing: leads never get order tracking, customers do while an order is on its way.
     /// </summary>
     public async Task<string?> AfterHoursReplyAsync(Lead lead)
     {
-        var s = await GetAfterHoursAsync();
-        if (!s.Enabled || string.IsNullOrWhiteSpace(s.Message) || lead.ConsentStatus == "opted_out") return null;
+        var all = await templates.GetAsync();
+        if (!all.AfterHoursEnabled || lead.ConsentStatus == "opted_out") return null;
         if ((await availability.EligibleAsync("leads", null, null, true)).Count > 0) return null;
         var since = DateTime.UtcNow - AfterHoursRepeat;
         if (await db.WhatsAppMessages.AnyAsync(m => m.LeadId == lead.Id && m.Direction == "outbound" && m.SentBy == "auto" && m.CreatedAt >= since)) return null;
-        var name = string.IsNullOrWhiteSpace(lead.Name) || lead.Name == lead.Phone ? "there" : lead.Name.Trim().Split(' ')[0];
-        return s.Message.Replace("{name}", name);
+
+        var who = await AudienceAsync(lead);
+        var key = who.Stage switch
+        {
+            MessageStages.Customer => who.OpenOrder is not null ? MessageKeys.AfterHoursCustomerOpen : MessageKeys.AfterHoursCustomer,
+            MessageStages.Interested => MessageKeys.AfterHoursInterested,
+            _ => MessageKeys.AfterHoursLead,
+        };
+        var body = all.Items.FirstOrDefault(i => i.Key == key) is { Enabled: true, Body: { Length: > 0 } b } ? b : null;
+        if (body is null) return null;
+        var name = lead.Name == lead.Phone ? null : lead.Name;
+        return MessageDefaults.Fill(body, name, null, who.OpenOrder?.Id ?? who.LatestOrder?.Id);
     }
+
+    /// <summary>The greeting for "hi" (or a track request from someone who has nothing to track), fitted to who is writing.</summary>
+    public async Task<string?> GreetingAsync(Lead lead)
+    {
+        var who = await AudienceAsync(lead);
+        var key = who.IsCustomer ? (who.OpenOrder is not null ? MessageKeys.GreetingCustomerOpen : MessageKeys.GreetingCustomer) : MessageKeys.GreetingLead;
+        if (await templates.BodyAsync(key) is not { } body) return null;
+        return MessageDefaults.Fill(body, lead.Name == lead.Phone ? null : lead.Name, null, who.OpenOrder?.Id ?? who.LatestOrder?.Id);
+    }
+
+    /// <summary>The reply for a customer who asks to track an order that is already delivered.</summary>
+    public async Task<string?> DeliveredReplyAsync(Lead lead, Order latest) =>
+        await templates.BodyAsync(MessageKeys.Delivered) is { } body ? MessageDefaults.Fill(body, lead.Name == lead.Phone ? null : lead.Name, null, latest.Id) : null;
 
     public async Task<bool> IsAutoAssignEnabledAsync() =>
         !string.Equals((await db.SiteSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == AutoAssignKey))?.Value, "false", StringComparison.OrdinalIgnoreCase);
@@ -176,7 +212,67 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
             await db.SaveChangesAsync(); // so the next pick sees the new workload
             given++;
         }
-        return given;
+        return given + await AssignCustomersAsync();
+    }
+
+    // ---------------------------------------------------------------------
+    // Customer care: paid customers stay with the sales person who converted them; when that person is away, an available person takes over
+    // ---------------------------------------------------------------------
+
+    /// <summary>An available Customer care person: WhatsApp-active people first, then anyone online who may open Customer care.</summary>
+    private async Task<Employee?> PickCareOwnerAsync(long? excludeId) =>
+        await availability.PickAsync("care", null, excludeId, true) ?? await availability.PickAsync("care", null, excludeId, false);
+
+    /// <summary>
+    /// Customers nobody owns go to an available person. Customers who wrote and are still waiting after 10 minutes while their owner is away
+    /// move to an available person. The sales person who converted them stays recorded and shown. Called by the background worker.
+    /// </summary>
+    public async Task<int> AssignCustomersAsync()
+    {
+        if (!await IsAutoAssignEnabledAsync()) return 0;
+        var moved = 0;
+
+        foreach (var lead in await db.Leads.Where(l => l.CustomerSince != null && l.AssignedToEmployeeId == null).OrderBy(l => l.CustomerSince).Take(50).ToListAsync())
+        {
+            var next = await PickCareOwnerAsync(null);
+            if (next is null) break; // nobody is available; they wait until someone is
+            await AssignAsync(lead, next.Id, "Customer care: given to an available person", "auto");
+            await db.SaveChangesAsync();
+            moved++;
+        }
+
+        var cutoff = DateTime.UtcNow.AddMinutes(-10);
+        var waiting = await (from l in db.Leads
+                             join c in db.Conversations on l.Id equals c.LeadId
+                             where l.CustomerSince != null && l.AssignedToEmployeeId != null && c.UnreadCount > 0 && c.LastInboundAt != null && c.LastInboundAt < cutoff
+                             orderby c.LastInboundAt
+                             select l).Take(50).ToListAsync();
+        foreach (var lead in waiting)
+        {
+            var owner = await db.Employees.AsNoTracking().FirstOrDefaultAsync(e => e.Id == lead.AssignedToEmployeeId);
+            if (owner is not null && StaffAvailability.IsOnline(owner)) continue; // their owner is around and will answer
+            var next = await PickCareOwnerAsync(owner?.Id);
+            if (next is null) continue;
+            await AssignAsync(lead, next.Id, $"Customer care: {owner?.Name ?? "the owner"} was not available", "auto");
+            await db.SaveChangesAsync();
+            moved++;
+        }
+        if (moved > 0) log.LogInformation("[Lead] Customer care: {Moved} customer(s) handed to an available person", moved);
+        return moved;
+    }
+
+    /// <summary>
+    /// First paid order: remember who converted the lead and make sure an available person looks after the customer.
+    /// The converting sales person keeps the customer when they are around; otherwise (or for a plain website order) an available person gets it.
+    /// </summary>
+    private async Task SetCustomerOwnerAsync(Lead lead)
+    {
+        var owner = lead.AssignedToEmployeeId is { } id ? await db.Employees.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id) : null;
+        if (owner is not null && owner.IsActive && StaffAvailability.IsOnline(owner)) return;
+        if (!await IsAutoAssignEnabledAsync()) return;
+        var next = await PickCareOwnerAsync(owner?.Id);
+        if (next is null) return; // nobody available: it stays with the converter, or in the queue, until someone is
+        await AssignAsync(lead, next.Id, owner is null ? "Customer care: given to an available person" : $"Customer care: {owner.Name} is not available", "auto");
     }
 
     /// <summary>
@@ -199,7 +295,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
                 Lead? lead = null; Employee? donor = null;
                 foreach (var d in people.Where(p => p.Id != receiver.Id && load.GetValueOrDefault(p.Id) - load.GetValueOrDefault(receiver.Id) >= 2).OrderByDescending(p => load.GetValueOrDefault(p.Id)))
                 {
-                    lead = await PendingOf(d.Id).Where(l => (l.Source == "whatsapp") == wa).OrderByDescending(l => l.AssignedAt).FirstOrDefaultAsync();
+                    lead = await PendingOf(d.Id, keepManual: true).Where(l => (l.Source == "whatsapp") == wa).OrderByDescending(l => l.AssignedAt).FirstOrDefaultAsync();
                     if (lead is not null) { donor = d; break; }
                 }
                 if (lead is null || donor is null) break;
@@ -247,14 +343,16 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     /// Leads an employee has not started on yet: still "new" and no reply from a team member. These are the ones that can safely move to someone else
     /// when the owner is away; leads already being worked stay with their owner.
     /// </summary>
-    private IQueryable<Lead> PendingOf(long employeeId) =>
+    private IQueryable<Lead> PendingOf(long employeeId, bool keepManual = false) =>
         db.Leads.Where(l => l.AssignedToEmployeeId == employeeId && l.Status == LeadStatuses.New
+            // a lead a person (admin / colleague) handed over on purpose stays put when the system rebalances or the owner merely looks away
+            && (!keepManual || (db.LeadAssignmentHistory.Where(h => h.LeadId == l.Id).OrderByDescending(h => h.CreatedAt).ThenByDescending(h => h.Id).Select(h => h.ChangedBy).FirstOrDefault() ?? "auto") == "auto")
             && !db.WhatsAppMessages.Any(m => m.LeadId == l.Id && m.Direction == "outbound" && m.SentBy != null && m.SentBy != "system" && m.SentBy != "auto")); // automatic messages (welcome = "system", after-hours reply = "auto") do not count
 
     /// <summary>Gives the pending leads of <paramref name="employeeId"/> to other WhatsApp-active people; with nobody available they go back to the admin queue until someone is.</summary>
-    public async Task<int> MovePendingLeadsAsync(long employeeId, string reason, string changedBy)
+    public async Task<int> MovePendingLeadsAsync(long employeeId, string reason, string changedBy, bool keepManual = false)
     {
-        var pending = await PendingOf(employeeId).OrderBy(l => l.CreatedAt).ToListAsync();
+        var pending = await PendingOf(employeeId, keepManual).OrderBy(l => l.CreatedAt).ToListAsync();
         foreach (var lead in pending)
         {
             var target = await PickNextEmployeeAsync(employeeId, NeedsWhatsAppSwitch(lead));
@@ -265,13 +363,13 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     }
 
     /// <summary>Turns "WhatsApp active" off for a person and moves their pending leads to others. Returns how many leads moved.</summary>
-    public async Task<int> SwitchOffWhatsAppAsync(long employeeId, string reason, string changedBy)
+    public async Task<int> SwitchOffWhatsAppAsync(long employeeId, string reason, string changedBy, bool keepManual = false)
     {
         var emp = await db.Employees.FirstOrDefaultAsync(e => e.Id == employeeId);
         if (emp is null) return 0;
         emp.WhatsAppActive = false;
         await db.SaveChangesAsync();
-        return await MovePendingLeadsAsync(employeeId, reason, changedBy);
+        return await MovePendingLeadsAsync(employeeId, reason, changedBy, keepManual);
     }
 
     /// <summary>
@@ -283,7 +381,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         var cutoff = StaffAvailability.OnlineCutoff();
         var away = await db.Employees.Where(e => e.WhatsAppActive && (!e.IsActive || e.LastSeenAt == null || e.LastSeenAt < cutoff)).Select(e => e.Id).ToListAsync();
         var moved = 0;
-        foreach (var id in away) moved += await SwitchOffWhatsAppAsync(id, "Owner went offline", "auto");
+        foreach (var id in away) moved += await SwitchOffWhatsAppAsync(id, "Owner went offline", "auto", keepManual: true);
         if (away.Count > 0) log.LogInformation("[Lead] {Away} staff went away; {Moved} pending lead(s) moved", away.Count, moved);
         return moved;
     }
@@ -292,10 +390,12 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     public async Task<int> ReassignOpenLeadsAsync(long fromEmployeeId, bool spreadAcrossTeam, string changedBy)
     {
         var open = await db.Leads.Where(l => l.AssignedToEmployeeId == fromEmployeeId
-            && l.Status != LeadStatuses.Converted && l.Status != LeadStatuses.NotInterested).ToListAsync();
+            && (l.CustomerSince != null || (l.Status != LeadStatuses.Converted && l.Status != LeadStatuses.NotInterested))).ToListAsync(); // customers need an owner too
         foreach (var lead in open)
         {
-            var target = spreadAcrossTeam ? await PickNextEmployeeAsync(fromEmployeeId, NeedsWhatsAppSwitch(lead)) : null;
+            var target = !spreadAcrossTeam ? null
+                : lead.CustomerSince != null ? await PickCareOwnerAsync(fromEmployeeId)
+                : await PickNextEmployeeAsync(fromEmployeeId, NeedsWhatsAppSwitch(lead));
             await AssignAsync(lead, target?.Id, $"Employee removed ({(target is null ? "returned to admin queue" : "redistributed")})", changedBy);
             await db.SaveChangesAsync(); // persists LastAssignedAt so the rotation advances per lead
         }
@@ -341,7 +441,16 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
             if (string.IsNullOrEmpty(lead.Email) && !string.IsNullOrEmpty(o.CustomerEmail)) lead.Email = o.CustomerEmail;
             if (lead.Name == lead.Phone && !string.IsNullOrWhiteSpace(o.CustomerName)) lead.Name = o.CustomerName.Trim();
         }
-        await AutoAssignAsync(lead);
+
+        // The first paid order turns a lead into a customer, remembering who converted it. Later orders change nothing here, so a cycle that
+        // runs over old orders never moves a customer around.
+        if (lead.CustomerSince is null)
+        {
+            lead.CustomerSince = now;
+            lead.ConvertedByEmployeeId = lead.AssignedToEmployeeId;
+            await SetCustomerOwnerAsync(lead);
+        }
+        else if (lead.AssignedToEmployeeId is null) await AutoAssignAsync(lead);
         await db.SaveChangesAsync();
         return lead;
     }
@@ -358,11 +467,17 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         return leadId;
     }
 
+    /// <summary>Why a status change is not allowed, or null. A lead becomes a customer only through a paid order, and a customer stays one.</summary>
+    public static string? StatusBlock(Lead lead, string status) =>
+        status == LeadStatuses.Converted && lead.CustomerSince is null ? "A lead becomes a customer when a paid or cash-on-delivery order is placed. Use “Create order” on the lead."
+        : lead.CustomerSince is not null && status != LeadStatuses.Converted ? "This person is a paying customer, so they stay in Customer care."
+        : null;
+
     public async Task<bool> ChangeStatusAsync(long id, string status, string? note, string changedBy)
     {
         if (!LeadStatuses.All.Contains(status)) return false;
         var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == id);
-        if (lead is null) return false;
+        if (lead is null || StatusBlock(lead, status) is not null) return false;
         if (lead.Status == status && string.IsNullOrWhiteSpace(note)) return true;
 
         db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = id, FromStatus = lead.Status, ToStatus = status, Note = Truncate(note, 500), ChangedBy = changedBy });

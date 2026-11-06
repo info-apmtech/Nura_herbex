@@ -64,6 +64,8 @@ builder.Services.AddScoped<ShippingGateway>();
 builder.Services.AddSingleton<MediaSigner>();
 builder.Services.AddSingleton<InvoiceService>();
 builder.Services.AddScoped<StaffAvailability>();
+builder.Services.AddScoped<MessageTemplateService>();
+builder.Services.AddScoped<LibraryService>();
 builder.Services.AddScoped<LeadService>();
 builder.Services.Configure<FollowUpOptions>(cfg.GetSection(FollowUpOptions.Section));
 builder.Services.AddScoped<FollowUpService>();
@@ -74,6 +76,10 @@ builder.Services.AddScoped<ReportService>();
 builder.Services.Configure<AiOptions>(o => { cfg.GetSection(AiOptions.Section).Bind(o); if (string.IsNullOrWhiteSpace(o.ApiKey)) o.ApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? ""; });
 builder.Services.AddScoped<ReplyAssistantService>();
 builder.Services.AddHostedService<FollowUpWorker>();
+builder.Services.Configure<MetaAdsOptions>(cfg.GetSection(MetaAdsOptions.Section));
+builder.Services.AddHttpClient<MetaAdsService>(h => h.Timeout = TimeSpan.FromSeconds(60));
+builder.Services.AddScoped<AdsReportService>();
+builder.Services.AddHostedService<MetaAdsWorker>();
 builder.Services.AddHttpClient<WhatsAppService>();
 
 // ---- Auth (JWT for customers and admins) ----------------------------------------------
@@ -195,6 +201,7 @@ if (cfg.GetValue("Database:AutoCreate", true))
         await DbSeeder.SeedAsync(db, cfg.GetValue("Database:SeedDemoBatch", false));
         await WhatsAppMediaBackfill.RunAsync(db, app.Logger);
         await OrgSeeder.RunAsync(db, app.Logger, cfg.GetValue("Database:SeedTestStaff", false) ? cfg["Database:TestStaffPassword"] : null);
+        await scope.ServiceProvider.GetRequiredService<LibraryService>().SeedSamplesAsync();
     }
     catch (Exception ex)
     {

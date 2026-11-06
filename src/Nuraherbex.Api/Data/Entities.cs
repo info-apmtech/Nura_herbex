@@ -243,6 +243,12 @@ public class Lead
     /// <summary>Owning sales employee (null = unassigned).</summary>
     public long? AssignedToEmployeeId { get; set; }
     public DateTime? AssignedAt { get; set; }
+    /// <summary>Set when the first paid (or cash-on-delivery) order is placed; from then on the person is looked after in Customer care.</summary>
+    public DateTime? CustomerSince { get; set; }
+    /// <summary>The sales person who owned the lead when it became a customer (null for a plain website order).</summary>
+    public long? ConvertedByEmployeeId { get; set; }
+    /// <summary>When the one-time customer welcome message went out.</summary>
+    public DateTime? WelcomeSentAt { get; set; }
 }
 
 /// <summary>Chat state for a lead: unread count and the 24h WhatsApp customer-service window.</summary>

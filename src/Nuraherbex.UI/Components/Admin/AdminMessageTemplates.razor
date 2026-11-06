@@ -1,0 +1,230 @@
+@inject ApiClient Api
+@inject BrowserInterop Browser
+
+@* Automatic messages and ready-made replies, one set for every stage of a person: new, interested, follow-up, not interested and customer. *@
+<div class="ld em mt">
+    <div class="em-head">
+        <div>
+            <h3>Messages &amp; templates</h3>
+            <p>What customers receive by themselves, and the ready-made replies your team picks in the chat. Leads never get order tracking; a customer gets it only while an order is on its way.</p>
+        </div>
+        <div class="em-head-actions">
+            <button type="button" class="ld-btn" disabled="@(_busy || !_dirty)" @onclick="ReloadAsync">Discard changes</button>
+            <button type="button" class="ld-btn primary" disabled="@(_busy || !_dirty)" @onclick="SaveAsync">@(_busy ? "Saving…" : "Save messages")</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="@($"em-note {(_ok ? "ok" : "bad")}")" role="status"><Icon Name="@(_ok ? "CheckCircle2" : "AlertCircle")" Size="15" /><span>@_message</span><button type="button" class="em-x" aria-label="Dismiss" @onclick="() => _message = null"><Icon Name="X" Size="14" /></button></div>
+    }
+
+    @if (_loading) { <div class="ld-card ld-empty">Loading…</div> }
+    else if (_s is null) { <div class="ld-card ld-empty"><strong>Could not load the messages</strong>Check your connection and try again.</div> }
+    else
+    {
+        <div class="mt-vars" aria-label="Placeholders you can use">
+            <span>Placeholders</span>
+            <code>{name}</code> the customer's first name
+            <code>{agent}</code> the staff member writing
+            <code>{order}</code> the latest order number
+        </div>
+
+        <section class="ld-card mt-block">
+            <div class="mt-block-head">
+                <div><h4>Automatic messages</h4><p class="fu-hint">Sent by the system. Edit the wording or switch one off.</p></div>
+                <label class="em-switch" title="When nobody on the team is signed in with WhatsApp active, a person who writes gets the matching after-hours message (once every 12 hours).">
+                    <input type="checkbox" checked="@_s.AfterHoursEnabled" @onchange="e => { _s.AfterHoursEnabled = e.Value is true; _dirty = true; }" />
+                    <span class="em-track"><span class="em-knob"></span></span>
+                    <span class="em-switch-label">After-hours replies</span>
+                </label>
+            </div>
+
+            @foreach (var grp in _s.Items.Where(i => i.Group == "auto").GroupBy(i => i.Stage).OrderBy(g => Array.IndexOf(MessageStages.All, g.Key)))
+            {
+                <h5 class="mt-stage"><span class="@($"ld-pill {PillOf(grp.Key)}")">@MessageStages.Label(grp.Key)</span></h5>
+                @foreach (var t in grp)
+                {
+                    var item = t;
+                    <article class="@($"mt-card {(item.Enabled ? "" : "is-off")}")" @key="item.Key">
+                        <header>
+                            <div><strong>@item.Title</strong>@if (!string.IsNullOrEmpty(item.Hint)) { <small>@item.Hint</small> }</div>
+                            <label class="em-switch" title="Switch this message on or off">
+                                <input type="checkbox" checked="@item.Enabled" @onchange="e => { item.Enabled = e.Value is true; _dirty = true; }" />
+                                <span class="em-track"><span class="em-knob"></span></span>
+                            </label>
+                        </header>
+                        <textarea class="fu-input" rows="@Rows(item.Body)" maxlength="1000" aria-label="@item.Title" @bind="item.Body" @bind:event="oninput" @bind:after="() => _dirty = true" disabled="@(!item.Enabled)"></textarea>
+                        <footer>
+                            <small>@item.Body.Length / 1000</small>
+                            <span class="mt-preview" title="How it looks with sample values">@MessageDefaults.Fill(item.Body, "Sathish", "Priya", "123456789012")</span>
+                            <button type="button" class="ld-btn" @onclick="() => ResetAuto(item)">Use the standard text</button>
+                        </footer>
+                    </article>
+                }
+            }
+
+            <div class="mt-meta">
+                <Icon Name="Info" Size="15" />
+                <div>
+                    <strong>Welcome message and WhatsApp's 24-hour rule</strong>
+                    <p>The welcome goes out once, right after the first paid order. Inside the 24-hour window it is sent as the text above. Outside it, WhatsApp only allows an approved template: submit this in Meta Business (category <em>Utility</em>, language English) and put its name in <code>WhatsApp:CustomerWelcomeTemplate</code> in the server settings.</p>
+                    <pre class="mt-code">Hello {{1}}, thank you for your order {{2}} with Nura Herbex 🌿
+I am {{3}} from our customer care team and I will look after you from here. Message us on this number any time for order updates or help with your product.</pre>
+                </div>
+            </div>
+        </section>
+
+        <section class="ld-card mt-block">
+            <div class="mt-block-head">
+                <div><h4>Ready-made replies</h4><p class="fu-hint">Your team picks these in the chat. The ones for the person's stage show first.</p></div>
+                <button type="button" class="ld-btn primary" @onclick="AddReply"><Icon Name="Plus" Size="14" /> Add a reply</button>
+            </div>
+
+            <div class="ld-tabs mt-tabs" role="tablist">
+                @foreach (var st in MessageStages.All)
+                {
+                    var stage = st;
+                    <button type="button" role="tab" class="@($"ld-tab {(_stage == stage ? "is-active" : "")}")" @onclick="() => _stage = stage">@MessageStages.Label(stage) <b>@_s.Items.Count(i => i.Group == "reply" && i.Stage == stage)</b></button>
+                }
+            </div>
+
+            @foreach (var t in _s.Items.Where(i => i.Group == "reply" && i.Stage == _stage))
+            {
+                var item = t;
+                <article class="mt-card" @key="item.Key">
+                    <header>
+                        <input class="fu-input mt-title" type="text" maxlength="80" aria-label="Reply title" placeholder="Title, e.g. Gentle nudge" @bind="item.Title" @bind:event="oninput" @bind:after="() => _dirty = true" />
+                        <select class="fu-input mt-stage-select" aria-label="Stage" value="@item.Stage" @onchange="e => MoveStage(item, e.Value?.ToString())">
+                            @foreach (var st in MessageStages.All) { <option value="@st" selected="@(st == item.Stage)">@MessageStages.Label(st)</option> }
+                        </select>
+                        <button type="button" class="ld-btn danger-outline" aria-label="Delete this reply" @onclick="() => Remove(item)"><Icon Name="Trash2" Size="13" /></button>
+                    </header>
+                    <textarea class="fu-input" rows="@Rows(item.Body)" maxlength="1000" aria-label="Reply text" placeholder="Write the message…" @bind="item.Body" @bind:event="oninput" @bind:after="() => _dirty = true"></textarea>
+                    <footer><small>@item.Body.Length / 1000</small><span class="mt-preview">@MessageDefaults.Fill(item.Body, "Sathish", "Priya", "123456789012")</span></footer>
+                </article>
+            }
+            @if (!_s.Items.Any(i => i.Group == "reply" && i.Stage == _stage))
+            {
+                <p class="fu-hint mt-none">No ready-made replies for @MessageStages.Label(_stage).ToLowerInvariant() yet. Add one and your team can use it in the chat.</p>
+            }
+        </section>
+
+        <section class="ld-card mt-block">
+            <div class="mt-block-head">
+                <div>
+                    <h4>WhatsApp templates (for after the 24-hour window)</h4>
+                    <p class="fu-hint">Once 24 hours pass since the customer's last message, WhatsApp only allows a template Meta has approved. Your team sends these from the chat, and the customer's reply reopens the window.</p>
+                </div>
+                <span class="ld-pill converted">@_s.ApprovedMetaTemplates.Count of @MetaTemplates.All.Length approved</span>
+            </div>
+            <ol class="mt-steps">
+                <li>Press <strong>Copy text</strong> on a template and create it in <em>Meta Business Manager → WhatsApp Manager → Message templates</em>, with exactly the name and category shown, language English.</li>
+                <li>When Meta approves it, switch <strong>Approved</strong> on here and save. Only approved templates show in the chat.</li>
+            </ol>
+            @foreach (var grp in MetaTemplates.All.GroupBy(t => t.Stage).OrderBy(g => Array.IndexOf(MessageStages.All, g.Key)))
+            {
+                <h5 class="mt-stage"><span class="@($"ld-pill {PillOf(grp.Key)}")">@MessageStages.Label(grp.Key)</span></h5>
+                @foreach (var t in grp)
+                {
+                    var def = t;
+                    var on = _s.ApprovedMetaTemplates.Contains(def.Name);
+                    <article class="@($"mt-card mt-meta-card {(on ? "is-approved" : "")}")" @key="def.Name">
+                        <header>
+                            <div>
+                                <strong>@def.Title</strong>
+                                <small><code>@def.Name</code> · <span class="@($"mt-cat {def.Category.ToLowerInvariant()}")">@def.Category</span>@(def.Button is null ? "" : " · button: “" + def.Button + "”")</small>
+                            </div>
+                            <label class="em-switch" title="Switch on after Meta has approved this template">
+                                <input type="checkbox" checked="@on" @onchange="e => SetApproved(def.Name, e.Value is true)" />
+                                <span class="em-track"><span class="em-knob"></span></span>
+                                <span class="em-switch-label">Approved</span>
+                            </label>
+                        </header>
+                        <pre class="mt-code">@def.Body</pre>
+                        <footer>
+                            <small>@string.Join(", ", def.Params.Select((p, i) => "{{" + (i + 1) + "}} " + p.Label.ToLowerInvariant()))</small>
+                            <span class="mt-preview" title="Example for Meta's review form">Example: @def.Sampled()</span>
+                            <button type="button" class="ld-btn" @onclick="() => CopyAsync(def)"><Icon Name="Copy" Size="13" /> @(_copiedName == def.Name ? "Copied" : "Copy text")</button>
+                        </footer>
+                        @if (def.Note is not null) { <small class="mt-note">@def.Note</small> }
+                    </article>
+                }
+            }
+        </section>
+    }
+</div>
+
+@code {
+    private MessageTemplatesSettings? _s;
+    private string _stage = MessageStages.New;
+    private bool _loading = true, _busy, _dirty, _ok;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        var res = await Api.AdminMessageTemplatesAsync();
+        _s = res.Success ? res.Settings : null;
+        if (!res.Success) { _message = res.Message ?? "Could not load the messages."; _ok = false; }
+        _dirty = false; _loading = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_s is null) return;
+        _busy = true;
+        var res = await Api.AdminSaveMessageTemplatesAsync(_s);
+        _message = res.Message; _ok = res.Success;
+        if (res.Success) await ReloadAsync();
+        _busy = false;
+    }
+
+    private void ResetAuto(MessageTemplateDto item)
+    {
+        var std = MessageDefaults.Automatic().FirstOrDefault(d => d.Key == item.Key);
+        if (std is null) return;
+        item.Body = std.Body; _dirty = true;
+    }
+
+    private void AddReply()
+    {
+        if (_s is null) return;
+        _s.Items.Add(new MessageTemplateDto { Key = "reply-" + Guid.NewGuid().ToString("N")[..8], Group = "reply", Stage = _stage, Title = "", Body = "" });
+        _dirty = true;
+    }
+
+    private void Remove(MessageTemplateDto item) { _s?.Items.Remove(item); _dirty = true; }
+
+    private string? _copiedName;
+
+    private void SetApproved(string name, bool on)
+    {
+        if (_s is null) return;
+        _s.ApprovedMetaTemplates.Remove(name);
+        if (on) _s.ApprovedMetaTemplates.Add(name);
+        _dirty = true;
+    }
+
+    private async Task CopyAsync(MetaTemplateDef def)
+    {
+        await Browser.CopyToClipboardAsync(def.Body);
+        _copiedName = def.Name;
+        StateHasChanged();
+        await Task.Delay(1800);
+        if (_copiedName == def.Name) { _copiedName = null; StateHasChanged(); }
+    }
+
+    private void MoveStage(MessageTemplateDto item, string? stage)
+    {
+        if (stage is not null && MessageStages.All.Contains(stage)) { item.Stage = stage; _stage = stage; _dirty = true; }
+    }
+
+    private static int Rows(string body) => Math.Clamp((body ?? "").Split('\n').Length + (body?.Length ?? 0) / 90, 3, 9);
+
+    private static string PillOf(string stage) => stage switch
+    {
+        MessageStages.Interested => "interested", MessageStages.FollowUp => "follow-up", MessageStages.NotInterested => "not-interested", MessageStages.Customer => "converted", _ => "new",
+    };
+}

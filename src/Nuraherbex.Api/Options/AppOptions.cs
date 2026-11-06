@@ -150,10 +150,14 @@ public class WhatsAppOptions
     public string DefaultCountryCode { get; set; } = "91";
     /// <summary>Folder for photos, stickers and voice notes customers send. Empty = App_Data/whatsapp-media next to the API. Keep it outside the deployment folder so redeploys do not delete it.</summary>
     public string MediaPath { get; set; } = "";
+    /// <summary>Folder for the file library (PDFs and videos staff send). Empty = App_Data/whatsapp-library next to the API. Keep it outside the deployment folder so redeploys do not delete it.</summary>
+    public string LibraryPath { get; set; } = "";
     /// <summary>Approved template names. Leave empty to send plain text (only deliverable inside the 24h customer-service window).</summary>
     public string OrderConfirmationTemplate { get; set; } = "";
     public string OrderShippedTemplate { get; set; } = "";
     public string OrderDeliveredTemplate { get; set; } = "";
+    /// <summary>Approved template for the one-time customer welcome. Body variables: {{1}} first name, {{2}} order id, {{3}} care person. Used when the 24-hour window is closed.</summary>
+    public string CustomerWelcomeTemplate { get; set; } = "";
     public string TemplateLanguage { get; set; } = "en";
     public bool AutoReplyEnabled { get; set; } = true;
     public bool CanSend => !string.IsNullOrWhiteSpace(AccessToken) && !string.IsNullOrWhiteSpace(PhoneNumberId);

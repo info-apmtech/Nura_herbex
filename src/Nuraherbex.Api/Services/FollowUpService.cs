@@ -44,7 +44,9 @@ public class FollowUpService(
     WhatsAppService whatsapp,
     IOptions<FollowUpOptions> options,
     IOptions<StoreOptions> store,
-    ILogger<FollowUpService> log)
+    ILogger<FollowUpService> log,
+    IOptions<WhatsAppOptions> whatsappOptions,
+    MessageTemplateService templates)
 {
     /// <summary>Current UTC time; tests replace it to travel through the 15 days.</summary>
     public static Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
@@ -197,8 +199,10 @@ public class FollowUpService(
                 await leads.ChangeStatusAsync(lead.Id, LeadStatuses.Interested, note ?? "Follow-up outcome", actor); break;
             case FollowUpOutcomes.NotInterested when lead.Status != LeadStatuses.Converted:
                 await leads.ChangeStatusAsync(lead.Id, LeadStatuses.NotInterested, note ?? "Follow-up outcome", actor); break;
-            case FollowUpOutcomes.Converted:
-                await leads.ChangeStatusAsync(lead.Id, LeadStatuses.Converted, note ?? "Follow-up outcome", actor); break;
+            case FollowUpOutcomes.Converted when lead.CustomerSince is null:
+                // Agreed to buy but no paid order yet: they are a hot lead until the order is placed.
+                if (lead.Status != LeadStatuses.Interested) await leads.ChangeStatusAsync(lead.Id, LeadStatuses.Interested, note ?? "Agreed to buy; waiting for the order", actor);
+                break;
         }
 
         string message = "Follow-up completed";
@@ -329,6 +333,7 @@ public class FollowUpService(
             try
             {
                 var lead = await leads.UpsertFromOrderAsync(o);
+                await SendCustomerWelcomeAsync(lead, o, now);
 
                 // ---- Order progress: raise a task when something needs a human ----
                 async Task Raise(string step, string title, string notes)
@@ -366,6 +371,30 @@ public class FollowUpService(
                 log.LogWarning(ex, "[FollowUp] Order sync failed for {Order}", o.Id);
             }
         }
+    }
+
+    /// <summary>
+    /// Welcomes a new customer once, right after their first paid order, from the number they already know. Inside the 24-hour window it goes as plain text;
+    /// outside it, as the approved template (WhatsApp:CustomerWelcomeTemplate). With neither possible it is retried each cycle for three days, then dropped.
+    /// </summary>
+    private async Task SendCustomerWelcomeAsync(Lead lead, Order order, DateTime now)
+    {
+        if (lead.WelcomeSentAt is not null || lead.CustomerSince is not { } since || since < now.AddDays(-3) || lead.ConsentStatus == "opted_out") return;
+        if (await templates.BodyAsync(MessageKeys.Welcome) is not { } body) return;
+
+        var agent = lead.AssignedToEmployeeId is { } eid ? await db.Employees.AsNoTracking().Where(e => e.Id == eid).Select(e => e.Name).FirstOrDefaultAsync() : null;
+        var first = string.IsNullOrWhiteSpace(lead.Name) || lead.Name == lead.Phone ? (string.IsNullOrWhiteSpace(order.CustomerName) ? "there" : order.CustomerName.Trim().Split(' ')[0]) : lead.Name.Trim().Split(' ')[0];
+        var window = await db.Conversations.AsNoTracking().Where(c => c.LeadId == lead.Id).Select(c => c.ServiceWindowExpiresAt).FirstOrDefaultAsync();
+
+        bool sent;
+        if (window is { } w && w > now) sent = await whatsapp.SendTextAsync(lead.Phone, MessageDefaults.Fill(body, first, agent, order.Id), order.Id, "system");
+        else if (!string.IsNullOrWhiteSpace(whatsappOptions.Value.CustomerWelcomeTemplate))
+            sent = await whatsapp.SendTemplateAsync(lead.Phone, whatsappOptions.Value.CustomerWelcomeTemplate, [first, order.Id, agent ?? "our care team"], order.Id, "system");
+        else return;
+
+        if (!sent) return;
+        lead.WelcomeSentAt = now;
+        await SaveQuietlyAsync();
     }
 
     private async Task SaveQuietlyAsync()

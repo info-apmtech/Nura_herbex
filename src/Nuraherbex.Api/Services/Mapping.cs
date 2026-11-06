@@ -98,6 +98,7 @@ public static class Mapping
         UnreadCount = c?.UnreadCount ?? 0, ServiceWindowExpiresAt = c?.ServiceWindowExpiresAt,
         CreatedAt = l.CreatedAt, LastContactAt = l.LastContactAt, ConvertedAt = l.ConvertedAt,
         AssignedToEmployeeId = l.AssignedToEmployeeId, AssignedAt = l.AssignedAt,
+        CustomerSince = l.CustomerSince, ConvertedByEmployeeId = l.ConvertedByEmployeeId,
     };
 
     /// <summary>Indian-style timestamp used in tracking timelines ("5/10/2026, 3:42:10 pm").</summary>

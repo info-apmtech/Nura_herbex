@@ -45,7 +45,10 @@ else
             else if (_activeTab == "formulation") { <AdminFormulationTab Ingredients="_ingredients" Metrics="_metrics" IngredientsChanged="OnIngredientsChanged" MetricsChanged="OnMetricsChanged" /> }
             else if (_activeTab == "content") { <AdminPageContentEditor /><AdminContentTab /> }
             else if (_activeTab == "crm") { <AdminCrmDashboard /> }
-            else if (_activeTab == "leads") { <AdminLeadsTab /> }
+            else if (_activeTab == "leads") { <AdminLeadsTab Mode="leads" /> }
+            else if (_activeTab == "interested") { <AdminLeadsTab Mode="interested" /> }
+            else if (_activeTab == "care") { <AdminLeadsTab Mode="care" /> }
+            else if (_activeTab == "campaigns") { <AdminAdsDashboard /> }
             else if (_activeTab == "followups") { <AdminFollowUpsTab /> }
             else if (_activeTab == "whatsapp") { <AdminWhatsAppTab /> }
             else if (_activeTab == "team") { <AdminOrganisation /> }
@@ -66,7 +69,7 @@ else
     {
         new("overview", "Overview", "TrendingUp", "MANAGE"), new("orders", "Orders", "ShoppingBag", "MANAGE"), new("payments", "Payments", "CreditCard", "MANAGE"), new("shipping", "Shipping setup", "Truck", "MANAGE"), new("customers", "Customers", "Users", "MANAGE"),
         new("products", "Products", "Package", "MANAGE"), new("coupons", "Coupons", "Tag", "MANAGE"), new("reviews", "Reviews", "MessageSquare", "MANAGE"),
-        new("crm", "Sales dashboard", "BarChart3", "SALES & WORK"), new("leads", "Leads", "Phone", "SALES & WORK"), new("followups", "Follow-ups", "Clock", "SALES & WORK"), new("tasks", "Tasks", "CheckCircle2", "SALES & WORK"),
+        new("crm", "Sales dashboard", "BarChart3", "SALES & WORK"), new("leads", "Leads", "Phone", "SALES & WORK"), new("interested", "Hot leads", "Flame", "SALES & WORK"), new("care", "Customer care", "HeartPulse", "SALES & WORK"), new("campaigns", "Ad campaigns", "TrendingUp", "SALES & WORK"), new("followups", "Follow-ups", "Clock", "SALES & WORK"), new("tasks", "Tasks", "CheckCircle2", "SALES & WORK"),
         new("reports", "Reports", "BarChart3", "ADMIN"), new("whatsapp", "WhatsApp log", "MessageCircle", "ADMIN"), new("team", "Team & organisation", "KeyRound", "ADMIN"),
         new("batches", "Batch reports", "ShieldCheck", "STOREFRONT & SUPPORT"), new("formulation", "Formulation", "FlaskConical", "STOREFRONT & SUPPORT"), new("content", "Store content", "FileText", "STOREFRONT & SUPPORT"),
     };
@@ -74,6 +77,9 @@ else
     private NavItem[] Navigation => AllPages.Where(p => AdminAuth.Can(p.Id) || (p.Id == "reports" && (AdminAuth.Can("leads") || AdminAuth.Can("followups") || AdminAuth.Can("tasks")))).Select(p => p.Id switch
     {
         "crm" when !AdminAuth.CanAll("crm") => p with { Label = "My dashboard" },
+        "interested" when !AdminAuth.CanAll("interested") => p with { Label = "My hot leads" },
+        "care" when !AdminAuth.CanAll("care") => p with { Label = "My customers" },
+        "campaigns" when !AdminAuth.CanAll("campaigns") => p with { Label = "My ad leads" },
         "followups" when !AdminAuth.CanAll("followups") => p with { Label = "My follow-ups" },
         "tasks" when !AdminAuth.CanAll("tasks") => p with { Label = "My tasks" },
         "reports" when !AdminAuth.CanAll("reports") => p with { Label = "My reports" },
@@ -128,6 +134,13 @@ else
             var r = await Api.AdminLeadsAsync(take: 1);
             if (r.Success && r.StatusCounts.GetValueOrDefault(LeadStatuses.New) is > 0 and var n)
                 next["leads"] = new NavBadge(n, false, $"{n} new lead(s) not contacted yet");
+        }
+        foreach (var view in new[] { LeadViews.Interested, LeadViews.Care })
+        {
+            if (!AdminAuth.Can(view)) continue;
+            var r = await Api.AdminLeadsAsync(take: 1, view: view);
+            if (r.Success && r.UnreadTotal > 0)
+                next[view] = new NavBadge(r.UnreadTotal, false, $"{r.UnreadTotal} unread message(s)");
         }
         if (AdminAuth.Can("followups"))
         {
