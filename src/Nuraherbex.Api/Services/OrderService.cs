@@ -22,11 +22,11 @@ public partial class OrderService(
     /// <param name="holdUntilPaid">
     /// Public checkout persists the pending order and a payment-attempt snapshot before payment confirmation.
     /// </param>
-    public async Task<Order> CreateAsync(CreateOrderRequest req, string? customerId, bool holdUntilPaid = false)
+    public async Task<Order> CreateAsync(CreateOrderRequest req, string? customerId, bool holdUntilPaid = false, bool emailOptional = false)
     {
         var c = req.Customer;
         var s = req.Shipping;
-        if (string.IsNullOrWhiteSpace(c.FullName) || string.IsNullOrWhiteSpace(c.Phone) || string.IsNullOrWhiteSpace(c.Email))
+        if (string.IsNullOrWhiteSpace(c.FullName) || string.IsNullOrWhiteSpace(c.Phone) || (!emailOptional && string.IsNullOrWhiteSpace(c.Email)))
             throw new InvalidOperationException("Customer full name, phone number, and email are required");
         if (string.IsNullOrWhiteSpace(s.AddressLine1) || string.IsNullOrWhiteSpace(s.City) || string.IsNullOrWhiteSpace(s.State) || string.IsNullOrWhiteSpace(s.Pincode))
             throw new InvalidOperationException("Complete shipping address (address line 1, city, state, pincode) is required");
@@ -46,7 +46,7 @@ public partial class OrderService(
 
         var order = new Order
         {
-            Id = id, CustomerName = c.FullName.Trim(), CustomerEmail = c.Email.Trim().ToLowerInvariant(), CustomerPhone = phone,
+            Id = id, CustomerName = c.FullName.Trim(), CustomerEmail = (c.Email ?? "").Trim().ToLowerInvariant(), CustomerPhone = phone,
             CustomerId = customerId,
             ShippingAddress = new AddressDto
             {

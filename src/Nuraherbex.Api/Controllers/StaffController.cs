@@ -198,8 +198,8 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         if (lead is null) return NoLead();
         if (r.Items.Count == 0 || r.Items.Any(i => string.IsNullOrWhiteSpace(i.ProductId) || i.Quantity < 1 || i.Quantity > 20))
             return BadRequest(new ApiResult { Success = false, Message = "Choose at least one product (1 to 20 of each)." });
-        if (string.IsNullOrWhiteSpace(r.Email) || !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(r.Email.Trim()))
-            return BadRequest(new ApiResult { Success = false, Message = "A valid customer email is required for the order confirmation." });
+        if (!string.IsNullOrWhiteSpace(r.Email) && !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(r.Email.Trim()))
+            return BadRequest(new ApiResult { Success = false, Message = "That email address is not valid. Fix it or leave it blank." });
         if (lead.ConsentStatus == "opted_out")
             return BadRequest(new ApiResult { Success = false, Message = "This customer opted out of messages, so order updates cannot be sent. Ask them to message you first." });
 
@@ -207,12 +207,12 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         {
             var order = await orders.CreateAsync(new CreateOrderRequest
             {
-                Customer = new CheckoutCustomerDto { FullName = string.IsNullOrWhiteSpace(r.CustomerName) ? lead.Name : r.CustomerName.Trim(), Phone = Last10(lead.Phone), Email = r.Email.Trim() },
+                Customer = new CheckoutCustomerDto { FullName = string.IsNullOrWhiteSpace(r.CustomerName) ? lead.Name : r.CustomerName.Trim(), Phone = Last10(lead.Phone), Email = (r.Email ?? "").Trim() },
                 Shipping = r.Address,
                 Items = r.Items.GroupBy(i => i.ProductId).Select(g => new CartLineDto { Id = g.Key, Quantity = g.Sum(x => x.Quantity) }).ToList(),
                 CouponCode = string.IsNullOrWhiteSpace(r.CouponCode) ? null : r.CouponCode.Trim(),
                 PaymentMethod = r.AlreadyPaid ? "ONLINE" : "COD",
-            }, null);
+            }, null, emailOptional: true);
 
             if (r.AlreadyPaid)
                 order = await orders.MarkPaidAsync(order.Id, string.IsNullOrWhiteSpace(r.PaymentReference) ? $"CRM-{DateTime.UtcNow:yyyyMMddHHmmss}" : r.PaymentReference.Trim(), null, "{\"source\":\"crm-manual\"}");
@@ -222,7 +222,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
             await db.SaveChangesAsync();
 
             var fresh = await db.Leads.FirstAsync(l => l.Id == id);
-            if (string.IsNullOrEmpty(fresh.Email)) fresh.Email = r.Email.Trim();
+            if (string.IsNullOrEmpty(fresh.Email) && !string.IsNullOrWhiteSpace(r.Email)) fresh.Email = r.Email.Trim();
             await leads.UpsertFromOrderAsync(tracked);
             log.LogInformation("[Lead] {Who} created order {Order} for lead {Id}", MyName, order.Id, id);
             return StatusCode(201, new LeadOrderResponse { Success = true, OrderId = order.Id, TotalAmount = order.TotalAmount, Message = $"Order {order.Id} created for ₹{order.TotalAmount:N0}. The customer will get the confirmation on WhatsApp and e-mail." });
@@ -634,7 +634,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     private static string? Validate(EmployeeSaveRequest r, bool creating)
     {
         if (string.IsNullOrWhiteSpace(r.Name)) return "Name is required.";
-        if (string.IsNullOrWhiteSpace(r.Email) || !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(r.Email.Trim())) return "A valid email is required.";
+        if (!string.IsNullOrWhiteSpace(r.Email) && !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(r.Email.Trim())) return "A valid email is required.";
         if (!Roles.Contains(r.Role)) return "Role must be admin or sales.";
         if (creating && (r.Password is null || r.Password.Length < 8)) return "Password must be at least 8 characters.";
         if (!creating && !string.IsNullOrEmpty(r.Password) && r.Password.Length < 8) return "Password must be at least 8 characters.";

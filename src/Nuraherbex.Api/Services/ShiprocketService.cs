@@ -94,7 +94,7 @@ public class ShiprocketService(HttpClient http, IOptions<ShiprocketOptions> opti
             billing_pincode = order.ShippingAddress.Pincode,
             billing_state = order.ShippingAddress.State,
             billing_country = string.IsNullOrWhiteSpace(order.ShippingAddress.Country) ? "India" : order.ShippingAddress.Country,
-            billing_email = order.CustomerEmail,
+            billing_email = string.IsNullOrWhiteSpace(order.CustomerEmail) ? "care@nuraherbex.com" : order.CustomerEmail, // Shiprocket wants one; orders placed without an email use the store address
             billing_phone = order.CustomerPhone,
             shipping_is_billing = true,
             order_items = order.Items.Select(i => new { name = i.Name, sku = i.Sku, units = i.Quantity, selling_price = i.Price, discount = 0, tax = 0, hsn = long.TryParse(i.Hsn, out var h) ? h : 21069099 }),

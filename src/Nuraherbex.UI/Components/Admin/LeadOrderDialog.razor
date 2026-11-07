@@ -49,13 +49,13 @@
 
             <div class="fu-step"><span>2</span> Where should it go?</div>
             <div class="lo-grid">
-                <label class="fu-field">Name<input type="text" maxlength="200" @bind="_name" @bind:event="oninput" /></label>
-                <label class="fu-field">Email <span>(for the confirmation)</span><input type="email" maxlength="200" placeholder="name@example.com" @bind="_email" @bind:event="oninput" /></label>
-                <label class="fu-field wide">Address<input type="text" maxlength="200" placeholder="House / street" @bind="_a.AddressLine1" @bind:event="oninput" /></label>
-                <label class="fu-field wide">Area <span>(optional)</span><input type="text" maxlength="200" @bind="_a.AddressLine2" @bind:event="oninput" /></label>
-                <label class="fu-field">City<input type="text" maxlength="100" @bind="_a.City" @bind:event="oninput" /></label>
-                <label class="fu-field">State<input type="text" maxlength="100" @bind="_a.State" @bind:event="oninput" /></label>
-                <label class="fu-field">Pincode<input type="text" inputmode="numeric" maxlength="6" @bind="_a.Pincode" @bind:event="oninput" /></label>
+                @Field("name", "Name", null, "text", 200, null, _name, v => _name = v)
+                @Field("email", "Email", "(optional)", "email", 200, "name@example.com", _email, v => _email = v)
+                @Field("address", "Address", null, "text", 200, "House / street", _a.AddressLine1, v => _a.AddressLine1 = v, true)
+                @Field("area", "Area", "(optional)", "text", 200, null, _a.AddressLine2 ?? "", v => _a.AddressLine2 = v, true)
+                @Field("city", "City", null, "text", 100, null, _a.City, v => _a.City = v)
+                @Field("state", "State", null, "text", 100, null, _a.State, v => _a.State = v)
+                @Field("pincode", "Pincode", "(6 digits)", "text", 6, null, _a.Pincode, v => _a.Pincode = v)
             </div>
 
             <div class="fu-step"><span>3</span> How is it paid?</div>
@@ -65,7 +65,8 @@
             </div>
             @if (_paid)
             {
-                <input type="text" class="fu-input" maxlength="80" placeholder="Payment reference, e.g. UPI transaction id" @bind="_ref" @bind:event="oninput" />
+                <input type="text" class="fu-input" maxlength="80" placeholder="Payment reference, e.g. UPI transaction id" aria-invalid="@(_errors.ContainsKey("ref") ? "true" : "false")" @bind="_ref" @bind:event="oninput" @bind:after="ClearRefError" />
+                @if (_errors.TryGetValue("ref", out var refErr)) { <em class="lo-err">@refErr</em> }
                 <p class="fu-hint"><Icon Name="Info" Size="12" /> Only choose this once the money is in your account. The order is marked paid and goes straight to shipping.</p>
             }
             else
@@ -73,8 +74,9 @@
                 <p class="fu-hint"><Icon Name="Info" Size="12" /> The customer pays the courier on delivery.</p>
             }
 
-            @if (!string.IsNullOrEmpty(_error)) { <div class="fu-flash bad" role="alert">@_error</div> }
         </div>
+
+        @if (!string.IsNullOrEmpty(_error)) { <div class="fu-flash bad lo-error" role="alert"><Icon Name="AlertCircle" Size="14" /> @_error</div> }
 
         <footer>
             <button type="button" class="ld-btn" @onclick="OnClose">Cancel</button>
@@ -84,6 +86,42 @@
 </div>
 
 @code {
+    private readonly Dictionary<string, string> _errors = new();
+    private void ClearRefError() => _errors.Remove("ref");
+
+    private RenderFragment Field(string key, string label, string? hint, string type, int max, string? placeholder, string value, Action<string> set, bool wide = false) => b =>
+    {
+        var err = _errors.GetValueOrDefault(key);
+        b.OpenElement(0, "label"); b.AddAttribute(1, "class", $"fu-field{(wide ? " wide" : "")}{(err is null ? "" : " has-error")}");
+        b.OpenElement(2, "span"); b.AddAttribute(3, "class", "lo-lbl"); b.AddContent(4, label);
+        if (hint is not null) { b.OpenElement(5, "small"); b.AddContent(6, hint); b.CloseElement(); }
+        b.CloseElement();
+        b.OpenElement(7, "input"); b.AddAttribute(8, "type", type); b.AddAttribute(9, "maxlength", max);
+        if (placeholder is not null) b.AddAttribute(10, "placeholder", placeholder);
+        if (key == "pincode") b.AddAttribute(11, "inputmode", "numeric");
+        b.AddAttribute(12, "aria-invalid", err is null ? "false" : "true");
+        b.AddAttribute(13, "value", value);
+        b.AddAttribute(14, "oninput", EventCallback.Factory.Create<ChangeEventArgs>(this, e => { set(e.Value?.ToString() ?? ""); _errors.Remove(key); }));
+        b.CloseElement();
+        if (err is not null) { b.OpenElement(15, "em"); b.AddAttribute(16, "class", "lo-err"); b.AddContent(17, err); b.CloseElement(); }
+        b.CloseElement();
+    };
+
+    private bool Validate()
+    {
+        _errors.Clear();
+        if (_lines.Count == 0) { _error = "Choose at least one product."; return false; }
+        if (string.IsNullOrWhiteSpace(_name)) _errors["name"] = "Enter the customer's name.";
+        if (!string.IsNullOrWhiteSpace(_email) && !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(_email.Trim())) _errors["email"] = "Enter a valid email, like name@example.com.";
+        if (string.IsNullOrWhiteSpace(_a.AddressLine1)) _errors["address"] = "Enter the house / street address.";
+        if (string.IsNullOrWhiteSpace(_a.City)) _errors["city"] = "Enter the city.";
+        if (string.IsNullOrWhiteSpace(_a.State)) _errors["state"] = "Enter the state.";
+        if (!System.Text.RegularExpressions.Regex.IsMatch(_a.Pincode ?? "", @"^\d{6}$")) _errors["pincode"] = "Enter a 6-digit pincode.";
+        if (_paid && string.IsNullOrWhiteSpace(_ref)) _errors["ref"] = "Enter the payment reference.";
+        _error = _errors.Count > 0 ? "Please fix the highlighted fields." : null;
+        return _errors.Count == 0;
+    }
+
     [Parameter, EditorRequired] public long LeadId { get; set; }
     [Parameter] public string LeadName { get; set; } = "";
     [Parameter] public string? LeadEmail { get; set; }
@@ -128,6 +166,7 @@
 
     private async Task SaveAsync()
     {
+        if (!Validate()) return;
         _error = null; _busy = true;
         var res = await Api.AdminLeadOrderAsync(LeadId, new LeadOrderRequest
         {

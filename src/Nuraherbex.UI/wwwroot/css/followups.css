@@ -300,3 +300,9 @@ textarea.fu-input{height:auto;padding:9px 12px!important;resize:vertical;font-fa
 .wa-facts dd{margin:2px 0 0;font-size:16px;font-weight:700}
 .wa-facts .bad{background:#fdecea}.wa-facts .bad dd{color:#a3281c}
 @media(max-width:700px){.wa-facts{grid-template-columns:repeat(3,minmax(0,1fr))}.wa-usage-money{text-align:left}}
+.lo-grid{align-items:start}
+.fu-field .lo-lbl{display:block;font-weight:650;color:#4b5563}
+.fu-field .lo-lbl small{font-weight:400;color:var(--ld-muted);margin-left:6px;font-size:11.5px}
+.fu-field.has-error input,.fu-input[aria-invalid=true]{border-color:#d4493b!important;background:#fff8f7!important}
+.lo-err{display:block;font-style:normal;font-size:11.5px;font-weight:500;color:#a93428;margin-top:2px}
+.fu-modal .lo-error{margin:0;border-radius:0;border-width:1px 0 0;display:flex;align-items:center;gap:6px;padding:9px 20px;flex:none}

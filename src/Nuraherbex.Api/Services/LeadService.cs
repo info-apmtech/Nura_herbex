@@ -276,9 +276,9 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     }
 
     /// <summary>
-    /// Shares unstarted leads out evenly when someone new comes online. People who are online and eligible are compared by open work;
-    /// while the busiest holds at least 2 more than the least busy and has an unstarted lead (status "new", no team reply yet), the newest of those
-    /// moves to the least busy person. Leads already being worked never move. Returns how many leads moved.
+    /// Shares unstarted leads out evenly when someone new comes online. People who are online and eligible are compared by how many unopened leads they hold;
+    /// while the fullest holds at least 2 more than the emptiest and has a movable unstarted lead (status "new", no team reply yet), the newest of those
+    /// moves to the emptiest person. Leads already being worked never move. Returns how many leads moved.
     /// </summary>
     public async Task<int> RebalanceAsync()
     {
@@ -288,14 +288,17 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         {
             var people = await availability.EligibleAsync("leads", null, null, wa);
             if (people.Count < 2) continue;
-            var load = await availability.WorkloadAsync();
-            for (var guard = 0; guard < 200; guard++)
+            // Balance on the number of unopened leads each person holds (15 unopened across 3 people = 5 each), counting leads that cannot move too.
+            var load = new Dictionary<long, int>();
+            foreach (var p in people) load[p.Id] = await PendingOf(p.Id).CountAsync(l => (l.Source == "whatsapp") == wa);
+            for (var guard = 0; guard < 500; guard++)
             {
                 var receiver = people.OrderBy(p => load.GetValueOrDefault(p.Id)).ThenBy(p => p.LastAssignedAt == null ? 0 : 1).ThenBy(p => p.LastAssignedAt).ThenBy(p => p.Id).First();
                 Lead? lead = null; Employee? donor = null;
                 foreach (var d in people.Where(p => p.Id != receiver.Id && load.GetValueOrDefault(p.Id) - load.GetValueOrDefault(receiver.Id) >= 2).OrderByDescending(p => load.GetValueOrDefault(p.Id)))
                 {
-                    lead = await PendingOf(d.Id, keepManual: true).Where(l => (l.Source == "whatsapp") == wa).OrderByDescending(l => l.AssignedAt).FirstOrDefaultAsync();
+                    // the latest unopened lead moves first
+                    lead = await PendingOf(d.Id, keepManual: true).Where(l => (l.Source == "whatsapp") == wa).OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync();
                     if (lead is not null) { donor = d; break; }
                 }
                 if (lead is null || donor is null) break;
