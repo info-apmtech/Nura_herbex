@@ -20,6 +20,8 @@ public abstract class StaffControllerBase(RightsService rightsService) : Control
     protected int Level(string page) => Rights.Level(page);
     protected long? MyId => long.TryParse(User.FindFirstValue("emp_id"), out var id) ? id : null;
     protected string MyName => User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "admin";
+    /// <summary>Employee id saved in audit columns (ChangedBy), or <see cref="MyName"/> for the configured super-admin who has no employee record.</summary>
+    protected string MyActorId => MyId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? MyName;
 
     /// <summary>A token stays valid for hours; rights are read fresh (briefly cached) so a deactivated person, or a changed designation, takes effect at once.</summary>
     [NonAction]

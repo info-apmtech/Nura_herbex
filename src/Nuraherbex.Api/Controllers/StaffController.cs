@@ -272,12 +272,12 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
             FollowUps = fus.Select(f => f.ToDto(lead.Name, lead.Phone, f.AssignedToEmployeeId is { } oid ? names.GetValueOrDefault(oid) : null)).ToList(),
             Orders = leadOrders.Select(ToLeadOrder).ToList(),
             Messages = messages.OrderBy(m => m.CreatedAt).Select(m => m.ToDto(signer)).ToList(),
-            History = history.Select(h => new LeadStatusHistoryDto { FromStatus = h.FromStatus, ToStatus = h.ToStatus, Note = h.Note, ChangedBy = h.ChangedBy, CreatedAt = h.CreatedAt }).ToList(),
+            History = history.Select(h => new LeadStatusHistoryDto { FromStatus = h.FromStatus, ToStatus = h.ToStatus, Note = h.Note, ChangedBy = ResolveChangedBy(h.ChangedBy, names, "system"), CreatedAt = h.CreatedAt }).ToList(),
             Assignments = assignments.Select(a => new LeadAssignmentDto
             {
                 FromName = a.FromEmployeeId is { } f ? names.GetValueOrDefault(f) ?? "Former employee" : null,
                 ToName = a.ToEmployeeId is { } t ? names.GetValueOrDefault(t) ?? "Former employee" : null,
-                Reason = a.Reason, ChangedBy = a.ChangedBy, CreatedAt = a.CreatedAt,
+                Reason = a.Reason, ChangedBy = ResolveChangedBy(a.ChangedBy, names, "auto"), CreatedAt = a.CreatedAt,
             }).ToList(),
             Audit = BuildAudit(history, assignments, names),
         });
@@ -285,17 +285,23 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
 
     private static bool IsAutomatic(string? who) => string.IsNullOrEmpty(who) || who is "auto" or "system" or "journey";
 
+    private static string ResolveChangedBy(string? who, Dictionary<long, string> names, string fallback) =>
+        string.IsNullOrEmpty(who) ? fallback
+        : long.TryParse(who, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id)
+            ? names.GetValueOrDefault(id) ?? "Former employee"
+        : who;
+
     /// <summary>Merges status and owner changes into one timeline so "who moved this, and when" is answered in one place.</summary>
     private static List<LeadAuditDto> BuildAudit(List<LeadStatusHistory> status, List<LeadAssignmentHistory> owners, Dictionary<long, string> names)
     {
         string Who(long? id) => id is { } i ? names.GetValueOrDefault(i) ?? "Former employee" : "nobody";
         var rows = status.Select(h => new LeadAuditDto
         {
-            Kind = "status", CreatedAt = h.CreatedAt, Actor = string.IsNullOrEmpty(h.ChangedBy) ? "system" : h.ChangedBy, Automatic = IsAutomatic(h.ChangedBy), Detail = h.Note,
+            Kind = "status", CreatedAt = h.CreatedAt, Actor = ResolveChangedBy(h.ChangedBy, names, "system"), Automatic = IsAutomatic(h.ChangedBy), Detail = h.Note,
             Summary = h.FromStatus is null ? $"Status set to {h.ToStatus}" : $"Status {h.FromStatus} → {h.ToStatus}",
         }).Concat(owners.Select(a => new LeadAuditDto
         {
-            Kind = "owner", CreatedAt = a.CreatedAt, Actor = string.IsNullOrEmpty(a.ChangedBy) ? "system" : a.ChangedBy, Automatic = IsAutomatic(a.ChangedBy), Detail = a.Reason,
+            Kind = "owner", CreatedAt = a.CreatedAt, Actor = ResolveChangedBy(a.ChangedBy, names, "system"), Automatic = IsAutomatic(a.ChangedBy), Detail = a.Reason,
             Summary = a.FromEmployeeId is null ? $"Assigned to {Who(a.ToEmployeeId)}" : $"Owner {Who(a.FromEmployeeId)} → {Who(a.ToEmployeeId)}",
         }));
         return rows.OrderByDescending(r => r.CreatedAt).ToList();
@@ -308,7 +314,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         var lead = await FindLeadAsync(id);
         if (lead is null) return NoLead();
         if (LeadService.StatusBlock(lead, r.Status) is { } blocked) return BadRequest(new ApiResult { Success = false, Message = blocked });
-        await leads.ChangeStatusAsync(id, r.Status, r.Note, MyName);
+        await leads.ChangeStatusAsync(id, r.Status, r.Note, MyActorId);
         return Ok(new ApiResult { Success = true, Message = "Status updated" });
     }
 
@@ -351,7 +357,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
             if (emp is null) return BadRequest(new ApiResult { Success = false, Message = "That employee is not active." });
             if (!CanAll(PageOf(lead)) && emp.Role != EmployeeRoles.Sales) return BadRequest(new ApiResult { Success = false, Message = "Leads can only be transferred to a sales employee." });
         }
-        await leads.AssignAsync(lead, r.EmployeeId, string.IsNullOrWhiteSpace(r.Reason) ? (CanAll(PageOf(lead)) ? "Assigned by manager" : "Transferred by owner") : r.Reason, MyName);
+        await leads.AssignAsync(lead, r.EmployeeId, string.IsNullOrWhiteSpace(r.Reason) ? (CanAll(PageOf(lead)) ? "Assigned by manager" : "Transferred by owner") : r.Reason, MyActorId);
         await db.SaveChangesAsync();
         return Ok(new ApiResult { Success = true, Message = r.EmployeeId is null ? "Lead unassigned" : "Lead assigned" });
     }
@@ -537,7 +543,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
             var given = await leads.AssignWaitingAsync();
             return Ok(new ApiResult { Success = true, Message = given > 0 ? $"{emp.Name} is WhatsApp active. {given} waiting lead(s) were given to them." : $"{emp.Name} is WhatsApp active." });
         }
-        var moved = await leads.SwitchOffWhatsAppAsync(id, $"WhatsApp switched off by {MyName}", MyName);
+        var moved = await leads.SwitchOffWhatsAppAsync(id, $"WhatsApp switched off by {MyName}", MyActorId);
         return Ok(new ApiResult { Success = true, Message = moved > 0 ? $"{emp.Name} is WhatsApp off. {moved} pending lead(s) moved to other active people, or back to the admin queue if nobody else is active." : $"{emp.Name} is WhatsApp off." });
     }
 
@@ -587,7 +593,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         var canWorkLeads = emp.IsActive && emp.Role == EmployeeRoles.Sales
             && (await rightsService.EmployeesWithPageAsync("leads")).Concat(await rightsService.EmployeesWithPageAsync("interested")).Concat(await rightsService.EmployeesWithPageAsync("care")).Contains(emp.Id);
         if ((wasActive && !emp.IsActive) || !canWorkLeads)
-            moved = await leads.ReassignOpenLeadsAsync(emp.Id, spreadAcrossTeam: true, MyName);
+            moved = await leads.ReassignOpenLeadsAsync(emp.Id, spreadAcrossTeam: true, MyActorId);
         return Ok(new EmployeeResponse { Success = true, Message = moved > 0 ? $"Employee updated; {moved} open lead(s) were reassigned." : "Employee updated", Employee = emp.ToDto() });
     }
 
@@ -609,7 +615,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         if (await db.Departments.FirstOrDefaultAsync(d => d.HeadEmployeeId == id) is { } headOf) headOf.HeadEmployeeId = null;
         await db.SaveChangesAsync();
         RightsService.Invalidate();
-        var moved = await leads.ReassignOpenLeadsAsync(emp.Id, spreadAcrossTeam: !string.Equals(reassign, "unassigned", StringComparison.OrdinalIgnoreCase), MyName);
+        var moved = await leads.ReassignOpenLeadsAsync(emp.Id, spreadAcrossTeam: !string.Equals(reassign, "unassigned", StringComparison.OrdinalIgnoreCase), MyActorId);
         log.LogInformation("[Staff] {Admin} removed employee {Email}; {Moved} lead(s) reassigned", MyName, emp.Email, moved);
         return Ok(new ApiResult { Success = true, Message = moved > 0 ? $"{emp.Name} removed; {moved} open lead(s) were reassigned." : $"{emp.Name} removed." });
     }

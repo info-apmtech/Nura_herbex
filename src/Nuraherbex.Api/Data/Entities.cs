@@ -281,6 +281,7 @@ public class LeadStatusHistory
     public string? FromStatus { get; set; }
     public string ToStatus { get; set; } = "";
     public string? Note { get; set; }
+    /// <summary>system | employee id (or configured admin email when signed in without an employee record).</summary>
     public string ChangedBy { get; set; } = "system";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
@@ -318,7 +319,7 @@ public class LeadAssignmentHistory
     public long? FromEmployeeId { get; set; }
     public long? ToEmployeeId { get; set; }
     public string? Reason { get; set; }
-    /// <summary>auto | admin name/email of whoever made the change.</summary>
+    /// <summary>auto | employee id (or configured admin email when signed in without an employee record).</summary>
     public string ChangedBy { get; set; } = "auto";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

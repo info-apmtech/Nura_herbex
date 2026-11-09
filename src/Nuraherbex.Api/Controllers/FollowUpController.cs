@@ -93,7 +93,7 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
     {
         var item = await FindAsync(id);
         if (item is null) return NoItem();
-        var (ok, message) = await followUps.CompleteAsync(item, r, MyName);
+        var (ok, message) = await followUps.CompleteAsync(item, r, MyName, MyId);
         return ok ? Ok(new ApiResult { Success = true, Message = message }) : BadRequest(new ApiResult { Success = false, Message = message });
     }
 
@@ -211,7 +211,7 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
             await presence.CheckInAsync(me); // switching on counts as being here right now
             given = await leads.AssignWaitingAsync(); // hand over leads that were waiting, without waiting for the 2-minute worker; nobody else's leads are taken away
         }
-        else await leads.SwitchOffWhatsAppAsync(me, "Owner switched WhatsApp off", MyName); // their not-yet-started leads move to someone active
+        else await leads.SwitchOffWhatsAppAsync(me, "Owner switched WhatsApp off", MyActorId); // their not-yet-started leads move to someone active
         return new() { Success = true, Active = req.Active, Message = req.Active ? (given > 0 ? $"You are WhatsApp active. {given} lead(s) were shared out." : "You are WhatsApp active. New WhatsApp leads can now come to you.") : "WhatsApp off. You will not get new WhatsApp leads." };
     }
 
