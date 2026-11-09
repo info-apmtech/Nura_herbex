@@ -21,7 +21,11 @@ public class MediaSigner(IOptions<JwtOptions> jwt)
     /// <summary>Path relative to the API root, e.g. api/whatsapp-media/12?exp=1760000000&amp;sig=ab12…</summary>
     public string Url(long messageId, DateTime? nowUtc = null)
     {
-        var exp = new DateTimeOffset((nowUtc ?? DateTime.UtcNow).Add(Lifetime)).ToUnixTimeSeconds();
+        // Round the expiry up to the next half hour so the link stays identical across the chat's 15-second refreshes. A link that changed every refresh made the
+        // browser reload the audio / video player, which cut voice notes off mid-play. Links are valid for between 2 and 2.5 hours.
+        var raw = new DateTimeOffset((nowUtc ?? DateTime.UtcNow).Add(Lifetime)).ToUnixTimeSeconds();
+        const long bucket = 30 * 60;
+        var exp = (raw + bucket - 1) / bucket * bucket;
         return $"api/whatsapp-media/{messageId}?exp={exp}&sig={Mac(messageId, exp)}";
     }
 

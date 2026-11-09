@@ -133,6 +133,7 @@ public partial class WhatsAppService(
             "button" => m.GetProperty("button").GetProperty("text").GetString(),
             "interactive" => ExtractInteractive(m.GetProperty("interactive")),
             "location" => LocationText(m),
+            "contacts" => ContactsText(m),
             "unsupported" => UnsupportedText(m),
             _ when Mapping.MediaTypes.Contains(type) => caption,
             _ => $"[{type}]",
@@ -213,6 +214,22 @@ public partial class WhatsAppService(
         return "WhatsApp could not deliver this message's content" + (string.IsNullOrWhiteSpace(why) ? "." : $" ({why}).") + " Ask the customer to send it again, or as a document.";
     }
 
+    /// <summary>A shared contact card: show who it is and their numbers instead of a bare "[contacts]".</summary>
+    private static string ContactsText(JsonElement m)
+    {
+        if (!m.TryGetProperty("contacts", out var arr) || arr.ValueKind != JsonValueKind.Array) return "[contact shared]";
+        var lines = new List<string>();
+        foreach (var c in arr.EnumerateArray())
+        {
+            var name = c.TryGetProperty("name", out var n) && n.TryGetProperty("formatted_name", out var f) ? f.GetString() : null;
+            var phones = c.TryGetProperty("phones", out var ps) && ps.ValueKind == JsonValueKind.Array
+                ? ps.EnumerateArray().Select(p => p.TryGetProperty("phone", out var v) ? v.GetString() : null).Where(v => !string.IsNullOrWhiteSpace(v)).ToList()
+                : [];
+            lines.Add($"Contact: {(string.IsNullOrWhiteSpace(name) ? "(no name)" : name)}{(phones.Count > 0 ? " - " + string.Join(", ", phones) : "")}");
+        }
+        return lines.Count == 0 ? "[contact shared]" : string.Join("\n", lines);
+    }
+
     private static string LocationText(JsonElement m)
     {
         if (!m.TryGetProperty("location", out var l)) return "[location shared]";
@@ -230,7 +247,8 @@ public partial class WhatsAppService(
     // Customer media (photos, stickers, voice notes, documents)
     // ---------------------------------------------------------------------
 
-    private const long MaxMediaBytes = 16 * 1024 * 1024;
+    /// <summary>WhatsApp allows documents up to 100 MB (photos, video and voice notes are smaller), so keep whatever a customer can send.</summary>
+    private const long MaxMediaBytes = 100L * 1024 * 1024;
 
     public string MediaDirectory => string.IsNullOrWhiteSpace(_o.MediaPath)
         ? Path.Combine(env?.ContentRootPath ?? AppContext.BaseDirectory, "App_Data", "whatsapp-media")
@@ -273,17 +291,33 @@ public partial class WhatsAppService(
             var mime = info.RootElement.TryGetProperty("mime_type", out var mt) ? mt.GetString() : null;
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || !IsMetaHost(uri)) { log.LogWarning("[WhatsApp] Media url for message {Id} was not a Meta address", msg.Id); return false; }
             if (info.RootElement.TryGetProperty("file_size", out var fs) && fs.TryGetInt64(out var size) && size > MaxMediaBytes) return false;
-
             using var fileReq = new HttpRequestMessage(HttpMethod.Get, uri);
             fileReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _o.AccessToken);
             using var fileRes = await http.SendAsync(fileReq, ct);
             if (!fileRes.IsSuccessStatusCode) { log.LogWarning("[WhatsApp] Media download for message {Id} failed with HTTP {Status}", msg.Id, (int)fileRes.StatusCode); return false; }
-            var bytes = await fileRes.Content.ReadAsByteArrayAsync(ct);
-            if (bytes.Length == 0 || bytes.Length > MaxMediaBytes) return false;
-
             Directory.CreateDirectory(MediaDirectory);
             var name = $"{msg.Id}{ExtensionFor(mime ?? msg.MediaMime, msg.MediaName)}";
-            await File.WriteAllBytesAsync(Path.Combine(MediaDirectory, name), bytes, ct);
+            var target = Path.Combine(MediaDirectory, name);
+            var partial = target + ".part";
+            long written = 0;
+            try
+            {
+                // Streamed to disk (not held in memory) because documents and videos can be tens of megabytes.
+                await using (var src = await fileRes.Content.ReadAsStreamAsync(ct))
+                await using (var dst = File.Create(partial))
+                {
+                    var buf = new byte[81920]; int n;
+                    while ((n = await src.ReadAsync(buf, ct)) > 0)
+                    {
+                        written += n;
+                        if (written > MaxMediaBytes) { log.LogWarning("[WhatsApp] Media for message {Id} is larger than {Max} MB; not stored", msg.Id, MaxMediaBytes / 1024 / 1024); break; }
+                        await dst.WriteAsync(buf.AsMemory(0, n), ct);
+                    }
+                }
+                if (written == 0 || written > MaxMediaBytes) { File.Delete(partial); return false; }
+                File.Move(partial, target, overwrite: true);
+            }
+            catch { try { File.Delete(partial); } catch { /* nothing to clean */ } throw; }
             msg.MediaMime = mime ?? msg.MediaMime;
             msg.MediaFile = name;
             await db.SaveChangesAsync(ct);
