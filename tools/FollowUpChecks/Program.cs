@@ -125,7 +125,7 @@ Check(!await db.FollowUps.AnyAsync(f => f.OrderId == "NH-1" && f.StepKey!.Starts
 
 // ---- 8. Manual follow-ups ------------------------------------------------------------------------------------
 var owned = await db.Leads.FirstAsync(l => l.Id == lead.Id);
-await leads.AssignAsync(owned, priya, "test", "test"); await db.SaveChangesAsync();
+await leads.AssignAsync(owned, priya, "test", priya.ToString()); await db.SaveChangesAsync();
 var (none, errPast) = await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = lead.Id, Type = "call", DueAt = now.AddHours(-3) }, "Priya", false, priya);
 Check(none is null && errPast is not null, "A follow-up in the past is rejected");
 var (noAccess, errOwner) = await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = lead.Id, Type = "call", DueAt = now.AddDays(1) }, "Karthik", false, karthik);
@@ -135,21 +135,23 @@ fresh.Status = LeadStatuses.New; fresh.CustomerSince = null; fresh.AssignedToEmp
 var (mine, _) = await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = fresh.Id, Type = "call", DueAt = now.AddDays(5), Notes = "Wants 3-month pack" }, "Priya", false, priya);
 Check(mine is not null && mine.RemindAt == mine.DueAt.AddDays(-2) && mine.AssignedToEmployeeId == priya, "Manual follow-up is owned by the lead owner with a 2-day reminder");
 Check((await db.Leads.FirstAsync(l => l.Id == fresh.Id)).Status == LeadStatuses.FollowUp, "Scheduling moves a new lead to Follow-up");
+Check((await db.LeadStatusHistory.OrderByDescending(h => h.Id).FirstAsync(h => h.LeadId == fresh.Id)).ChangedBy == priya.ToString(), "Scheduling records employee id in status ChangedBy");
 
 // ---- 9. Completing ---------------------------------------------------------------------------------------------
-var (ok1, _) = await svc.CompleteAsync(await db.FollowUps.FirstAsync(f => f.Id == mine!.Id), new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.Callback }, "Priya");
+var (ok1, _) = await svc.CompleteAsync(await db.FollowUps.FirstAsync(f => f.Id == mine!.Id), new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.Callback }, "Priya", priya);
 Check(!ok1, "Callback without a time is rejected");
-var (ok2, msg2) = await svc.CompleteAsync(await db.FollowUps.FirstAsync(f => f.Id == mine!.Id), new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.NoAnswer }, "Priya");
+var (ok2, msg2) = await svc.CompleteAsync(await db.FollowUps.FirstAsync(f => f.Id == mine!.Id), new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.NoAnswer }, "Priya", priya);
 var retry = await db.FollowUps.FirstOrDefaultAsync(f => f.LeadId == fresh.Id && f.Status == "pending" && f.Title.StartsWith("Retry: "));
 Check(ok2 && retry is not null && retry.Title.StartsWith("Retry: ") && Ist(retry.DueAt).Date == new DateTime(2026, 10, 13) && Ist(retry.DueAt).Hour == 10, "No answer books a retry for tomorrow 10:00");
-var (ok3, _) = await svc.CompleteAsync(retry!, new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.Interested, Note = "Will order Friday" }, "Priya");
+var (ok3, _) = await svc.CompleteAsync(retry!, new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.Interested, Note = "Will order Friday" }, "Priya", priya);
 Check(ok3 && (await db.Leads.FirstAsync(l => l.Id == fresh.Id)).Status == LeadStatuses.Interested, "Outcome 'interested' updates the lead");
-var (again, _) = await svc.CompleteAsync(retry!, new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.Done }, "Priya");
+Check((await db.LeadStatusHistory.OrderByDescending(h => h.Id).FirstAsync(h => h.LeadId == fresh.Id)).ChangedBy == priya.ToString(), "Completion status update records employee id in ChangedBy");
+var (again, _) = await svc.CompleteAsync(retry!, new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.Done }, "Priya", priya);
 Check(!again, "A closed follow-up cannot be completed twice");
 
 // finish a whole journey -> enrollment completes
 foreach (var s in await db.FollowUps.Where(f => f.EnrollmentId != null && f.OrderId == "NH-2" && f.Status == "pending").ToListAsync())
-    await svc.CompleteAsync(s, new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.Done }, "Karthik");
+    await svc.CompleteAsync(s, new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.Done }, "Karthik", karthik);
 Check((await db.JourneyEnrollments.FirstAsync(e => e.OrderId == "NH-2")).Status == "completed", "Finishing every step completes the journey");
 
 // ---- 10. Automatic sending -------------------------------------------------------------------------------------
@@ -497,6 +499,23 @@ await AdsChecks.RunAsync(db, Check);
     Check(await lib.DeleteAsync(pdf.Id) && await lib.OpenAsync(pdf.Id, token) is null && !File.Exists(opened.Value.Path), "Deleting a file removes it and closes its link");
     try { Directory.Delete(libDir, true); } catch { /* temp folder */ }
 }
+
+// ---- 17. ChangedBy stores employee id when taking unowned lead via follow-up ---------------------------------------
+{
+    var queueLead = new Lead { Phone = "919876599999", Name = "Queue Lead", Status = LeadStatuses.New };
+    db.Leads.Add(queueLead);
+    await db.SaveChangesAsync();
+    var (assignedItem, assignErr) = await svc.CreateManualAsync(
+        new FollowUpCreateRequest { LeadId = queueLead.Id, Type = "call", DueAt = now.AddDays(2), AssignedToEmployeeId = karthik },
+        "Priya", isAdmin: true, myId: priya);
+    Check(assignedItem is not null && assignErr is null, "Admin employee schedules follow-up and assigns unowned lead");
+    var assignRow = await db.LeadAssignmentHistory.OrderByDescending(h => h.Id).FirstAsync(h => h.LeadId == queueLead.Id);
+    var statusRow = await db.LeadStatusHistory.OrderByDescending(h => h.Id).FirstAsync(h => h.LeadId == queueLead.Id);
+    Check(assignRow.ChangedBy == priya.ToString() && statusRow.ChangedBy == priya.ToString(), "Follow-up scheduling writes employee id (not name) to assignment and status ChangedBy");
+    Check(assignedItem!.CreatedBy == "Priya", "Follow-up CreatedBy keeps display name");
+}
+
+await ChangedByChecks.RunAsync(Check);
 
 Console.WriteLine($"\n{checks} follow-up checks passed. No external services contacted.");
 

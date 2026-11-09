@@ -150,14 +150,15 @@ public class FollowUpService(
         db.FollowUps.Add(item);
 
         // Scheduling a follow-up means the lead is being worked on.
+        var changedBy = myId?.ToString(CultureInfo.InvariantCulture) ?? actor;
         if (lead.Status is LeadStatuses.New or LeadStatuses.Interested)
         {
-            db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, FromStatus = lead.Status, ToStatus = LeadStatuses.FollowUp, Note = "Follow-up scheduled", ChangedBy = actor });
+            db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, FromStatus = lead.Status, ToStatus = LeadStatuses.FollowUp, Note = "Follow-up scheduled", ChangedBy = changedBy });
             lead.Status = LeadStatuses.FollowUp;
             lead.UpdatedAt = Clock();
         }
         // Unowned lead + sales user: they take it, so it does not float around.
-        if (lead.AssignedToEmployeeId is null && owner is not null) await leads.AssignAsync(lead, owner, "Took ownership by scheduling a follow-up", actor);
+        if (lead.AssignedToEmployeeId is null && owner is not null) await leads.AssignAsync(lead, owner, "Took ownership by scheduling a follow-up", changedBy);
         if (owner is { } assignee && assignee != myId)
             Notify(assignee, "lead", $"New follow-up: {item.Title}", $"Due {FormatDue(due)}");
         await db.SaveChangesAsync();
@@ -179,7 +180,7 @@ public class FollowUpService(
     /// <summary>Sets the reminder from the admin setting (called where the setting is known).</summary>
     private async Task<int> ReminderDaysAsync() => int.TryParse(await GetSettingAsync(KeyReminder), out var d) ? Math.Clamp(d, 0, 14) : 2;
 
-    public async Task<(bool Ok, string Message)> CompleteAsync(FollowUp item, FollowUpCompleteRequest r, string actor)
+    public async Task<(bool Ok, string Message)> CompleteAsync(FollowUp item, FollowUpCompleteRequest r, string actor, long? actorId = null)
     {
         if (item.Status != "pending") return (false, "This follow-up is already closed.");
         if (!FollowUpOutcomes.All.Contains(r.Outcome)) return (false, "Unknown outcome.");
@@ -193,15 +194,16 @@ public class FollowUpService(
         item.Outcome = Truncate(string.IsNullOrEmpty(note) ? r.Outcome : $"{r.Outcome}: {note}", 500);
 
         var lead = await db.Leads.FirstAsync(l => l.Id == item.LeadId);
+        var changedBy = actorId?.ToString(CultureInfo.InvariantCulture) ?? actor;
         switch (r.Outcome)
         {
             case FollowUpOutcomes.Interested when lead.Status is LeadStatuses.New or LeadStatuses.FollowUp or LeadStatuses.NotInterested:
-                await leads.ChangeStatusAsync(lead.Id, LeadStatuses.Interested, note ?? "Follow-up outcome", actor); break;
+                await leads.ChangeStatusAsync(lead.Id, LeadStatuses.Interested, note ?? "Follow-up outcome", changedBy); break;
             case FollowUpOutcomes.NotInterested when lead.Status != LeadStatuses.Converted:
-                await leads.ChangeStatusAsync(lead.Id, LeadStatuses.NotInterested, note ?? "Follow-up outcome", actor); break;
+                await leads.ChangeStatusAsync(lead.Id, LeadStatuses.NotInterested, note ?? "Follow-up outcome", changedBy); break;
             case FollowUpOutcomes.Converted when lead.CustomerSince is null:
                 // Agreed to buy but no paid order yet: they are a hot lead until the order is placed.
-                if (lead.Status != LeadStatuses.Interested) await leads.ChangeStatusAsync(lead.Id, LeadStatuses.Interested, note ?? "Agreed to buy; waiting for the order", actor);
+                if (lead.Status != LeadStatuses.Interested) await leads.ChangeStatusAsync(lead.Id, LeadStatuses.Interested, note ?? "Agreed to buy; waiting for the order", changedBy);
                 break;
         }
 
