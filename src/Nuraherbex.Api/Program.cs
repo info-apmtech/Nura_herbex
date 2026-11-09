@@ -200,7 +200,7 @@ if (cfg.GetValue("Database:AutoCreate", true))
         else await db.Database.MigrateAsync();
         await DbSeeder.SeedAsync(db, cfg.GetValue("Database:SeedDemoBatch", false));
         await WhatsAppMediaBackfill.RunAsync(db, app.Logger);
-        await OrgSeeder.RunAsync(db, app.Logger, cfg.GetValue("Database:SeedTestStaff", false) ? cfg["Database:TestStaffPassword"] : null);
+        await OrgSeeder.RunAsync(db, app.Logger);
         await scope.ServiceProvider.GetRequiredService<LibraryService>().SeedSamplesAsync();
     }
     catch (Exception ex)
