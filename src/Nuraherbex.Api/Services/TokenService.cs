@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Nuraherbex.Api.Data;
 using Nuraherbex.Api.Options;
+using Nuraherbex.Shared.Models;
 
 namespace Nuraherbex.Api.Services;
 
@@ -26,7 +27,7 @@ public class TokenService(IOptions<JwtOptions> options)
     /// <summary>JWT for a CRM employee. Role is "admin" or "sales"; emp_id lets the API scope data to the employee.</summary>
     public string CreateStaffToken(Employee e) => Create(
         [new Claim(JwtRegisteredClaimNames.Sub, e.Email), new Claim(ClaimTypes.Email, e.Email), new Claim(ClaimTypes.Name, e.Name),
-         new Claim(ClaimTypes.Role, e.Role), new Claim("emp_id", e.Id.ToString())],
+         new Claim(ClaimTypes.Role, e.Role.ToCode()), new Claim("emp_id", e.Id.ToString())],
         TimeSpan.FromHours(_o.AdminTokenHours));
 
     private string Create(IEnumerable<Claim> claims, TimeSpan lifetime)

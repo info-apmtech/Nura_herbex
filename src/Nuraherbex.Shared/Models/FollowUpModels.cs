@@ -3,6 +3,74 @@ namespace Nuraherbex.Shared.Models;
 // ---------------------------------------------------------------------------
 // Follow-ups (tasks), journey plan, notifications and reports
 // ---------------------------------------------------------------------------
+public enum FollowUpStatus
+{
+    Pending = 1,
+    Done = 2,
+    Skipped = 3,
+}
+
+public static class FollowUpStatuses
+{
+    public const string Pending = "pending";
+    public const string Done = "done";
+    public const string Skipped = "skipped";
+    public static readonly string[] All = [Pending, Done, Skipped];
+
+    public static string ToCode(this FollowUpStatus status) => status switch
+    {
+        FollowUpStatus.Pending => Pending,
+        FollowUpStatus.Done => Done,
+        FollowUpStatus.Skipped => Skipped,
+        _ => Pending,
+    };
+
+    public static bool TryParse(string? value, out FollowUpStatus status)
+    {
+        switch (value?.Trim().ToLowerInvariant())
+        {
+            case Pending: status = FollowUpStatus.Pending; return true;
+            case Done: status = FollowUpStatus.Done; return true;
+            case Skipped: status = FollowUpStatus.Skipped; return true;
+            default: status = default; return false;
+        }
+    }
+}
+
+public enum FollowUpSource
+{
+    Manual = 1,
+    Journey = 2,
+    System = 3,
+}
+
+public static class FollowUpSources
+{
+    public const string Manual = "manual";
+    public const string Journey = "journey";
+    public const string System = "system";
+    public static readonly string[] All = [Manual, Journey, System];
+
+    public static string ToCode(this FollowUpSource source) => source switch
+    {
+        FollowUpSource.Manual => Manual,
+        FollowUpSource.Journey => Journey,
+        FollowUpSource.System => System,
+        _ => Manual,
+    };
+
+    public static bool TryParse(string? value, out FollowUpSource source)
+    {
+        switch (value?.Trim().ToLowerInvariant())
+        {
+            case Manual: source = FollowUpSource.Manual; return true;
+            case Journey: source = FollowUpSource.Journey; return true;
+            case System: source = FollowUpSource.System; return true;
+            default: source = default; return false;
+        }
+    }
+}
+
 public static class FollowUpTypes
 {
     public const string Call = "call";

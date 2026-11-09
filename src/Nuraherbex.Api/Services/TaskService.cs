@@ -9,7 +9,7 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
 {
     public sealed record Caller(long? EmployeeId, string Name, bool CanSeeAll);
 
-    private static readonly string[] OpenStatuses = [TaskStatuses.Todo, TaskStatuses.InProgress, TaskStatuses.Blocked];
+    private static readonly WorkTaskStatus[] OpenStatuses = [WorkTaskStatus.Todo, WorkTaskStatus.InProgress, WorkTaskStatus.Blocked];
 
     /// <summary>Finished tasks stay visible (Done chip, Done column of the board) for this many days. One number, so the chip and the board always agree.</summary>
     public const int DoneWindowDays = 30;
@@ -43,13 +43,13 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
 
     private TaskDto ToDto(WorkTask t, Names n, Caller c, int checkDone, int checkTotal, int comments) => new()
     {
-        Id = t.Id, Title = t.Title, Description = t.Description, Status = t.Status, Priority = t.Priority, StartAt = t.StartAt, DueAt = t.DueAt,
-        IsOverdue = t.Status != TaskStatuses.Done && t.DueAt is { } d && d < DateTime.UtcNow,
+        Id = t.Id, Title = t.Title, Description = t.Description, Status = t.Status.ToCode(), Priority = t.Priority.ToCode(), StartAt = t.StartAt, DueAt = t.DueAt,
+        IsOverdue = t.Status != WorkTaskStatus.Done && t.DueAt is { } d && d < DateTime.UtcNow,
         AssignedToEmployeeId = t.AssignedToEmployeeId, AssignedToName = t.AssignedToEmployeeId is { } a ? n.Employees.GetValueOrDefault(a) : null,
         CreatedByEmployeeId = t.CreatedByEmployeeId, CreatedByName = t.CreatedByName,
         DepartmentId = t.DepartmentId, DepartmentName = t.DepartmentId is { } dp ? n.Departments.GetValueOrDefault(dp) : null,
         LeadId = t.LeadId, LeadName = t.LeadId is { } l ? n.Leads.GetValueOrDefault(l) : null, OrderId = t.OrderId, Tags = t.Tags,
-        Repeat = t.Repeat, ChecklistDone = checkDone, ChecklistTotal = checkTotal, CommentCount = comments,
+        Repeat = t.Repeat.ToCode(), ChecklistDone = checkDone, ChecklistTotal = checkTotal, CommentCount = comments,
         CreatedAt = t.CreatedAt, UpdatedAt = t.UpdatedAt, CompletedAt = t.CompletedAt, CanEdit = CanEdit(t, c),
         IsUpcoming = IsUpcoming(t, FollowUpService.TodayStartUtc().AddDays(1)),
     };
@@ -65,10 +65,10 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
         var doneSince = now.AddDays(-DoneWindowDays);
         // Upcoming = not started yet: it starts after today, or it is a repeating copy that falls due after today. Finished work never appears here.
         // Pending = everything unfinished that is not upcoming. The two lists never overlap, so a task is in exactly one of them.
-        System.Linq.Expressions.Expression<Func<WorkTask, bool>> upcoming = t => t.Status != TaskStatuses.Done
-            && (t.StartAt != null ? t.StartAt >= tomorrow : (t.Repeat != TaskRepeats.None && t.DueAt != null && t.DueAt >= tomorrow));
-        System.Linq.Expressions.Expression<Func<WorkTask, bool>> pending = t => t.Status != TaskStatuses.Done
-            && !(t.StartAt != null ? t.StartAt >= tomorrow : (t.Repeat != TaskRepeats.None && t.DueAt != null && t.DueAt >= tomorrow));
+        System.Linq.Expressions.Expression<Func<WorkTask, bool>> upcoming = t => t.Status != WorkTaskStatus.Done
+            && (t.StartAt != null ? t.StartAt >= tomorrow : (t.Repeat != WorkTaskRepeat.None && t.DueAt != null && t.DueAt >= tomorrow));
+        System.Linq.Expressions.Expression<Func<WorkTask, bool>> pending = t => t.Status != WorkTaskStatus.Done
+            && !(t.StartAt != null ? t.StartAt >= tomorrow : (t.Repeat != WorkTaskRepeat.None && t.DueAt != null && t.DueAt >= tomorrow));
         var open = visible.Where(pending);
 
         // The filters the person picked (who, department, priority, search...) apply to the counts too, so a chip always matches what its list shows.
@@ -79,7 +79,8 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
         else if (long.TryParse(f.Assignee, out var aid)) q = q.Where(t => t.AssignedToEmployeeId == aid);
         if (f.CreatedByMe) q = q.Where(t => t.CreatedByEmployeeId == c.EmployeeId);
         if (f.DepartmentId is { } dep) q = q.Where(t => t.DepartmentId == dep);
-        if (!string.IsNullOrWhiteSpace(f.Priority)) q = q.Where(t => t.Priority == f.Priority);
+        if (!string.IsNullOrWhiteSpace(f.Priority))
+            q = TaskPriorities.TryParse(f.Priority, out var priorityFilter) ? q.Where(t => t.Priority == priorityFilter) : q.Where(_ => false);
         if (f.LeadId is { } lead) q = q.Where(t => t.LeadId == lead);
         if (!string.IsNullOrWhiteSpace(f.Search))
         {
@@ -95,7 +96,7 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
             Upcoming = await q.CountAsync(upcoming),
             Overdue = await qOpen.CountAsync(t => t.DueAt != null && t.DueAt < now),
             DueToday = await qOpen.CountAsync(t => t.DueAt != null && t.DueAt >= todayStart && t.DueAt < tomorrow),
-            Done = await q.CountAsync(t => t.Status == TaskStatuses.Done && t.CompletedAt >= doneSince),
+            Done = await q.CountAsync(t => t.Status == WorkTaskStatus.Done && t.CompletedAt >= doneSince),
             Mine = await open.CountAsync(t => t.AssignedToEmployeeId == c.EmployeeId),
             Unassigned = await open.CountAsync(t => t.AssignedToEmployeeId == null),
         };
@@ -104,20 +105,21 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
         {
             case "overdue": q = qOpen.Where(t => t.DueAt != null && t.DueAt < now); break;
             case "today": q = qOpen.Where(t => t.DueAt != null && t.DueAt >= todayStart && t.DueAt < tomorrow); break;
-            case "done": q = q.Where(t => t.Status == TaskStatuses.Done && t.CompletedAt >= doneSince); break;
-            case "board": q = q.Where(t => t.Status == TaskStatuses.Done ? t.CompletedAt >= doneSince : !(t.StartAt != null ? t.StartAt >= tomorrow : (t.Repeat != TaskRepeats.None && t.DueAt != null && t.DueAt >= tomorrow))); break;
+            case "done": q = q.Where(t => t.Status == WorkTaskStatus.Done && t.CompletedAt >= doneSince); break;
+            case "board": q = q.Where(t => t.Status == WorkTaskStatus.Done ? t.CompletedAt >= doneSince : !(t.StartAt != null ? t.StartAt >= tomorrow : (t.Repeat != WorkTaskRepeat.None && t.DueAt != null && t.DueAt >= tomorrow))); break;
             case "all": break;
             case "upcoming": q = q.Where(upcoming); break;
             default: q = qOpen; break;
         }
-        if (!string.IsNullOrWhiteSpace(f.Status)) q = q.Where(t => t.Status == f.Status);
+        if (!string.IsNullOrWhiteSpace(f.Status))
+            q = TaskStatuses.TryParse(f.Status, out var statusFilter) ? q.Where(t => t.Status == statusFilter) : q.Where(_ => false);
 
         var rows = (await q.Take(1000).ToListAsync())
-            .OrderBy(t => t.Status == TaskStatuses.Done ? 1 : 0)
+            .OrderBy(t => t.Status == WorkTaskStatus.Done ? 1 : 0)
             .ThenBy(t => f.Scope != "upcoming" && IsUpcoming(t, tomorrow) ? 1 : 0)
             .ThenByDescending(t => f.Scope == "done" ? 0 : PriorityRank(t.Priority))
             .ThenBy(t => f.Scope == "upcoming" ? (t.StartAt ?? t.DueAt ?? DateTime.MaxValue) : (t.DueAt ?? DateTime.MaxValue))
-            .ThenByDescending(t => t.Status == TaskStatuses.Done ? t.CompletedAt : null)
+            .ThenByDescending(t => t.Status == WorkTaskStatus.Done ? t.CompletedAt : null)
             .Take(Math.Clamp(f.Take, 1, 500)).ToList();
 
         var ids = rows.Select(r => r.Id).ToList();
@@ -143,9 +145,9 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
     }
 
     /// <summary>Same rule as the Upcoming list, for one task.</summary>
-    private static bool IsUpcoming(WorkTask t, DateTime tomorrow) => t.Status != TaskStatuses.Done && (t.StartAt != null ? t.StartAt >= tomorrow : t.Repeat != TaskRepeats.None && t.DueAt != null && t.DueAt >= tomorrow);
+    private static bool IsUpcoming(WorkTask t, DateTime tomorrow) => t.Status != WorkTaskStatus.Done && (t.StartAt != null ? t.StartAt >= tomorrow : t.Repeat != WorkTaskRepeat.None && t.DueAt != null && t.DueAt >= tomorrow);
 
-    private static int PriorityRank(string p) => p switch { TaskPriorities.Urgent => 4, TaskPriorities.High => 3, TaskPriorities.Normal => 2, _ => 1 };
+    private static int PriorityRank(WorkTaskPriority p) => p switch { WorkTaskPriority.Urgent => 4, WorkTaskPriority.High => 3, WorkTaskPriority.Normal => 2, _ => 1 };
 
     public async Task<TaskDetailResponse?> DetailAsync(long id, Caller c)
     {
@@ -197,14 +199,16 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
     {
         var error = await ValidateAsync(r);
         if (error is not null) return (null, error);
+        var priority = TaskPriorities.TryParse(r.Priority, out var parsedPriority) ? parsedPriority : WorkTaskPriority.Normal;
+        var repeat = TaskRepeats.TryParse(r.Repeat, out var parsedRepeat) ? parsedRepeat : WorkTaskRepeat.None;
         // Auto-assign: only people who are signed in right now, least busy first. Nobody online = the task waits unassigned.
         string? autoName = null;
         if (r.AutoAssign && r.AssignedToEmployeeId is null && await availability.PickAsync("tasks", r.DepartmentId) is { } pick) { r.AssignedToEmployeeId = pick.Id; autoName = pick.Name; pick.LastAssignedAt = DateTime.UtcNow; }
         var t = new WorkTask
         {
-            Title = r.Title.Trim(), Description = Clean(r.Description, 4000), Priority = r.Priority, StartAt = AsUtc(r.StartAt), DueAt = AsUtc(r.DueAt),
+            Title = r.Title.Trim(), Description = Clean(r.Description, 4000), Priority = priority, StartAt = AsUtc(r.StartAt), DueAt = AsUtc(r.DueAt),
             AssignedToEmployeeId = r.AssignedToEmployeeId, DepartmentId = r.DepartmentId, LeadId = r.LeadId,
-            OrderId = string.IsNullOrWhiteSpace(r.OrderId) ? null : r.OrderId.Trim(), Tags = Clean(r.Tags, 300), Repeat = r.Repeat,
+            OrderId = string.IsNullOrWhiteSpace(r.OrderId) ? null : r.OrderId.Trim(), Tags = Clean(r.Tags, 300), Repeat = repeat,
             CreatedByEmployeeId = c.EmployeeId, CreatedByName = c.Name,
         };
         if (t.StartAt is { } sa0 && sa0 <= DateTime.UtcNow) t.StartedNotifiedAt = t.StartSoonNotifiedAt = DateTime.UtcNow; // already started: no "starts now" notice
@@ -225,11 +229,13 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
     {
         var error = await ValidateAsync(r);
         if (error is not null) return (false, error);
+        var priority = TaskPriorities.TryParse(r.Priority, out var parsedPriority) ? parsedPriority : WorkTaskPriority.Normal;
+        var repeat = TaskRepeats.TryParse(r.Repeat, out var parsedRepeat) ? parsedRepeat : WorkTaskRepeat.None;
         var names = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
         var changes = new List<string>();
         if (t.Title != r.Title.Trim()) { changes.Add("changed the title"); t.Title = r.Title.Trim(); }
         t.Description = Clean(r.Description, 4000);
-        if (t.Priority != r.Priority) { changes.Add($"set the priority to {r.Priority}"); t.Priority = r.Priority; }
+        if (t.Priority != priority) { changes.Add($"set the priority to {priority.ToCode()}"); t.Priority = priority; }
         var start = AsUtc(r.StartAt);
         if (t.StartAt != start)
         {
@@ -250,7 +256,7 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
         }
         t.DepartmentId = r.DepartmentId; t.LeadId = r.LeadId; t.OrderId = string.IsNullOrWhiteSpace(r.OrderId) ? null : r.OrderId.Trim();
         t.Tags = Clean(r.Tags, 300);
-        if (t.Repeat != r.Repeat) { changes.Add($"set it to repeat {r.Repeat}"); t.Repeat = r.Repeat; }
+        if (t.Repeat != repeat) { changes.Add($"set it to repeat {repeat.ToCode()}"); t.Repeat = repeat; }
         t.UpdatedAt = DateTime.UtcNow;
         foreach (var ch in changes) Log(t.Id, c.Name, char.ToUpperInvariant(ch[0]) + ch[1..]);
         await db.SaveChangesAsync();
@@ -259,16 +265,16 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
 
     public async Task<(bool Ok, string Message)> SetStatusAsync(WorkTask t, string status, string? note, Caller c)
     {
-        if (!TaskStatuses.All.Contains(status)) return (false, "Unknown status.");
-        if (t.Status == status) return (true, "No change");
-        if (status == TaskStatuses.Done && IsUpcoming(t, FollowUpService.TodayStartUtc().AddDays(1))) return (false, "This task has not started yet. It can be completed from its start day.");
+        if (!TaskStatuses.All.Contains(status) || !TaskStatuses.TryParse(status, out var nextStatus)) return (false, "Unknown status.");
+        if (t.Status == nextStatus) return (true, "No change");
+        if (nextStatus == WorkTaskStatus.Done && IsUpcoming(t, FollowUpService.TodayStartUtc().AddDays(1))) return (false, "This task has not started yet. It can be completed from its start day.");
         // Finishing with steps still open needs a written reason, so the creator can see what was skipped and why.
-        if (status == TaskStatuses.Done && string.IsNullOrWhiteSpace(note) && await db.TaskChecklistItems.AnyAsync(i => i.TaskId == t.Id && !i.Done))
+        if (nextStatus == WorkTaskStatus.Done && string.IsNullOrWhiteSpace(note) && await db.TaskChecklistItems.AnyAsync(i => i.TaskId == t.Id && !i.Done))
             return (false, "Some checklist steps are not ticked. Give a reason for each one before marking the task done.");
         var from = t.Status;
-        t.Status = status; t.UpdatedAt = DateTime.UtcNow;
-        Log(t.Id, c.Name, $"Moved from {TaskStatuses.Label(from)} to {TaskStatuses.Label(status)}{(string.IsNullOrWhiteSpace(note) ? "" : " - " + note.Trim())}");
-        if (status == TaskStatuses.Done)
+        t.Status = nextStatus; t.UpdatedAt = DateTime.UtcNow;
+        Log(t.Id, c.Name, $"Moved from {TaskStatuses.Label(from)} to {TaskStatuses.Label(nextStatus)}{(string.IsNullOrWhiteSpace(note) ? "" : " - " + note.Trim())}");
+        if (nextStatus == WorkTaskStatus.Done)
         {
             t.CompletedAt = DateTime.UtcNow;
             if (Clean(note, 4000) is { } why) db.TaskComments.Add(new TaskComment { TaskId = t.Id, AuthorEmployeeId = c.EmployeeId, Author = c.Name, Body = "Marked done. " + why });
@@ -278,25 +284,25 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
         }
         else
         {
-            var reopened = from == TaskStatuses.Done;
+            var reopened = from == WorkTaskStatus.Done;
             t.CompletedAt = null;
             if (reopened) await RemoveUntouchedNextRepeatAsync(t); // finishing it again must not stack up another copy
             await db.SaveChangesAsync();
             if (reopened) return (true, "Task reopened. It is back in your open tasks.");
         }
-        return (true, status == TaskStatuses.Done ? "Task completed" : "Status updated");
+        return (true, nextStatus == WorkTaskStatus.Done ? "Task completed" : "Status updated");
     }
 
     /// <summary>The still-open later occurrence of a repeating task, if one was already made (by finishing it before).</summary>
     private IQueryable<WorkTask> NextOccurrences(WorkTask done) =>
-        db.WorkTasks.Where(x => x.Id != done.Id && x.Status != TaskStatuses.Done && x.Title == done.Title && x.Repeat == done.Repeat
+        db.WorkTasks.Where(x => x.Id != done.Id && x.Status != WorkTaskStatus.Done && x.Title == done.Title && x.Repeat == done.Repeat
             && x.AssignedToEmployeeId == done.AssignedToEmployeeId && x.CreatedByEmployeeId == done.CreatedByEmployeeId && x.DueAt > done.DueAt);
 
     /// <summary>When a finished repeating task is reopened, drop the next occurrence that was created for it if nobody has touched it yet.</summary>
     private async Task RemoveUntouchedNextRepeatAsync(WorkTask reopened)
     {
-        if (reopened.Repeat == TaskRepeats.None || reopened.DueAt is null) return;
-        foreach (var n in await NextOccurrences(reopened).Where(x => x.Status == TaskStatuses.Todo).ToListAsync())
+        if (reopened.Repeat == WorkTaskRepeat.None || reopened.DueAt is null) return;
+        foreach (var n in await NextOccurrences(reopened).Where(x => x.Status == WorkTaskStatus.Todo).ToListAsync())
         {
             var touched = await db.TaskComments.AnyAsync(m => m.TaskId == n.Id) || await db.TaskChecklistItems.AnyAsync(i => i.TaskId == n.Id && i.Done)
                 || await db.TaskActivities.CountAsync(a => a.TaskId == n.Id) > 1;
@@ -306,7 +312,7 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
         }
     }
 
-    private static DateTime AddPeriod(string repeat, DateTime d) => repeat switch { TaskRepeats.Daily => d.AddDays(1), TaskRepeats.Weekly => d.AddDays(7), _ => d.AddMonths(1) };
+    private static DateTime AddPeriod(WorkTaskRepeat repeat, DateTime d) => repeat switch { WorkTaskRepeat.Daily => d.AddDays(1), WorkTaskRepeat.Weekly => d.AddDays(7), _ => d.AddMonths(1) };
 
     /// <summary>When the next occurrence of a repeating task falls due, skipping occurrences that already passed.</summary>
     private static DateTime NextRepeatDue(WorkTask t)
@@ -319,10 +325,10 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
     /// <summary>Finishing a repeating task does not create the next one yet: it is created on its own day by the background cycle. The owner is just told the future date.</summary>
     private async Task CreateNextRepeatAsync(WorkTask done, Caller c)
     {
-        if (done.Repeat == TaskRepeats.None || done.DueAt is null) return;
+        if (done.Repeat == WorkTaskRepeat.None || done.DueAt is null) return;
         if (await NextOccurrences(done).AnyAsync()) return; // already created: nothing more to announce
         var next = NextRepeatDue(done);
-        Log(done.Id, "system", $"Next {done.Repeat} task will be created on {FollowUpService.FormatDue(next)}");
+        Log(done.Id, "system", $"Next {done.Repeat.ToCode()} task will be created on {FollowUpService.FormatDue(next)}");
         Notify(done.AssignedToEmployeeId ?? done.CreatedByEmployeeId, $"Upcoming repeat: {done.Title}", $"Will be created on {FollowUpService.FormatDue(next)}", done.Id, "reminder");
         await db.SaveChangesAsync();
     }
@@ -332,7 +338,7 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
     {
         var tomorrow = FollowUpService.TodayStartUtc().AddDays(1);
         var since = now.AddDays(-70);
-        var latest = await db.WorkTasks.Where(t => t.Repeat != TaskRepeats.None && t.DueAt != null && t.DueAt >= since
+        var latest = await db.WorkTasks.Where(t => t.Repeat != WorkTaskRepeat.None && t.DueAt != null && t.DueAt >= since
             && !db.WorkTasks.Any(x => x.Id != t.Id && x.Title == t.Title && x.Repeat == t.Repeat && x.AssignedToEmployeeId == t.AssignedToEmployeeId
                 && x.CreatedByEmployeeId == t.CreatedByEmployeeId && x.DueAt > t.DueAt)).Take(200).ToListAsync();
         var made = 0;
@@ -360,8 +366,8 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
             await db.SaveChangesAsync();
             var items = await db.TaskChecklistItems.AsNoTracking().Where(i => i.TaskId == t.Id).OrderBy(i => i.Position).ToListAsync();
             foreach (var i in items) db.TaskChecklistItems.Add(new TaskChecklistItem { TaskId = copy.Id, Text = i.Text, Position = i.Position });
-            Log(copy.Id, "system", $"Created automatically on its {t.Repeat} repeat day");
-            Log(t.Id, "system", $"Next {t.Repeat} task created for {FollowUpService.FormatDue(next)}");
+            Log(copy.Id, "system", $"Created automatically on its {t.Repeat.ToCode()} repeat day");
+            Log(t.Id, "system", $"Next {t.Repeat.ToCode()} task created for {FollowUpService.FormatDue(next)}");
             Notify(copy.AssignedToEmployeeId ?? copy.CreatedByEmployeeId, $"Repeating task today: {copy.Title}", $"Due {FollowUpService.FormatDue(next)}", copy.Id);
             await db.SaveChangesAsync();
             made++;
@@ -373,9 +379,9 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
     public async Task DeleteAsync(WorkTask t, bool stopSeries = false)
     {
         // Deleting a repeating task on purpose ends the series, otherwise the previous copy would be repeated again.
-        if (stopSeries && t.Repeat != TaskRepeats.None)
+        if (stopSeries && t.Repeat != WorkTaskRepeat.None)
             foreach (var x in await db.WorkTasks.Where(x => x.Id != t.Id && x.Title == t.Title && x.Repeat == t.Repeat && x.AssignedToEmployeeId == t.AssignedToEmployeeId && x.CreatedByEmployeeId == t.CreatedByEmployeeId).ToListAsync())
-                x.Repeat = TaskRepeats.None;
+                x.Repeat = WorkTaskRepeat.None;
         db.TaskChecklistItems.RemoveRange(db.TaskChecklistItems.Where(i => i.TaskId == t.Id));
         db.TaskComments.RemoveRange(db.TaskComments.Where(i => i.TaskId == t.Id));
         db.TaskActivities.RemoveRange(db.TaskActivities.Where(i => i.TaskId == t.Id));
@@ -440,13 +446,13 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
     {
         var now = DateTime.UtcNow;
         // Upcoming work: tell the assignee a day before the start date, and again when it starts.
-        var startSoon = await db.WorkTasks.Where(t => t.Status != TaskStatuses.Done && t.StartAt != null && t.StartAt > now && t.StartAt <= now.AddHours(24) && t.StartSoonNotifiedAt == null).Take(200).ToListAsync();
+        var startSoon = await db.WorkTasks.Where(t => t.Status != WorkTaskStatus.Done && t.StartAt != null && t.StartAt > now && t.StartAt <= now.AddHours(24) && t.StartSoonNotifiedAt == null).Take(200).ToListAsync();
         foreach (var t in startSoon)
         {
             t.StartSoonNotifiedAt = now;
             Notify(t.AssignedToEmployeeId ?? t.CreatedByEmployeeId, $"Upcoming task: {t.Title}", $"Starts {FollowUpService.FormatDue(t.StartAt!.Value)}", t.Id, "reminder");
         }
-        var started = await db.WorkTasks.Where(t => t.Status != TaskStatuses.Done && t.StartAt != null && t.StartAt <= now && t.StartedNotifiedAt == null).Take(200).ToListAsync();
+        var started = await db.WorkTasks.Where(t => t.Status != WorkTaskStatus.Done && t.StartAt != null && t.StartAt <= now && t.StartedNotifiedAt == null).Take(200).ToListAsync();
         foreach (var t in started)
         {
             t.StartedNotifiedAt = now;
@@ -455,14 +461,14 @@ public class TaskService(NuraDbContext db, ILogger<TaskService> log, StaffAvaila
         }
         if (startSoon.Count + started.Count > 0) await db.SaveChangesAsync();
         // Due within a day.
-        var soon = await db.WorkTasks.Where(t => t.Status != TaskStatuses.Done && t.DueAt != null && t.DueAt > now && t.DueAt <= now.AddHours(24) && t.ReminderSentAt == null).Take(200).ToListAsync();
+        var soon = await db.WorkTasks.Where(t => t.Status != WorkTaskStatus.Done && t.DueAt != null && t.DueAt > now && t.DueAt <= now.AddHours(24) && t.ReminderSentAt == null).Take(200).ToListAsync();
         foreach (var t in soon)
         {
             t.ReminderSentAt = now;
             Notify(t.AssignedToEmployeeId ?? t.CreatedByEmployeeId, $"Task due soon: {t.Title}", $"Due {FollowUpService.FormatDue(t.DueAt!.Value)}", t.Id, "reminder");
         }
         // Overdue: tell the owner, and the person who created it.
-        var late = await db.WorkTasks.Where(t => t.Status != TaskStatuses.Done && t.DueAt != null && t.DueAt < now && t.OverdueNotifiedAt == null).Take(200).ToListAsync();
+        var late = await db.WorkTasks.Where(t => t.Status != WorkTaskStatus.Done && t.DueAt != null && t.DueAt < now && t.OverdueNotifiedAt == null).Take(200).ToListAsync();
         foreach (var t in late)
         {
             t.OverdueNotifiedAt = now;

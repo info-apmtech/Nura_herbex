@@ -124,7 +124,7 @@ public class AdsReportService(NuraDbContext db)
                 CampKey = n is { CampaignId.Length: > 0 } ? n.CampaignId : r.AdId is not null ? "ad:" + r.AdId : adKey,
                 CampLabel = n is { CampaignName.Length: > 0 } ? n.CampaignName : r.AdId is not null ? $"Unnamed campaign (ad {r.AdId})" : $"Unnamed campaign ({adLabel})",
                 AdType = r.SourceType is "post" ? "post" : "ad",
-                Status = lead.CustomerSince is not null ? "customer" : lead.Status,
+                Status = lead.CustomerSince is not null ? "customer" : lead.Status.ToCode(),
                 OwnerName = lead.AssignedToEmployeeId is { } oid ? owners.GetValueOrDefault(oid) : null,
             };
             scoped.Add(att);

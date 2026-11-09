@@ -5,6 +5,7 @@ using System.Text;
 using Microsoft.Extensions.Options;
 using Nuraherbex.Api.Data;
 using Nuraherbex.Api.Options;
+using Nuraherbex.Shared.Models;
 
 namespace Nuraherbex.Api.Services;
 
@@ -82,7 +83,7 @@ public class InvoiceService(IOptions<JwtOptions> jwt, IOptionsMonitor<StoreOptio
             : Row(sellerState.Length > 0 ? $"IGST @ {Pct(rate)}%" : $"GST @ {Pct(rate)}%", gst);
 
         var a = o.ShippingAddress;
-        var paid = o.PaymentStatus is "PAID" or "COD_COLLECTED";
+        var paid = o.PaymentStatus is OrderPaymentStatus.Paid or OrderPaymentStatus.CodCollected;
         var sb = new StringBuilder();
         sb.Append("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
         sb.Append($"<title>Invoice {H(InvoiceNumber(o))}</title><style>{Css}</style></head><body>");
@@ -101,7 +102,7 @@ public class InvoiceService(IOptions<JwtOptions> jwt, IOptionsMonitor<StoreOptio
         sb.Append($"<div><span>Invoice No.</span><b>{H(InvoiceNumber(o))}</b></div>");
         sb.Append($"<div><span>Invoice Date</span><b>{o.CreatedAt.ToLocalTime():dd MMM yyyy}</b></div>");
         sb.Append($"<div><span>Order No.</span><b>{H(o.Id)}</b></div>");
-        sb.Append($"<div><span>Payment Mode</span><b>{(o.PaymentMethod == "COD" ? "Cash on Delivery" : "Online Payment")}</b></div></div>");
+        sb.Append($"<div><span>Payment Mode</span><b>{(o.PaymentMethod == OrderPaymentMethod.Cod ? "Cash on Delivery" : "Online Payment")}</b></div></div>");
 
         // Parties
         sb.Append("<div class=\"parties\"><div class=\"card\"><h3>Billed To</h3>");

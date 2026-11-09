@@ -146,26 +146,27 @@ public class FollowUpService(
         long? owner = isAdmin ? r.AssignedToEmployeeId ?? lead.AssignedToEmployeeId : lead.AssignedToEmployeeId ?? myId;
         if (owner is { } oid && !await db.Employees.AnyAsync(e => e.Id == oid && e.IsActive)) return (null, "That employee is not active.");
 
-        var item = NewItem(lead, r.Type, string.IsNullOrWhiteSpace(r.Title) ? DefaultTitle(r.Type, lead.Name) : r.Title.Trim(), r.Notes, due, owner, "manual", actor, await ReminderDaysAsync());
+        var createdBy = myId?.ToString(CultureInfo.InvariantCulture) ?? actor;
+        var item = NewItem(lead, r.Type, string.IsNullOrWhiteSpace(r.Title) ? DefaultTitle(r.Type, lead.Name) : r.Title.Trim(), r.Notes, due, owner, FollowUpSource.Manual, createdBy, await ReminderDaysAsync());
         db.FollowUps.Add(item);
 
         // Scheduling a follow-up means the lead is being worked on.
-        var changedBy = myId?.ToString(CultureInfo.InvariantCulture) ?? actor;
-        if (lead.Status is LeadStatuses.New or LeadStatuses.Interested)
+        if (lead.Status is LeadStatus.New or LeadStatus.Interested)
         {
-            db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, FromStatus = lead.Status, ToStatus = LeadStatuses.FollowUp, Note = "Follow-up scheduled", ChangedBy = changedBy });
-            lead.Status = LeadStatuses.FollowUp;
+            LeadStatus? fromStatus = Enum.IsDefined(lead.Status) ? lead.Status : null;
+            db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, FromStatus = fromStatus, ToStatus = LeadStatus.FollowUp, Note = "Follow-up scheduled", ChangedBy = createdBy });
+            lead.Status = LeadStatus.FollowUp;
             lead.UpdatedAt = Clock();
         }
         // Unowned lead + sales user: they take it, so it does not float around.
-        if (lead.AssignedToEmployeeId is null && owner is not null) await leads.AssignAsync(lead, owner, "Took ownership by scheduling a follow-up", changedBy);
+        if (lead.AssignedToEmployeeId is null && owner is not null) await leads.AssignAsync(lead, owner, "Took ownership by scheduling a follow-up", createdBy);
         if (owner is { } assignee && assignee != myId)
             Notify(assignee, "lead", $"New follow-up: {item.Title}", $"Due {FormatDue(due)}");
         await db.SaveChangesAsync();
         return (item, null);
     }
 
-    private FollowUp NewItem(Lead lead, string type, string title, string? notes, DateTime due, long? owner, string source, string actor, int reminderDays = 2)
+    private FollowUp NewItem(Lead lead, string type, string title, string? notes, DateTime due, long? owner, FollowUpSource source, string actor, int reminderDays = 2)
     {
         var item = new FollowUp
         {
@@ -182,28 +183,28 @@ public class FollowUpService(
 
     public async Task<(bool Ok, string Message)> CompleteAsync(FollowUp item, FollowUpCompleteRequest r, string actor, long? actorId = null)
     {
-        if (item.Status != "pending") return (false, "This follow-up is already closed.");
+        if (item.Status != FollowUpStatus.Pending) return (false, "This follow-up is already closed.");
         if (!FollowUpOutcomes.All.Contains(r.Outcome)) return (false, "Unknown outcome.");
         if (r.Outcome == FollowUpOutcomes.Callback && r.NextDueAt is null) return (false, "Pick when to call back.");
 
         var now = Clock();
         var note = r.Note?.Trim();
-        item.Status = "done";
+        var completedBy = actorId?.ToString(CultureInfo.InvariantCulture) ?? actor;
+        item.Status = FollowUpStatus.Done;
         item.CompletedAt = now;
-        item.CompletedBy = actor;
+        item.CompletedBy = completedBy;
         item.Outcome = Truncate(string.IsNullOrEmpty(note) ? r.Outcome : $"{r.Outcome}: {note}", 500);
 
         var lead = await db.Leads.FirstAsync(l => l.Id == item.LeadId);
-        var changedBy = actorId?.ToString(CultureInfo.InvariantCulture) ?? actor;
         switch (r.Outcome)
         {
-            case FollowUpOutcomes.Interested when lead.Status is LeadStatuses.New or LeadStatuses.FollowUp or LeadStatuses.NotInterested:
-                await leads.ChangeStatusAsync(lead.Id, LeadStatuses.Interested, note ?? "Follow-up outcome", changedBy); break;
-            case FollowUpOutcomes.NotInterested when lead.Status != LeadStatuses.Converted:
-                await leads.ChangeStatusAsync(lead.Id, LeadStatuses.NotInterested, note ?? "Follow-up outcome", changedBy); break;
+            case FollowUpOutcomes.Interested when lead.Status is LeadStatus.New or LeadStatus.FollowUp or LeadStatus.NotInterested:
+                await leads.ChangeStatusAsync(lead.Id, LeadStatuses.Interested, note ?? "Follow-up outcome", completedBy); break;
+            case FollowUpOutcomes.NotInterested when lead.Status != LeadStatus.Converted:
+                await leads.ChangeStatusAsync(lead.Id, LeadStatuses.NotInterested, note ?? "Follow-up outcome", completedBy); break;
             case FollowUpOutcomes.Converted when lead.CustomerSince is null:
                 // Agreed to buy but no paid order yet: they are a hot lead until the order is placed.
-                if (lead.Status != LeadStatuses.Interested) await leads.ChangeStatusAsync(lead.Id, LeadStatuses.Interested, note ?? "Agreed to buy; waiting for the order", changedBy);
+                if (lead.Status != LeadStatus.Interested) await leads.ChangeStatusAsync(lead.Id, LeadStatuses.Interested, note ?? "Agreed to buy; waiting for the order", completedBy);
                 break;
         }
 
@@ -212,7 +213,7 @@ public class FollowUpService(
         {
             var next = r.NextDueAt is { } n ? AsUtc(n) : AtTenAm(now, 1);
             if (next <= now) return (false, "Choose a callback time in the future.");
-            var again = NewItem(lead, item.Type == FollowUpTypes.Order ? FollowUpTypes.Call : item.Type, item.Title.StartsWith("Retry: ") ? item.Title : "Retry: " + item.Title, null, next, item.AssignedToEmployeeId, "manual", actor, await ReminderDaysAsync());
+            var again = NewItem(lead, item.Type == FollowUpTypes.Order ? FollowUpTypes.Call : item.Type, item.Title.StartsWith("Retry: ") ? item.Title : "Retry: " + item.Title, null, next, item.AssignedToEmployeeId, FollowUpSource.Manual, completedBy, await ReminderDaysAsync());
             again.OrderId = null;
             db.FollowUps.Add(again);
             message = $"Completed. Next follow-up set for {FormatDue(next)}.";
@@ -226,7 +227,7 @@ public class FollowUpService(
     private async Task CloseJourneyIfFinishedAsync(FollowUp item)
     {
         if (item.EnrollmentId is not { } eid) return;
-        if (await db.FollowUps.AnyAsync(f => f.EnrollmentId == eid && f.Status == "pending")) return;
+        if (await db.FollowUps.AnyAsync(f => f.EnrollmentId == eid && f.Status == FollowUpStatus.Pending)) return;
         var e = await db.JourneyEnrollments.FirstOrDefaultAsync(x => x.Id == eid);
         if (e is { Status: "active" }) { e.Status = "completed"; await db.SaveChangesAsync(); }
     }
@@ -264,9 +265,9 @@ public class FollowUpService(
         }).ToList();
 
     /// <summary>Sends the task's WhatsApp message: free text inside the 24h window, otherwise the configured template.</summary>
-    public async Task<(bool Ok, string Message)> SendNowAsync(FollowUp item, string actor)
+    public async Task<(bool Ok, string Message)> SendNowAsync(FollowUp item, string actor, string? completedBy = null)
     {
-        if (item.Status != "pending") return (false, "This follow-up is already closed.");
+        if (item.Status != FollowUpStatus.Pending) return (false, "This follow-up is already closed.");
         if (string.IsNullOrWhiteSpace(item.SuggestedMessage)) return (false, "This task has no message to send. Use the chat instead.");
         var lead = await db.Leads.FirstAsync(l => l.Id == item.LeadId);
         if (lead.ConsentStatus == "opted_out") return (false, "This customer opted out of messages.");
@@ -279,21 +280,21 @@ public class FollowUpService(
         else return (false, "The 24-hour reply window is closed and no approved template is set for this step. Call the customer or wait for them to message.");
 
         if (!sent) return (false, whatsapp.LastError ?? "WhatsApp could not send the message. Check the WhatsApp credentials in the server configuration.");
-        item.Status = "done"; item.CompletedAt = Clock(); item.CompletedBy = actor; item.Outcome = "Sent on WhatsApp";
+        item.Status = FollowUpStatus.Done; item.CompletedAt = Clock(); item.CompletedBy = completedBy ?? actor; item.Outcome = "Sent on WhatsApp";
         await db.SaveChangesAsync();
         await CloseJourneyIfFinishedAsync(item);
         return (true, "Message sent and task completed.");
     }
 
     /// <summary>Sends every message in <paramref name="pending"/> one by one, stopping as soon as the monthly WhatsApp limit is reached.</summary>
-    public async Task<(int Sent, int Failed, int Skipped, string Message)> SendDueAsync(IQueryable<FollowUp> pending, string actor, int max = 50)
+    public async Task<(int Sent, int Failed, int Skipped, string Message)> SendDueAsync(IQueryable<FollowUp> pending, string actor, int max = 50, string? completedBy = null)
     {
-        var items = await pending.Where(f => f.Status == "pending" && f.SuggestedMessage != null && f.SuggestedMessage != "").OrderBy(f => f.DueAt).Take(max).ToListAsync();
+        var items = await pending.Where(f => f.Status == FollowUpStatus.Pending && f.SuggestedMessage != null && f.SuggestedMessage != "").OrderBy(f => f.DueAt).Take(max).ToListAsync();
         int sent = 0, failed = 0, skipped = 0;
         string? firstProblem = null;
         foreach (var item in items)
         {
-            var (ok, message) = await SendNowAsync(item, actor);
+            var (ok, message) = await SendNowAsync(item, actor, completedBy);
             if (ok) { sent++; continue; }
             if (whatsapp.LimitReached) { firstProblem = message; skipped = items.Count - sent - failed; break; }
             failed++; firstProblem ??= message;
@@ -322,7 +323,7 @@ public class FollowUpService(
     {
         var since = started > Clock().AddDays(-90) ? started : Clock().AddDays(-90);
         var orders = await db.Orders.AsNoTracking()
-            .Where(o => o.CreatedAt >= since && (o.PaymentStatus == "PAID" || o.PaymentStatus == "COD_PENDING" || o.PaymentStatus == "COD_COLLECTED"))
+            .Where(o => o.CreatedAt >= since && (o.PaymentStatus == OrderPaymentStatus.Paid || o.PaymentStatus == OrderPaymentStatus.CodPending || o.PaymentStatus == OrderPaymentStatus.CodCollected))
             .ToListAsync();
         if (orders.Count == 0) return;
 
@@ -341,7 +342,7 @@ public class FollowUpService(
                 async Task Raise(string step, string title, string notes)
                 {
                     if (!existingSteps.Add(o.Id + "|" + step)) return;
-                    var item = NewItem(lead, FollowUpTypes.Order, title, notes, now, lead.AssignedToEmployeeId, "system", "system");
+                    var item = NewItem(lead, FollowUpTypes.Order, title, notes, now, lead.AssignedToEmployeeId, FollowUpSource.System, "system");
                     item.OrderId = o.Id; item.StepKey = step; item.RemindAt = null;
                     db.FollowUps.Add(item);
                     Notify(lead.AssignedToEmployeeId, "order", title, notes, "/admin/followups");
@@ -416,7 +417,7 @@ public class FollowUpService(
         foreach (var step in JourneyPlan.Steps)
         {
             var due = AtTenAm(anchor, step.Day);
-            var item = NewItem(lead, step.Type, step.Title, step.Type == FollowUpTypes.Call ? step.Message : null, due, lead.AssignedToEmployeeId, "journey", "journey");
+            var item = NewItem(lead, step.Type, step.Title, step.Type == FollowUpTypes.Call ? step.Message : null, due, lead.AssignedToEmployeeId, FollowUpSource.Journey, "journey");
             item.OrderId = order.Id; item.EnrollmentId = enrollment.Id; item.StepKey = step.Key;
             item.SuggestedMessage = step.Type == FollowUpTypes.Call ? null : Fill(step.Message, lead, order.Id);
             var remind = due.AddDays(-days);
@@ -450,7 +451,7 @@ public class FollowUpService(
                 if (have.Contains(e.Id + "|" + step.Key)) continue;
                 var due = AtTenAm(e.AnchorAt, step.Day);
                 if (due < now.AddDays(-1)) continue; // that moment is long gone; do not create a stale task
-                var item = NewItem(lead, step.Type, step.Title, step.Type == FollowUpTypes.Call ? step.Message : null, due, lead.AssignedToEmployeeId, "journey", "journey");
+                var item = NewItem(lead, step.Type, step.Title, step.Type == FollowUpTypes.Call ? step.Message : null, due, lead.AssignedToEmployeeId, FollowUpSource.Journey, "journey");
                 item.OrderId = e.OrderId; item.EnrollmentId = e.Id; item.StepKey = step.Key;
                 item.SuggestedMessage = step.Type == FollowUpTypes.Call ? null : Fill(step.Message, lead, e.OrderId);
                 var remind = due.AddDays(-days);
@@ -468,7 +469,7 @@ public class FollowUpService(
         var names = await db.Leads.AsNoTracking().ToDictionaryAsync(l => l.Id, l => l.Name);
 
         // Advance heads-up (normally 2 days before).
-        var heads = await db.FollowUps.Where(f => f.Status == "pending" && f.RemindAt != null && f.RemindAt <= now && f.ReminderSentAt == null).Take(200).ToListAsync();
+        var heads = await db.FollowUps.Where(f => f.Status == FollowUpStatus.Pending && f.RemindAt != null && f.RemindAt <= now && f.ReminderSentAt == null).Take(200).ToListAsync();
         foreach (var f in heads)
         {
             f.ReminderSentAt = now;
@@ -478,7 +479,7 @@ public class FollowUpService(
         }
 
         // Due now.
-        var due = await db.FollowUps.Where(f => f.Status == "pending" && f.DueAt <= now && f.DueNotifiedAt == null).Take(200).ToListAsync();
+        var due = await db.FollowUps.Where(f => f.Status == FollowUpStatus.Pending && f.DueAt <= now && f.DueNotifiedAt == null).Take(200).ToListAsync();
         foreach (var f in due)
         {
             f.DueNotifiedAt = now;
@@ -490,7 +491,7 @@ public class FollowUpService(
     private async Task EscalateAsync()
     {
         var cutoff = Clock().AddHours(-24);
-        var late = await db.FollowUps.Where(f => f.Status == "pending" && f.DueAt < cutoff && f.EscalatedAt == null).Take(100).ToListAsync();
+        var late = await db.FollowUps.Where(f => f.Status == FollowUpStatus.Pending && f.DueAt < cutoff && f.EscalatedAt == null).Take(100).ToListAsync();
         if (late.Count == 0) return;
         var owners = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
         foreach (var f in late)
@@ -508,7 +509,7 @@ public class FollowUpService(
         if (hour < 9 || hour >= 20) return;
         if (await whatsapp.IsLimitReachedAsync()) return; // nothing is sent once the monthly allowance is used; the tasks stay in the list
         var now = Clock();
-        var items = await db.FollowUps.Where(f => f.Status == "pending" && f.Source == "journey" && f.DueAt <= now
+        var items = await db.FollowUps.Where(f => f.Status == FollowUpStatus.Pending && f.Source == FollowUpSource.Journey && f.DueAt <= now
             && (f.Type == FollowUpTypes.WhatsApp || f.Type == FollowUpTypes.Review || f.Type == FollowUpTypes.Reorder)).OrderBy(f => f.DueAt).Take(25).ToListAsync();
         foreach (var f in items)
         {
@@ -521,7 +522,7 @@ public class FollowUpService(
                 if (whatsapp.LimitReached) return;
                 continue;
             }
-            f.Status = "done"; f.CompletedAt = now; f.CompletedBy = "auto"; f.Outcome = $"Sent automatically ({t.Name})";
+            f.Status = FollowUpStatus.Done; f.CompletedAt = now; f.CompletedBy = "auto"; f.Outcome = $"Sent automatically ({t.Name})";
             await db.SaveChangesAsync();
             await CloseJourneyIfFinishedAsync(f);
         }
@@ -531,7 +532,7 @@ public class FollowUpService(
     // Reports
     // ---------------------------------------------------------------------
 
-    private sealed record Slim(long Id, string Type, string Status, DateTime DueAt, DateTime? CompletedAt, string? CompletedBy, long? AssignedToEmployeeId, string? StepKey, string Source);
+    private sealed record Slim(long Id, string Type, FollowUpStatus Status, DateTime DueAt, DateTime? CompletedAt, string? CompletedBy, long? AssignedToEmployeeId, string? StepKey, FollowUpSource Source);
 
     public async Task<FollowUpReportResponse> ReportAsync(int days, long? onlyEmployee)
     {
@@ -545,8 +546,8 @@ public class FollowUpService(
         var items = await q.Select(f => new Slim(f.Id, f.Type, f.Status, f.DueAt, f.CompletedAt, f.CompletedBy, f.AssignedToEmployeeId, f.StepKey, f.Source)).ToListAsync();
 
         bool OnTime(DateTime due, DateTime? done) => done is { } d && d < TimeZoneInfo.ConvertTimeToUtc(TimeZoneInfo.ConvertTimeFromUtc(due, Ist).Date.AddDays(1), Ist);
-        bool IsDone(string s) => s == "done";
-        bool IsOverdue(string s, DateTime due) => s == "pending" && due < todayStart;
+        bool IsDone(FollowUpStatus s) => s == FollowUpStatus.Done;
+        bool IsOverdue(FollowUpStatus s, DateTime due) => s == FollowUpStatus.Pending && due < todayStart;
 
         var names = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
         FollowUpReportRow Row(string label, long? emp, IEnumerable<Slim> set)
@@ -567,7 +568,7 @@ public class FollowUpService(
             Due = items.Count, Done = items.Count(i => IsDone(i.Status)),
             DoneOnTime = items.Count(i => IsDone(i.Status) && OnTime(i.DueAt, i.CompletedAt)),
             Overdue = items.Count(i => IsOverdue(i.Status, i.DueAt)),
-            Pending = items.Count(i => i.Status == "pending" && !IsOverdue(i.Status, i.DueAt)),
+            Pending = items.Count(i => i.Status == FollowUpStatus.Pending && !IsOverdue(i.Status, i.DueAt)),
             AutoSent = items.Count(i => i.CompletedBy == "auto"),
         };
         report.CompletionRate = report.Due == 0 ? 0 : (int)Math.Round(100.0 * report.Done / report.Due);
@@ -575,7 +576,7 @@ public class FollowUpService(
 
         // By employee (admins) — includes leads owned and converted in the period.
         var owned = await db.Leads.AsNoTracking().Where(l => l.AssignedToEmployeeId != null).GroupBy(l => l.AssignedToEmployeeId!.Value)
-            .Select(g => new { Id = g.Key, Open = g.Count(l => l.Status != LeadStatuses.Converted && l.Status != LeadStatuses.NotInterested), Won = g.Count(l => l.ConvertedAt != null && l.ConvertedAt >= from) })
+            .Select(g => new { Id = g.Key, Open = g.Count(l => l.Status != LeadStatus.Converted && l.Status != LeadStatus.NotInterested), Won = g.Count(l => l.ConvertedAt != null && l.ConvertedAt >= from) })
             .ToDictionaryAsync(x => x.Id);
         var groups = items.GroupBy(i => i.AssignedToEmployeeId);
         var empIds = names.Keys.Where(id => onlyEmployee is null || id == onlyEmployee).ToList();
@@ -592,7 +593,7 @@ public class FollowUpService(
         report.ByType = items.GroupBy(i => i.Type).Select(g => Row(g.Key, null, g)).OrderByDescending(r => r.Due).ToList();
 
         // 15-day journey funnel.
-        var journey = items.Where(i => i.Source == "journey" && i.StepKey != null).GroupBy(i => i.StepKey!).ToDictionary(g => g.Key, g => g.ToList());
+        var journey = items.Where(i => i.Source == FollowUpSource.Journey && i.StepKey != null).GroupBy(i => i.StepKey!).ToDictionary(g => g.Key, g => g.ToList());
         foreach (var step in JourneyPlan.Steps)
         {
             var list = journey.GetValueOrDefault(step.Key) ?? [];
@@ -600,8 +601,8 @@ public class FollowUpService(
             {
                 StepKey = step.Key, Title = step.Title, Day = step.Day, Total = list.Count,
                 Done = list.Count(i => IsDone(i.Status)), AutoSent = list.Count(i => i.CompletedBy == "auto"),
-                Pending = list.Count(i => i.Status == "pending" && !IsOverdue(i.Status, i.DueAt)),
-                Overdue = list.Count(i => IsOverdue(i.Status, i.DueAt)), Skipped = list.Count(i => i.Status == "skipped"),
+                Pending = list.Count(i => i.Status == FollowUpStatus.Pending && !IsOverdue(i.Status, i.DueAt)),
+                Overdue = list.Count(i => IsOverdue(i.Status, i.DueAt)), Skipped = list.Count(i => i.Status == FollowUpStatus.Skipped),
             });
         }
         report.ReviewRequests = report.Journey.FirstOrDefault(j => j.StepKey == "day8-review")?.Done ?? 0;

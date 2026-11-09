@@ -30,6 +30,39 @@ public class ApiResult<T> : ApiResult
 // ---------------------------------------------------------------------------
 // Catalog
 // ---------------------------------------------------------------------------
+public enum ProductStatus
+{
+    Active = 1,
+    Draft = 2,
+    Archived = 3,
+}
+
+public static class ProductStatuses
+{
+    public const string Active = "active";
+    public const string Draft = "draft";
+    public const string Archived = "archived";
+    public static readonly string[] All = [Active, Draft, Archived];
+
+    public static string ToCode(this ProductStatus status) => status switch
+    {
+        ProductStatus.Draft => Draft,
+        ProductStatus.Archived => Archived,
+        _ => Active,
+    };
+
+    public static bool TryParse(string? value, out ProductStatus status)
+    {
+        switch (value?.Trim().ToLowerInvariant())
+        {
+            case Active: status = ProductStatus.Active; return true;
+            case Draft: status = ProductStatus.Draft; return true;
+            case Archived: status = ProductStatus.Archived; return true;
+            default: status = default; return false;
+        }
+    }
+}
+
 public class ProductDto
 {
     public string Id { get; set; } = "";
@@ -63,10 +96,38 @@ public class ProductListResponse : ApiResult
     public List<ProductDto> Products { get; set; } = new();
 }
 
+public enum CouponDiscountType
+{
+    Percentage = 1,
+    Fixed = 2,
+}
+
+public static class CouponDiscountTypes
+{
+    public const string Percentage = "PERCENTAGE";
+    public const string Fixed = "FIXED";
+
+    public static string ToCode(this CouponDiscountType type) => type switch
+    {
+        CouponDiscountType.Fixed => Fixed,
+        _ => Percentage,
+    };
+
+    public static bool TryParse(string? value, out CouponDiscountType type)
+    {
+        switch (value)
+        {
+            case Percentage: type = CouponDiscountType.Percentage; return true;
+            case Fixed: type = CouponDiscountType.Fixed; return true;
+            default: type = default; return false;
+        }
+    }
+}
+
 public class CouponDto
 {
     public string Code { get; set; } = "";
-    public string DiscountType { get; set; } = "PERCENTAGE";
+    public string DiscountType { get; set; } = CouponDiscountTypes.Percentage;
     public decimal DiscountValue { get; set; }
     public decimal MinOrderAmount { get; set; }
     public decimal MaxDiscountCap { get; set; }
@@ -117,6 +178,134 @@ public class OrderTotalsDto : ApiResult
 // ---------------------------------------------------------------------------
 // Orders
 // ---------------------------------------------------------------------------
+[JsonConverter(typeof(OrderPaymentMethodJsonConverter))]
+public enum OrderPaymentMethod
+{
+    Cod = 1,
+    Online = 2,
+}
+
+public static class OrderPaymentMethods
+{
+    public const string Cod = "COD";
+    public const string Online = "ONLINE";
+    public static readonly string[] All = [Cod, Online];
+
+    public static string ToCode(this OrderPaymentMethod method) => method switch
+    {
+        OrderPaymentMethod.Online => Online,
+        _ => Cod,
+    };
+
+    public static bool TryParse(string? value, out OrderPaymentMethod method)
+    {
+        switch (value?.Trim().ToUpperInvariant())
+        {
+            case Cod: method = OrderPaymentMethod.Cod; return true;
+            case Online: method = OrderPaymentMethod.Online; return true;
+            default: method = default; return false;
+        }
+    }
+}
+
+public sealed class OrderPaymentMethodJsonConverter : JsonConverter<OrderPaymentMethod>
+{
+    public override OrderPaymentMethod Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            var s = reader.GetString();
+            if (OrderPaymentMethods.TryParse(s, out var parsed) || Enum.TryParse(s, ignoreCase: true, out parsed) && Enum.IsDefined(parsed))
+                return parsed;
+            throw new JsonException($"Unknown order payment method '{s}'.");
+        }
+        if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var raw) && Enum.IsDefined(typeof(OrderPaymentMethod), raw))
+            return (OrderPaymentMethod)raw;
+        throw new JsonException($"Invalid token '{reader.TokenType}' for {nameof(OrderPaymentMethod)}.");
+    }
+
+    public override void Write(Utf8JsonWriter writer, OrderPaymentMethod value, JsonSerializerOptions options)
+        => writer.WriteStringValue(value.ToCode());
+}
+
+[JsonConverter(typeof(OrderPaymentStatusJsonConverter))]
+public enum OrderPaymentStatus
+{
+    Pending = 1,
+    Paid = 2,
+    Failed = 3,
+    Refunded = 4,
+    CodPending = 5,
+    CodCollected = 6,
+    RefundPending = 7,
+    Cancelled = 8,
+}
+
+public static class OrderPaymentStatuses
+{
+    public const string Pending = "PENDING";
+    public const string Paid = "PAID";
+    public const string Failed = "FAILED";
+    public const string Refunded = "REFUNDED";
+    public const string CodPending = "COD_PENDING";
+    public const string CodCollected = "COD_COLLECTED";
+    public const string RefundPending = "REFUND_PENDING";
+    public const string Cancelled = "CANCELLED";
+    public static readonly string[] All = [Pending, Paid, Failed, Refunded, CodPending, CodCollected, RefundPending, Cancelled];
+
+    public static string ToCode(this OrderPaymentStatus status) => status switch
+    {
+        OrderPaymentStatus.Paid => Paid,
+        OrderPaymentStatus.Failed => Failed,
+        OrderPaymentStatus.Refunded => Refunded,
+        OrderPaymentStatus.CodPending => CodPending,
+        OrderPaymentStatus.CodCollected => CodCollected,
+        OrderPaymentStatus.RefundPending => RefundPending,
+        OrderPaymentStatus.Cancelled => Cancelled,
+        _ => Pending,
+    };
+
+    public static bool TryParse(string? value, out OrderPaymentStatus status)
+    {
+        switch (value?.Trim().ToUpperInvariant())
+        {
+            case Pending: status = OrderPaymentStatus.Pending; return true;
+            case Paid: status = OrderPaymentStatus.Paid; return true;
+            case Failed: status = OrderPaymentStatus.Failed; return true;
+            case Refunded: status = OrderPaymentStatus.Refunded; return true;
+            case CodPending:
+            case "COD-PENDING": status = OrderPaymentStatus.CodPending; return true;
+            case CodCollected:
+            case "COD-COLLECTED": status = OrderPaymentStatus.CodCollected; return true;
+            case RefundPending:
+            case "REFUND-PENDING": status = OrderPaymentStatus.RefundPending; return true;
+            case Cancelled:
+            case "CANCELED": status = OrderPaymentStatus.Cancelled; return true;
+            default: status = default; return false;
+        }
+    }
+}
+
+public sealed class OrderPaymentStatusJsonConverter : JsonConverter<OrderPaymentStatus>
+{
+    public override OrderPaymentStatus Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            var s = reader.GetString();
+            if (OrderPaymentStatuses.TryParse(s, out var parsed) || Enum.TryParse(s, ignoreCase: true, out parsed) && Enum.IsDefined(parsed))
+                return parsed;
+            throw new JsonException($"Unknown order payment status '{s}'.");
+        }
+        if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var raw) && Enum.IsDefined(typeof(OrderPaymentStatus), raw))
+            return (OrderPaymentStatus)raw;
+        throw new JsonException($"Invalid token '{reader.TokenType}' for {nameof(OrderPaymentStatus)}.");
+    }
+
+    public override void Write(Utf8JsonWriter writer, OrderPaymentStatus value, JsonSerializerOptions options)
+        => writer.WriteStringValue(value.ToCode());
+}
+
 public class AddressDto
 {
     public string AddressLine1 { get; set; } = "";

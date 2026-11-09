@@ -3,6 +3,15 @@ namespace Nuraherbex.Shared.Models;
 // ---------------------------------------------------------------------------
 // CRM leads (admin view)
 // ---------------------------------------------------------------------------
+public enum LeadStatus
+{
+    New = 1,
+    Interested = 2,
+    FollowUp = 3,
+    Converted = 4,
+    NotInterested = 5,
+}
+
 public static class LeadStatuses
 {
     public const string New = "new";
@@ -11,6 +20,71 @@ public static class LeadStatuses
     public const string Converted = "converted";
     public const string NotInterested = "not-interested";
     public static readonly string[] All = [New, Interested, FollowUp, Converted, NotInterested];
+
+    public static string ToCode(this LeadStatus status) => status switch
+    {
+        LeadStatus.New => New,
+        LeadStatus.Interested => Interested,
+        LeadStatus.FollowUp => FollowUp,
+        LeadStatus.Converted => Converted,
+        LeadStatus.NotInterested => NotInterested,
+        _ => New,
+    };
+
+    public static bool TryParse(string? value, out LeadStatus status)
+    {
+        switch (value?.Trim().ToLowerInvariant())
+        {
+            case New: status = LeadStatus.New; return true;
+            case Interested: status = LeadStatus.Interested; return true;
+            case FollowUp: status = LeadStatus.FollowUp; return true;
+            case Converted: status = LeadStatus.Converted; return true;
+            case NotInterested: status = LeadStatus.NotInterested; return true;
+            default: status = default; return false;
+        }
+    }
+}
+
+public enum LeadSource
+{
+    WhatsApp = 1,
+    Instagram = 2,
+    Facebook = 3,
+    Website = 4,
+    Manual = 5,
+}
+
+public static class LeadSources
+{
+    public const string WhatsApp = "whatsapp";
+    public const string Instagram = "instagram";
+    public const string Facebook = "facebook";
+    public const string Website = "website";
+    public const string Manual = "manual";
+    public static readonly string[] All = [WhatsApp, Instagram, Facebook, Website, Manual];
+
+    public static string ToCode(this LeadSource source) => source switch
+    {
+        LeadSource.WhatsApp => WhatsApp,
+        LeadSource.Instagram => Instagram,
+        LeadSource.Facebook => Facebook,
+        LeadSource.Website => Website,
+        LeadSource.Manual => Manual,
+        _ => WhatsApp,
+    };
+
+    public static bool TryParse(string? value, out LeadSource source)
+    {
+        switch (value?.Trim().ToLowerInvariant())
+        {
+            case WhatsApp: source = LeadSource.WhatsApp; return true;
+            case Instagram: source = LeadSource.Instagram; return true;
+            case Facebook: source = LeadSource.Facebook; return true;
+            case Website: source = LeadSource.Website; return true;
+            case Manual: source = LeadSource.Manual; return true;
+            default: source = default; return false;
+        }
+    }
 }
 
 public class LeadDto
@@ -143,10 +217,32 @@ public class LeadReplyRequest
 // ---------------------------------------------------------------------------
 // Employees (CRM users)
 // ---------------------------------------------------------------------------
+public enum EmployeeRole
+{
+    Admin = 1,
+    Sales = 2,
+}
+
 public static class EmployeeRoles
 {
     public const string Admin = "admin";
     public const string Sales = "sales";
+
+    public static string ToCode(this EmployeeRole role) => role switch
+    {
+        EmployeeRole.Admin => Admin,
+        _ => Sales,
+    };
+
+    public static bool TryParse(string? value, out EmployeeRole role)
+    {
+        switch (value)
+        {
+            case Admin: role = EmployeeRole.Admin; return true;
+            case Sales: role = EmployeeRole.Sales; return true;
+            default: role = default; return false;
+        }
+    }
 }
 
 public class EmployeeDto
@@ -226,6 +322,9 @@ public static class MessageStages
     public const string New = "new", Interested = "interested", FollowUp = "follow-up", NotInterested = "not-interested", Customer = "customer";
     public static readonly string[] All = [New, Interested, FollowUp, NotInterested, Customer];
     public static string Label(string s) => s switch { New => "New leads", Interested => "Interested leads", FollowUp => "Follow-up leads", NotInterested => "Not interested", Customer => "Customers", _ => s };
+
+    /// <summary>The stage that fits a lead (a paid customer always counts as a customer).</summary>
+    public static string Of(LeadStatus leadStatus, bool isCustomer) => isCustomer ? Customer : Of(leadStatus.ToCode(), false);
 
     /// <summary>The stage that fits a lead (a paid customer always counts as a customer).</summary>
     public static string Of(string leadStatus, bool isCustomer) => isCustomer ? Customer : leadStatus switch

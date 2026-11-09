@@ -43,7 +43,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
             lead = new Lead
             {
                 Phone = norm, Name = string.IsNullOrWhiteSpace(profileName) ? norm : profileName.Trim(),
-                Source = "whatsapp", SourceDetail = referralDetail, FirstMessage = Truncate(body, 1000),
+                Source = LeadSource.WhatsApp, SourceDetail = referralDetail, FirstMessage = Truncate(body, 1000),
                 CreatedAt = now, UpdatedAt = now, LastContactAt = now,
             };
             db.Leads.Add(lead);
@@ -62,7 +62,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
 
         if (created)
         {
-            db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, ToStatus = LeadStatuses.New, Note = "Lead captured from WhatsApp", CreatedAt = now });
+            db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, ToStatus = LeadStatus.New, Note = "Lead captured from WhatsApp", CreatedAt = now });
             log.LogInformation("[Lead] New WhatsApp lead {Id} ({Phone})", lead.Id, norm);
         }
         else
@@ -76,7 +76,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
 
         // Keep attribution: the first contact, and any later Click-to-WhatsApp ad referral.
         if (created || referralJson is not null)
-            db.LeadSourceEvents.Add(new LeadSourceEvent { LeadId = lead.Id, Source = "whatsapp", Detail = referralDetail, ReferralJson = referralJson, CreatedAt = now });
+            db.LeadSourceEvents.Add(new LeadSourceEvent { LeadId = lead.Id, Source = LeadSource.WhatsApp, Detail = referralDetail, ReferralJson = referralJson, CreatedAt = now });
 
         if (IsStopKeyword(body)) SetConsent(lead, "opted_out", now);
         else if (IsStartKeyword(body) && lead.ConsentStatus != "opted_in") SetConsent(lead, "opted_in", now);
@@ -123,7 +123,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     }
 
     /// <summary>Confirmed orders (paid or cash on delivery) that are not cancelled or returned.</summary>
-    public static bool IsConfirmed(Order o) => o.PaymentStatus is "PAID" or "COD_PENDING" or "COD_COLLECTED" && o.FulfillmentStatus is not ("CANCELLED" or "RTO");
+    public static bool IsConfirmed(Order o) => o.PaymentStatus is OrderPaymentStatus.Paid or OrderPaymentStatus.CodPending or OrderPaymentStatus.CodCollected && o.FulfillmentStatus is not ("CANCELLED" or "RTO");
 
     /// <summary>The first word of a name, or "there" when the lead only has a phone number.</summary>
     public static string FirstName(string? name, string? phone) =>
@@ -192,13 +192,13 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     public Task<Employee?> PickNextEmployeeAsync(long? excludeId = null, bool whatsAppOnly = true) => availability.PickAsync("leads", null, excludeId, whatsAppOnly);
 
     /// <summary>WhatsApp leads only go to staff who switched "WhatsApp active" on; leads from other sources (website orders) go to anyone signed in.</summary>
-    private static bool NeedsWhatsAppSwitch(Lead lead) => lead.Source == "whatsapp";
+    private static bool NeedsWhatsAppSwitch(Lead lead) => lead.Source == LeadSource.WhatsApp;
 
     /// <summary>Gives leads that arrived while nobody was online to whoever is signed in now, least busy first. Called by the background worker.</summary>
     public async Task<int> AssignWaitingAsync()
     {
         if (!await IsAutoAssignEnabledAsync()) return 0;
-        var waiting = await db.Leads.Where(l => l.AssignedToEmployeeId == null && l.Status != LeadStatuses.Converted && l.Status != LeadStatuses.NotInterested)
+        var waiting = await db.Leads.Where(l => l.AssignedToEmployeeId == null && l.Status != LeadStatus.Converted && l.Status != LeadStatus.NotInterested)
             .OrderBy(l => l.CreatedAt).Take(50).ToListAsync();
         var given = 0;
         var noTakerFor = new HashSet<bool>(); // stop asking once nobody can take a kind of lead (WhatsApp / other) in this pass
@@ -290,7 +290,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
             if (people.Count < 2) continue;
             // Balance on the number of unopened leads each person holds (15 unopened across 3 people = 5 each), counting leads that cannot move too.
             var load = new Dictionary<long, int>();
-            foreach (var p in people) load[p.Id] = await PendingOf(p.Id).CountAsync(l => (l.Source == "whatsapp") == wa);
+            foreach (var p in people) load[p.Id] = await PendingOf(p.Id).CountAsync(l => (l.Source == LeadSource.WhatsApp) == wa);
             for (var guard = 0; guard < 500; guard++)
             {
                 var receiver = people.OrderBy(p => load.GetValueOrDefault(p.Id)).ThenBy(p => p.LastAssignedAt == null ? 0 : 1).ThenBy(p => p.LastAssignedAt).ThenBy(p => p.Id).First();
@@ -298,7 +298,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
                 foreach (var d in people.Where(p => p.Id != receiver.Id && load.GetValueOrDefault(p.Id) - load.GetValueOrDefault(receiver.Id) >= 2).OrderByDescending(p => load.GetValueOrDefault(p.Id)))
                 {
                     // the latest unopened lead moves first
-                    lead = await PendingOf(d.Id, keepManual: true).Where(l => (l.Source == "whatsapp") == wa).OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync();
+                    lead = await PendingOf(d.Id, keepManual: true).Where(l => (l.Source == LeadSource.WhatsApp) == wa).OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync();
                     if (lead is not null) { donor = d; break; }
                 }
                 if (lead is null || donor is null) break;
@@ -347,7 +347,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     /// when the owner is away; leads already being worked stay with their owner.
     /// </summary>
     private IQueryable<Lead> PendingOf(long employeeId, bool keepManual = false) =>
-        db.Leads.Where(l => l.AssignedToEmployeeId == employeeId && l.Status == LeadStatuses.New
+        db.Leads.Where(l => l.AssignedToEmployeeId == employeeId && l.Status == LeadStatus.New
             // a lead a person (admin / colleague) handed over on purpose stays put when the system rebalances or the owner merely looks away
             && (!keepManual || (db.LeadAssignmentHistory.Where(h => h.LeadId == l.Id).OrderByDescending(h => h.CreatedAt).ThenByDescending(h => h.Id).Select(h => h.ChangedBy).FirstOrDefault() ?? "auto") == "auto")
             && !db.WhatsAppMessages.Any(m => m.LeadId == l.Id && m.Direction == "outbound" && m.SentBy != null && m.SentBy != "system" && m.SentBy != "auto")); // automatic messages (welcome = "system", after-hours reply = "auto") do not count
@@ -393,7 +393,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     public async Task<int> ReassignOpenLeadsAsync(long fromEmployeeId, bool spreadAcrossTeam, string changedBy)
     {
         var open = await db.Leads.Where(l => l.AssignedToEmployeeId == fromEmployeeId
-            && (l.CustomerSince != null || (l.Status != LeadStatuses.Converted && l.Status != LeadStatuses.NotInterested))).ToListAsync(); // customers need an owner too
+            && (l.CustomerSince != null || (l.Status != LeadStatus.Converted && l.Status != LeadStatus.NotInterested))).ToListAsync(); // customers need an owner too
         foreach (var lead in open)
         {
             var target = !spreadAcrossTeam ? null
@@ -418,7 +418,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
             lead = new Lead
             {
                 Phone = norm, Name = string.IsNullOrWhiteSpace(o.CustomerName) ? norm : o.CustomerName.Trim(), Email = o.CustomerEmail,
-                Source = "website", SourceDetail = $"Order {o.Id}", Status = LeadStatuses.Converted, ConvertedAt = now,
+                Source = LeadSource.Website, SourceDetail = $"Order {o.Id}", Status = LeadStatus.Converted, ConvertedAt = now,
                 CustomerId = o.CustomerId, CreatedAt = now, UpdatedAt = now, LastContactAt = now,
             };
             db.Leads.Add(lead);
@@ -428,15 +428,16 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
                 db.Entry(lead).State = EntityState.Detached;
                 lead = await db.Leads.FirstAsync(l => l.Phone == norm);
             }
-            if (lead.Status == LeadStatuses.Converted && lead.SourceDetail == $"Order {o.Id}")
-                db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, ToStatus = LeadStatuses.Converted, Note = $"Customer placed order {o.Id}", CreatedAt = now });
+            if (lead.Status == LeadStatus.Converted && lead.SourceDetail == $"Order {o.Id}")
+                db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, ToStatus = LeadStatus.Converted, Note = $"Customer placed order {o.Id}", CreatedAt = now });
         }
         else
         {
-            if (lead.Status != LeadStatuses.Converted)
+            if (lead.Status != LeadStatus.Converted)
             {
-                db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, FromStatus = lead.Status, ToStatus = LeadStatuses.Converted, Note = $"Customer placed order {o.Id}", CreatedAt = now });
-                lead.Status = LeadStatuses.Converted;
+                LeadStatus? fromStatus = Enum.IsDefined(lead.Status) ? lead.Status : null;
+                db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, FromStatus = fromStatus, ToStatus = LeadStatus.Converted, Note = $"Customer placed order {o.Id}", CreatedAt = now });
+                lead.Status = LeadStatus.Converted;
                 lead.ConvertedAt ??= now;
                 lead.UpdatedAt = now;
             }
@@ -478,15 +479,16 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
 
     public async Task<bool> ChangeStatusAsync(long id, string status, string? note, string changedBy)
     {
-        if (!LeadStatuses.All.Contains(status)) return false;
+        if (!LeadStatuses.TryParse(status, out var nextStatus)) return false;
         var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == id);
-        if (lead is null || StatusBlock(lead, status) is not null) return false;
-        if (lead.Status == status && string.IsNullOrWhiteSpace(note)) return true;
+        if (lead is null || StatusBlock(lead, nextStatus.ToCode()) is not null) return false;
+        if (lead.Status == nextStatus && string.IsNullOrWhiteSpace(note)) return true;
 
-        db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = id, FromStatus = lead.Status, ToStatus = status, Note = Truncate(note, 500), ChangedBy = changedBy });
-        lead.Status = status;
+        LeadStatus? fromStatus = Enum.IsDefined(lead.Status) ? lead.Status : null;
+        db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = id, FromStatus = fromStatus, ToStatus = nextStatus, Note = Truncate(note, 500), ChangedBy = changedBy });
+        lead.Status = nextStatus;
         lead.UpdatedAt = DateTime.UtcNow;
-        lead.ConvertedAt = status == LeadStatuses.Converted ? lead.ConvertedAt ?? DateTime.UtcNow : null;
+        lead.ConvertedAt = nextStatus == LeadStatus.Converted ? lead.ConvertedAt ?? DateTime.UtcNow : null;
         await db.SaveChangesAsync();
         return true;
     }

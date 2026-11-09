@@ -91,7 +91,7 @@ public sealed class ShadowfaxTrackingProcessor(NuraDbContext db, OrderOperationL
             if (mapped.Status == "DELIVERED")
             {
                 order.DeliveredAt ??= time ?? DateTime.UtcNow;
-                if (order.PaymentMethod == "COD") order.PaymentStatus = "COD_COLLECTED";
+                if (order.PaymentMethod == OrderPaymentMethod.Cod) order.PaymentStatus = OrderPaymentStatus.CodCollected;
             }
             if (mapped.Status == "CANCELLED") order.ShippingLabelUrl = null;
         }

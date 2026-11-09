@@ -183,23 +183,111 @@ public class RightsPresetDto
 // Task management
 // ---------------------------------------------------------------------------
 
+public enum WorkTaskStatus
+{
+    Todo = 1,
+    InProgress = 2,
+    Blocked = 3,
+    Done = 4,
+}
+
 public static class TaskStatuses
 {
     public const string Todo = "todo", InProgress = "in_progress", Blocked = "blocked", Done = "done";
     public static readonly string[] All = [Todo, InProgress, Blocked, Done];
     public static string Label(string s) => s switch { Todo => "To do", InProgress => "In progress", Blocked => "Blocked", Done => "Done", _ => s };
+    public static string Label(WorkTaskStatus s) => Label(s.ToCode());
+
+    public static string ToCode(this WorkTaskStatus status) => status switch
+    {
+        WorkTaskStatus.Todo => Todo,
+        WorkTaskStatus.InProgress => InProgress,
+        WorkTaskStatus.Blocked => Blocked,
+        WorkTaskStatus.Done => Done,
+        _ => Todo,
+    };
+
+    public static bool TryParse(string? value, out WorkTaskStatus status)
+    {
+        switch (value?.Trim().ToLowerInvariant())
+        {
+            case Todo: status = WorkTaskStatus.Todo; return true;
+            case InProgress: status = WorkTaskStatus.InProgress; return true;
+            case Blocked: status = WorkTaskStatus.Blocked; return true;
+            case Done: status = WorkTaskStatus.Done; return true;
+            default: status = default; return false;
+        }
+    }
+}
+
+public enum WorkTaskPriority
+{
+    Low = 1,
+    Normal = 2,
+    High = 3,
+    Urgent = 4,
 }
 
 public static class TaskPriorities
 {
     public const string Low = "low", Normal = "normal", High = "high", Urgent = "urgent";
     public static readonly string[] All = [Low, Normal, High, Urgent];
+
+    public static string ToCode(this WorkTaskPriority priority) => priority switch
+    {
+        WorkTaskPriority.Low => Low,
+        WorkTaskPriority.Normal => Normal,
+        WorkTaskPriority.High => High,
+        WorkTaskPriority.Urgent => Urgent,
+        _ => Normal,
+    };
+
+    public static bool TryParse(string? value, out WorkTaskPriority priority)
+    {
+        switch (value?.Trim().ToLowerInvariant())
+        {
+            case Low: priority = WorkTaskPriority.Low; return true;
+            case Normal: priority = WorkTaskPriority.Normal; return true;
+            case High: priority = WorkTaskPriority.High; return true;
+            case Urgent: priority = WorkTaskPriority.Urgent; return true;
+            default: priority = default; return false;
+        }
+    }
+}
+
+public enum WorkTaskRepeat
+{
+    None = 1,
+    Daily = 2,
+    Weekly = 3,
+    Monthly = 4,
 }
 
 public static class TaskRepeats
 {
     public const string None = "none", Daily = "daily", Weekly = "weekly", Monthly = "monthly";
     public static readonly string[] All = [None, Daily, Weekly, Monthly];
+
+    public static string ToCode(this WorkTaskRepeat repeat) => repeat switch
+    {
+        WorkTaskRepeat.None => None,
+        WorkTaskRepeat.Daily => Daily,
+        WorkTaskRepeat.Weekly => Weekly,
+        WorkTaskRepeat.Monthly => Monthly,
+        _ => None,
+    };
+
+    public static bool TryParse(string? value, out WorkTaskRepeat repeat)
+    {
+        switch (value?.Trim().ToLowerInvariant())
+        {
+            case None: repeat = WorkTaskRepeat.None; return true;
+            case Daily: repeat = WorkTaskRepeat.Daily; return true;
+            case Weekly: repeat = WorkTaskRepeat.Weekly; return true;
+            case Monthly: repeat = WorkTaskRepeat.Monthly; return true;
+            default: repeat = default; return false;
+        }
+    }
 }
 
 public class TaskDto

@@ -32,7 +32,7 @@ public class CalculatedTotals
 public class ProductService(NuraDbContext db, IOptions<StoreOptions> store)
 {
     public async Task<List<Product>> ListActiveAsync() =>
-        await db.Products.AsNoTracking().Where(p => p.Status == "active").OrderBy(p => p.Price).ToListAsync();
+        await db.Products.AsNoTracking().Where(p => p.Status == ProductStatus.Active).OrderBy(p => p.Price).ToListAsync();
 
     public Task<Product?> GetAsync(string id) => db.Products.FirstOrDefaultAsync(p => p.Id == id);
 
@@ -49,7 +49,7 @@ public class ProductService(NuraDbContext db, IOptions<StoreOptions> store)
             return new CouponResult { Valid = false, Message = $"Coupon requires minimum order of ₹{coupon.MinOrderAmount:0}" };
 
         decimal discount;
-        if (coupon.DiscountType == "PERCENTAGE")
+        if (coupon.DiscountType == CouponDiscountType.Percentage)
         {
             discount = Math.Round(subtotal * coupon.DiscountValue / 100m, 0, MidpointRounding.AwayFromZero);
             if (coupon.MaxDiscountCap > 0 && discount > coupon.MaxDiscountCap) discount = coupon.MaxDiscountCap;
@@ -73,7 +73,7 @@ public class ProductService(NuraDbContext db, IOptions<StoreOptions> store)
         {
             var qty = Math.Max(1, line.Quantity);
             var product = await GetAsync(line.Id) ?? throw new InvalidOperationException($"Product not found: {line.Id}");
-            if (product.Status != "active") throw new InvalidOperationException($"{product.Name} is no longer available.");
+            if (product.Status != ProductStatus.Active) throw new InvalidOperationException($"{product.Name} is no longer available.");
             if (product.StockQuantity < qty)
                 throw new InvalidOperationException($"Insufficient stock for {product.Name}. Available: {product.StockQuantity}");
 

@@ -95,24 +95,24 @@ public static class ChangedByChecks
         var signer = new MediaSigner(Options.Create(new JwtOptions { Secret = new string('k', 40) }));
         var fuSvc = new FollowUpService(db, leads, whatsapp, Options.Create(new FollowUpOptions()), storeOptions, NullLogger<FollowUpService>.Instance, waOptions, templates);
 
-        var mansoor = new Employee { Name = "mansoor", Email = "mansoor@nuraherbex.com", Role = EmployeeRoles.Sales, IsActive = true, WhatsAppActive = true, LastSeenAt = DateTime.UtcNow };
-        var adminEmp = new Employee { Name = "Priya Admin", Email = "priya.admin@nuraherbex.com", Role = EmployeeRoles.Admin, IsActive = true, WhatsAppActive = false, LastSeenAt = DateTime.UtcNow };
-        var karthik = new Employee { Name = "Karthik", Email = "karthik@nuraherbex.com", Role = EmployeeRoles.Sales, IsActive = true, WhatsAppActive = true, LastSeenAt = DateTime.UtcNow };
+        var mansoor = new Employee { Name = "mansoor", Email = "mansoor@nuraherbex.com", Role = EmployeeRole.Sales, IsActive = true, WhatsAppActive = true, LastSeenAt = DateTime.UtcNow };
+        var adminEmp = new Employee { Name = "Priya Admin", Email = "priya.admin@nuraherbex.com", Role = EmployeeRole.Admin, IsActive = true, WhatsAppActive = false, LastSeenAt = DateTime.UtcNow };
+        var karthik = new Employee { Name = "Karthik", Email = "karthik@nuraherbex.com", Role = EmployeeRole.Sales, IsActive = true, WhatsAppActive = true, LastSeenAt = DateTime.UtcNow };
         db.Employees.AddRange(mansoor, adminEmp, karthik);
         await db.SaveChangesAsync();
 
-        var lead1 = new Lead { Name = "Asha", Phone = "919900000001", Status = LeadStatuses.New, AssignedToEmployeeId = mansoor.Id };
-        var lead2 = new Lead { Name = "Bala", Phone = "919900000002", Status = LeadStatuses.New, AssignedToEmployeeId = null };
-        var lead3 = new Lead { Name = "Chitra", Phone = "919900000003", Status = LeadStatuses.New, AssignedToEmployeeId = mansoor.Id };
+        var lead1 = new Lead { Name = "Asha", Phone = "919900000001", Status = LeadStatus.New, AssignedToEmployeeId = mansoor.Id };
+        var lead2 = new Lead { Name = "Bala", Phone = "919900000002", Status = LeadStatus.New, AssignedToEmployeeId = null };
+        var lead3 = new Lead { Name = "Chitra", Phone = "919900000003", Status = LeadStatus.New, AssignedToEmployeeId = mansoor.Id };
         db.Leads.AddRange(lead1, lead2, lead3);
         await db.SaveChangesAsync();
 
         var staffCtrl = new StaffController(db, leads, whatsapp, orderSvc, signer, rights, NullLogger<StaffController>.Instance);
         var fuCtrl = new FollowUpController(db, fuSvc, whatsapp, rights);
 
-        var mansoorUser = EmployeePrincipal(mansoor.Id, mansoor.Name, mansoor.Email, mansoor.Role);
-        var adminEmpUser = EmployeePrincipal(adminEmp.Id, adminEmp.Name, adminEmp.Email, adminEmp.Role);
-        var karthikUser = EmployeePrincipal(karthik.Id, karthik.Name, karthik.Email, karthik.Role);
+        var mansoorUser = EmployeePrincipal(mansoor.Id, mansoor.Name, mansoor.Email, mansoor.Role.ToCode());
+        var adminEmpUser = EmployeePrincipal(adminEmp.Id, adminEmp.Name, adminEmp.Email, adminEmp.Role.ToCode());
+        var karthikUser = EmployeePrincipal(karthik.Id, karthik.Name, karthik.Email, karthik.Role.ToCode());
         var superAdminUser = SuperAdminPrincipal("admin@nuraherbex.com");
 
         // 1) Sales employee changes lead status & transfers lead
@@ -155,13 +155,15 @@ public static class ChangedByChecks
         check(fuAssign.ChangedBy == adminEmp.Id.ToString(), "ChangedBy: FollowUp Create assignment stores actor employee ID");
 
         var createdFu = await db.FollowUps.OrderByDescending(f => f.Id).FirstAsync(f => f.LeadId == lead1.Id);
+        check(createdFu.CreatedBy == adminEmp.Id.ToString(),
+            "ChangedBy: FollowUp Create stores employee ID in FollowUp.CreatedBy");
         await PrepareControllerAsync(fuCtrl, mansoorUser, scope.ServiceProvider, $"/api/admin/followups/{createdFu.Id}/complete");
         check(fuCtrl.Complete(createdFu.Id, new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.NotInterested, Note = "Not needed" }).Result is OkObjectResult,
             "ChangedBy: employee completes follow-up with outcome not-interested");
         var fuStatus = await db.LeadStatusHistory.OrderByDescending(h => h.Id).FirstAsync(h => h.LeadId == lead1.Id);
         var completedFu = await db.FollowUps.FirstAsync(f => f.Id == createdFu.Id);
-        check(fuStatus.ChangedBy == mansoor.Id.ToString() && completedFu.CompletedBy == "mansoor",
-            "ChangedBy: FollowUp Complete stores employee ID in LeadStatusHistory.ChangedBy and name in CompletedBy");
+        check(fuStatus.ChangedBy == mansoor.Id.ToString() && completedFu.CompletedBy == mansoor.Id.ToString(),
+            "ChangedBy: FollowUp Complete stores employee ID in LeadStatusHistory.ChangedBy and FollowUp.CompletedBy");
 
         // 5) Configured super-admin (no emp_id) still records configured email
         await PrepareControllerAsync(staffCtrl, superAdminUser, scope.ServiceProvider);
@@ -180,7 +182,7 @@ public static class ChangedByChecks
         check(offlineAssign.ChangedBy == "auto", "ChangedBy: sign-out preserves auto marker");
 
         // 7) LeadDetail resolves IDs dynamically, handles employee rename, missing ID -> "Former employee", and preserves system/super-admin/legacy strings
-        db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead1.Id, FromStatus = LeadStatuses.New, ToStatus = LeadStatuses.FollowUp, ChangedBy = "999999", Note = "Deleted staff", CreatedAt = DateTime.UtcNow.AddMinutes(-5) });
+        db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead1.Id, FromStatus = LeadStatus.New, ToStatus = LeadStatus.FollowUp, ChangedBy = "999999", Note = "Deleted staff", CreatedAt = DateTime.UtcNow.AddMinutes(-5) });
         db.LeadAssignmentHistory.Add(new LeadAssignmentHistory { LeadId = lead1.Id, FromEmployeeId = null, ToEmployeeId = mansoor.Id, ChangedBy = "LegacyAgent", Reason = "Old row", CreatedAt = DateTime.UtcNow.AddMinutes(-6) });
         await db.SaveChangesAsync();
 
@@ -202,6 +204,8 @@ public static class ChangedByChecks
         check(detail1.Audit.Any(a => a.Detail == "Spoke on phone" && a.Actor == "Mansoor Ali" && !a.Automatic)
             && detail1.Audit.Any(a => a.Detail != null && a.Detail.StartsWith("Employee removed") && a.Actor == "Priya Updated" && !a.Automatic),
             "ChangedBy: LeadDetail Audit on lead1 resolves employee IDs dynamically");
+        check(detail1.FollowUps.Any(f => f.Id == createdFu.Id && f.CompletedBy == "Mansoor Ali" && f.Status == FollowUpStatuses.Done && f.Source == FollowUpSources.Manual),
+            "ChangedBy: LeadDetail FollowUps resolves CompletedBy employee ID to current employee name and preserves status/source string codes");
 
         await PrepareControllerAsync(staffCtrl, superAdminUser, scope.ServiceProvider, $"/api/admin/leads/{lead2.Id}");
         var detail2 = (staffCtrl.LeadDetail(lead2.Id).Result as OkObjectResult)?.Value as LeadDetailResponse;

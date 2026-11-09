@@ -50,27 +50,27 @@ public static class AdsChecks
         check(broken is { AdId: null, Headline: null } && AdsReportService.ParseReferral("") is null && AdsReportService.ParseReferral(null) is null, "Ads: a damaged referral still counts as an ad touch, an empty one does not");
 
         // ---- data: five people around March 2026 ------------------------------------------------
-        var ownerA = new Employee { Name = "Ads Owner A", Email = "ads.a@x.test", Role = "sales" };
-        var ownerB = new Employee { Name = "Ads Owner B", Email = "ads.b@x.test", Role = "sales" };
+        var ownerA = new Employee { Name = "Ads Owner A", Email = "ads.a@x.test", Role = EmployeeRole.Sales };
+        var ownerB = new Employee { Name = "Ads Owner B", Email = "ads.b@x.test", Role = EmployeeRole.Sales };
         db.Employees.AddRange(ownerA, ownerB);
         await db.SaveChangesAsync();
 
-        Lead MakeLead(string phone, string name, string status, long? owner, DateTime? customerSince = null) => new()
+        Lead MakeLead(string phone, string name, LeadStatus status, long? owner, DateTime? customerSince = null) => new()
         {
             Phone = phone, Name = name, Status = status, AssignedToEmployeeId = owner, CustomerSince = customerSince,
             CreatedAt = new DateTime(2026, 3, 9, 9, 0, 0, DateTimeKind.Utc), LastContactAt = new DateTime(2026, 3, 22, 9, 0, 0, DateTimeKind.Utc),
         };
-        var l1 = MakeLead("919700000001", "Anita Rao", LeadStatuses.New, ownerA.Id);
-        var l2 = MakeLead("919700000002", "Bala Kumar", LeadStatuses.Converted, ownerA.Id, new DateTime(2026, 3, 15, 8, 0, 0, DateTimeKind.Utc));
-        var l3 = MakeLead("919700000003", "Chitra Devi", LeadStatuses.Interested, ownerB.Id);
-        var l4 = MakeLead("919700000004", "Dev Anand", LeadStatuses.New, null);
-        var l5 = MakeLead("919700000005", "Esha Nair", LeadStatuses.New, ownerB.Id);
-        var l6 = MakeLead("919700000006", "Farhan Ali", LeadStatuses.New, ownerB.Id);
+        var l1 = MakeLead("919700000001", "Anita Rao", LeadStatus.New, ownerA.Id);
+        var l2 = MakeLead("919700000002", "Bala Kumar", LeadStatus.Converted, ownerA.Id, new DateTime(2026, 3, 15, 8, 0, 0, DateTimeKind.Utc));
+        var l3 = MakeLead("919700000003", "Chitra Devi", LeadStatus.Interested, ownerB.Id);
+        var l4 = MakeLead("919700000004", "Dev Anand", LeadStatus.New, null);
+        var l5 = MakeLead("919700000005", "Esha Nair", LeadStatus.New, ownerB.Id);
+        var l6 = MakeLead("919700000006", "Farhan Ali", LeadStatus.New, ownerB.Id);
         db.Leads.AddRange(l1, l2, l3, l4, l5, l6);
         await db.SaveChangesAsync();
 
         string Ref(string adId, string headline, string type = "ad") => $"{{\"source_id\":\"{adId}\",\"source_type\":\"{type}\",\"source_url\":\"https://fb.me/{adId}\",\"headline\":\"{headline}\"}}";
-        LeadSourceEvent Ev(Lead l, DateTime at, string? json) => new() { LeadId = l.Id, CreatedAt = at, ReferralJson = json, Source = "whatsapp" };
+        LeadSourceEvent Ev(Lead l, DateTime at, string? json) => new() { LeadId = l.Id, CreatedAt = at, ReferralJson = json, Source = LeadSource.WhatsApp };
         db.LeadSourceEvents.AddRange(
             Ev(l1, new DateTime(2026, 3, 10, 12, 0, 0, DateTimeKind.Utc), Ref("111", "Summer Sale")),
             Ev(l1, new DateTime(2026, 3, 20, 12, 0, 0, DateTimeKind.Utc), Ref("222", "Winter Reel")), // later touch: the first one wins
@@ -79,15 +79,15 @@ public static class AdsChecks
             Ev(l4, new DateTime(2026, 3, 13, 5, 0, 0, DateTimeKind.Utc), Ref("333", "Festival Post", "post")),
             Ev(l5, new DateTime(2026, 2, 28, 5, 0, 0, DateTimeKind.Utc), Ref("111", "Summer Sale")),   // before the period
             Ev(l6, new DateTime(2026, 3, 14, 5, 0, 0, DateTimeKind.Utc), null));                         // no ad details
-        Order MakeOrder(string id, string phone, string pay, string fulfil, decimal total) => new()
+        Order MakeOrder(string id, string phone, OrderPaymentStatus pay, string fulfil, decimal total) => new()
         {
-            Id = id, CustomerName = "x", CustomerEmail = "x@x.test", CustomerPhone = phone, PaymentMethod = pay == "PAID" ? "ONLINE" : "COD", PaymentStatus = pay,
+            Id = id, CustomerName = "x", CustomerEmail = "x@x.test", CustomerPhone = phone, PaymentMethod = pay == OrderPaymentStatus.Paid ? OrderPaymentMethod.Online : OrderPaymentMethod.Cod, PaymentStatus = pay,
             FulfillmentStatus = fulfil, TotalAmount = total, CreatedAt = new DateTime(2026, 3, 16, 5, 0, 0, DateTimeKind.Utc),
         };
         db.Orders.AddRange(
-            MakeOrder("AD-O1", "9700000002", "PAID", "DELIVERED", 1000m),
-            MakeOrder("AD-O2", "919700000002", "COD_PENDING", "IN_TRANSIT", 500m),
-            MakeOrder("AD-O3", "9700000002", "PAID", "CANCELLED", 700m)); // cancelled: not revenue
+            MakeOrder("AD-O1", "9700000002", OrderPaymentStatus.Paid, "DELIVERED", 1000m),
+            MakeOrder("AD-O2", "919700000002", OrderPaymentStatus.CodPending, "IN_TRANSIT", 500m),
+            MakeOrder("AD-O3", "9700000002", OrderPaymentStatus.Paid, "CANCELLED", 700m)); // cancelled: not revenue
         await db.SaveChangesAsync();
 
         var svc = new AdsReportService(db);

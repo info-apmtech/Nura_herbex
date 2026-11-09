@@ -39,7 +39,7 @@ public partial class OrderService(
 
         var calc = await products.CalculateAsync(req.Items, req.CouponCode);
         var t = calc.Totals;
-        var isCod = string.Equals(req.PaymentMethod, "COD", StringComparison.OrdinalIgnoreCase);
+        var isCod = string.Equals(req.PaymentMethod, OrderPaymentMethods.Cod, StringComparison.OrdinalIgnoreCase);
 
         string id;
         do { id = NewOrderId(); } while (await db.Orders.AnyAsync(o => o.Id == id));
@@ -55,7 +55,7 @@ public partial class OrderService(
             },
             Items = t.Items, Subtotal = t.Subtotal, DiscountAmount = t.DiscountAmount, CouponCode = t.CouponCode,
             ShippingFee = t.ShippingFee, TaxAmount = t.TaxAmount, TotalAmount = t.FinalTotal,
-            PaymentMethod = isCod ? "COD" : "ONLINE", PaymentStatus = isCod ? "COD_PENDING" : "PENDING",
+            PaymentMethod = isCod ? OrderPaymentMethod.Cod : OrderPaymentMethod.Online, PaymentStatus = isCod ? OrderPaymentStatus.CodPending : OrderPaymentStatus.Pending,
             FulfillmentStatus = "PENDING",
             ParcelWeightKg = calc.Parcel.WeightKg, ParcelLengthCm = calc.Parcel.LengthCm,
             ParcelBreadthCm = calc.Parcel.BreadthCm, ParcelHeightCm = calc.Parcel.HeightCm,
@@ -146,9 +146,9 @@ public partial class OrderService(
     public async Task<Order> MarkPaidAsync(string orderId, string? paymentRef, string? txnId, string rawGatewayJson)
     {
         var order = await GetAsync(orderId) ?? throw new InvalidOperationException($"Order {orderId} not found");
-        if (order.PaymentStatus == "PAID") return order;
+        if (order.PaymentStatus == OrderPaymentStatus.Paid) return order;
 
-        order.PaymentStatus = "PAID";
+        order.PaymentStatus = OrderPaymentStatus.Paid;
         order.DeliveryStatus = "Order Confirmed";
         order.PaymentRef = paymentRef;
         order.PayuTxnId = txnId;
@@ -182,7 +182,7 @@ public partial class OrderService(
         order.DeliveredAt = DateTime.UtcNow;
         order.FulfillmentStatus = "DELIVERED";
         order.DeliveryStatus = "Delivered";
-        if (order.PaymentMethod == "COD") order.PaymentStatus = "COD_COLLECTED";
+        if (order.PaymentMethod == OrderPaymentMethod.Cod) order.PaymentStatus = OrderPaymentStatus.CodCollected;
         order.UpdatedAt = DateTime.UtcNow;
         order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto { Status = "Delivered to Recipient", Time = Mapping.TimelineStamp(), Done = true, Active = true }];
         await db.SaveChangesAsync();
@@ -205,7 +205,7 @@ public partial class OrderService(
             throw new InvalidOperationException("A cancelled, returned, or delivered order cannot be booked.");
         if (order.FulfillmentReadyAt is null)
             throw new InvalidOperationException("Mark the parcel as packed before booking pickup.");
-        if (order.PaymentStatus != "PAID" && !(order.PaymentMethod == "COD" && order.PaymentStatus == "COD_PENDING"))
+        if (order.PaymentStatus != OrderPaymentStatus.Paid && !(order.PaymentMethod == OrderPaymentMethod.Cod && order.PaymentStatus == OrderPaymentStatus.CodPending))
             throw new InvalidOperationException("Cannot ship an unpaid online order. Verify payment first.");
         if (!string.IsNullOrWhiteSpace(order.ShiprocketAwb) && !order.ShiprocketAwb.StartsWith("SR-PENDING-") && order.FulfillmentStatus != "CANCELLED")
             return new ShiprocketResult { Success = true, ShiprocketAwb = order.ShiprocketAwb, ShiprocketOrderId = order.ShiprocketOrderId ?? "", ShiprocketShipmentId = order.ShiprocketShipmentId ?? "", ShiprocketCourier = order.ShiprocketCourier ?? "", DeliveryStatus = order.DeliveryStatus };
@@ -312,11 +312,11 @@ public partial class OrderService(
             catch (Exception ex) { throw new InvalidOperationException($"The courier could not cancel the shipment right now ({ex.Message}). Please try again shortly."); }
         }
 
-        var stockWasTaken = order.PaymentStatus is "PAID" or "COD_PENDING" or "COD_COLLECTED";
+        var stockWasTaken = order.PaymentStatus is OrderPaymentStatus.Paid or OrderPaymentStatus.CodPending or OrderPaymentStatus.CodCollected;
         if (stockWasTaken) await products.RestoreStockAsync(order);
-        var refund = order.PaymentStatus == "PAID";
-        if (refund) order.PaymentStatus = "REFUND_PENDING";
-        else if (order.PaymentStatus is "COD_PENDING" or "COD_COLLECTED") order.PaymentStatus = "CANCELLED";
+        var refund = order.PaymentStatus == OrderPaymentStatus.Paid;
+        if (refund) order.PaymentStatus = OrderPaymentStatus.RefundPending;
+        else if (order.PaymentStatus is OrderPaymentStatus.CodPending or OrderPaymentStatus.CodCollected) order.PaymentStatus = OrderPaymentStatus.Cancelled;
 
         order.FulfillmentStatus = "CANCELLED";
         order.DeliveryStatus = "Order Cancelled";
@@ -338,8 +338,8 @@ public partial class OrderService(
         await using var lease = await operationLock.AcquireAsync(orderId);
         db.ChangeTracker.Clear();
         var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
-        if (order.PaymentStatus != "REFUND_PENDING") throw new InvalidOperationException("This order has no refund waiting.");
-        order.PaymentStatus = "REFUNDED";
+        if (order.PaymentStatus != OrderPaymentStatus.RefundPending) throw new InvalidOperationException("This order has no refund waiting.");
+        order.PaymentStatus = OrderPaymentStatus.Refunded;
         order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto { Status = "Refund completed", Time = Mapping.TimelineStamp(), Done = true }];
         order.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
@@ -354,8 +354,8 @@ public partial class OrderService(
         await using var lease = await operationLock.AcquireAsync(orderId);
         db.ChangeTracker.Clear();
         var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
-        if (order.PaymentStatus == "REFUND_PENDING") throw new InvalidOperationException("Refund the customer and press Mark refunded before deleting this order.");
-        var neverPaid = order.PaymentMethod != "COD" && order.PaymentStatus != "PAID";
+        if (order.PaymentStatus == OrderPaymentStatus.RefundPending) throw new InvalidOperationException("Refund the customer and press Mark refunded before deleting this order.");
+        var neverPaid = order.PaymentMethod != OrderPaymentMethod.Cod && order.PaymentStatus != OrderPaymentStatus.Paid;
         if (order.FulfillmentStatus is not ("CANCELLED" or "RTO") && !neverPaid)
             throw new InvalidOperationException("Cancel the order first, then delete it.");
         db.Payments.RemoveRange(db.Payments.Where(p => p.OrderId == orderId));
@@ -370,7 +370,7 @@ public partial class OrderService(
         db.ChangeTracker.Clear();
         var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
         if (order.FulfillmentStatus != "PENDING") throw new InvalidOperationException("Only a pending order can be marked packed.");
-        if (order.PaymentStatus != "PAID" && !(order.PaymentMethod == "COD" && order.PaymentStatus == "COD_PENDING"))
+        if (order.PaymentStatus != OrderPaymentStatus.Paid && !(order.PaymentMethod == OrderPaymentMethod.Cod && order.PaymentStatus == OrderPaymentStatus.CodPending))
             throw new InvalidOperationException("Verify payment before packing the order.");
         if (parcel is not null)
         {

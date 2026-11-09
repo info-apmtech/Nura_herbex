@@ -49,7 +49,7 @@ public class RightsService(NuraDbContext db, IMemoryCache cache)
             .Select(e => new { e.Role, e.IsActive, e.DepartmentId, e.DesignationId }).FirstOrDefaultAsync();
         ResolvedRights result;
         if (row is null || !row.IsActive) result = ResolvedRights.Nobody;
-        else if (row.Role == EmployeeRoles.Admin)
+        else if (row.Role == EmployeeRole.Admin)
         {
             var dName = row.DesignationId is { } did ? await db.Designations.AsNoTracking().Where(d => d.Id == did).Select(d => d.Name).FirstOrDefaultAsync() : null;
             var dep = row.DepartmentId is { } pid ? await db.Departments.AsNoTracking().Where(d => d.Id == pid).Select(d => d.Name).FirstOrDefaultAsync() : null;
@@ -74,7 +74,7 @@ public class RightsService(NuraDbContext db, IMemoryCache cache)
         var rows = await db.Employees.AsNoTracking().Where(e => e.IsActive).Select(e => new { e.Id, e.Role, e.DesignationId }).ToListAsync();
         var json = await db.Designations.AsNoTracking().ToDictionaryAsync(d => d.Id, d => d.RightsJson);
         return rows.Where(e =>
-            e.Role == EmployeeRoles.Admin ? includeAdmins
+            e.Role == EmployeeRole.Admin ? includeAdmins
             : (e.DesignationId is { } id && json.TryGetValue(id, out var j) ? PageCatalog.LevelFrom(j, page) : PageCatalog.DefaultStaff.GetValueOrDefault(page)) >= minLevel)
             .Select(e => e.Id).ToList();
     }

@@ -111,10 +111,10 @@ public static class DbSeeder
         if (!await db.Coupons.AnyAsync())
         {
             db.Coupons.AddRange(
-                new Coupon { Code = "STAMIX10", DiscountType = "PERCENTAGE", DiscountValue = 10, MinOrderAmount = 0, MaxDiscountCap = 500 },
-                new Coupon { Code = "SAVE10", DiscountType = "PERCENTAGE", DiscountValue = 10, MinOrderAmount = 0, MaxDiscountCap = 500 },
-                new Coupon { Code = "STAMIX20", DiscountType = "PERCENTAGE", DiscountValue = 20, MinOrderAmount = 3000, MaxDiscountCap = 1500 },
-                new Coupon { Code = "WELCOME20", DiscountType = "PERCENTAGE", DiscountValue = 20, MinOrderAmount = 3000, MaxDiscountCap = 1500 });
+                new Coupon { Code = "STAMIX10", DiscountType = CouponDiscountType.Percentage, DiscountValue = 10, MinOrderAmount = 0, MaxDiscountCap = 500 },
+                new Coupon { Code = "SAVE10", DiscountType = CouponDiscountType.Percentage, DiscountValue = 10, MinOrderAmount = 0, MaxDiscountCap = 500 },
+                new Coupon { Code = "STAMIX20", DiscountType = CouponDiscountType.Percentage, DiscountValue = 20, MinOrderAmount = 3000, MaxDiscountCap = 1500 },
+                new Coupon { Code = "WELCOME20", DiscountType = CouponDiscountType.Percentage, DiscountValue = 20, MinOrderAmount = 3000, MaxDiscountCap = 1500 });
         }
 
         // Off by default so a fresh install shows exactly what the React storefront shows (no batches until you add one in Admin).

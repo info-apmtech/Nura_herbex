@@ -39,11 +39,11 @@ public class StaffAvailability(NuraDbContext db)
     public async Task<Dictionary<long, int>> WorkloadAsync()
     {
         var todayStart = FollowUpService.TodayStartUtc();
-        var leads = await db.Leads.AsNoTracking().Where(l => l.AssignedToEmployeeId != null && l.Status != LeadStatuses.Converted && l.Status != LeadStatuses.NotInterested)
+        var leads = await db.Leads.AsNoTracking().Where(l => l.AssignedToEmployeeId != null && l.Status != LeadStatus.Converted && l.Status != LeadStatus.NotInterested)
             .GroupBy(l => l.AssignedToEmployeeId!.Value).Select(g => new { g.Key, N = g.Count() }).ToListAsync();
-        var tasks = await db.WorkTasks.AsNoTracking().Where(t => t.AssignedToEmployeeId != null && t.Status != TaskStatuses.Done)
+        var tasks = await db.WorkTasks.AsNoTracking().Where(t => t.AssignedToEmployeeId != null && t.Status != WorkTaskStatus.Done)
             .GroupBy(t => t.AssignedToEmployeeId!.Value).Select(g => new { g.Key, N = g.Count() }).ToListAsync();
-        var late = await db.FollowUps.AsNoTracking().Where(f => f.Status == "pending" && f.DueAt < todayStart && f.AssignedToEmployeeId != null)
+        var late = await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Pending && f.DueAt < todayStart && f.AssignedToEmployeeId != null)
             .GroupBy(f => f.AssignedToEmployeeId!.Value).Select(g => new { g.Key, N = g.Count() }).ToListAsync();
         var load = new Dictionary<long, int>();
         foreach (var x in leads) load[x.Key] = load.GetValueOrDefault(x.Key) + x.N;
@@ -73,7 +73,7 @@ public class StaffAvailability(NuraDbContext db)
     {
         var rights = await db.Designations.AsNoTracking().ToDictionaryAsync(d => d.Id, d => d.RightsJson);
         var cutoff = OnlineCutoff();
-        var staff = await db.Employees.Where(e => e.IsActive && e.Role == EmployeeRoles.Sales && e.Id != excludeId && e.LastSeenAt != null && e.LastSeenAt >= cutoff && (!whatsAppOnly || e.WhatsAppActive)
+        var staff = await db.Employees.Where(e => e.IsActive && e.Role == EmployeeRole.Sales && e.Id != excludeId && e.LastSeenAt != null && e.LastSeenAt >= cutoff && (!whatsAppOnly || e.WhatsAppActive)
             && (departmentId == null || e.DepartmentId == departmentId)).ToListAsync();
         return staff
             .Where(e => (e.DesignationId is { } id && rights.TryGetValue(id, out var json) ? PageCatalog.LevelFrom(json, page) : PageCatalog.DefaultStaff.GetValueOrDefault(page)) >= PageCatalog.Limited)

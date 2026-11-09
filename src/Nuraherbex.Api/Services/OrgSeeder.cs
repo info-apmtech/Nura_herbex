@@ -45,7 +45,7 @@ public static class OrgSeeder
 
             foreach (var e in await db.Employees.Where(e => e.DesignationId == null).ToListAsync())
             {
-                if (e.Role == EmployeeRoles.Admin) { e.DesignationId = admin.Id; e.DepartmentId ??= mgmt.Id; }
+                if (e.Role == EmployeeRole.Admin) { e.DesignationId = admin.Id; e.DepartmentId ??= mgmt.Id; }
                 else { e.DesignationId = exec.Id; e.DepartmentId ??= sales.Id; }
             }
             await db.SaveChangesAsync();
