@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Nuraherbex.Api.Data;
 using Nuraherbex.Api.Options;
+using Nuraherbex.Shared.Models;
 
 namespace Nuraherbex.Api.Services;
 
@@ -25,7 +26,7 @@ public class EmailService(HttpClient http, IOptions<EmailOptions> email, IOption
             <p style="color:#c9bfe0;margin:0 0 20px">Thank you for choosing Stamix™. Your order <b style="color:#fff3bf">{H(o.Id)}</b> has been received.</p>
             <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #2b1f44;border-bottom:1px solid #2b1f44">{rows}
               <tr><td style="padding:8px 0;color:#9d90bd">Shipping</td><td align="right" style="color:#9d90bd">{(o.ShippingFee == 0 ? "FREE" : $"₹{o.ShippingFee:N0}")}</td></tr>
-              <tr><td style="padding:8px 0;color:#fff;font-weight:bold">Total ({H(o.PaymentMethod == "COD" ? "Cash on Delivery" : "Paid online")})</td><td align="right" style="color:#fff3bf;font-weight:bold">₹{o.TotalAmount:N0}</td></tr>
+              <tr><td style="padding:8px 0;color:#fff;font-weight:bold">Total ({H(o.PaymentMethod == OrderPaymentMethod.Cod ? "Cash on Delivery" : "Paid online")})</td><td align="right" style="color:#fff3bf;font-weight:bold">₹{o.TotalAmount:N0}</td></tr>
             </table>
             <p style="color:#c9bfe0;margin:20px 0 4px">Delivering to:</p>
             <p style="color:#fff;margin:0">{H(o.ShippingAddress.AddressLine1)} {H(o.ShippingAddress.AddressLine2)}, {H(o.ShippingAddress.City)}, {H(o.ShippingAddress.State)} – {H(o.ShippingAddress.Pincode)}</p>
@@ -120,7 +121,7 @@ public class EmailService(HttpClient http, IOptions<EmailOptions> email, IOption
     /// <summary>Order or shipment cancelled (admin, courier or customer).</summary>
     public async Task<bool> SendOrderCancelledAsync(Order o, string? reason = null)
     {
-        var charged = o.PaymentStatus is "PAID" or "COD_COLLECTED";
+        var charged = o.PaymentStatus is OrderPaymentStatus.Paid or OrderPaymentStatus.CodCollected;
         var paymentLine = charged
             ? "You have already paid for this order — our support team will process the refund against this order number."
             : "No payment has been taken for this order.";

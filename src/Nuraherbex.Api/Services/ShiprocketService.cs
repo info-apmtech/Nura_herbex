@@ -62,7 +62,7 @@ public class ShiprocketService(HttpClient http, IOptions<ShiprocketOptions> opti
 
     public async Task<ShiprocketResult> CreateOrderAsync(Order order, ParcelSpecs parcel)
     {
-        var isCod = order.PaymentMethod == "COD";
+        var isCod = order.PaymentMethod == OrderPaymentMethod.Cod;
         var token = await GetTokenAsync();
 
         if (token is null)

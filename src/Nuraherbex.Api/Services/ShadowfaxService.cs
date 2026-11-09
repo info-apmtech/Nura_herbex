@@ -26,7 +26,7 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
             throw new InvalidOperationException("Shadowfax live shipping is selected, but the pickup address is missing. Configure Shadowfax:Pickup with Name, Contact, AddressLine1, City, and Pincode in appsettings.Local.json.");
 
         var warehouse = _o.OrderType.Equals("warehouse", StringComparison.OrdinalIgnoreCase);
-        var isCod = order.PaymentMethod == "COD";
+        var isCod = order.PaymentMethod == OrderPaymentMethod.Cod;
         var ship = order.ShippingAddress;
         var ret = _o.Return.IsComplete ? _o.Return : _o.Pickup;
         ValidateAddress(_o.Pickup, "pickup", requireContact: !warehouse);

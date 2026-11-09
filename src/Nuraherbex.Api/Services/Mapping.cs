@@ -10,7 +10,7 @@ public static class Mapping
         Id = p.Id, Sku = p.Sku, Name = p.Name, Subtitle = p.Subtitle, Description = p.Description,
         Price = p.Price, CompareAtPrice = p.CompareAtPrice, StockQuantity = p.StockQuantity,
         WeightKg = p.WeightKg, LengthCm = p.LengthCm, BreadthCm = p.BreadthCm, HeightCm = p.HeightCm,
-        HsnCode = p.HsnCode, ImageUrl = p.ImageUrl, Status = p.Status,
+        HsnCode = p.HsnCode, ImageUrl = p.ImageUrl, Status = p.Status.ToCode(),
         Category = p.Category, ShortName = p.ShortName, Badge = p.Badge, Highlights = p.Highlights, Ingredients = p.Ingredients, Directions = p.Directions, ServingInfo = p.ServingInfo,
     };
 
@@ -20,7 +20,7 @@ public static class Mapping
         CustomerName = o.CustomerName, CustomerEmail = o.CustomerEmail, CustomerPhone = o.CustomerPhone, CustomerId = o.CustomerId,
         ShippingAddress = o.ShippingAddress, Items = o.Items,
         Subtotal = o.Subtotal, DiscountAmount = o.DiscountAmount, ShippingFee = o.ShippingFee, TaxAmount = o.TaxAmount, TotalAmount = o.TotalAmount,
-        CouponCode = o.CouponCode, PaymentMethod = o.PaymentMethod, PaymentStatus = o.PaymentStatus, PaymentRef = o.PaymentRef, PayuTxnId = o.PayuTxnId,
+        CouponCode = o.CouponCode, PaymentMethod = o.PaymentMethod.ToCode(), PaymentStatus = o.PaymentStatus.ToCode(), PaymentRef = o.PaymentRef, PayuTxnId = o.PayuTxnId,
         ParcelWeightKg = o.ParcelWeightKg, ParcelLengthCm = o.ParcelLengthCm, ParcelBreadthCm = o.ParcelBreadthCm, ParcelHeightCm = o.ParcelHeightCm,
         FulfillmentReadyAt = o.FulfillmentReadyAt, ShipmentBookedAt = o.ShipmentBookedAt, PickedUpAt = o.PickedUpAt, DeliveredAt = o.DeliveredAt,
         LastShippingEventAt = o.LastShippingEventAt, FulfillmentStatus = o.FulfillmentStatus, Courier = o.Courier, ShiprocketOrderId = o.ShiprocketOrderId, ShiprocketShipmentId = o.ShiprocketShipmentId,
@@ -75,26 +75,33 @@ public static class Mapping
         "location" => "Location", "contacts" => "Contact", "unsupported" => "Unsupported message", _ => $"[{type}]",
     };
 
-    public static FollowUpDto ToDto(this FollowUp f, string leadName, string leadPhone, string? ownerName) => new()
+    public static string? ResolveActor(string? who, IReadOnlyDictionary<long, string> names) =>
+        string.IsNullOrEmpty(who) ? null
+        : long.TryParse(who, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id)
+            ? names.GetValueOrDefault(id) ?? "Former employee"
+        : who;
+
+    public static FollowUpDto ToDto(this FollowUp f, string leadName, string leadPhone, string? ownerName, IReadOnlyDictionary<long, string>? employeeNames = null) => new()
     {
         Id = f.Id, LeadId = f.LeadId, LeadName = leadName, LeadPhone = leadPhone, OrderId = f.OrderId,
         AssignedToEmployeeId = f.AssignedToEmployeeId, AssignedToName = ownerName, Type = f.Type, Title = f.Title, Notes = f.Notes,
-        SuggestedMessage = f.SuggestedMessage, DueAt = f.DueAt, Status = f.Status, Outcome = f.Outcome, CompletedAt = f.CompletedAt,
-        CompletedBy = f.CompletedBy, Source = f.Source, StepKey = f.StepKey, RemindAt = f.RemindAt, CreatedAt = f.CreatedAt,
-        IsOverdue = f.Status == "pending" && f.DueAt < FollowUpService.TodayStartUtc(),
-        CanMessage = f.Status == "pending" && !string.IsNullOrWhiteSpace(f.SuggestedMessage),
+        SuggestedMessage = f.SuggestedMessage, DueAt = f.DueAt, Status = f.Status.ToCode(), Outcome = f.Outcome, CompletedAt = f.CompletedAt,
+        CompletedBy = employeeNames is null ? f.CompletedBy : ResolveActor(f.CompletedBy, employeeNames),
+        Source = f.Source.ToCode(), StepKey = f.StepKey, RemindAt = f.RemindAt, CreatedAt = f.CreatedAt,
+        IsOverdue = f.Status == FollowUpStatus.Pending && f.DueAt < FollowUpService.TodayStartUtc(),
+        CanMessage = f.Status == FollowUpStatus.Pending && !string.IsNullOrWhiteSpace(f.SuggestedMessage),
     };
 
     public static EmployeeDto ToDto(this Employee e) => new()
     {
-        Id = e.Id, Name = e.Name, Email = e.Email, Phone = e.Phone, Role = e.Role, IsActive = e.IsActive,
+        Id = e.Id, Name = e.Name, Email = e.Email, Phone = e.Phone, Role = e.Role.ToCode(), IsActive = e.IsActive,
         CreatedAt = e.CreatedAt, LastLoginAt = e.LastLoginAt, IsOnline = StaffAvailability.IsOnline(e), WhatsAppActive = e.WhatsAppActive, DepartmentId = e.DepartmentId, DesignationId = e.DesignationId,
     };
 
     public static LeadDto ToDto(this Lead l, Conversation? c = null) => new()
     {
-        Id = l.Id, Name = l.Name, Phone = l.Phone, Email = l.Email, Source = l.Source, SourceDetail = l.SourceDetail,
-        Status = l.Status, ConsentStatus = l.ConsentStatus, FirstMessage = l.FirstMessage, Notes = l.Notes, CustomerId = l.CustomerId,
+        Id = l.Id, Name = l.Name, Phone = l.Phone, Email = l.Email, Source = l.Source.ToCode(), SourceDetail = l.SourceDetail,
+        Status = l.Status.ToCode(), ConsentStatus = l.ConsentStatus, FirstMessage = l.FirstMessage, Notes = l.Notes, CustomerId = l.CustomerId,
         UnreadCount = c?.UnreadCount ?? 0, ServiceWindowExpiresAt = c?.ServiceWindowExpiresAt,
         CreatedAt = l.CreatedAt, LastContactAt = l.LastContactAt, ConvertedAt = l.ConvertedAt,
         AssignedToEmployeeId = l.AssignedToEmployeeId, AssignedAt = l.AssignedAt,

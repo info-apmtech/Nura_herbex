@@ -37,23 +37,23 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
         var recentDone = FollowUpService.Clock().AddDays(-30);
         var counts = new FollowUpCounts
         {
-            Overdue = await q.CountAsync(f => f.Status == "pending" && f.DueAt < today),
-            Today = await q.CountAsync(f => f.Status == "pending" && f.DueAt >= today && f.DueAt < tomorrow),
-            Upcoming = await q.CountAsync(f => f.Status == "pending" && f.DueAt >= tomorrow),
-            Done = await q.CountAsync(f => f.Status != "pending" && f.CompletedAt >= recentDone),
-            Messages = await q.CountAsync(f => f.Status == "pending" && f.DueAt < tomorrow && f.SuggestedMessage != null && f.SuggestedMessage != ""),
-            Sent = await q.CountAsync(f => f.Status == "done" && f.CompletedAt >= recentDone && f.Outcome != null && f.Outcome.StartsWith("Sent")),
+            Overdue = await q.CountAsync(f => f.Status == FollowUpStatus.Pending && f.DueAt < today),
+            Today = await q.CountAsync(f => f.Status == FollowUpStatus.Pending && f.DueAt >= today && f.DueAt < tomorrow),
+            Upcoming = await q.CountAsync(f => f.Status == FollowUpStatus.Pending && f.DueAt >= tomorrow),
+            Done = await q.CountAsync(f => f.Status != FollowUpStatus.Pending && f.CompletedAt >= recentDone),
+            Messages = await q.CountAsync(f => f.Status == FollowUpStatus.Pending && f.DueAt < tomorrow && f.SuggestedMessage != null && f.SuggestedMessage != ""),
+            Sent = await q.CountAsync(f => f.Status == FollowUpStatus.Done && f.CompletedAt >= recentDone && f.Outcome != null && f.Outcome.StartsWith("Sent")),
         };
 
         var filtered = scope switch
         {
-            "overdue" => q.Where(f => f.Status == "pending" && f.DueAt < today).OrderBy(f => f.DueAt),
-            "today" => q.Where(f => f.Status == "pending" && f.DueAt >= today && f.DueAt < tomorrow).OrderBy(f => f.DueAt),
-            "upcoming" => q.Where(f => f.Status == "pending" && f.DueAt >= tomorrow).OrderBy(f => f.DueAt),
-            "done" => q.Where(f => f.Status != "pending" && f.CompletedAt >= recentDone).OrderByDescending(f => f.CompletedAt),
-            "messages" => q.Where(f => f.Status == "pending" && f.DueAt < tomorrow && f.SuggestedMessage != null && f.SuggestedMessage != "").OrderBy(f => f.DueAt),
-            "sent" => q.Where(f => f.Status == "done" && f.CompletedAt >= recentDone && f.Outcome != null && f.Outcome.StartsWith("Sent")).OrderByDescending(f => f.CompletedAt),
-            _ => q.Where(f => f.Status == "pending").OrderBy(f => f.DueAt),
+            "overdue" => q.Where(f => f.Status == FollowUpStatus.Pending && f.DueAt < today).OrderBy(f => f.DueAt),
+            "today" => q.Where(f => f.Status == FollowUpStatus.Pending && f.DueAt >= today && f.DueAt < tomorrow).OrderBy(f => f.DueAt),
+            "upcoming" => q.Where(f => f.Status == FollowUpStatus.Pending && f.DueAt >= tomorrow).OrderBy(f => f.DueAt),
+            "done" => q.Where(f => f.Status != FollowUpStatus.Pending && f.CompletedAt >= recentDone).OrderByDescending(f => f.CompletedAt),
+            "messages" => q.Where(f => f.Status == FollowUpStatus.Pending && f.DueAt < tomorrow && f.SuggestedMessage != null && f.SuggestedMessage != "").OrderBy(f => f.DueAt),
+            "sent" => q.Where(f => f.Status == FollowUpStatus.Done && f.CompletedAt >= recentDone && f.Outcome != null && f.Outcome.StartsWith("Sent")).OrderByDescending(f => f.CompletedAt),
+            _ => q.Where(f => f.Status == FollowUpStatus.Pending).OrderBy(f => f.DueAt),
         };
         var rows = await filtered.Take(Math.Clamp(take, 1, 500)).ToListAsync();
         return new FollowUpListResponse { Success = true, Counts = counts, Items = await MapAsync(rows) };
@@ -67,7 +67,7 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
         return rows.Select(r =>
         {
             leadMap.TryGetValue(r.LeadId, out var l);
-            return r.ToDto(l?.Name ?? "Unknown lead", l?.Phone ?? "", r.AssignedToEmployeeId is { } id ? owners.GetValueOrDefault(id) : null);
+            return r.ToDto(l?.Name ?? "Unknown lead", l?.Phone ?? "", r.AssignedToEmployeeId is { } id ? owners.GetValueOrDefault(id) : null, owners);
         }).ToList();
     }
 
@@ -83,7 +83,7 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
     [HttpPost("followups")]
     public async Task<IActionResult> Create(FollowUpCreateRequest r)
     {
-        var (item, error) = await followUps.CreateManualAsync(r, MyName, CanAll("followups"), MyId);
+        var (item, error) = await followUps.CreateManualAsync(r, MyActorId, CanAll("followups"), MyId);
         if (item is null) return BadRequest(new ApiResult { Success = false, Message = error });
         return StatusCode(201, new ApiResult { Success = true, Message = $"Follow-up scheduled for {FollowUpService.FormatDue(item.DueAt)}" });
     }
@@ -93,7 +93,7 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
     {
         var item = await FindAsync(id);
         if (item is null) return NoItem();
-        var (ok, message) = await followUps.CompleteAsync(item, r, MyName, MyId);
+        var (ok, message) = await followUps.CompleteAsync(item, r, MyActorId, MyId);
         return ok ? Ok(new ApiResult { Success = true, Message = message }) : BadRequest(new ApiResult { Success = false, Message = message });
     }
 
@@ -102,7 +102,7 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
     {
         var item = await FindAsync(id);
         if (item is null) return NoItem();
-        if (item.Status != "pending") return BadRequest(new ApiResult { Success = false, Message = "This follow-up is already closed." });
+        if (item.Status != FollowUpStatus.Pending) return BadRequest(new ApiResult { Success = false, Message = "This follow-up is already closed." });
         var due = r.DueAt.Kind == DateTimeKind.Local ? r.DueAt.ToUniversalTime() : DateTime.SpecifyKind(r.DueAt, DateTimeKind.Utc);
         if (due < FollowUpService.Clock().AddMinutes(-5)) return BadRequest(new ApiResult { Success = false, Message = "Choose a time in the future." });
         if (CanAll("followups") && r.AssignedToEmployeeId is { } emp && !await _db.Employees.AnyAsync(e => e.Id == emp && e.IsActive))
@@ -117,8 +117,8 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
     {
         var item = await FindAsync(id);
         if (item is null) return NoItem();
-        if (item.Status != "pending") return BadRequest(new ApiResult { Success = false, Message = "This follow-up is already closed." });
-        item.Status = "skipped"; item.CompletedAt = FollowUpService.Clock(); item.CompletedBy = MyName; item.Outcome = "skipped";
+        if (item.Status != FollowUpStatus.Pending) return BadRequest(new ApiResult { Success = false, Message = "This follow-up is already closed." });
+        item.Status = FollowUpStatus.Skipped; item.CompletedAt = FollowUpService.Clock(); item.CompletedBy = MyActorId; item.Outcome = "skipped";
         await _db.SaveChangesAsync();
         return Ok(new ApiResult { Success = true, Message = "Follow-up skipped" });
     }
@@ -128,7 +128,7 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
     {
         var item = await FindAsync(id);
         if (item is null) return NoItem();
-        var (ok, message) = await followUps.SendNowAsync(item, MyName);
+        var (ok, message) = await followUps.SendNowAsync(item, MyName, MyActorId);
         return ok ? Ok(new ApiResult { Success = true, Message = message }) : BadRequest(new ApiResult { Success = false, Message = message });
     }
 
@@ -137,9 +137,9 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
     public async Task<IActionResult> SendDue()
     {
         var tomorrow = FollowUpService.TodayStartUtc().AddDays(1);
-        var q = _db.FollowUps.Where(f => f.Status == "pending" && f.DueAt < tomorrow);
+        var q = _db.FollowUps.Where(f => f.Status == FollowUpStatus.Pending && f.DueAt < tomorrow);
         if (!CanAll("followups")) q = q.Where(f => f.AssignedToEmployeeId == MyId);
-        var (sent, failed, skipped, message) = await followUps.SendDueAsync(q, MyName);
+        var (sent, failed, skipped, message) = await followUps.SendDueAsync(q, MyName, completedBy: MyActorId);
         return Ok(new ApiResult { Success = sent > 0 || (failed == 0 && skipped == 0), Message = message });
     }
 

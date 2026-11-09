@@ -34,7 +34,7 @@ FollowUpService.Clock = () => now;
 var ist = TimeZoneInfo.FindSystemTimeZoneById(OperatingSystem.IsWindows() ? "India Standard Time" : "Asia/Kolkata");
 DateTime Ist(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(utc, ist);
 
-db.Employees.AddRange(new Employee { Name = "Priya", Email = "p@x.test", Role = "sales", LastSeenAt = DateTime.UtcNow, WhatsAppActive = true }, new Employee { Name = "Karthik", Email = "k@x.test", Role = "sales", LastSeenAt = DateTime.UtcNow, WhatsAppActive = true });
+db.Employees.AddRange(new Employee { Name = "Priya", Email = "p@x.test", Role = EmployeeRole.Sales, LastSeenAt = DateTime.UtcNow, WhatsAppActive = true }, new Employee { Name = "Karthik", Email = "k@x.test", Role = EmployeeRole.Sales, LastSeenAt = DateTime.UtcNow, WhatsAppActive = true });
 await db.SaveChangesAsync();
 var priya = db.Employees.First(e => e.Name == "Priya").Id; var karthik = db.Employees.First(e => e.Name == "Karthik").Id;
 // Go-live was yesterday, so test orders (created "today") count.
@@ -43,7 +43,7 @@ await db.SaveChangesAsync();
 
 Order MakeOrder(string id, string phone, string fulfillment = "DELIVERED", DateTime? created = null, DateTime? updated = null, string? awb = "AWB1") => new()
 {
-    Id = id, CustomerName = "Asha Raman", CustomerEmail = "a@x.test", CustomerPhone = phone, PaymentMethod = "COD", PaymentStatus = "COD_PENDING",
+    Id = id, CustomerName = "Asha Raman", CustomerEmail = "a@x.test", CustomerPhone = phone, PaymentMethod = OrderPaymentMethod.Cod, PaymentStatus = OrderPaymentStatus.CodPending,
     FulfillmentStatus = fulfillment, DeliveredAt = fulfillment == "DELIVERED" ? now : null, CreatedAt = created ?? now.AddHours(-1), UpdatedAt = updated ?? now,
     ShiprocketAwb = awb, TotalAmount = 1000,
 };
@@ -53,10 +53,10 @@ db.Orders.Add(MakeOrder("NH-1", "9876500001"));
 await db.SaveChangesAsync();
 await svc.RunCycleAsync();
 var lead = await db.Leads.SingleAsync(l => l.Phone == "919876500001");
-Check(lead.Status == LeadStatuses.Converted && lead.Source == "website", "Delivered order creates a Converted lead");
+Check(lead.Status == LeadStatus.Converted && lead.Source == LeadSource.Website, "Delivered order creates a Converted lead");
 Check(lead.AssignedToEmployeeId is not null, "That lead is assigned to a sales employee");
 var steps = await db.FollowUps.Where(f => f.LeadId == lead.Id).OrderBy(f => f.DueAt).ToListAsync();
-Check(steps.Count == JourneyPlan.Steps.Length && steps.All(s => s.Source == "journey" && s.OrderId == "NH-1"), "Journey creates one task per step");
+Check(steps.Count == JourneyPlan.Steps.Length && steps.All(s => s.Source == FollowUpSource.Journey && s.OrderId == "NH-1"), "Journey creates one task per step");
 var day1 = steps.First(s => s.StepKey == "day1-welcome");
 Check(Ist(day1.DueAt).Date == new DateTime(2026, 10, 13) && Ist(day1.DueAt).Hour == 10, "Day 1 is due tomorrow at 10:00 IST");
 Check(Ist(steps.First(s => s.StepKey == "day10-call").DueAt).Date == new DateTime(2026, 10, 22), "Day 10 call is due 10 days after delivery");
@@ -131,33 +131,33 @@ Check(none is null && errPast is not null, "A follow-up in the past is rejected"
 var (noAccess, errOwner) = await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = lead.Id, Type = "call", DueAt = now.AddDays(1) }, "Karthik", false, karthik);
 Check(noAccess is null && errOwner == "Lead not found.", "A sales user cannot schedule on a colleague's lead");
 var fresh = await db.Leads.FirstAsync(l => l.Phone == "919876500002");
-fresh.Status = LeadStatuses.New; fresh.CustomerSince = null; fresh.AssignedToEmployeeId = priya; await db.SaveChangesAsync(); // a plain lead: customers stay customers
+fresh.Status = LeadStatus.New; fresh.CustomerSince = null; fresh.AssignedToEmployeeId = priya; await db.SaveChangesAsync(); // a plain lead: customers stay customers
 var (mine, _) = await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = fresh.Id, Type = "call", DueAt = now.AddDays(5), Notes = "Wants 3-month pack" }, "Priya", false, priya);
 Check(mine is not null && mine.RemindAt == mine.DueAt.AddDays(-2) && mine.AssignedToEmployeeId == priya, "Manual follow-up is owned by the lead owner with a 2-day reminder");
-Check((await db.Leads.FirstAsync(l => l.Id == fresh.Id)).Status == LeadStatuses.FollowUp, "Scheduling moves a new lead to Follow-up");
+Check((await db.Leads.FirstAsync(l => l.Id == fresh.Id)).Status == LeadStatus.FollowUp, "Scheduling moves a new lead to Follow-up");
 Check((await db.LeadStatusHistory.OrderByDescending(h => h.Id).FirstAsync(h => h.LeadId == fresh.Id)).ChangedBy == priya.ToString(), "Scheduling records employee id in status ChangedBy");
 
 // ---- 9. Completing ---------------------------------------------------------------------------------------------
 var (ok1, _) = await svc.CompleteAsync(await db.FollowUps.FirstAsync(f => f.Id == mine!.Id), new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.Callback }, "Priya", priya);
 Check(!ok1, "Callback without a time is rejected");
 var (ok2, msg2) = await svc.CompleteAsync(await db.FollowUps.FirstAsync(f => f.Id == mine!.Id), new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.NoAnswer }, "Priya", priya);
-var retry = await db.FollowUps.FirstOrDefaultAsync(f => f.LeadId == fresh.Id && f.Status == "pending" && f.Title.StartsWith("Retry: "));
+var retry = await db.FollowUps.FirstOrDefaultAsync(f => f.LeadId == fresh.Id && f.Status == FollowUpStatus.Pending && f.Title.StartsWith("Retry: "));
 Check(ok2 && retry is not null && retry.Title.StartsWith("Retry: ") && Ist(retry.DueAt).Date == new DateTime(2026, 10, 13) && Ist(retry.DueAt).Hour == 10, "No answer books a retry for tomorrow 10:00");
 var (ok3, _) = await svc.CompleteAsync(retry!, new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.Interested, Note = "Will order Friday" }, "Priya", priya);
-Check(ok3 && (await db.Leads.FirstAsync(l => l.Id == fresh.Id)).Status == LeadStatuses.Interested, "Outcome 'interested' updates the lead");
+Check(ok3 && (await db.Leads.FirstAsync(l => l.Id == fresh.Id)).Status == LeadStatus.Interested, "Outcome 'interested' updates the lead");
 Check((await db.LeadStatusHistory.OrderByDescending(h => h.Id).FirstAsync(h => h.LeadId == fresh.Id)).ChangedBy == priya.ToString(), "Completion status update records employee id in ChangedBy");
 var (again, _) = await svc.CompleteAsync(retry!, new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.Done }, "Priya", priya);
 Check(!again, "A closed follow-up cannot be completed twice");
 
 // finish a whole journey -> enrollment completes
-foreach (var s in await db.FollowUps.Where(f => f.EnrollmentId != null && f.OrderId == "NH-2" && f.Status == "pending").ToListAsync())
+foreach (var s in await db.FollowUps.Where(f => f.EnrollmentId != null && f.OrderId == "NH-2" && f.Status == FollowUpStatus.Pending).ToListAsync())
     await svc.CompleteAsync(s, new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.Done }, "Karthik", karthik);
 Check((await db.JourneyEnrollments.FirstAsync(e => e.OrderId == "NH-2")).Status == "completed", "Finishing every step completes the journey");
 
 // ---- 10. Automatic sending -------------------------------------------------------------------------------------
 lead = await db.Leads.FirstAsync(l => l.Id == lead.Id);
 var autoStep = await db.FollowUps.FirstAsync(f => f.Id == day3.Id);
-autoStep.Status = "pending"; autoStep.CompletedAt = null; autoStep.DueAt = now.AddHours(-1); autoStep.CompletedBy = null;
+autoStep.Status = FollowUpStatus.Pending; autoStep.CompletedAt = null; autoStep.DueAt = now.AddHours(-1); autoStep.CompletedBy = null;
 await db.SaveChangesAsync();
 await svc.RunCycleAsync();
 Check(sent.Count == 0, "Auto-send is off by default: nothing is sent");
@@ -172,17 +172,17 @@ now = new DateTime(2026, 10, 12, 5, 30, 0, DateTimeKind.Utc);
 await svc.RunCycleAsync();
 Check(sent.Count == 1 && sent[0].Contains("usage_check") && sent[0].Contains("919876500001"), "Opted-in customer receives the approved template");
 var done = await db.FollowUps.FirstAsync(f => f.Id == day3.Id);
-Check(done.Status == "done" && done.CompletedBy == "auto", "The task is closed as sent automatically");
+Check(done.Status == FollowUpStatus.Done && done.CompletedBy == "auto", "The task is closed as sent automatically");
 Check(!sent.Any(s => s.Contains("day1") || s.Contains("review")), "Steps without a template are never auto-sent");
 
 // ---- 11. Send now (employee presses Send) ----------------------------------------------------------------------
 var day7 = await db.FollowUps.FirstAsync(f => f.LeadId == lead.Id && f.StepKey == "day7-experience");
-var (closedWin, closedMsg) = await svc.SendNowAsync(day7, "Priya");
+var (closedWin, closedMsg) = await svc.SendNowAsync(day7, "Priya", priya.ToString());
 Check(!closedWin && closedMsg.Contains("24-hour"), "Send now refuses when the window is closed and no template exists");
 var convo = await db.Conversations.FirstOrDefaultAsync(c => c.LeadId == lead.Id); if (convo is null) { convo = new Conversation { LeadId = lead.Id }; db.Conversations.Add(convo); } convo.ServiceWindowExpiresAt = now.AddHours(5); convo.LastInboundAt = now;
 await db.SaveChangesAsync();
-var (okSend, sendMsg) = await svc.SendNowAsync(day7, "Priya");
-Check(okSend && sent.Count == 2 && (await db.FollowUps.FirstAsync(f => f.Id == day7.Id)).Outcome == "Sent on WhatsApp", "Send now works inside the 24-hour window");
+var (okSend, sendMsg) = await svc.SendNowAsync(day7, "Priya", priya.ToString());
+Check(okSend && sent.Count == 2 && (await db.FollowUps.FirstAsync(f => f.Id == day7.Id)).Outcome == "Sent on WhatsApp" && (await db.FollowUps.FirstAsync(f => f.Id == day7.Id)).CompletedBy == priya.ToString(), "Send now works inside the 24-hour window and records employee id in CompletedBy");
 lead.ConsentStatus = "opted_out"; await db.SaveChangesAsync();
 var day12 = await db.FollowUps.FirstAsync(f => f.LeadId == lead.Id && f.StepKey == "day12-reorder");
 var (optedOut, _) = await svc.SendNowAsync(day12, "Priya");
@@ -212,7 +212,7 @@ db.WhatsAppMessages.AddRange(
     new WhatsAppMessage { LeadId = lead3.Id, Direction = "inbound", WaMessageId = "in-b", Phone = lead3.Phone, CreatedAt = t0 },
     new WhatsAppMessage { LeadId = lead3.Id, Direction = "outbound", WaMessageId = "out-bot2", Phone = lead3.Phone, CreatedAt = t0.AddMinutes(1), SentBy = "system" });
 await db.SaveChangesAsync();
-(await db.FollowUps.FirstAsync(f => f.Status == "pending")).DueAt = FollowUpService.Clock().AddDays(-3);
+(await db.FollowUps.FirstAsync(f => f.Status == FollowUpStatus.Pending)).DueAt = FollowUpService.Clock().AddDays(-3);
 await db.SaveChangesAsync();
 var dash = await new CrmDashboardService(db).BuildAsync(30, null);
 Check(dash.MedianFirstReplyMinutes == 12, "First reply time counts the first person's reply, not the auto-reply");
@@ -221,7 +221,7 @@ Check(dash.NewLeads > 0 && dash.Funnel.Count == 5 && dash.ByEmployee.Count == 2,
 Check(dash.NeedsAttention.Any(a => a.Reason.StartsWith("Overdue")) , "Overdue follow-ups show up under needs attention");
 
 // ---- 14. Reply assistant: drafted replies (built-in guide when no AI key) ------------------------------------------
-db.Products.AddRange(new Product { Id = "p1", Sku = "S1", Name = "Stamix Canister", Price = 1899, Status = "active" }, new Product { Id = "p2", Sku = "S2", Name = "Stamix Duo", Price = 3499, Status = "active" });
+db.Products.AddRange(new Product { Id = "p1", Sku = "S1", Name = "Stamix Canister", Price = 1899, Status = ProductStatus.Active }, new Product { Id = "p2", Sku = "S2", Name = "Stamix Duo", Price = 3499, Status = ProductStatus.Active });
 await db.SaveChangesAsync();
 var assistant = new ReplyAssistantService(db, Options.Create(new AiOptions()), Options.Create(new StoreOptions { FreeShippingThreshold = 999, FlatShippingFee = 99 }), new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()), NullLogger<ReplyAssistantService>.Instance);
 var rl = new Lead { Id = 900, Name = "Asha Raman", Phone = "919876509999" };
@@ -370,16 +370,16 @@ Check(healthTamil.NeedsReview && healthTamil.Intent == "Health question" && heal
 // ---- 15. Customer care: a paid order makes a customer; who converted; who looks after them; messages that fit who is writing ----
 {
     async Task Presence(long id, bool online) { var e = await db.Employees.FirstAsync(x => x.Id == id); e.LastSeenAt = online ? DateTime.UtcNow : null; await db.SaveChangesAsync(); }
-    Order Paid(string id, string phone, string name, string fulfillment = "PENDING") { var o = MakeOrder(id, phone, fulfillment, awb: null); o.PaymentStatus = "PAID"; o.PaymentMethod = "ONLINE"; o.CustomerName = name; return o; }
+    Order Paid(string id, string phone, string name, string fulfillment = "PENDING") { var o = MakeOrder(id, phone, fulfillment, awb: null); o.PaymentStatus = OrderPaymentStatus.Paid; o.PaymentMethod = OrderPaymentMethod.Online; o.CustomerName = name; return o; }
     await Presence(priya, true); await Presence(karthik, true);
 
-    var interested = new Lead { Phone = "919811100001", Name = "Ravi Kumar", Source = "whatsapp", Status = LeadStatuses.Interested, AssignedToEmployeeId = priya };
+    var interested = new Lead { Phone = "919811100001", Name = "Ravi Kumar", Source = LeadSource.WhatsApp, Status = LeadStatus.Interested, AssignedToEmployeeId = priya };
     db.Leads.Add(interested); await db.SaveChangesAsync();
     Check(LeadService.StatusBlock(interested, LeadStatuses.Converted) is not null, "A lead cannot be marked Converted by hand");
 
     var o1 = Paid("NH-CC1", "9811100001", "Ravi Kumar"); db.Orders.Add(o1); await db.SaveChangesAsync();
     var cust = await leads.UpsertFromOrderAsync(o1);
-    Check(cust.CustomerSince is not null && cust.Status == LeadStatuses.Converted, "A paid order turns the lead into a customer");
+    Check(cust.CustomerSince is not null && cust.Status == LeadStatus.Converted, "A paid order turns the lead into a customer");
     Check(cust.ConvertedByEmployeeId == priya && cust.AssignedToEmployeeId == priya, "The sales person who owned the lead is recorded as the converter and keeps the customer while available");
     Check(LeadService.StatusBlock(cust, LeadStatuses.Interested) is not null, "A customer cannot be moved back to a lead status");
     var since = cust.CustomerSince;
@@ -387,7 +387,7 @@ Check(healthTamil.NeedsReview && healthTamil.Intent == "Health question" && heal
     Check((await db.Leads.FirstAsync(l => l.Id == cust.Id)).CustomerSince == since, "Running again does not change who converted or when");
 
     await Presence(priya, false);
-    db.Leads.Add(new Lead { Phone = "919811100002", Name = "Mina Devi", Status = LeadStatuses.Interested, AssignedToEmployeeId = priya }); await db.SaveChangesAsync();
+    db.Leads.Add(new Lead { Phone = "919811100002", Name = "Mina Devi", Status = LeadStatus.Interested, AssignedToEmployeeId = priya }); await db.SaveChangesAsync();
     var o2 = Paid("NH-CC2", "9811100002", "Mina Devi"); db.Orders.Add(o2); await db.SaveChangesAsync();
     var c2 = await leads.UpsertFromOrderAsync(o2);
     Check(c2.ConvertedByEmployeeId == priya && c2.AssignedToEmployeeId == karthik, "When the converter is away an available person takes the customer and the converter stays recorded");
@@ -405,12 +405,12 @@ Check(healthTamil.NeedsReview && healthTamil.Intent == "Health question" && heal
 
     // messages that fit who is writing (nobody is online now, so after-hours applies)
     await Presence(priya, false);
-    var newLead = new Lead { Phone = "919811100005", Name = "Sathish Kumar", Status = LeadStatuses.New }; db.Leads.Add(newLead); await db.SaveChangesAsync();
+    var newLead = new Lead { Phone = "919811100005", Name = "Sathish Kumar", Status = LeadStatus.New }; db.Leads.Add(newLead); await db.SaveChangesAsync();
     var hi = await leads.GreetingAsync(newLead);
     Check(hi is not null && hi.Contains("Sathish") && !hi.Contains("track", StringComparison.OrdinalIgnoreCase), "A lead's greeting is professional and offers no order tracking");
     var away = await leads.AfterHoursReplyAsync(newLead);
     Check(away is not null && away.Contains("Sathish") && !away.Contains("track", StringComparison.OrdinalIgnoreCase), "The after-hours reply to a lead offers no order tracking");
-    var awayHot = await leads.AfterHoursReplyAsync(new Lead { Id = 9999, Phone = "919811100006", Name = "Hot Lead", Status = LeadStatuses.Interested });
+    var awayHot = await leads.AfterHoursReplyAsync(new Lead { Id = 9999, Phone = "919811100006", Name = "Hot Lead", Status = LeadStatus.Interested });
     Check(awayHot is not null && awayHot.Contains("interest") && !awayHot.Contains("track", StringComparison.OrdinalIgnoreCase), "Interested leads get their own after-hours wording, without tracking");
     var awayCust = await leads.AfterHoursReplyAsync(c2);
     Check(awayCust is not null && awayCust.Contains("track") && awayCust.Contains("NH-CC2"), "A customer with an order on its way is offered tracking after hours");
@@ -502,7 +502,7 @@ await AdsChecks.RunAsync(db, Check);
 
 // ---- 17. ChangedBy stores employee id when taking unowned lead via follow-up ---------------------------------------
 {
-    var queueLead = new Lead { Phone = "919876599999", Name = "Queue Lead", Status = LeadStatuses.New };
+    var queueLead = new Lead { Phone = "919876599999", Name = "Queue Lead", Status = LeadStatus.New };
     db.Leads.Add(queueLead);
     await db.SaveChangesAsync();
     var (assignedItem, assignErr) = await svc.CreateManualAsync(
@@ -512,10 +512,11 @@ await AdsChecks.RunAsync(db, Check);
     var assignRow = await db.LeadAssignmentHistory.OrderByDescending(h => h.Id).FirstAsync(h => h.LeadId == queueLead.Id);
     var statusRow = await db.LeadStatusHistory.OrderByDescending(h => h.Id).FirstAsync(h => h.LeadId == queueLead.Id);
     Check(assignRow.ChangedBy == priya.ToString() && statusRow.ChangedBy == priya.ToString(), "Follow-up scheduling writes employee id (not name) to assignment and status ChangedBy");
-    Check(assignedItem!.CreatedBy == "Priya", "Follow-up CreatedBy keeps display name");
+    Check(assignedItem!.CreatedBy == priya.ToString(), "Follow-up CreatedBy stores employee id");
 }
 
 await ChangedByChecks.RunAsync(Check);
+await EnumStorageChecks.RunAsync(Check);
 
 Console.WriteLine($"\n{checks} follow-up checks passed. No external services contacted.");
 

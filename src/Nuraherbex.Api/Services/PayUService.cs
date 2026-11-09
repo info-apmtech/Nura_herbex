@@ -35,7 +35,7 @@ public class PayUService(NuraDbContext db, OrderService orders, OrderOperationLo
     {
         // New orders are saved before payment; snapshots support legacy checkout recovery.
         var saved = await orders.GetAsync(orderId);
-        if (saved?.PaymentStatus == "PAID") throw new InvalidOperationException($"Order {orderId} is already paid");
+        if (saved?.PaymentStatus == OrderPaymentStatus.Paid) throw new InvalidOperationException($"Order {orderId} is already paid");
 
         var held = await orders.FindHeldAttemptAsync(orderId);
         var order = saved ?? (held is null ? null : JsonSerializer.Deserialize<Order>(held.OrderSnapshotJson))

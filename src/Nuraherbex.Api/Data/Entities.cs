@@ -31,7 +31,8 @@ public class Product
     /// <summary>Pack / serving line, e.g. "Daily powder · 30-day supply".</summary>
     public string? ServingInfo { get; set; }
     public string ImageUrl { get; set; } = "";
-    public string Status { get; set; } = "active";
+    /// <summary>Active = 1 | Draft = 2 | Archived = 3</summary>
+    public ProductStatus Status { get; set; } = ProductStatus.Active;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
@@ -39,7 +40,8 @@ public class Product
 public class Coupon
 {
     public string Code { get; set; } = "";
-    public string DiscountType { get; set; } = "PERCENTAGE";
+    /// <summary>Percentage = 1 | Fixed = 2</summary>
+    public CouponDiscountType DiscountType { get; set; } = CouponDiscountType.Percentage;
     public decimal DiscountValue { get; set; }
     public decimal MinOrderAmount { get; set; }
     public decimal MaxDiscountCap { get; set; } = 1000;
@@ -89,8 +91,10 @@ public class Order
     public decimal TaxAmount { get; set; }
     public decimal TotalAmount { get; set; }
     public string? CouponCode { get; set; }
-    public string PaymentMethod { get; set; } = "COD";
-    public string PaymentStatus { get; set; } = "PENDING";
+    /// <summary>Cod = 1 | Online = 2</summary>
+    public OrderPaymentMethod PaymentMethod { get; set; } = OrderPaymentMethod.Cod;
+    /// <summary>Pending = 1 | Paid = 2 | Failed = 3 | Refunded = 4 | CodPending = 5 | CodCollected = 6 | RefundPending = 7 | Cancelled = 8</summary>
+    public OrderPaymentStatus PaymentStatus { get; set; } = OrderPaymentStatus.Pending;
     public string? PaymentRef { get; set; }
     public string? PayuTxnId { get; set; }
     public string FulfillmentStatus { get; set; } = "PENDING";
@@ -223,12 +227,12 @@ public class Lead
     /// <summary>E.164 digits without '+', e.g. 919876543210. Unique.</summary>
     public string Phone { get; set; } = "";
     public string? Email { get; set; }
-    /// <summary>whatsapp | instagram | facebook | website | manual</summary>
-    public string Source { get; set; } = "whatsapp";
+    /// <summary>WhatsApp = 1 | Instagram = 2 | Facebook = 3 | Website = 4 | Manual = 5</summary>
+    public LeadSource Source { get; set; } = LeadSource.WhatsApp;
     /// <summary>Campaign / ad headline / form name that brought the lead in.</summary>
     public string? SourceDetail { get; set; }
-    /// <summary>new | interested | follow-up | converted | not-interested</summary>
-    public string Status { get; set; } = "new";
+    /// <summary>New = 1 | Interested = 2 | FollowUp = 3 | Converted = 4 | NotInterested = 5</summary>
+    public LeadStatus Status { get; set; } = LeadStatus.New;
     /// <summary>unknown | opted_in | opted_out</summary>
     public string ConsentStatus { get; set; } = "unknown";
     public DateTime? ConsentAt { get; set; }
@@ -268,7 +272,8 @@ public class LeadSourceEvent
 {
     public long Id { get; set; }
     public long LeadId { get; set; }
-    public string Source { get; set; } = "whatsapp";
+    /// <summary>WhatsApp = 1 | Instagram = 2 | Facebook = 3 | Website = 4 | Manual = 5</summary>
+    public LeadSource Source { get; set; } = LeadSource.WhatsApp;
     public string? Detail { get; set; }
     public string? ReferralJson { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -278,8 +283,10 @@ public class LeadStatusHistory
 {
     public long Id { get; set; }
     public long LeadId { get; set; }
-    public string? FromStatus { get; set; }
-    public string ToStatus { get; set; } = "";
+    /// <summary>New = 1 | Interested = 2 | FollowUp = 3 | Converted = 4 | NotInterested = 5</summary>
+    public LeadStatus? FromStatus { get; set; }
+    /// <summary>New = 1 | Interested = 2 | FollowUp = 3 | Converted = 4 | NotInterested = 5</summary>
+    public LeadStatus ToStatus { get; set; } = LeadStatus.New;
     public string? Note { get; set; }
     /// <summary>system | employee id (or configured admin email when signed in without an employee record).</summary>
     public string ChangedBy { get; set; } = "system";
@@ -296,8 +303,8 @@ public class Employee
     public string Phone { get; set; } = "";
     /// <summary>pbkdf2-sha512:iterations:salt:hash</summary>
     public string PasswordHash { get; set; } = "";
-    /// <summary>admin | sales</summary>
-    public string Role { get; set; } = "sales";
+    /// <summary>Admin = 1 | Sales = 2</summary>
+    public EmployeeRole Role { get; set; } = EmployeeRole.Sales;
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? LastLoginAt { get; set; }
@@ -343,16 +350,18 @@ public class FollowUp
     public DateTime? ReminderSentAt { get; set; }
     public DateTime? DueNotifiedAt { get; set; }
     public DateTime? EscalatedAt { get; set; }
-    /// <summary>pending | done | skipped</summary>
-    public string Status { get; set; } = "pending";
+    /// <summary>Pending = 1 | Done = 2 | Skipped = 3</summary>
+    public FollowUpStatus Status { get; set; } = FollowUpStatus.Pending;
     public string? Outcome { get; set; }
     public DateTime? CompletedAt { get; set; }
+    /// <summary>auto | employee id (or configured admin email when signed in without an employee record).</summary>
     public string? CompletedBy { get; set; }
-    /// <summary>manual | journey | system</summary>
-    public string Source { get; set; } = "manual";
+    /// <summary>Manual = 1 | Journey = 2 | System = 3</summary>
+    public FollowUpSource Source { get; set; } = FollowUpSource.Manual;
     public long? EnrollmentId { get; set; }
     /// <summary>Journey step or order-check key, e.g. day3-usage. With OrderId it is unique, so a step is created only once.</summary>
     public string? StepKey { get; set; }
+    /// <summary>system | journey | employee id (or configured admin email when signed in without an employee record).</summary>
     public string CreatedBy { get; set; } = "system";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
@@ -416,10 +425,10 @@ public class WorkTask
     public long Id { get; set; }
     public string Title { get; set; } = "";
     public string? Description { get; set; }
-    /// <summary>todo | in_progress | blocked | done</summary>
-    public string Status { get; set; } = "todo";
-    /// <summary>low | normal | high | urgent</summary>
-    public string Priority { get; set; } = "normal";
+    /// <summary>1 = todo | 2 = in_progress | 3 = blocked | 4 = done</summary>
+    public WorkTaskStatus Status { get; set; } = WorkTaskStatus.Todo;
+    /// <summary>1 = low | 2 = normal | 3 = high | 4 = urgent</summary>
+    public WorkTaskPriority Priority { get; set; } = WorkTaskPriority.Normal;
     /// <summary>When work begins. The task is listed as pending from this day; before it, the task is upcoming. Empty = listed by its due date.</summary>
     public DateTime? StartAt { get; set; }
     public DateTime? DueAt { get; set; }
@@ -430,8 +439,8 @@ public class WorkTask
     public long? LeadId { get; set; }
     public string? OrderId { get; set; }
     public string? Tags { get; set; }
-    /// <summary>none | daily | weekly | monthly: finishing the task creates the next one.</summary>
-    public string Repeat { get; set; } = "none";
+    /// <summary>1 = none | 2 = daily | 3 = weekly | 4 = monthly: finishing the task creates the next one.</summary>
+    public WorkTaskRepeat Repeat { get; set; } = WorkTaskRepeat.None;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }

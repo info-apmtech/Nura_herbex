@@ -141,7 +141,7 @@ public class ShiprocketWebhookController(
         order.UpdatedAt = DateTime.UtcNow;
         order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto
             { Status = mapped.Text, Location = location ?? "Express Sorting Facility", Time = Mapping.TimelineStamp(), Done = true, Active = true }];
-        if (mapped.Status == "DELIVERED" && order.PaymentMethod == "COD") order.PaymentStatus = "COD_COLLECTED";
+        if (mapped.Status == "DELIVERED" && order.PaymentMethod == OrderPaymentMethod.Cod) order.PaymentStatus = OrderPaymentStatus.CodCollected;
         await db.SaveChangesAsync();
         log.LogInformation("[Shiprocket] Order {Order} â†’ {Status}", order.Id, mapped.Status);
 

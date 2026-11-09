@@ -19,8 +19,9 @@ async Task Reject(Func<Task> work, string label) { try { await work(); } catch (
 var fake = new CourierHandler();
 var config = new ShadowfaxOptions { StagingToken = "test-only-token", WebhookToken = new string('w', 40), Pickup = new() { Name = "Store", Contact = "9999999999", AddressLine1 = "Test street", City = "Chennai", Pincode = "600002", UniqueCode = "TEST" } };
 using var http = new HttpClient(fake);
-var sf = new ShadowfaxService(http, Options.Create(config), NullLogger<ShadowfaxService>.Instance);
-Order NewOrder(string id = "NH-TEST") => new() { Id = id, CustomerName = "Customer", CustomerPhone = "9999999999", PaymentMethod = "ONLINE", PaymentStatus = "PAID", Subtotal = 1200, TotalAmount = 1200,
+var shippingStore = new ShippingSettingsStore();
+var sf = new ShadowfaxService(http, Options.Create(config), shippingStore, NullLogger<ShadowfaxService>.Instance);
+Order NewOrder(string id = "NH-TEST") => new() { Id = id, CustomerName = "Customer", CustomerPhone = "9999999999", PaymentMethod = OrderPaymentMethod.Online, PaymentStatus = OrderPaymentStatus.Paid, Subtotal = 1200, TotalAmount = 1200,
     ShippingAddress = new() { AddressLine1 = "Delivery street", City = "Chennai", State = "Tamil Nadu", Pincode = "600001" },
     ParcelWeightKg = .4m, ParcelLengthCm = 10, ParcelBreadthCm = 10, ParcelHeightCm = 14,
     Items = [new() { Id = "p", Sku = "SKU", Name = "Product", Price = 1200, Quantity = 1, WeightKg = .4m }] };
@@ -28,7 +29,7 @@ var order = NewOrder();
 await sf.CreateOrderAsync(order, new());
 Check(fake.Booking!["return_details"] is not null && fake.Booking["rts_details"] is null, "Documented return_details payload");
 Check(fake.Booking["order_details"]!["cod_amount"]!.GetValue<decimal>() == 0, "Prepaid COD amount is zero");
-order.PaymentMethod = "COD";
+order.PaymentMethod = OrderPaymentMethod.Cod;
 await sf.CreateOrderAsync(order, new());
 Check(fake.Booking["order_details"]!["cod_amount"]!.GetValue<decimal>() == 1200, "COD amount comes from stored order total");
 fake.RejectBooking = true;
@@ -49,8 +50,8 @@ using var provider = new ServiceCollection().AddLogging().BuildServiceProvider()
 var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 await using var db = new NuraDbContext(new DbContextOptionsBuilder<NuraDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 var gate = new OrderOperationLock(db);
-var shipping = new ShippingGateway(new ShiprocketService(http, Options.Create(new ShiprocketOptions()), NullLogger<ShiprocketService>.Instance), sf);
-var orders = new OrderService(db, new ProductService(db, Options.Create(new StoreOptions())), shipping, gate, Options.Create(new ShadowfaxOptions { AutoBook = false }), scopeFactory, NullLogger<OrderService>.Instance);
+var shipping = new ShippingGateway(new ShiprocketService(http, Options.Create(new ShiprocketOptions()), shippingStore, NullLogger<ShiprocketService>.Instance), sf, shippingStore, Options.Create(new ShippingOptions()), Options.Create(new ShadowfaxOptions()));
+var orders = new OrderService(db, new ProductService(db, Options.Create(new StoreOptions())), shipping, gate, scopeFactory, NullLogger<OrderService>.Instance);
 db.Orders.Add(NewOrder()); await db.SaveChangesAsync();
 await Reject(() => orders.RetryShipmentAsync("NH-TEST"), "Packing gate blocks paid but unpacked order");
 await orders.MarkReadyAsync("NH-TEST");
@@ -93,7 +94,7 @@ Check(fake.Booking!["order_details"]!["client_order_id"]!.ToString() == retryRef
 db.Products.Add(new Product { Id = "p", Sku = "SKU", Name = "Product", Price = 1200, StockQuantity = 10, WeightKg = .4m, LengthCm = 10, BreadthCm = 10, HeightCm = 14 });
 await db.SaveChangesAsync();
 var pending = await orders.CreateAsync(new CreateOrderRequest { PaymentMethod = "ONLINE", Customer = new() { FullName = "Buyer", Email = "buyer@example.test", Phone = "9999999999" }, Shipping = NewOrder().ShippingAddress, Items = [new() { Id = "p", Quantity = 1 }] }, null, holdUntilPaid: true);
-Check(await db.Orders.AnyAsync(o => o.Id == pending.Id && o.PaymentStatus == "PENDING"), "Online checkout saves pending order before payment");
+Check(await db.Orders.AnyAsync(o => o.Id == pending.Id && o.PaymentStatus == OrderPaymentStatus.Pending), "Online checkout saves pending order before payment");
 await Reject(() => orders.MarkReadyAsync(pending.Id), "Unpaid online order cannot be marked packed");
 var payOptions = new PayUOptions { MerchantKey = "test-merchant", MerchantSalt = "test-salt" };
 var payu = new PayUService(db, orders, gate, Options.Create(payOptions), Options.Create(new StoreOptions()), NullLogger<PayUService>.Instance);

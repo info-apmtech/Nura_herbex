@@ -62,20 +62,20 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
         foreach (var o in orders)
             res.Rows.Add([o.Id, Ist(o.CreatedAt), o.CustomerName, o.CustomerPhone, o.ShippingAddress.City, o.ShippingAddress.State,
                 string.Join("; ", o.Items.Select(i => $"{i.Name} x{i.Quantity}")), o.Items.Sum(i => i.Quantity).ToString(Inv),
-                Money(o.Subtotal), Money(o.DiscountAmount), Money(o.ShippingFee), Money(o.TotalAmount), o.PaymentMethod, o.PaymentStatus,
+                Money(o.Subtotal), Money(o.DiscountAmount), Money(o.ShippingFee), Money(o.TotalAmount), o.PaymentMethod.ToCode(), o.PaymentStatus.ToCode(),
                 o.FulfillmentStatus, o.DeliveryStatus, o.ShiprocketCourier ?? o.Courier ?? "", o.ShiprocketAwb ?? ""]);
-        var paid = orders.Where(o => o.PaymentStatus is "PAID" or "COD_COLLECTED").ToList();
+        var paid = orders.Where(o => o.PaymentStatus is OrderPaymentStatus.Paid or OrderPaymentStatus.CodCollected).ToList();
         var delivered = orders.Count(o => o.FulfillmentStatus == "DELIVERED");
         var lost = orders.Count(o => o.FulfillmentStatus is "RTO" or "CANCELLED");
         var units = orders.SelectMany(o => o.Items).GroupBy(i => i.Name).Select(g => new { g.Key, Qty = g.Sum(i => i.Quantity) }).OrderByDescending(x => x.Qty).FirstOrDefault();
         res.Summary =
         [
             S("Orders", orders.Count), S("Revenue collected", Money(paid.Sum(o => o.TotalAmount)), "Paid online or COD collected", "good"),
-            S("COD awaiting", Money(orders.Where(o => o.PaymentStatus == "COD_PENDING").Sum(o => o.TotalAmount)), "Cash on delivery not yet collected", "warn"),
+            S("COD awaiting", Money(orders.Where(o => o.PaymentStatus == OrderPaymentStatus.CodPending).Sum(o => o.TotalAmount)), "Cash on delivery not yet collected", "warn"),
             S("Average order", Money(orders.Count == 0 ? 0 : orders.Average(o => o.TotalAmount))),
             S("Delivered", $"{delivered} ({Pct(delivered, orders.Count)})", null, "good"),
             S("Returned or cancelled", $"{lost} ({Pct(lost, orders.Count)})", null, lost > 0 ? "bad" : "neutral"),
-            S("Prepaid / COD", $"{orders.Count(o => o.PaymentMethod != "COD")} / {orders.Count(o => o.PaymentMethod == "COD")}"),
+            S("Prepaid / COD", $"{orders.Count(o => o.PaymentMethod != OrderPaymentMethod.Cod)} / {orders.Count(o => o.PaymentMethod == OrderPaymentMethod.Cod)}"),
             S("Best seller", units is null ? "None" : $"{units.Key} ({units.Qty})"),
         ];
         return res;
@@ -91,25 +91,25 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
         // The newest comment staff left when changing the lead's status, plus how many follow-ups are done.
         var notes = (await db.LeadStatusHistory.AsNoTracking().Where(h => ids.Contains(h.LeadId) && h.Note != null && h.Note != "").OrderByDescending(h => h.CreatedAt).ToListAsync())
             .GroupBy(h => h.LeadId).ToDictionary(g => g.Key, g => g.First());
-        var fu = await db.FollowUps.AsNoTracking().Where(f => ids.Contains(f.LeadId)).GroupBy(f => f.LeadId).Select(g => new { g.Key, Total = g.Count(), Done = g.Count(f => f.Status == "done") }).ToDictionaryAsync(x => x.Key);
+        var fu = await db.FollowUps.AsNoTracking().Where(f => ids.Contains(f.LeadId)).GroupBy(f => f.LeadId).Select(g => new { g.Key, Total = g.Count(), Done = g.Count(f => f.Status == FollowUpStatus.Done) }).ToDictionaryAsync(x => x.Key);
         var res = new ReportResponse { Columns = ["Lead ID", "Created", "Name", "Phone", "Email", "Source", "Campaign / detail", "Status", "Owner", "Notes", "Latest comment", "Follow-ups", "Last contact", "Converted on", "Consent", "First message"] };
         foreach (var l in leads)
         {
             notes.TryGetValue(l.Id, out var h);
             fu.TryGetValue(l.Id, out var f);
-            res.Rows.Add([l.Id.ToString(Inv), Ist(l.CreatedAt), l.Name, l.Phone, l.Email ?? "", l.Source, l.SourceDetail ?? "", l.Status,
+            res.Rows.Add([l.Id.ToString(Inv), Ist(l.CreatedAt), l.Name, l.Phone, l.Email ?? "", l.Source.ToCode(), l.SourceDetail ?? "", l.Status.ToCode(),
                 l.AssignedToEmployeeId is { } id ? owners.GetValueOrDefault(id) ?? "" : "Unassigned", Clip(l.Notes, 300),
                 h is null ? "" : $"{Clip(h.Note, 300)} ({Ist(h.CreatedAt)})", f is null ? "" : $"{f.Done} of {f.Total} done", Ist(l.LastContactAt), Ist(l.ConvertedAt), l.ConsentStatus, Clip(l.FirstMessage, 160)]);
         }
-        var won = leads.Count(l => l.Status == LeadStatuses.Converted);
+        var won = leads.Count(l => l.Status == LeadStatus.Converted);
         var unassigned = leads.Count(l => l.AssignedToEmployeeId is null);
         res.Summary =
         [
             S("New leads", leads.Count), S("Converted", $"{won} ({Pct(won, leads.Count)})", "Conversion rate of this period's leads", "good"),
-            S("Interested", leads.Count(l => l.Status == LeadStatuses.Interested)), S("In follow-up", leads.Count(l => l.Status == LeadStatuses.FollowUp)),
-            S("Not interested", leads.Count(l => l.Status == LeadStatuses.NotInterested)), S("Still new", leads.Count(l => l.Status == LeadStatuses.New)),
+            S("Interested", leads.Count(l => l.Status == LeadStatus.Interested)), S("In follow-up", leads.Count(l => l.Status == LeadStatus.FollowUp)),
+            S("Not interested", leads.Count(l => l.Status == LeadStatus.NotInterested)), S("Still new", leads.Count(l => l.Status == LeadStatus.New)),
             S("Unassigned", unassigned, "Leads with no owner", unassigned > 0 ? "warn" : "neutral"),
-            S("Top source", leads.GroupBy(l => l.Source).OrderByDescending(g => g.Count()).Select(g => $"{g.Key} ({g.Count()})").FirstOrDefault() ?? "None"),
+            S("Top source", leads.GroupBy(l => l.Source).OrderByDescending(g => g.Count()).Select(g => $"{g.Key.ToCode()} ({g.Count()})").FirstOrDefault() ?? "None"),
         ];
         return res;
     }
@@ -127,19 +127,19 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
         foreach (var f in items)
         {
             leads.TryGetValue(f.LeadId, out var l);
-            var status = f.Status == "pending" && f.DueAt < today ? "overdue" : f.Status;
+            var status = f.Status == FollowUpStatus.Pending && f.DueAt < today ? "overdue" : f.Status.ToCode();
             res.Rows.Add([Ist(f.DueAt), l?.Name ?? "", l?.Phone ?? "", f.Type, f.Title, Clip(f.Notes, 300), f.AssignedToEmployeeId is { } id ? owners.GetValueOrDefault(id) ?? "" : "Unassigned",
-                status, Ist(f.CompletedAt), f.CompletedBy ?? "", Clip(f.Outcome, 300), l?.Status ?? "", f.StepKey ?? "", f.Source, f.OrderId ?? ""]);
+                status, Ist(f.CompletedAt), Mapping.ResolveActor(f.CompletedBy, owners) ?? "", Clip(f.Outcome, 300), l?.Status.ToCode() ?? "", f.StepKey ?? "", f.Source.ToCode(), f.OrderId ?? ""]);
         }
-        var done = items.Count(f => f.Status == "done");
-        var sent = items.Count(f => f.Status == "done" && f.Outcome != null && f.Outcome.StartsWith("Sent"));
-        var overdue = items.Count(f => f.Status == "pending" && f.DueAt < today);
+        var done = items.Count(f => f.Status == FollowUpStatus.Done);
+        var sent = items.Count(f => f.Status == FollowUpStatus.Done && f.Outcome != null && f.Outcome.StartsWith("Sent"));
+        var overdue = items.Count(f => f.Status == FollowUpStatus.Pending && f.DueAt < today);
         res.Summary =
         [
             S("Follow-ups due", items.Count), S("Done", $"{done} ({Pct(done, items.Count)})", null, "good"),
-            S("Overdue", overdue, "Still pending after their day", overdue > 0 ? "bad" : "neutral"), S("Pending", items.Count(f => f.Status == "pending") - overdue),
-            S("Skipped", items.Count(f => f.Status == "skipped")), S("WhatsApp messages sent", sent, "Sent from the follow-up list"),
-            S("Sent automatically", items.Count(f => f.CompletedBy == "auto")), S("Journey steps", items.Count(f => f.Source == "journey")),
+            S("Overdue", overdue, "Still pending after their day", overdue > 0 ? "bad" : "neutral"), S("Pending", items.Count(f => f.Status == FollowUpStatus.Pending) - overdue),
+            S("Skipped", items.Count(f => f.Status == FollowUpStatus.Skipped)), S("WhatsApp messages sent", sent, "Sent from the follow-up list"),
+            S("Sent automatically", items.Count(f => f.CompletedBy == "auto")), S("Journey steps", items.Count(f => f.Source == FollowUpSource.Journey)),
         ];
         return res;
     }
@@ -189,20 +189,20 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
         var res = new ReportResponse { Columns = ["Task ID", "Title", "Department", "Assigned to", "Created by", "Priority", "Status", "Checklist", "Latest comment", "Created", "Due", "Completed", "Late", "Audit trail"] };
         foreach (var t in tasks)
         {
-            var late = t.Status != "done" && t.DueAt is { } d && d < now;
+            var late = t.Status != WorkTaskStatus.Done && t.DueAt is { } d && d < now;
             res.Rows.Add([t.Id.ToString(Inv), t.Title, t.DepartmentId is { } di ? depts.GetValueOrDefault(di) ?? "" : "", t.AssignedToEmployeeId is { } a ? people.GetValueOrDefault(a) ?? "" : "Unassigned",
-                t.CreatedByName, t.Priority, t.Status, checks.TryGetValue(t.Id, out var ck) ? $"{ck.Done} of {ck.Total}" : "",
+                t.CreatedByName, t.Priority.ToCode(), t.Status.ToCode(), checks.TryGetValue(t.Id, out var ck) ? $"{ck.Done} of {ck.Total}" : "",
                 lastComment.TryGetValue(t.Id, out var lc) ? $"{lc.Author}: {Clip(lc.Body, 300)}" : "", Ist(t.CreatedAt), Ist(t.DueAt), Ist(t.CompletedAt), late ? "Yes" : "",
                 trail.TryGetValue(t.Id, out var tl) ? string.Join("\n", tl.Select(x => $"{x.When} · {x.Actor}: {Clip(x.Text, 400)}")) : ""]);
             if (trail.TryGetValue(t.Id, out var lines)) res.Details[t.Id.ToString(Inv)] = lines;
         }
-        var doneCount = tasks.Count(t => t.Status == "done");
-        var overdue = tasks.Count(t => t.Status != "done" && t.DueAt is { } d && d < now);
+        var doneCount = tasks.Count(t => t.Status == WorkTaskStatus.Done);
+        var overdue = tasks.Count(t => t.Status != WorkTaskStatus.Done && t.DueAt is { } d && d < now);
         res.Summary =
         [
             S("Tasks created", tasks.Count), S("Done", $"{doneCount} ({Pct(doneCount, tasks.Count)})", null, "good"),
-            S("In progress", tasks.Count(t => t.Status == "in_progress")), S("Blocked", tasks.Count(t => t.Status == "blocked"), null, tasks.Any(t => t.Status == "blocked") ? "warn" : "neutral"),
-            S("Overdue", overdue, null, overdue > 0 ? "bad" : "neutral"), S("Urgent or high", tasks.Count(t => t.Priority is "urgent" or "high")),
+            S("In progress", tasks.Count(t => t.Status == WorkTaskStatus.InProgress)), S("Blocked", tasks.Count(t => t.Status == WorkTaskStatus.Blocked), null, tasks.Any(t => t.Status == WorkTaskStatus.Blocked) ? "warn" : "neutral"),
+            S("Overdue", overdue, null, overdue > 0 ? "bad" : "neutral"), S("Urgent or high", tasks.Count(t => t.Priority is WorkTaskPriority.Urgent or WorkTaskPriority.High)),
             S("Unassigned", tasks.Count(t => t.AssignedToEmployeeId is null)),
         ];
         return res;
@@ -215,7 +215,7 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
         var customers = await db.Customers.AsNoTracking().Where(c => c.CreatedAt >= from && c.CreatedAt < to).OrderByDescending(c => c.CreatedAt).Take(MaxRows).ToListAsync();
         var ids = customers.Select(c => c.Id).ToList();
         var spend = await db.Orders.AsNoTracking().Where(o => o.CustomerId != null && ids.Contains(o.CustomerId)).Select(o => new { o.CustomerId, o.TotalAmount, o.PaymentStatus }).ToListAsync();
-        var byCustomer = spend.GroupBy(s => s.CustomerId!).ToDictionary(g => g.Key, g => (Count: g.Count(), Total: g.Where(x => x.PaymentStatus is "PAID" or "COD_COLLECTED").Sum(x => x.TotalAmount)));
+        var byCustomer = spend.GroupBy(s => s.CustomerId!).ToDictionary(g => g.Key, g => (Count: g.Count(), Total: g.Where(x => x.PaymentStatus is OrderPaymentStatus.Paid or OrderPaymentStatus.CodCollected).Sum(x => x.TotalAmount)));
         var res = new ReportResponse { Columns = ["Customer ID", "Name", "Email", "Phone", "City", "State", "Joined", "Orders", "Total spent"] };
         foreach (var c in customers)
         {

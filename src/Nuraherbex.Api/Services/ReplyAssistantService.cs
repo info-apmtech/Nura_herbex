@@ -116,7 +116,7 @@ public class ReplyAssistantService(
 
     private async Task<Facts> LoadFactsAsync(Lead lead)
     {
-        var products = await db.Products.AsNoTracking().Where(p => p.Status == "active").OrderBy(p => p.Price).Take(12).ToListAsync();
+        var products = await db.Products.AsNoTracking().Where(p => p.Status == ProductStatus.Active).OrderBy(p => p.Price).Take(12).ToListAsync();
         var l10 = Last10(lead.Phone);
         string[] forms = [l10, "91" + l10, "0" + l10, "+91" + l10, lead.Phone];
         var orders = await db.Orders.AsNoTracking().Where(o => forms.Contains(o.CustomerPhone)).OrderByDescending(o => o.CreatedAt).Take(3).ToListAsync();
@@ -131,10 +131,10 @@ public class ReplyAssistantService(
         foreach (var p in f.Products) sb.AppendLine($"- {p.Name}{(string.IsNullOrWhiteSpace(p.Subtitle) ? "" : " - " + p.Subtitle)}: Rs {p.Price:N0}{(p.StockQuantity <= 0 ? " (currently out of stock)" : "")}");
         sb.AppendLine($"Delivery: free above Rs {f.FreeShippingFrom:N0}, otherwise Rs {f.ShippingFee:N0}. Delivery time is not fixed - say we will confirm it for their pincode.");
         sb.AppendLine($"Support: {f.Support}");
-        sb.AppendLine($"Customer: {lead.Name}; lead status: {lead.Status}.");
+        sb.AppendLine($"Customer: {lead.Name}; lead status: {lead.Status.ToCode()}.");
         if (f.Orders.Count == 0) sb.AppendLine("Orders: none yet.");
         foreach (var o in f.Orders)
-            sb.AppendLine($"Order {o.Id} placed {o.CreatedAt:d MMM yyyy}: Rs {o.TotalAmount:N0}, {(o.PaymentMethod == "COD" ? "cash on delivery" : "paid online")}, status: {o.DeliveryStatus}{(string.IsNullOrEmpty(o.ShiprocketAwb) || o.ShiprocketAwb.StartsWith("SR-PENDING-") ? "" : $", courier {o.Courier} tracking number {o.ShiprocketAwb}")}.");
+            sb.AppendLine($"Order {o.Id} placed {o.CreatedAt:d MMM yyyy}: Rs {o.TotalAmount:N0}, {(o.PaymentMethod == OrderPaymentMethod.Cod ? "cash on delivery" : "paid online")}, status: {o.DeliveryStatus}{(string.IsNullOrEmpty(o.ShiprocketAwb) || o.ShiprocketAwb.StartsWith("SR-PENDING-") ? "" : $", courier {o.Courier} tracking number {o.ShiprocketAwb}")}.");
         return sb.ToString();
     }
 

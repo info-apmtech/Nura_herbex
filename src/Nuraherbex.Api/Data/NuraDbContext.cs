@@ -67,7 +67,7 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.Property(x => x.LengthCm).HasPrecision(9, 2);
             e.Property(x => x.BreadthCm).HasPrecision(9, 2);
             e.Property(x => x.HeightCm).HasPrecision(9, 2);
-            e.Property(x => x.Status).HasMaxLength(32);
+            e.Property(x => x.Status).HasConversion<int>();
         });
 
         b.Entity<Coupon>(e =>
@@ -75,6 +75,7 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.ToTable("coupons");
             e.HasKey(x => x.Code);
             e.Property(x => x.Code).HasMaxLength(64);
+            e.Property(x => x.DiscountType).HasConversion<int>();
             e.Property(x => x.DiscountValue).HasPrecision(18, 2);
             e.Property(x => x.MinOrderAmount).HasPrecision(18, 2);
             e.Property(x => x.MaxDiscountCap).HasPrecision(18, 2);
@@ -106,8 +107,8 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.Property(x => x.ShippingFee).HasPrecision(18, 2);
             e.Property(x => x.TaxAmount).HasPrecision(18, 2);
             e.Property(x => x.TotalAmount).HasPrecision(18, 2);
-            e.Property(x => x.PaymentMethod).HasMaxLength(16);
-            e.Property(x => x.PaymentStatus).HasMaxLength(32);
+            e.Property(x => x.PaymentMethod).HasConversion<int>();
+            e.Property(x => x.PaymentStatus).HasConversion<int>();
             e.Property(x => x.FulfillmentStatus).HasMaxLength(32);
             e.Property(x => x.ShiprocketAwb).HasMaxLength(64);
             e.Property(x => x.Courier).HasMaxLength(16);
@@ -209,9 +210,9 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.Phone).HasMaxLength(32);
             e.Property(x => x.Email).HasMaxLength(200);
-            e.Property(x => x.Source).HasMaxLength(32);
+            e.Property(x => x.Source).HasConversion<int>();
             e.Property(x => x.SourceDetail).HasMaxLength(500);
-            e.Property(x => x.Status).HasMaxLength(32);
+            e.Property(x => x.Status).HasConversion<int>();
             e.Property(x => x.ConsentStatus).HasMaxLength(32);
             e.Property(x => x.ConsentSource).HasMaxLength(64);
             e.Property(x => x.CustomerId).HasMaxLength(64);
@@ -231,7 +232,7 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
         {
             e.ToTable("lead_source_events");
             e.HasKey(x => x.Id);
-            e.Property(x => x.Source).HasMaxLength(32);
+            e.Property(x => x.Source).HasConversion<int>();
             e.HasIndex(x => x.LeadId);
         });
 
@@ -255,8 +256,8 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
         {
             e.ToTable("lead_status_history");
             e.HasKey(x => x.Id);
-            e.Property(x => x.FromStatus).HasMaxLength(32);
-            e.Property(x => x.ToStatus).HasMaxLength(32);
+            e.Property(x => x.FromStatus).HasConversion<int?>();
+            e.Property(x => x.ToStatus).HasConversion<int>();
             e.Property(x => x.ChangedBy).HasMaxLength(200);
             e.HasIndex(x => x.LeadId);
         });
@@ -269,7 +270,7 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.Property(x => x.Email).HasMaxLength(200);
             e.Property(x => x.Phone).HasMaxLength(32);
             e.Property(x => x.PasswordHash).HasMaxLength(400);
-            e.Property(x => x.Role).HasMaxLength(16);
+            e.Property(x => x.Role).HasConversion<int>();
             e.HasIndex(x => x.Email).IsUnique();
             e.HasIndex(x => x.DesignationId);
         });
@@ -290,10 +291,10 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.Property(x => x.OrderId).HasMaxLength(64);
             e.Property(x => x.Type).HasMaxLength(16);
             e.Property(x => x.Title).HasMaxLength(300);
-            e.Property(x => x.Status).HasMaxLength(16);
+            e.Property(x => x.Status).HasConversion<int>();
             e.Property(x => x.Outcome).HasMaxLength(500);
             e.Property(x => x.CompletedBy).HasMaxLength(200);
-            e.Property(x => x.Source).HasMaxLength(16);
+            e.Property(x => x.Source).HasConversion<int>();
             e.Property(x => x.StepKey).HasMaxLength(64);
             e.Property(x => x.CreatedBy).HasMaxLength(200);
             e.HasIndex(x => new { x.AssignedToEmployeeId, x.Status, x.DueAt });
@@ -347,12 +348,12 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.ToTable("work_tasks");
             e.HasKey(x => x.Id);
             e.Property(x => x.Title).HasMaxLength(300);
-            e.Property(x => x.Status).HasMaxLength(16);
-            e.Property(x => x.Priority).HasMaxLength(16);
+            e.Property(x => x.Status).HasConversion<int>();
+            e.Property(x => x.Priority).HasConversion<int>();
             e.Property(x => x.CreatedByName).HasMaxLength(200);
             e.Property(x => x.OrderId).HasMaxLength(64);
             e.Property(x => x.Tags).HasMaxLength(300);
-            e.Property(x => x.Repeat).HasMaxLength(16);
+            e.Property(x => x.Repeat).HasConversion<int>();
             e.HasIndex(x => new { x.AssignedToEmployeeId, x.Status, x.DueAt });
             e.HasIndex(x => x.LeadId);
             e.HasIndex(x => x.DepartmentId);

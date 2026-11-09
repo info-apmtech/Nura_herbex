@@ -15,12 +15,12 @@ public class AdminCatalogController(NuraDbContext db) : ControllerBase
         Price = p.Price, CompareAtPrice = p.CompareAtPrice, CostPrice = p.CostPrice,
         StockQuantity = p.StockQuantity, WeightKg = p.WeightKg, LengthCm = p.LengthCm,
         BreadthCm = p.BreadthCm, HeightCm = p.HeightCm, HsnCode = p.HsnCode,
-        ImageUrl = p.ImageUrl, Status = p.Status, Category = p.Category, FssaiLicense = p.FssaiLicense, UpdatedAt = p.UpdatedAt,
+        ImageUrl = p.ImageUrl, Status = p.Status.ToCode(), Category = p.Category, FssaiLicense = p.FssaiLicense, UpdatedAt = p.UpdatedAt,
         ShortName = p.ShortName, Badge = p.Badge, Highlights = p.Highlights, Ingredients = p.Ingredients, Directions = p.Directions, ServingInfo = p.ServingInfo
     };
     private static AdminCouponDto CouponDto(Coupon c, int used = 0) => new()
     {
-        Code = c.Code, DiscountType = c.DiscountType, DiscountValue = c.DiscountValue,
+        Code = c.Code, DiscountType = c.DiscountType.ToCode(), DiscountValue = c.DiscountValue,
         MinOrderAmount = c.MinOrderAmount, MaxDiscountCap = c.MaxDiscountCap,
         IsActive = c.IsActive, ExpiresAt = c.ExpiresAt, OrdersUsed = used
     };
@@ -32,7 +32,7 @@ public class AdminCatalogController(NuraDbContext db) : ControllerBase
         if (p.CompareAtPrice.HasValue && (p.CompareAtPrice < p.Price || p.CompareAtPrice > 10000000)) return "Compare-at price must be at least the selling price, or left empty.";
         if (p.StockQuantity < 0 || p.StockQuantity > 1000000) return "Stock must be between 0 and 1,000,000.";
         if (p.WeightKg <= 0 || p.WeightKg > 1000 || p.LengthCm <= 0 || p.BreadthCm <= 0 || p.HeightCm <= 0 || p.LengthCm > 1000 || p.BreadthCm > 1000 || p.HeightCm > 1000) return "Enter positive parcel weight and dimensions (maximum 1,000 each).";
-        if (p.Status is not ("active" or "draft" or "archived")) return "Choose Active, Draft or Archived.";
+        if (p.Status is not (ProductStatuses.Active or ProductStatuses.Draft or ProductStatuses.Archived)) return "Choose Active, Draft or Archived.";
         if ((p.Description?.Length ?? 0) > 10000 || (p.Subtitle?.Length ?? 0) > 300 || (p.Category?.Length ?? 0) > 100 || (p.HsnCode?.Length ?? 0) > 32 || (p.ShortName?.Length ?? 0) > 100 || (p.Badge?.Length ?? 0) > 60 || (p.Highlights?.Length ?? 0) > 2000 || (p.Ingredients?.Length ?? 0) > 4000 || (p.Directions?.Length ?? 0) > 4000 || (p.ServingInfo?.Length ?? 0) > 200 || (p.FssaiLicense?.Length ?? 0) > 64) return "One or more product details are too long.";
         var image = p.ImageUrl?.Trim() ?? "";
         if (image.Length > 2048 || (image.Length > 0 && !(image.StartsWith('/') && !image.StartsWith("//") && !image.Contains('\\')) && !(Uri.TryCreate(image, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http"))) return "Use an HTTPS image URL or a local path beginning with /.";
@@ -60,7 +60,7 @@ public class AdminCatalogController(NuraDbContext db) : ControllerBase
         p.LengthCm = decimal.Round(r.LengthCm, 2); p.BreadthCm = decimal.Round(r.BreadthCm, 2); p.HeightCm = decimal.Round(r.HeightCm, 2);
         if (p.Price <= 0 || p.WeightKg <= 0 || p.LengthCm <= 0 || p.BreadthCm <= 0 || p.HeightCm <= 0) return BadRequest(new ApiResult { Message = "Price and parcel values are too small." });
         p.HsnCode = r.HsnCode?.Trim() ?? ""; p.FssaiLicense = r.FssaiLicense?.Trim(); p.Category = r.Category?.Trim();
-        p.ImageUrl = r.ImageUrl?.Trim() ?? ""; p.Status = r.Status; p.UpdatedAt = DateTime.UtcNow;
+        p.ImageUrl = r.ImageUrl?.Trim() ?? ""; p.Status = ProductStatuses.TryParse(r.Status, out var parsedStatus) ? parsedStatus : ProductStatus.Active; p.UpdatedAt = DateTime.UtcNow;
         p.ShortName = r.ShortName?.Trim(); p.Badge = r.Badge?.Trim(); p.Highlights = r.Highlights?.Trim(); p.Ingredients = r.Ingredients?.Trim(); p.Directions = r.Directions?.Trim(); p.ServingInfo = r.ServingInfo?.Trim();
         if (id is null) db.Products.Add(p);
         try { await db.SaveChangesAsync(); }
@@ -72,7 +72,7 @@ public class AdminCatalogController(NuraDbContext db) : ControllerBase
     {
         var product = await db.Products.FindAsync(id);
         if (product is null) return NotFound(new ApiResult { Message = "Product not found." });
-        product.Status = "archived"; product.UpdatedAt = DateTime.UtcNow;
+        product.Status = ProductStatus.Archived; product.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return Ok(new ApiResult { Success = true, Message = "Product archived. Previous orders are preserved." });
     }
@@ -90,13 +90,13 @@ public class AdminCatalogController(NuraDbContext db) : ControllerBase
     {
         var clean = r.Code?.Trim().ToUpperInvariant() ?? "";
         if (clean.Length is < 3 or > 64 || clean.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '-' or '_'))) return BadRequest(new ApiResult { Message = "Code must be 3–64 letters, numbers, hyphens or underscores." });
-        if (r.DiscountType is not ("PERCENTAGE" or "FIXED") || r.DiscountValue <= 0 || r.DiscountValue > 10000000 || (r.DiscountType == "PERCENTAGE" && r.DiscountValue > 100)) return BadRequest(new ApiResult { Message = "Enter a valid discount: 0–100% or a positive fixed amount." });
+        if (!CouponDiscountTypes.TryParse(r.DiscountType, out var discountType) || r.DiscountValue <= 0 || r.DiscountValue > 10000000 || (discountType == CouponDiscountType.Percentage && r.DiscountValue > 100)) return BadRequest(new ApiResult { Message = "Enter a valid discount: 0–100% or a positive fixed amount." });
         if (r.MinOrderAmount < 0 || r.MinOrderAmount > 10000000 || r.MaxDiscountCap < 0 || r.MaxDiscountCap > 10000000) return BadRequest(new ApiResult { Message = "Minimum order and discount cap must be non-negative amounts." });
         if (code is not null && !string.Equals(code, clean, StringComparison.OrdinalIgnoreCase)) return BadRequest(new ApiResult { Message = "Coupon codes cannot be renamed. Create another coupon instead." });
         if (code is null && await db.Coupons.AnyAsync(c => c.Code == clean)) return Conflict(new ApiResult { Message = "This coupon code already exists." });
         var coupon = code is null ? new Coupon { Code = clean } : await db.Coupons.FindAsync(clean);
         if (coupon is null) return NotFound(new ApiResult { Message = "Coupon not found." });
-        coupon.DiscountType = r.DiscountType; coupon.DiscountValue = decimal.Round(r.DiscountValue, 2);
+        coupon.DiscountType = discountType; coupon.DiscountValue = decimal.Round(r.DiscountValue, 2);
         if (coupon.DiscountValue <= 0) return BadRequest(new ApiResult { Message = "Discount must be at least 0.01." });
         coupon.MinOrderAmount = decimal.Round(r.MinOrderAmount, 2); coupon.MaxDiscountCap = decimal.Round(r.MaxDiscountCap, 2);
         coupon.IsActive = r.IsActive; coupon.ExpiresAt = r.ExpiresAt?.ToUniversalTime();

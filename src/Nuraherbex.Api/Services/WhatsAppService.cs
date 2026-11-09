@@ -357,7 +357,7 @@ public partial class WhatsAppService(
         var sb = new StringBuilder();
         sb.AppendLine($"📦 *Order {o.Id}*");
         sb.AppendLine($"Status: *{o.DeliveryStatus}*");
-        sb.AppendLine($"Total: ₹{o.TotalAmount:N0} ({(o.PaymentMethod == "COD" ? "Cash on Delivery" : o.PaymentStatus)})");
+        sb.AppendLine($"Total: ₹{o.TotalAmount:N0} ({(o.PaymentMethod == OrderPaymentMethod.Cod ? "Cash on Delivery" : o.PaymentStatus.ToCode())})");
         if (!string.IsNullOrWhiteSpace(o.ShiprocketAwb) && !o.ShiprocketAwb.StartsWith("SR-PENDING-"))
             sb.AppendLine($"Courier: {o.ShiprocketCourier} · AWB {o.ShiprocketAwb}");
         return sb.ToString().TrimEnd();

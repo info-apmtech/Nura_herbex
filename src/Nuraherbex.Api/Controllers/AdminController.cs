@@ -79,7 +79,7 @@ public class AdminController(
         return Ok(new AdminLoginResponse
         {
             Success = true, Valid = true, Message = "Authenticated successfully", Token = tokens.CreateStaffToken(emp),
-            User = new AdminUserDto { Email = emp.Email, Role = emp.Role, Name = emp.Name, EmployeeId = emp.Id, Rights = new Dictionary<string, int>((await rightsSvc.ResolveEmployeeAsync(emp.Id)).Levels), Department = (await rightsSvc.ResolveEmployeeAsync(emp.Id)).Department, Designation = (await rightsSvc.ResolveEmployeeAsync(emp.Id)).Designation },
+            User = new AdminUserDto { Email = emp.Email, Role = emp.Role.ToCode(), Name = emp.Name, EmployeeId = emp.Id, Rights = new Dictionary<string, int>((await rightsSvc.ResolveEmployeeAsync(emp.Id)).Levels), Department = (await rightsSvc.ResolveEmployeeAsync(emp.Id)).Department, Designation = (await rightsSvc.ResolveEmployeeAsync(emp.Id)).Designation },
         });
     }
 
@@ -121,7 +121,7 @@ public class AdminController(
                 PaymentMethod = r.PaymentMethod, CouponCode = r.CouponCode,
             }, null);
 
-            if (r.PaymentMethod != "COD" && r.MarkPaid)
+            if (r.PaymentMethod != OrderPaymentMethods.Cod && r.MarkPaid)
                 order = await orders.MarkPaidAsync(order.Id, $"ADMIN-{DateTime.UtcNow:yyyyMMddHHmmss}", null, "{\"source\":\"admin-manual\"}");
 
             return StatusCode(201, new OrderResponse { Success = true, Order = order.ToDto() });

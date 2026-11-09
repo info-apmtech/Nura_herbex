@@ -129,9 +129,8 @@ namespace Nuraherbex.Api.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("DiscountType")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("DiscountType")
+                        .HasColumnType("int");
 
                     b.Property<decimal>("DiscountValue")
                         .HasPrecision(18, 2)
@@ -326,10 +325,8 @@ namespace Nuraherbex.Api.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("nvarchar(16)");
+                    b.Property<int>("Role")
+                        .HasColumnType("int");
 
                     b.Property<bool>("WhatsAppActive")
                         .HasColumnType("bit");
@@ -402,15 +399,11 @@ namespace Nuraherbex.Api.Data.Migrations
                     b.Property<DateTime?>("ReminderSentAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("nvarchar(16)");
+                    b.Property<int>("Source")
+                        .HasColumnType("int");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("nvarchar(16)");
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
 
                     b.Property<string>("StepKey")
                         .HasMaxLength(64)
@@ -548,19 +541,15 @@ namespace Nuraherbex.Api.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
+                    b.Property<int>("Source")
+                        .HasColumnType("int");
 
                     b.Property<string>("SourceDetail")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -636,10 +625,8 @@ namespace Nuraherbex.Api.Data.Migrations
                     b.Property<string>("ReferralJson")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
+                    b.Property<int>("Source")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -664,9 +651,8 @@ namespace Nuraherbex.Api.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("FromStatus")
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
+                    b.Property<int?>("FromStatus")
+                        .HasColumnType("int");
 
                     b.Property<long>("LeadId")
                         .HasColumnType("bigint");
@@ -674,10 +660,8 @@ namespace Nuraherbex.Api.Data.Migrations
                     b.Property<string>("Note")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("ToStatus")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
+                    b.Property<int>("ToStatus")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -814,18 +798,14 @@ namespace Nuraherbex.Api.Data.Migrations
                         .HasPrecision(9, 3)
                         .HasColumnType("decimal(9,3)");
 
-                    b.Property<string>("PaymentMethod")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("nvarchar(16)");
+                    b.Property<int>("PaymentMethod")
+                        .HasColumnType("int");
 
                     b.Property<string>("PaymentRef")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("PaymentStatus")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
+                    b.Property<int>("PaymentStatus")
+                        .HasColumnType("int");
 
                     b.Property<string>("PayuTxnId")
                         .HasColumnType("nvarchar(max)");
@@ -1103,10 +1083,8 @@ namespace Nuraherbex.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
 
                     b.Property<int>("StockQuantity")
                         .HasColumnType("int");
@@ -1497,18 +1475,14 @@ namespace Nuraherbex.Api.Data.Migrations
                     b.Property<DateTime?>("OverdueNotifiedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("Priority")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("nvarchar(16)");
+                    b.Property<int>("Priority")
+                        .HasColumnType("int");
 
                     b.Property<DateTime?>("ReminderSentAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("Repeat")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("nvarchar(16)");
+                    b.Property<int>("Repeat")
+                        .HasColumnType("int");
 
                     b.Property<DateTime?>("StartAt")
                         .HasColumnType("datetime2");
@@ -1519,10 +1493,8 @@ namespace Nuraherbex.Api.Data.Migrations
                     b.Property<DateTime?>("StartedNotifiedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("nvarchar(16)");
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
 
                     b.Property<string>("Tags")
                         .HasMaxLength(300)

@@ -149,7 +149,7 @@ public sealed class ShiprocketTrackingWorker(IServiceScopeFactory scopes, ILogge
         order.FulfillmentStatus = mapped.Status;
         order.DeliveryStatus = mapped.Text;
         order.UpdatedAt = DateTime.UtcNow;
-        if (mapped.Status == "DELIVERED" && order.PaymentMethod == "COD") order.PaymentStatus = "COD_COLLECTED";
+        if (mapped.Status == "DELIVERED" && order.PaymentMethod == OrderPaymentMethod.Cod) order.PaymentStatus = OrderPaymentStatus.CodCollected;
         return EmailService.TransitionEmail(mapped.Status, previous);
     }
 

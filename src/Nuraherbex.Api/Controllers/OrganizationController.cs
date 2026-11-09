@@ -35,7 +35,7 @@ public class OrganizationController(NuraDbContext db, RightsService rightsServic
         var deps = await db.Departments.AsNoTracking().OrderByDescending(d => d.IsActive).ThenBy(d => d.Name).ToListAsync();
         var people = await db.Employees.AsNoTracking().Where(e => e.IsActive && e.DepartmentId != null).GroupBy(e => e.DepartmentId!.Value).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N);
         var desig = await db.Designations.AsNoTracking().Where(d => d.DepartmentId != null).GroupBy(d => d.DepartmentId!.Value).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N);
-        var tasks = await db.WorkTasks.AsNoTracking().Where(t => t.DepartmentId != null && t.Status != TaskStatuses.Done).GroupBy(t => t.DepartmentId!.Value).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N);
+        var tasks = await db.WorkTasks.AsNoTracking().Where(t => t.DepartmentId != null && t.Status != WorkTaskStatus.Done).GroupBy(t => t.DepartmentId!.Value).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N);
         var names = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
         return new DepartmentListResponse
         {
