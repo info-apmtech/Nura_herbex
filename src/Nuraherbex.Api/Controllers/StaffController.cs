@@ -108,6 +108,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
             .GroupJoin(db.Conversations.AsNoTracking(), l => l.Id, c => c.LeadId, (l, cs) => new { l, cs })
             .SelectMany(x => x.cs.DefaultIfEmpty(), (x, c) => new { x.l, c })
             .ToListAsync();
+        rows.Reverse(); // the newest N were fetched; show them oldest first so the latest lead sits at the bottom
 
         var ids = rows.Select(r => r.l.Id).ToList();
         var last = await db.WhatsAppMessages.AsNoTracking()
@@ -533,8 +534,8 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
             if (!StaffAvailability.IsOnline(emp)) return BadRequest(new ApiResult { Success = false, Message = $"{emp.Name} is not signed in right now, so they cannot be set active. They can switch it on themselves when they sign in." });
             emp.WhatsAppActive = true;
             await db.SaveChangesAsync();
-            var given = await leads.AssignWaitingAsync() + await leads.RebalanceAsync();
-            return Ok(new ApiResult { Success = true, Message = given > 0 ? $"{emp.Name} is WhatsApp active. {given} lead(s) were shared out." : $"{emp.Name} is WhatsApp active." });
+            var given = await leads.AssignWaitingAsync();
+            return Ok(new ApiResult { Success = true, Message = given > 0 ? $"{emp.Name} is WhatsApp active. {given} waiting lead(s) were given to them." : $"{emp.Name} is WhatsApp active." });
         }
         var moved = await leads.SwitchOffWhatsAppAsync(id, $"WhatsApp switched off by {MyName}", MyName);
         return Ok(new ApiResult { Success = true, Message = moved > 0 ? $"{emp.Name} is WhatsApp off. {moved} pending lead(s) moved to other active people, or back to the admin queue if nobody else is active." : $"{emp.Name} is WhatsApp off." });

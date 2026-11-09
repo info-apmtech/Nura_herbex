@@ -391,10 +391,11 @@
                                             @($"[{m.Type}]")
                                         }
                                         <span class="@($"ld-meta {(m.Status == "failed" ? "failed" : "")}")">
-                                            @if (m.Status == "failed") { <span>Not delivered</span> }
+                                            @if (m.Status == "failed") { <span title="@m.Error">Not delivered</span> }
                                             @local.ToString("hh:mm tt")
                                             @if (!inbound && m.Status != "failed") { @Ticks(m.Status) }
                                         </span>
+                                        @if (m.Status == "failed" && !string.IsNullOrEmpty(m.Error)) { <span class="ld-fail-why" style="display:block;font-size:11px;color:#b42318;margin-top:2px">@m.Error</span> }
                                         @if (!string.IsNullOrEmpty(m.Reaction)) { <span class="ld-react" title="Customer reacted">@m.Reaction</span> }
                                     </div>
                                     prevDay = local.Date; prevDir = m.Direction;
@@ -404,78 +405,100 @@
 
                         @if (!string.IsNullOrEmpty(_toast)) { <div class="ld-toast">@_toast</div> }
 
-                        @if (CanReply(lead) && _assistantOn)
-                        {
-                            <div class="ra">
-                                <div class="ra-top">
-                                    <span class="ra-title"><Icon Name="Zap" Size="13" /> @(_drafting ? "Writing a reply…" : _draft is null ? "Reply assistant" : _draft.Source == "ai" ? "AI draft" : "Standard reply")</span>
-                                    @if (!_drafting && _draft is not null && !string.IsNullOrEmpty(_draft.Intent)) { <span class="ld-pill new">@_draft.Intent</span> }
-                                    <span class="ra-gap"></span>
-                                    <button type="button" class="ra-chip strong" disabled="@(_busy || _drafting)" @onclick="() => SuggestAsync(null, true)">@(_draft is null ? "Suggest a reply" : "New draft")</button>
-                                    @foreach (var t in Tweaks)
-                                    {
-                                        var tweak = t;
-                                        <button type="button" class="ra-chip" disabled="@(_busy || _drafting || string.IsNullOrWhiteSpace(_reply))" @onclick="() => SuggestAsync(tweak.Instruction, false)">@tweak.Label</button>
-                                    }
-                                </div>
-                                @if (_draft is { NeedsReview: true } && !string.IsNullOrWhiteSpace(_reply))
-                                {
-                                    <div class="ra-warn"><Icon Name="AlertCircle" Size="13" /><span><strong>Check before sending.</strong> @(_draft.ReviewNote ?? "This reply needs a careful read.")</span></div>
-                                }
-                                @if (_draft?.RespondingTo is { Length: > 0 } q && !_drafting)
-                                {
-                                    <div class="ra-q">Replying to: “@q”</div>
-                                }
-                            </div>
-                        }
-
-                        @if (CanReply(lead) && _filesOpen)
-                        {
-                            <div class="ld-filepanel" role="menu" aria-label="Files to send">
-                                @if (_library.Count == 0) { <span class="fu-hint">No files yet. An administrator adds them in Team &amp; organisation → File library.</span> }
-                                @foreach (var lf in _library)
-                                {
-                                    var file = lf;
-                                    <div class="ld-fileitem">
-                                        <span class="ld-filekind">@AdminFileLibrary.KindEmoji(file.Kind)</span>
-                                        <div><strong>@file.Title</strong><small>@LibraryKinds.Label(file.Kind) · @AdminFileLibrary.Size(file.Size)@(file.CanAttach ? "" : " · link only")</small></div>
-                                        <button type="button" class="ld-btn primary" disabled="@(_busy || !file.CanAttach)" title="@(file.CanAttach ? "Send the file itself on WhatsApp" : "Too large to send as an attachment")" @onclick="() => SendFileAsync(file, false)">Send file</button>
-                                        <button type="button" class="ld-btn" disabled="@_busy" title="Send a message with the file's link" @onclick="() => SendFileAsync(file, true)">Send link</button>
+                        <div class="cmp">
+                            @if (CanReply(lead) && _pop != "")
+                            {
+                                <button type="button" class="cmp-scrim" tabindex="-1" aria-label="Close" @onclick="() => _pop = string.Empty"></button>
+                                <div class="cmp-pop" role="dialog" aria-label="@PopTitle(lead)">
+                                    <div class="cmp-pop-head">
+                                        <div><strong>@PopTitle(lead)</strong><small>@PopHint(lead)</small></div>
+                                        <button type="button" class="cmp-x" aria-label="Close" @onclick="() => _pop = string.Empty"><Icon Name="X" Size="16" /></button>
                                     </div>
-                                }
-                            </div>
-                        }
-
-                        @if (CanReply(lead))
-                        {
-                            <div class="ld-tplbar">
-                                <button type="button" class="@($"ra-chip {(_filesOpen ? "strong" : "")}")" aria-expanded="@_filesOpen" @onclick="ToggleFiles"><Icon Name="FileText" Size="13" /> Files &amp; videos</button>
-                                @if (_templates.Count > 0)
-                                {
-                                    <button type="button" class="@($"ra-chip {(_tplOpen ? "strong" : "")}")" aria-expanded="@_tplOpen" @onclick="() => _tplOpen = !_tplOpen"><Icon Name="FileText" Size="13" /> Ready-made replies · @MessageStages.Label(StageOf(lead))</button>
-                                }
-                                @if (_tplOpen && _templates.Count > 0)
-                                {
-                                    <div class="ld-tplpanel" role="menu">
-                                        @foreach (var t in TemplatesFor(lead))
+                                    <div class="cmp-pop-body">
+                                        @if (_pop == "ai")
                                         {
-                                            var tpl = t;
-                                            <button type="button" role="menuitem" class="ld-tplitem" @onclick="() => UseTemplate(tpl)">
-                                                <strong>@tpl.Title</strong><small>@MessageDefaults.Fill(tpl.Body, lead.Name, AdminAuth.Name, _selected.Orders.FirstOrDefault()?.Id)</small>
+                                            <button type="button" class="cmp-primary" disabled="@(_busy || _drafting)" @onclick="() => SuggestAsync(null, true)">
+                                                <Icon Name="Sparkles" Size="16" /> @(_drafting ? "Writing a reply…" : _draft is null ? "Write a reply for me" : "Write a new draft")
                                             </button>
+                                            @if (_draft?.RespondingTo is { Length: > 0 } rq && !_drafting)
+                                            {
+                                                <div class="cmp-ctx">Replying to <em>“@rq”</em></div>
+                                            }
+                                            <div class="cmp-sub">Rewrite what is in the box</div>
+                                            <div class="cmp-chips">
+                                                @foreach (var t in Tweaks)
+                                                {
+                                                    var tweak = t;
+                                                    <button type="button" class="cmp-chip" disabled="@(_busy || _drafting || string.IsNullOrWhiteSpace(_reply))" @onclick="() => SuggestAsync(tweak.Instruction, false)">@tweak.Label</button>
+                                                }
+                                            </div>
+                                            @if (string.IsNullOrWhiteSpace(_reply)) { <small class="cmp-faint">Write or generate a reply first, then rewrite it here.</small> }
                                         }
-                                        @if (!TemplatesFor(lead).Any()) { <span class="fu-hint">No ready-made replies for this stage yet.</span> }
+                                        else if (_pop == "files")
+                                        {
+                                            @if (_library.Count == 0) { <p class="cmp-empty">No files yet. An administrator adds them in Team &amp; organisation → File library.</p> }
+                                            @foreach (var lf in _library)
+                                            {
+                                                var file = lf;
+                                                <div class="cmp-item">
+                                                    <span class="cmp-ico">@AdminFileLibrary.KindEmoji(file.Kind)</span>
+                                                    <div class="cmp-txt"><strong>@file.Title</strong><small>@LibraryKinds.Label(file.Kind) · @AdminFileLibrary.Size(file.Size)@(file.CanAttach ? "" : " · link only")</small></div>
+                                                    <div class="cmp-acts">
+                                                        <button type="button" class="cmp-btn primary" disabled="@(_busy || !file.CanAttach)" title="@(file.CanAttach ? "Send the file itself on WhatsApp" : "Too large to send as an attachment")" @onclick="() => SendFileAsync(file, false)">Send file</button>
+                                                        <button type="button" class="cmp-btn" disabled="@_busy" title="Send a message with the file's link" @onclick="() => SendFileAsync(file, true)">Send link</button>
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
+                                        else if (_pop == "tpl")
+                                        {
+                                            @if (!TemplatesFor(lead).Any()) { <p class="cmp-empty">No ready-made replies for this stage yet.</p> }
+                                            @foreach (var t in TemplatesFor(lead))
+                                            {
+                                                var tpl = t;
+                                                <button type="button" class="cmp-item cmp-click" @onclick="() => UseTemplate(tpl)">
+                                                    <span class="cmp-ico"><Icon Name="MessageSquare" Size="16" /></span>
+                                                    <div class="cmp-txt"><strong>@tpl.Title</strong><small class="cmp-clamp">@MessageDefaults.Fill(tpl.Body, lead.Name, AdminAuth.Name, _selected.Orders.FirstOrDefault()?.Id)</small></div>
+                                                    <span class="cmp-use">Use</span>
+                                                </button>
+                                            }
+                                        }
                                     </div>
-                                }
-                            </div>
-                        }
+                                </div>
+                            }
 
-                        <form class="ld-composer" @onsubmit="ReplyAsync" @onsubmit:preventDefault>
-                            <textarea rows="@ReplyRows" aria-label="Type a message" disabled="@(_busy || !CanReply(lead))" maxlength="1500"
-                                      placeholder="@(lead.ConsentStatus == "opted_out" ? "Customer opted out" : WindowOpen(lead) ? "Type a message, or use the suggested reply" : "24-hour window closed")"
-                                      @bind="_reply" @bind:event="oninput" @onkeydown="OnReplyKey"></textarea>
-                            <button type="submit" class="ld-send" aria-label="Send message" title="Send (Ctrl+Enter)" disabled="@(_busy || _drafting || !CanReply(lead) || string.IsNullOrWhiteSpace(_reply))"><Icon Name="Send" Size="18" /></button>
-                        </form>
+                            @if (CanReply(lead) && _draft is { NeedsReview: true } && !string.IsNullOrWhiteSpace(_reply))
+                            {
+                                <div class="cmp-note"><Icon Name="AlertCircle" Size="14" /><span><strong>Check before sending.</strong> @(_draft.ReviewNote ?? "This reply needs a careful read.")</span></div>
+                            }
+
+                            <form class="ld-composer" @onsubmit="ReplyAsync" @onsubmit:preventDefault>
+                                <textarea rows="@ReplyRows" aria-label="Type a message" disabled="@(_busy || !CanReply(lead))" maxlength="1500"
+                                          placeholder="@(lead.ConsentStatus == "opted_out" ? "Customer opted out" : WindowOpen(lead) ? "Type a message, or use the tools below" : "24-hour window closed")"
+                                          @bind="_reply" @bind:event="oninput" @onkeydown="OnReplyKey"></textarea>
+                                <button type="submit" class="ld-send" aria-label="Send message" title="Send (Ctrl+Enter)" disabled="@(_busy || _drafting || !CanReply(lead) || string.IsNullOrWhiteSpace(_reply))"><Icon Name="Send" Size="18" /></button>
+                            </form>
+
+                            @if (CanReply(lead))
+                            {
+                                <div class="cmp-bar">
+                                    @if (_assistantOn)
+                                    {
+                                        <button type="button" class="@($"cmp-tool {(_pop == "ai" ? "is-on" : "")}")" aria-expanded="@(_pop == "ai")" @onclick="() => OpenPopAsync(PopAi)">
+                                            <Icon Name="Sparkles" Size="15" /> @(_drafting ? "Writing…" : "Reply assistant")
+                                            @if (!_drafting && _draft is not null) { <span class="cmp-dot" title="@(_draft.Source == "ai" ? "AI draft" : "Standard reply")"></span> }
+                                        </button>
+                                    }
+                                    <button type="button" class="@($"cmp-tool {(_pop == "files" ? "is-on" : "")}")" aria-expanded="@(_pop == "files")" @onclick="() => OpenPopAsync(PopFiles)"><Icon Name="FileText" Size="15" /> Files &amp; videos</button>
+                                    @if (_templates.Count > 0)
+                                    {
+                                        <button type="button" class="@($"cmp-tool {(_pop == "tpl" ? "is-on" : "")}")" aria-expanded="@(_pop == "tpl")" @onclick="() => OpenPopAsync(PopTpl)"><Icon Name="MessageSquare" Size="15" /> Ready-made replies</button>
+                                    }
+                                    <span class="cmp-gap"></span>
+                                    <small class="cmp-hint">Ctrl + Enter to send</small>
+                                </div>
+                            }
+                        </div>
                     </div>
                 }
                 else
@@ -691,12 +714,10 @@
     private Dictionary<string, int> _viewCounts = new();
     private int _unreadTotal;
     private List<MessageTemplateDto> _templates = new();
-    private bool _tplOpen;
 
     // Files from the library, and approved WhatsApp templates for when the 24-hour window is closed
     private List<string> _approved = new();
     private List<LibraryFileDto> _library = new();
-    private bool _filesOpen;
     private MetaTemplateDef? _pickedTpl;
     private List<string> _tplValues = new();
 
@@ -742,16 +763,35 @@
         _busy = false;
     }
 
-    private async Task ToggleFiles()
+    // ---- Composer tools: one panel at a time opens above the text box ----
+    private const string PopAi = "ai", PopFiles = "files", PopTpl = "tpl";
+    private string _pop = string.Empty;
+
+    private async Task OpenPopAsync(string which)
     {
-        _filesOpen = !_filesOpen;
-        _tplOpen = false;
-        if (_filesOpen && _library.Count == 0)
+        _pop = _pop == which ? string.Empty : which;
+        if (_pop == PopFiles && _library.Count == 0)
         {
             var res = await Api.AdminLibraryAsync();
             if (res.Success) _library = res.Files; else _toast = res.Message;
         }
     }
+
+    private string PopTitle(LeadDto lead) => _pop switch
+    {
+        PopAi => "Reply assistant",
+        PopFiles => "Files & videos",
+        PopTpl => "Ready-made replies",
+        _ => "",
+    };
+
+    private string PopHint(LeadDto lead) => _pop switch
+    {
+        PopAi => "Let the assistant write the reply, or rewrite yours.",
+        PopFiles => "Send a brochure, PDF or video from your library.",
+        PopTpl => $"For {MessageStages.Label(StageOf(lead)).ToLowerInvariant()}. Pick one and it fills the box so you can edit it.",
+        _ => "",
+    };
 
     private async Task SendFileAsync(LibraryFileDto file, bool asLink)
     {
@@ -759,7 +799,7 @@
         _busy = true;
         var res = await Api.AdminLeadSendFileAsync(lead.Id, new SendFileRequest { FileId = file.Id, Mode = asLink ? "link" : "attachment" });
         _toast = res.Success ? null : res.Message;
-        if (res.Success) { _filesOpen = false; _notice = $"{(asLink ? "Link to" : "File")} “{file.Title}” sent to {lead.Name}."; }
+        if (res.Success) { _pop = string.Empty; _notice = $"{(asLink ? "Link to" : "File")} “{file.Title}” sent to {lead.Name}."; }
         await RefreshDetailAsync(lead.Id, keepNotes: true);
         await LoadAsync(false);
         _busy = false;
@@ -845,7 +885,7 @@
     {
         if (_selected?.Lead is not { } lead) return;
         _reply = MessageDefaults.Fill(t.Body, lead.Name, AdminAuth.Name, _selected.Orders.FirstOrDefault()?.Id);
-        _tplOpen = false;
+        _pop = string.Empty;
     }
 
     protected override async Task OnInitializedAsync()
@@ -871,7 +911,7 @@
                 await InvokeAsync(async () =>
                 {
                     if (_busy) return;
-                    await LoadAsync(false);
+                    await LoadAsync(false, keepOrder: true);
                     if (_selected?.Lead is { } l) await RefreshDetailAsync(l.Id, keepNotes: true);
                 });
         }
@@ -879,11 +919,19 @@
         catch (ObjectDisposedException) { }
     }
 
-    private async Task LoadAsync(bool spinner)
+    /// <param name="keepOrder">Background refresh: rows already on screen keep their place (only their details update) and brand-new leads are added at the bottom,
+    /// so the list never jumps while someone is typing to a customer. The Refresh button and any action re-sort normally.</param>
+    private async Task LoadAsync(bool spinner, bool keepOrder = false)
     {
         if (spinner) { _loading = true; StateHasChanged(); }
         var res = await Api.AdminLeadsAsync(_statusFilter, null, _query, _assignee, 100, Mode);
         if (_cts.IsCancellationRequested) return;
+        if (res.Success && keepOrder && _leads.Count > 0)
+        {
+            var fresh = res.Leads.ToDictionary(x => x.Id);
+            var known = _leads.Select(x => x.Id).ToHashSet();
+            res.Leads = _leads.Where(x => fresh.ContainsKey(x.Id)).Select(x => fresh[x.Id]).Concat(res.Leads.Where(x => !known.Contains(x.Id))).ToList();
+        }
         if (res.Success) { _leads = res.Leads; _counts = res.StatusCounts; _unassigned = res.UnassignedCount; _viewCounts = res.ViewCounts; _unreadTotal = res.UnreadTotal; _error = null; }
         else _error = res.Message ?? "Could not load leads.";
         _loading = false;
@@ -920,7 +968,7 @@
 
     private async Task OpenAsync(long id)
     {
-        _toast = null; _tab = "chat"; _reply = ""; _draft = null; _draftForMessage = 0;
+        _toast = null; _tab = "chat"; _reply = ""; _draft = null; _draftForMessage = 0; _pop = string.Empty;
         await RefreshDetailAsync(id, keepNotes: false);
         await LoadAsync(false); // the unread badge clears once the conversation is opened
     }
@@ -1049,6 +1097,7 @@
     {
         if (_selected?.Lead is not { } lead) return;
         var lastInbound = _selected.Messages.LastOrDefault(m => m.Direction == "inbound");
+        _pop = string.Empty; // close the panel so the new text in the box is what they see
         _drafting = true; _toast = null; StateHasChanged();
         var res = await Api.AdminSuggestReplyAsync(lead.Id, new ReplySuggestRequest { Fresh = fresh, Instruction = instruction, CurrentDraft = string.IsNullOrWhiteSpace(_reply) ? null : _reply });
         _drafting = false;
@@ -1177,7 +1226,8 @@
             return;
         }
         var safeUrl = System.Net.WebUtility.HtmlEncode(url);
-        var fallback = $"<span class=\"ld-nomedia\" hidden>The {label} could not be loaded. Ask the customer to send it again.</span>";
+        var retry = "var s=this.parentElement,e=s.previousElementSibling;if(e&&e.tagName==='A')e=e.firstElementChild;e.src=e.src.split('&r=')[0]+'&r='+Date.now();e.hidden=false;s.hidden=true;return false;";
+        var fallback = $"<span class=\"ld-nomedia\" hidden>The {label} could not be loaded. <a href=\"#\" onclick=\"{retry}\">Try again</a> · <a href=\"{safeUrl}\" target=\"_blank\" rel=\"noopener\">Open or download</a> (some formats, like 3GP video or AMR audio, only play in an app on your device).</span>";
         switch (m.Type)
         {
             case "image":
