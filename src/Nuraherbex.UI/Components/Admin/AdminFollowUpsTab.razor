@@ -37,11 +37,12 @@
         @* Status chips double as the filter *@
         <WhatsAppUsageBar @ref="_usageBar" />
 
-        <div class="fu-chips five">
-            <button type="button" class="@ChipClass("overdue", "late")" @onclick='() => SetScopeAsync("overdue")'><b>@_counts.Overdue</b><span>Overdue</span></button>
-            <button type="button" class="@ChipClass("today", "today")" @onclick='() => SetScopeAsync("today")'><b>@_counts.Today</b><span>Due today</span></button>
+        <div class="fu-chips six">
+            <button type="button" class="@ChipClass("overdue", "late")" @onclick='() => SetScopeAsync("overdue")' title="Due on an earlier day and still not done"><b>@_counts.Overdue</b><span>Overdue</span></button>
+            <button type="button" class="@ChipClass("today", "today")" @onclick='() => SetScopeAsync("today")' title="Due today"><b>@_counts.Today</b><span>Today</span></button>
+            <button type="button" class="@ChipClass("tomorrow", "")" @onclick='() => SetScopeAsync("tomorrow")' title="Due tomorrow"><b>@_counts.Tomorrow</b><span>Tomorrow</span></button>
+            <button type="button" class="@ChipClass("later", "")" @onclick='() => SetScopeAsync("later")' title="Due the day after tomorrow or later, grouped by date"><b>@_counts.Later</b><span>Later dates</span></button>
             <button type="button" class="@ChipClass("messages", "msg")" @onclick='() => SetScopeAsync("messages")' title="WhatsApp messages ready to send now"><b>@_counts.Messages</b><span>Messages to send</span></button>
-            <button type="button" class="@ChipClass("upcoming", "")" @onclick='() => SetScopeAsync("upcoming")'><b>@_counts.Upcoming</b><span>Coming up</span></button>
             <button type="button" class="@ChipClass("sent", "")" @onclick='() => SetScopeAsync("sent")' title="Messages sent from follow-ups, last 30 days"><b>@_counts.Sent</b><span>Sent (30 days)</span></button>
         </div>
         <div class="fu-chips-more"><button type="button" class="fu-skip" @onclick='() => SetScopeAsync("done")'>Show everything completed in the last 30 days (@_counts.Done)</button></div>
@@ -86,7 +87,7 @@
             {
                 <div class="ld-empty"><strong>@EmptyTitle</strong>@EmptyText</div>
             }
-            else if (_scope == "upcoming")
+            else if (_scope is "upcoming" or "later")
             {
                 @foreach (var g in PageItems.GroupBy(i => FuFmt.Local(i.DueAt).Date))
                 {
@@ -132,6 +133,8 @@
     {
         "overdue" => "Nothing is overdue",
         "today" => "You are all caught up for today",
+        "tomorrow" => "Nothing is due tomorrow",
+        "later" => "Nothing scheduled for later dates",
         "upcoming" => "Nothing scheduled ahead",
         "done" => "Nothing completed yet",
         "messages" => "No messages are waiting",
@@ -143,6 +146,8 @@
     {
         "overdue" => "Great — no follow-up has been missed.",
         "today" => "New work appears here when a task falls due.",
+        "tomorrow" => "Follow-ups booked for tomorrow appear here.",
+        "later" => "Schedule a follow-up from a lead, or wait for the 15-day journey of a delivered order to be created. They are grouped by date.",
         "upcoming" => "Schedule a follow-up from a lead, or wait for the 15-day journey of a delivered order to be created.",
         "done" => "Finished follow-ups from the last 30 days are listed here.",
         "messages" => "Welcome, thank-you and reorder messages appear here when they are due. Nothing is sent until you press Send.",

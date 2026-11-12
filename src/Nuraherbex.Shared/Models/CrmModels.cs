@@ -56,7 +56,10 @@ public class CrmDashboardResponse : ApiResult
     /// <summary>True when the numbers cover only the signed-in employee's own leads.</summary>
     public bool Personal { get; set; }
 
+    /// <summary>People who enquired for the first time in the period (records created only because an order was placed are not counted).</summary>
     public int NewLeads { get; set; }
+    /// <summary>Of <see cref="NewLeads"/>, those who arrived through a Click-to-WhatsApp ad: the number to compare with Meta.</summary>
+    public int AdLeads { get; set; }
     public int ConvertedLeads { get; set; }
     /// <summary>Of the leads created in the period, the share that is now a customer (0-100).</summary>
     public int ConversionRate { get; set; }

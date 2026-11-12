@@ -86,30 +86,57 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
     private async Task<ReportResponse> LeadsAsync(DateTime from, DateTime to, long? ownerOnly)
     {
         var owners = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
-        var leads = await db.Leads.AsNoTracking().Where(l => l.CreatedAt >= from && l.CreatedAt < to && (ownerOnly == null || l.AssignedToEmployeeId == ownerOnly)).OrderByDescending(l => l.CreatedAt).Take(MaxRows).ToListAsync();
+        // Same definition as the CRM dashboard: people who enquired in the period; records made only because an order was placed are not new leads.
+        var periodQ = db.Leads.AsNoTracking().Where(l => l.CreatedAt >= from && l.CreatedAt < to && (ownerOnly == null || l.AssignedToEmployeeId == ownerOnly)).Where(LeadService.IsNewEnquiry);
+        var leads = await periodQ.OrderByDescending(l => l.CreatedAt).Take(MaxRows).ToListAsync();
+        // Summary figures come from the database, so they stay right when the period holds more leads than the sheet has rows.
+        var total = await periodQ.CountAsync();
+        var byStatus = (await periodQ.GroupBy(l => l.Status).Select(g => new { g.Key, N = g.Count() }).ToListAsync()).ToDictionary(x => x.Key, x => x.N);
+        var adLeads = await periodQ.CountAsync(l => db.LeadSourceEvents.Any(e => e.LeadId == l.Id && e.ReferralJson != null));
+        var noOwner = await periodQ.CountAsync(l => l.AssignedToEmployeeId == null);
+        var bySource = (await periodQ.GroupBy(l => l.Source).Select(g => new { g.Key, N = g.Count() }).ToListAsync()).OrderByDescending(x => x.N).FirstOrDefault();
+        // "No answer" is not a stored status: it is a New or Follow-up lead whose last finished follow-up got no answer. It is split out so the status figures add up to the total.
+        var naNew = await periodQ.Where(l => l.Status == LeadStatus.New).CountAsync(LeadService.NoAnswerOf(db, true));
+        var naFollow = await periodQ.Where(l => l.Status == LeadStatus.FollowUp).CountAsync(LeadService.NoAnswerOf(db, true));
+        var naIds = (await periodQ.Where(l => l.Status == LeadStatus.New || l.Status == LeadStatus.FollowUp).Where(LeadService.NoAnswerOf(db, true)).Select(l => l.Id).Take(MaxRows).ToListAsync()).ToHashSet();
         var ids = leads.Select(l => l.Id).ToList();
         // The newest comment staff left when changing the lead's status, plus how many follow-ups are done.
         var notes = (await db.LeadStatusHistory.AsNoTracking().Where(h => ids.Contains(h.LeadId) && h.Note != null && h.Note != "").OrderByDescending(h => h.CreatedAt).ToListAsync())
             .GroupBy(h => h.LeadId).ToDictionary(g => g.Key, g => g.First());
         var fu = await db.FollowUps.AsNoTracking().Where(f => ids.Contains(f.LeadId)).GroupBy(f => f.LeadId).Select(g => new { g.Key, Total = g.Count(), Done = g.Count(f => f.Status == FollowUpStatus.Done) }).ToDictionaryAsync(x => x.Key);
-        var res = new ReportResponse { Columns = ["Lead ID", "Created", "Name", "Phone", "Email", "Source", "Campaign / detail", "Status", "Owner", "Notes", "Latest comment", "Follow-ups", "Last contact", "Converted on", "Consent", "First message"] };
+        // Where each lead stands with follow-ups: the result of the last finished one, and the next one booked.
+        var lastResult = (await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Done && f.Outcome != null && ids.Contains(f.LeadId))
+                .OrderByDescending(f => f.CompletedAt).ThenByDescending(f => f.Id).Select(f => new { f.LeadId, f.Outcome }).ToListAsync())
+            .GroupBy(x => x.LeadId).ToDictionary(g => g.Key, g => g.First().Outcome!);
+        var nextDue = (await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Pending && ids.Contains(f.LeadId)).GroupBy(f => f.LeadId).Select(g => new { g.Key, At = g.Min(x => x.DueAt) }).ToListAsync())
+            .ToDictionary(x => x.Key, x => x.At);
+        // "Status" shows what the Leads tabs show: no-answer for a lead whose last follow-up got no answer, otherwise the stored status.
+        string StatusOf(Lead l) => naIds.Contains(l.Id) ? FollowUpOutcomes.NoAnswer : l.Status.ToCode();
+        var res = new ReportResponse { Columns = ["Lead ID", "Created", "Name", "Phone", "Email", "Source", "Campaign / detail", "Status", "Owner", "Notes", "Latest comment", "Follow-ups", "Last contact", "Converted on", "Consent", "First message", "Last follow-up result", "Next follow-up"] };
         foreach (var l in leads)
         {
             notes.TryGetValue(l.Id, out var h);
             fu.TryGetValue(l.Id, out var f);
-            res.Rows.Add([l.Id.ToString(Inv), Ist(l.CreatedAt), l.Name, l.Phone, l.Email ?? "", l.Source.ToCode(), l.SourceDetail ?? "", l.Status.ToCode(),
+            res.Rows.Add([l.Id.ToString(Inv), Ist(l.CreatedAt), l.Name, l.Phone, l.Email ?? "", l.Source.ToCode(), l.SourceDetail ?? "", StatusOf(l),
                 l.AssignedToEmployeeId is { } id ? owners.GetValueOrDefault(id) ?? "" : "Unassigned", Clip(l.Notes, 300),
-                h is null ? "" : $"{Clip(h.Note, 300)} ({Ist(h.CreatedAt)})", f is null ? "" : $"{f.Done} of {f.Total} done", Ist(l.LastContactAt), Ist(l.ConvertedAt), l.ConsentStatus, Clip(l.FirstMessage, 160)]);
+                h is null ? "" : $"{Clip(h.Note, 300)} ({Ist(h.CreatedAt)})", f is null ? "" : $"{f.Done} of {f.Total} done", Ist(l.LastContactAt), Ist(l.ConvertedAt), l.ConsentStatus, Clip(l.FirstMessage, 160),
+                lastResult.GetValueOrDefault(l.Id) is { } lr ? Clip(lr, 160) : "", nextDue.TryGetValue(l.Id, out var nd) ? Ist(nd) : ""]);
         }
-        var won = leads.Count(l => l.Status == LeadStatus.Converted);
-        var unassigned = leads.Count(l => l.AssignedToEmployeeId is null);
+        int N(LeadStatus s) => byStatus.GetValueOrDefault(s);
+        var won = N(LeadStatus.Converted);
+        // Every lead is in exactly one of: New, In follow-up, No answer, Interested, Not interested, Converted.
         res.Summary =
         [
-            S("New leads", leads.Count), S("Converted", $"{won} ({Pct(won, leads.Count)})", "Conversion rate of this period's leads", "good"),
-            S("Interested", leads.Count(l => l.Status == LeadStatus.Interested)), S("In follow-up", leads.Count(l => l.Status == LeadStatus.FollowUp)),
-            S("Not interested", leads.Count(l => l.Status == LeadStatus.NotInterested)), S("Still new", leads.Count(l => l.Status == LeadStatus.New)),
-            S("Unassigned", unassigned, "Leads with no owner", unassigned > 0 ? "warn" : "neutral"),
-            S("Top source", leads.GroupBy(l => l.Source).OrderByDescending(g => g.Count()).Select(g => $"{g.Key.ToCode()} ({g.Count()})").FirstOrDefault() ?? "None"),
+            S("Leads in this period", total, "Everyone who first enquired in the period; orders placed without an enquiry are not counted"),
+            S("From Meta ads", adLeads, "Arrived through a Click-to-WhatsApp ad: compare this with Meta"),
+            S("New, not started", N(LeadStatus.New) - naNew, "Nobody has worked on them yet"),
+            S("In follow-up", N(LeadStatus.FollowUp) - naFollow, "Being chased"),
+            S("No answer", naNew + naFollow, "The last call or message got no answer; a retry is booked", naNew + naFollow > 0 ? "warn" : "neutral"),
+            S("Interested", N(LeadStatus.Interested), "Hot leads"),
+            S("Not interested", N(LeadStatus.NotInterested), "Closed for now"),
+            S("Converted", $"{won} ({Pct(won, total)})", "Placed an order; the percentage is of this period's leads", "good"),
+            S("Unassigned", noOwner, "Leads with no owner", noOwner > 0 ? "warn" : "neutral"),
+            S("Top source", bySource is null ? "None" : $"{bySource.Key.ToCode()} ({bySource.N})"),
         ];
         return res;
     }
@@ -138,7 +165,9 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
         [
             S("Follow-ups due", items.Count), S("Done", $"{done} ({Pct(done, items.Count)})", null, "good"),
             S("Overdue", overdue, "Still pending after their day", overdue > 0 ? "bad" : "neutral"), S("Pending", items.Count(f => f.Status == FollowUpStatus.Pending) - overdue),
-            S("Skipped", items.Count(f => f.Status == FollowUpStatus.Skipped)), S("WhatsApp messages sent", sent, "Sent from the follow-up list"),
+            S("No answer", items.Count(f => f.Status == FollowUpStatus.Done && f.Outcome != null && f.Outcome.StartsWith(FollowUpOutcomes.NoAnswer)), "Calls or messages that got no answer (a retry was booked each time)"),
+            S("Not interested", items.Count(f => f.Status == FollowUpStatus.Done && f.Outcome != null && f.Outcome.StartsWith(FollowUpOutcomes.NotInterested)), "Follow-ups that ended with the lead saying no"),
+            S("Skipped", items.Count(f => f.Status == FollowUpStatus.Skipped), "Closed without being done, for example replaced by a newer follow-up"), S("WhatsApp messages sent", sent, "Sent from the follow-up list"),
             S("Sent automatically", items.Count(f => f.CompletedBy == "auto")), S("Journey steps", items.Count(f => f.Source == FollowUpSource.Journey)),
         ];
         return res;

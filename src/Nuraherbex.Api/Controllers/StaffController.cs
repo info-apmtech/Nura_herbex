@@ -102,17 +102,41 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
             baseQuery = baseQuery.Where(l => l.Name.Contains(term) || (digits.Length > 0 && l.Phone.Contains(digits)) || (l.Email != null && l.Email.Contains(term)));
         }
 
-        var counts = await baseQuery.GroupBy(l => l.Status).Select(g => new { g.Key, N = g.Count() }).ToListAsync();
+        // The Leads panel is split into tabs by what needs doing (new today / older and still unopened / follow-up / no answer / not interested);
+        // the other panels keep one count per status.
+        var todayStart = FollowUpService.TodayStartUtc();
+        var bucketed = view == LeadViews.Leads;
+        Dictionary<string, int> statusCounts;
+        if (bucketed)
+        {
+            statusCounts = [];
+            foreach (var b in LeadBuckets.All) statusCounts[b] = await InBucket(baseQuery, b, todayStart).CountAsync();
+        }
+        else
+            statusCounts = (await baseQuery.GroupBy(l => l.Status).Select(g => new { g.Key, N = g.Count() }).ToListAsync()).ToDictionary(c => c.Key.ToCode(), c => c.N);
+
         var filtered = string.IsNullOrWhiteSpace(status)
             ? baseQuery
-            : LeadStatuses.TryParse(status, out var statusEnum)
-                ? baseQuery.Where(l => l.Status == statusEnum)
-                : baseQuery.Where(_ => false);
-        var rows = await filtered.OrderByDescending(l => l.LastContactAt).Take(Math.Clamp(take, 1, 500))
+            : bucketed && LeadBuckets.All.Contains(status.Trim().ToLowerInvariant())
+                ? InBucket(baseQuery, status.Trim().ToLowerInvariant(), todayStart)
+                : LeadStatuses.TryParse(status, out var statusEnum)
+                    ? baseQuery.Where(l => l.Status == statusEnum)
+                    : baseQuery.Where(_ => false);
+        // Follow-up and No answer tabs are a work list: leads with a follow-up due today come first, then the rest by their next due date
+        // (missed ones before tomorrow's and later ones, leads with nothing booked last). Other lists show the latest conversations at the bottom.
+        var byDue = bucketed && status?.Trim().ToLowerInvariant() is LeadBuckets.FollowUp or LeadBuckets.NoAnswer;
+        var dayEnd = todayStart.AddDays(1);
+        IQueryable<Lead> ordered = byDue
+            ? filtered
+                .OrderBy(l => db.FollowUps.Any(f => f.LeadId == l.Id && f.Status == FollowUpStatus.Pending && f.DueAt >= todayStart && f.DueAt < dayEnd) ? 0 : 1)
+                .ThenBy(l => db.FollowUps.Any(f => f.LeadId == l.Id && f.Status == FollowUpStatus.Pending) ? 0 : 1)
+                .ThenBy(l => db.FollowUps.Where(f => f.LeadId == l.Id && f.Status == FollowUpStatus.Pending).Min(f => (DateTime?)f.DueAt))
+            : filtered.OrderByDescending(l => l.LastContactAt);
+        var rows = await ordered.Take(Math.Clamp(take, 1, 500))
             .GroupJoin(db.Conversations.AsNoTracking(), l => l.Id, c => c.LeadId, (l, cs) => new { l, cs })
             .SelectMany(x => x.cs.DefaultIfEmpty(), (x, c) => new { x.l, c })
             .ToListAsync();
-        rows.Reverse(); // the newest N were fetched; show them oldest first so the latest lead sits at the bottom
+        if (!byDue) rows.Reverse(); // the newest N were fetched; show them oldest first so the latest lead sits at the bottom
 
         var ids = rows.Select(r => r.l.Id).ToList();
         var last = await db.WhatsAppMessages.AsNoTracking()
@@ -124,6 +148,10 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
 
         var nextFu = (await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Pending && ids.Contains(f.LeadId)).GroupBy(f => f.LeadId).Select(g => new { g.Key, At = g.Min(x => x.DueAt) }).ToListAsync()).ToDictionary(x => x.Key, x => x.At);
         var orderStats = await OrderStatsAsync(rows.Select(r => r.l));
+        var dueTodayIds = (await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Pending && f.DueAt >= todayStart && f.DueAt < dayEnd && ids.Contains(f.LeadId)).Select(f => f.LeadId).Distinct().ToListAsync()).ToHashSet();
+        var noAnswerIds = (await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Done && f.Outcome != null && ids.Contains(f.LeadId))
+                .OrderByDescending(f => f.CompletedAt).ThenByDescending(f => f.Id).Select(f => new { f.LeadId, f.Outcome }).ToListAsync())
+            .GroupBy(x => x.LeadId).Where(g => g.First().Outcome!.StartsWith(FollowUpOutcomes.NoAnswer)).Select(g => g.Key).ToHashSet();
 
         return new LeadListResponse
         {
@@ -134,6 +162,8 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
                 dto.AssignedToName = r.l.AssignedToEmployeeId is { } eid ? names.GetValueOrDefault(eid) : null;
                 dto.ConvertedByName = r.l.ConvertedByEmployeeId is { } cid ? names.GetValueOrDefault(cid) : null;
                 if (nextFu.TryGetValue(r.l.Id, out var nf)) dto.NextFollowUpAt = nf;
+                dto.NoAnswer = noAnswerIds.Contains(r.l.Id);
+                dto.FollowUpToday = dueTodayIds.Contains(r.l.Id);
                 if (orderStats.TryGetValue(r.l.Id, out var os)) { dto.OrderCount = os.Count; dto.LifetimeValue = os.Value; dto.LastOrderAt = os.Last; dto.OpenOrders = os.Open; }
                 if (lastByLead.TryGetValue(r.l.Id, out var m))
                 {
@@ -143,12 +173,26 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
                 return dto;
             }).ToList(),
             Total = await filtered.CountAsync(),
-            StatusCounts = counts.ToDictionary(c => c.Key.ToCode(), c => c.N),
+            StatusCounts = statusCounts,
             ViewCounts = viewCounts,
             UnreadTotal = await db.Conversations.AsNoTracking().Where(c => c.UnreadCount > 0 && scopeQuery.Any(l => l.Id == c.LeadId)).SumAsync(c => (int?)c.UnreadCount) ?? 0,
             UnassignedCount = CanAll(view) ? await InView(db.Leads.AsNoTracking(), view).CountAsync(l => l.AssignedToEmployeeId == null) : 0,
         };
     }
+
+    /// <summary>True when the lead's most recent finished follow-up ended with "no answer".</summary>
+    private System.Linq.Expressions.Expression<Func<Lead, bool>> NoAnswerOf(bool want) => LeadService.NoAnswerOf(db, want);
+
+    /// <summary>One tab of the Leads panel. New = first enquiry today, nobody started yet; Older = same but from an earlier day and still unopened.</summary>
+    private IQueryable<Lead> InBucket(IQueryable<Lead> q, string bucket, DateTime todayStart) => bucket switch
+    {
+        LeadBuckets.New => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.New && l.CreatedAt >= todayStart).Where(NoAnswerOf(false)),
+        LeadBuckets.Older => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.New && l.CreatedAt < todayStart).Where(NoAnswerOf(false)),
+        LeadBuckets.FollowUp => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.FollowUp).Where(NoAnswerOf(false)),
+        LeadBuckets.NoAnswer => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.New || l.Status == Nuraherbex.Shared.Models.LeadStatus.FollowUp).Where(NoAnswerOf(true)),
+        LeadBuckets.NotInterested => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.NotInterested),
+        _ => q.Where(_ => false),
+    };
 
     // ---- Customer view: orders matched to the lead by phone ------------------------------------
 
@@ -317,6 +361,18 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         if (LeadService.StatusBlock(lead, r.Status) is { } blocked) return BadRequest(new ApiResult { Success = false, Message = blocked });
         await leads.ChangeStatusAsync(id, r.Status, r.Note, MyActorId);
         return Ok(new ApiResult { Success = true, Message = "Status updated" });
+    }
+
+    /// <summary>"No answer": logs the attempt and books a retry (tomorrow 10 am unless a time is given). The lead moves to the No answer tab.</summary>
+    [HttpPost("leads/{id:long}/no-answer")]
+    public async Task<IActionResult> LeadNoAnswer(long id, LeadNoAnswerRequest r, [FromServices] FollowUpService followUps)
+    {
+        var lead = await FindLeadAsync(id);
+        if (lead is null) return NoLead();
+        if (lead.Status is Nuraherbex.Shared.Models.LeadStatus.Converted or Nuraherbex.Shared.Models.LeadStatus.NotInterested)
+            return BadRequest(new ApiResult { Success = false, Message = "Reopen this lead before logging a no-answer." });
+        var (ok, message) = await followUps.LogNoAnswerAsync(lead, r.NextDueAt, r.Note, MyActorId, MyId);
+        return ok ? Ok(new ApiResult { Success = true, Message = message }) : BadRequest(new ApiResult { Success = false, Message = message });
     }
 
     [HttpPut("leads/{id:long}/notes")]
@@ -598,7 +654,45 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         return Ok(new EmployeeResponse { Success = true, Message = moved > 0 ? $"Employee updated; {moved} open lead(s) were reassigned." : "Employee updated", Employee = emp.ToDto() });
     }
 
-    /// <summary>Removing an employee deactivates the login (history stays intact), moves their open leads and returns their open tasks to unassigned.</summary>
+    /// <summary>Active people who can take over a leaving employee's leads / customers (excluding that person).</summary>
+    private async Task<(List<long> Leads, List<long> Care)> HandoverPeopleAsync(long exceptId)
+    {
+        var leadPeople = (await rightsService.EmployeesWithPageAsync("leads")).Concat(await rightsService.EmployeesWithPageAsync("interested")).Where(x => x != exceptId).Distinct().ToList();
+        var carePeople = (await rightsService.EmployeesWithPageAsync("care")).Where(x => x != exceptId).Distinct().ToList();
+        return (leadPeople, carePeople);
+    }
+
+    /// <summary>What the person holds and who could take it, for the "who gets their leads and follow-ups?" popup shown before removal.</summary>
+    [HttpGet("employees/{id:long}/handover")]
+    public async Task<IActionResult> HandoverPreview(long id)
+    {
+        var emp = await db.Employees.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id);
+        if (emp is null) return NotFound(new ApiResult { Success = false, Message = "Employee not found" });
+        var (leadPeople, carePeople) = await HandoverPeopleAsync(id);
+        var pool = leadPeople.Concat(carePeople).Distinct().ToList();
+
+        var mine = await db.Leads.AsNoTracking().Where(l => l.AssignedToEmployeeId == id).Select(l => new { l.CustomerSince, l.Status }).ToListAsync();
+        var openMine = mine.Where(l => l.CustomerSince != null || (l.Status != Nuraherbex.Shared.Models.LeadStatus.Converted && l.Status != Nuraherbex.Shared.Models.LeadStatus.NotInterested)).ToList();
+        var held = (await db.Leads.AsNoTracking().Where(l => l.AssignedToEmployeeId != null && pool.Contains(l.AssignedToEmployeeId.Value)
+                && (l.CustomerSince != null || (l.Status != Nuraherbex.Shared.Models.LeadStatus.Converted && l.Status != Nuraherbex.Shared.Models.LeadStatus.NotInterested)))
+            .GroupBy(l => l.AssignedToEmployeeId!.Value).Select(g => new { g.Key, N = g.Count() }).ToListAsync()).ToDictionary(x => x.Key, x => x.N);
+        var fus = (await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Pending && f.AssignedToEmployeeId != null && (f.AssignedToEmployeeId == id || pool.Contains(f.AssignedToEmployeeId.Value)))
+            .GroupBy(f => f.AssignedToEmployeeId!.Value).Select(g => new { g.Key, N = g.Count() }).ToListAsync()).ToDictionary(x => x.Key, x => x.N);
+        var people = await db.Employees.AsNoTracking().Where(e => pool.Contains(e.Id) && e.IsActive).OrderBy(e => e.Name).ToListAsync();
+
+        return Ok(new HandoverPreviewResponse
+        {
+            Success = true, Name = emp.Name,
+            OpenLeads = openMine.Count(l => l.CustomerSince == null), Customers = openMine.Count(l => l.CustomerSince != null),
+            PendingFollowUps = fus.GetValueOrDefault(id),
+            Candidates = people.Select(p => new HandoverCandidateDto { Id = p.Id, Name = p.Name, IsOnline = StaffAvailability.IsOnline(p), OpenLeads = held.GetValueOrDefault(p.Id), PendingFollowUps = fus.GetValueOrDefault(p.Id) }).ToList(),
+        });
+    }
+
+    /// <summary>
+    /// Removing an employee deactivates the login (history stays intact) and hands over their open leads, customers and pending follow-ups.
+    /// <paramref name="reassign"/>: "equal" (split evenly across the team), an employee id (everything to that person), "unassigned" (admin queue) or "auto" (by who is online).
+    /// </summary>
     [HttpDelete("employees/{id:long}")]
     public async Task<IActionResult> RemoveEmployee(long id, [FromQuery] string? reassign)
     {
@@ -606,6 +700,17 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         if (emp is null) return NotFound(new ApiResult { Success = false, Message = "Employee not found" });
         if (id == MyId) return BadRequest(new ApiResult { Success = false, Message = "You cannot remove your own account." });
         if (emp.Role == EmployeeRole.Admin && !IsAdmin) return BadRequest(new ApiResult { Success = false, Message = "Only an administrator can remove an administrator." });
+
+        var (leadPeople, carePeople) = await HandoverPeopleAsync(id);
+        string mode; long? toId = null;
+        var choice = (reassign ?? "auto").Trim().ToLowerInvariant();
+        if (long.TryParse(choice, out var personId)) { mode = HandoverModes.Person; toId = personId; }
+        else if (choice is HandoverModes.Equal or HandoverModes.Unassigned or HandoverModes.Auto) mode = choice;
+        else return BadRequest(new ApiResult { Success = false, Message = "Choose how to hand over their work: split equally, one person, or the admin queue." });
+        if (mode == HandoverModes.Person && (toId == id || !leadPeople.Concat(carePeople).Contains(toId!.Value)))
+            return BadRequest(new ApiResult { Success = false, Message = "That person cannot take over leads. Pick an active team member who has access to Leads." });
+        if (mode == HandoverModes.Equal && leadPeople.Count == 0 && carePeople.Count == 0)
+            return BadRequest(new ApiResult { Success = false, Message = "There is nobody else to share the leads with. Choose the admin queue instead." });
 
         emp.IsActive = false;
         foreach (var t in await db.WorkTasks.Where(t => t.AssignedToEmployeeId == id && t.Status != WorkTaskStatus.Done).ToListAsync())
@@ -616,9 +721,16 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         if (await db.Departments.FirstOrDefaultAsync(d => d.HeadEmployeeId == id) is { } headOf) headOf.HeadEmployeeId = null;
         await db.SaveChangesAsync();
         RightsService.Invalidate();
-        var moved = await leads.ReassignOpenLeadsAsync(emp.Id, spreadAcrossTeam: !string.Equals(reassign, "unassigned", StringComparison.OrdinalIgnoreCase), MyActorId);
-        log.LogInformation("[Staff] {Admin} removed employee {Email}; {Moved} lead(s) reassigned", MyName, emp.Email, moved);
-        return Ok(new ApiResult { Success = true, Message = moved > 0 ? $"{emp.Name} removed; {moved} open lead(s) were reassigned." : $"{emp.Name} removed." });
+        var moved = await leads.HandOverAsync(emp.Id, mode, toId, leadPeople, carePeople, MyActorId);
+        log.LogInformation("[Staff] {Admin} removed employee {Email}; {Leads} lead(s) and {FollowUps} follow-up(s) handed over ({Mode})", MyName, emp.Email, moved.Leads, moved.FollowUps, mode);
+        var where = mode switch
+        {
+            HandoverModes.Equal => "split equally across the team",
+            HandoverModes.Person => $"given to {await db.Employees.AsNoTracking().Where(e => e.Id == toId).Select(e => e.Name).FirstOrDefaultAsync()}",
+            HandoverModes.Unassigned => "moved to the admin queue",
+            _ => "reassigned",
+        };
+        return Ok(new ApiResult { Success = true, Message = moved.Leads + moved.FollowUps > 0 ? $"{emp.Name} removed; {moved.Leads} lead(s) and {moved.FollowUps} follow-up(s) {where}." : $"{emp.Name} removed." });
     }
 
     /// <summary>The message library: automatic replies and ready-made replies per stage. Everyone who works leads or customers may read it; only Team rights change it.</summary>

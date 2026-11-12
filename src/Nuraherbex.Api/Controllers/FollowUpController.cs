@@ -19,7 +19,7 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
 
     // ---- Tasks -------------------------------------------------------------------------
 
-    /// <param name="scope">overdue | today | upcoming | done | open (default: everything not done)</param>
+    /// <param name="scope">overdue | today | tomorrow | later | upcoming (tomorrow and later) | done | messages | sent | open (default: everything not done)</param>
     /// <param name="assignee">admin only: "unassigned", "me" or an employee id</param>
     [HttpGet("followups")]
     public async Task<FollowUpListResponse> List([FromQuery] string? scope, [FromQuery] string? assignee, [FromQuery] string? type, [FromQuery] long? leadId, [FromQuery] int take = 200)
@@ -34,11 +34,14 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
 
         var today = FollowUpService.TodayStartUtc();
         var tomorrow = today.AddDays(1);
+        var dayAfter = today.AddDays(2);
         var recentDone = FollowUpService.Clock().AddDays(-30);
         var counts = new FollowUpCounts
         {
             Overdue = await q.CountAsync(f => f.Status == FollowUpStatus.Pending && f.DueAt < today),
             Today = await q.CountAsync(f => f.Status == FollowUpStatus.Pending && f.DueAt >= today && f.DueAt < tomorrow),
+            Tomorrow = await q.CountAsync(f => f.Status == FollowUpStatus.Pending && f.DueAt >= tomorrow && f.DueAt < dayAfter),
+            Later = await q.CountAsync(f => f.Status == FollowUpStatus.Pending && f.DueAt >= dayAfter),
             Upcoming = await q.CountAsync(f => f.Status == FollowUpStatus.Pending && f.DueAt >= tomorrow),
             Done = await q.CountAsync(f => f.Status != FollowUpStatus.Pending && f.CompletedAt >= recentDone),
             Messages = await q.CountAsync(f => f.Status == FollowUpStatus.Pending && f.DueAt < tomorrow && f.SuggestedMessage != null && f.SuggestedMessage != ""),
@@ -49,6 +52,8 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
         {
             "overdue" => q.Where(f => f.Status == FollowUpStatus.Pending && f.DueAt < today).OrderBy(f => f.DueAt),
             "today" => q.Where(f => f.Status == FollowUpStatus.Pending && f.DueAt >= today && f.DueAt < tomorrow).OrderBy(f => f.DueAt),
+            "tomorrow" => q.Where(f => f.Status == FollowUpStatus.Pending && f.DueAt >= tomorrow && f.DueAt < dayAfter).OrderBy(f => f.DueAt),
+            "later" => q.Where(f => f.Status == FollowUpStatus.Pending && f.DueAt >= dayAfter).OrderBy(f => f.DueAt),
             "upcoming" => q.Where(f => f.Status == FollowUpStatus.Pending && f.DueAt >= tomorrow).OrderBy(f => f.DueAt),
             "done" => q.Where(f => f.Status != FollowUpStatus.Pending && f.CompletedAt >= recentDone).OrderByDescending(f => f.CompletedAt),
             "messages" => q.Where(f => f.Status == FollowUpStatus.Pending && f.DueAt < tomorrow && f.SuggestedMessage != null && f.SuggestedMessage != "").OrderBy(f => f.DueAt),

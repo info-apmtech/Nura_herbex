@@ -122,6 +122,10 @@ public class LeadDto
     public int OpenOrders { get; set; }
     /// <summary>Soonest pending follow-up, if any.</summary>
     public DateTime? NextFollowUpAt { get; set; }
+    /// <summary>The last follow-up on this lead ended with "no answer" (a retry is waiting).</summary>
+    public bool NoAnswer { get; set; }
+    /// <summary>Has a pending follow-up due today (Indian calendar day); the Follow-up tab lists these first.</summary>
+    public bool FollowUpToday { get; set; }
     /// <summary>Orders placed by this customer (matched by phone) and what they are worth.</summary>
     public int OrderCount { get; set; }
     public decimal LifetimeValue { get; set; }
@@ -151,6 +155,42 @@ public class LeadListResponse : ApiResult
     public int UnreadTotal { get; set; }
 }
 
+/// <summary>
+/// Tabs of the Leads panel. "new" = first enquiry today and nobody has started on it; "older" = the same, but it arrived on an earlier day and is still unopened;
+/// "follow-up" = being chased; "no-answer" = the last call or message got no answer; "not-interested" = closed for now.
+/// </summary>
+public static class LeadBuckets
+{
+    public const string New = LeadStatuses.New, Older = "older", FollowUp = LeadStatuses.FollowUp, NoAnswer = "no-answer", NotInterested = LeadStatuses.NotInterested;
+    public static readonly string[] All = [New, Older, FollowUp, NoAnswer, NotInterested];
+}
+
+/// <summary>What happens to a leaving employee's leads and follow-ups: "equal" splits them evenly across the team, "person" gives all to one person, "unassigned" returns them to the admin queue, "auto" follows who is online.</summary>
+public static class HandoverModes
+{
+    public const string Equal = "equal", Person = "person", Unassigned = "unassigned", Auto = "auto";
+}
+
+public class HandoverCandidateDto
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = "";
+    public bool IsOnline { get; set; }
+    /// <summary>Open leads this person already holds.</summary>
+    public int OpenLeads { get; set; }
+    public int PendingFollowUps { get; set; }
+}
+
+/// <summary>What a person leaving the team holds, and who can take it over (shown in the popup before removal).</summary>
+public class HandoverPreviewResponse : ApiResult
+{
+    public string Name { get; set; } = "";
+    public int OpenLeads { get; set; }
+    public int Customers { get; set; }
+    public int PendingFollowUps { get; set; }
+    public List<HandoverCandidateDto> Candidates { get; set; } = new();
+}
+
 /// <summary>The three panels over the same people: new and follow-up leads, interested leads, and paid customers.</summary>
 public static class LeadViews
 {
@@ -174,6 +214,13 @@ public class LeadStatusRequest
 {
     public string Status { get; set; } = LeadStatuses.New;
     public string? Note { get; set; }
+}
+
+/// <summary>Records that a call or message got no answer. A retry is booked for <see cref="NextDueAt"/> (tomorrow 10 am when empty).</summary>
+public class LeadNoAnswerRequest
+{
+    public string? Note { get; set; }
+    public DateTime? NextDueAt { get; set; }
 }
 
 public class LeadNotesRequest

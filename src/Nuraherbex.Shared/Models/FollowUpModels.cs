@@ -127,6 +127,11 @@ public class FollowUpCounts
 {
     public int Overdue { get; set; }
     public int Today { get; set; }
+    /// <summary>Pending, due tomorrow (Indian calendar day).</summary>
+    public int Tomorrow { get; set; }
+    /// <summary>Pending, due the day after tomorrow or later.</summary>
+    public int Later { get; set; }
+    /// <summary>Tomorrow and later together.</summary>
     public int Upcoming { get; set; }
     public int Done { get; set; }
     /// <summary>Pending WhatsApp messages due today or earlier that can be sent straight from the list.</summary>

@@ -17,7 +17,7 @@ else if (!AdminAuth.IsAuthenticated)
 }
 else
 {
-    <div class="admin-shell">
+    <div class="@($"admin-shell {(_collapsed ? "nav-collapsed" : "")}")">
         <aside class="admin-sidebar @(_mobileMenu ? "is-open" : "")" aria-label="Admin navigation">
             <a class="admin-brand" href="/admin"><img class="admin-brand-logo" src="/_content/Nuraherbex.UI/images/logo-mark.png" alt="" /><span>Nura Herbex<small>STORE ADMINISTRATION</small></span></a>
             <div class="admin-store-label"><span class="admin-store-dot"></span> Your store workspace</div>
@@ -25,7 +25,7 @@ else
             <div class="admin-sidebar-bottom"><a class="admin-nav-item" href="/shop"><Icon Name="ExternalLink" Size="18" /> View storefront</a><div class="admin-user"><span class="admin-avatar">@(string.IsNullOrEmpty(AdminAuth.Name) ? "A" : AdminAuth.Name[..1].ToUpperInvariant())</span><span><strong>@(string.IsNullOrEmpty(AdminAuth.Name) ? "Administrator" : AdminAuth.Name)</strong><small>@(AdminAuth.Designation ?? AdminAuth.Email)</small></span><button class="admin-icon-btn" title="Sign out" aria-label="Sign out" @onclick="LogoutAsync"><Icon Name="LogOut" Size="18" /></button></div></div>
         </aside>
         @if (_mobileMenu) { <button class="admin-mobile-backdrop" aria-label="Close navigation" @onclick="() => _mobileMenu = false"></button> }
-        <div class="admin-main"><header class="admin-topbar"><div class="admin-actions"><button class="admin-icon-btn admin-menu-toggle" aria-label="Toggle navigation" aria-expanded="@_mobileMenu" @onclick="() => _mobileMenu = !_mobileMenu"><Icon Name="Menu" Size="22" /></button><span class="admin-breadcrumb">Workspace <span>/</span> <strong>@PageName</strong></span></div><div class="admin-actions">@if (AdminAuth.IsAuthenticated) { <AdminWhatsAppToggle /><AdminBell /> }<span class="admin-today">@DateTime.Now.ToString("ddd, dd MMM yyyy")</span><a class="admin-btn admin-btn-small" href="/shop"><Icon Name="ExternalLink" Size="15" /> Open store</a></div></header>
+        <div class="admin-main"><header class="admin-topbar"><div class="admin-actions"><button class="admin-icon-btn admin-menu-toggle" aria-label="@(_collapsed ? "Show navigation menu" : "Hide navigation menu")" title="@(_collapsed ? "Show the menu" : "Hide the menu to give the page more room")" aria-expanded="@(!_collapsed)" @onclick="ToggleNavAsync"><Icon Name="Menu" Size="22" /></button><span class="admin-breadcrumb">Workspace <span>/</span> <strong>@PageName</strong></span></div><div class="admin-actions">@if (AdminAuth.IsAuthenticated) { <AdminWhatsAppToggle /><AdminBell /> }<span class="admin-today">@DateTime.Now.ToString("ddd, dd MMM yyyy")</span><a class="admin-btn admin-btn-small" href="/shop"><Icon Name="ExternalLink" Size="15" /> Open store</a></div></header>
         <main class="admin-content">
         @if (_loadErrors.Count > 0) { <div role="alert" class="admin-error">@string.Join(" · ", _loadErrors.Select(e => e.Key + ": " + e.Value)) <button class="admin-btn admin-btn-small" @onclick="RefreshAsync">Retry</button></div> }
         @if (!AdminAuth.HasAnyPage) { <div class="admin-error" role="status"><strong>No pages assigned yet.</strong> Ask an administrator to give your account a designation.</div> }
@@ -64,6 +64,15 @@ else
     [Parameter] public string? Section { get; set; }
     private readonly Dictionary<string, string> _loadErrors = new();
     private bool _mobileMenu;
+    /// <summary>Desktop: the left menu is hidden so pages such as Leads get the full width. Remembered between visits.</summary>
+    private bool _collapsed;
+    private const string NavKey = "nura.admin.navCollapsed";
+
+    private async Task ToggleNavAsync()
+    {
+        _collapsed = !_collapsed; _mobileMenu = !_mobileMenu; // phones use the slide-in menu, larger screens the collapse; each ignores the other flag
+        try { await Browser.SetLocalAsync(NavKey, _collapsed ? "1" : "0"); } catch { }
+    }
     private record NavItem(string Id, string Label, string Icon, string Group);
     private static readonly NavItem[] AllPages =
     {
@@ -172,6 +181,7 @@ else
     {
         if (!firstRender) return;
         await Browser.SetMetaAsync(RouteMeta.Admin);
+        try { _collapsed = await Browser.GetLocalAsync(NavKey) == "1"; } catch { }
         await AdminAuth.InitAsync(); // validates a stored token with the server
         _initDone = true;
         EnsureRoleView();

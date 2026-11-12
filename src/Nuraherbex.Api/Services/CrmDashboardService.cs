@@ -34,12 +34,14 @@ public class CrmDashboardService(NuraDbContext db)
         var leadQ = db.Leads.AsNoTracking().AsQueryable();
         if (onlyEmployee is { } me) leadQ = leadQ.Where(l => l.AssignedToEmployeeId == me);
 
-        var created = await leadQ.Where(l => l.CreatedAt >= from).Select(l => new { l.Id, l.Source, l.Status, l.CreatedAt, l.Phone, l.AssignedToEmployeeId, l.ConvertedAt }).ToListAsync();
+        var createdQ = leadQ.Where(l => l.CreatedAt >= from).Where(LeadService.IsNewEnquiry);
+        var adLeads = await createdQ.CountAsync(l => db.LeadSourceEvents.Any(e => e.LeadId == l.Id && e.ReferralJson != null));
+        var created = await createdQ.Select(l => new { l.Id, l.Source, l.Status, l.CreatedAt, l.Phone, l.AssignedToEmployeeId, l.ConvertedAt }).ToListAsync();
         var convertedInPeriod = await leadQ.CountAsync(l => l.ConvertedAt != null && l.ConvertedAt >= from);
         var report = new CrmDashboardResponse
         {
             Success = true, Days = days, From = from, Personal = onlyEmployee is not null,
-            NewLeads = created.Count,
+            NewLeads = created.Count, AdLeads = adLeads,
             ConvertedLeads = convertedInPeriod,
             ConversionRate = created.Count == 0 ? 0 : (int)Math.Round(100.0 * created.Count(l => l.Status == LeadStatus.Converted) / created.Count),
             OpenLeads = await leadQ.CountAsync(l => l.Status != LeadStatus.Converted && l.Status != LeadStatus.NotInterested),

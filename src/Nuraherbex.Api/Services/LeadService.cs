@@ -30,6 +30,21 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
 
     public sealed record InboundResult(Lead Lead, bool Created);
 
+    /// <summary>True (or false when <paramref name="want"/> is false) when the lead's most recent finished follow-up ended with "no answer". One rule shared by the Leads tabs and the reports.</summary>
+    public static System.Linq.Expressions.Expression<Func<Lead, bool>> NoAnswerOf(NuraDbContext db, bool want)
+    {
+        System.Linq.Expressions.Expression<Func<Lead, bool>> e = l => (db.FollowUps.Where(f => f.LeadId == l.Id && f.Status == FollowUpStatus.Done && f.Outcome != null)
+            .OrderByDescending(f => f.CompletedAt).ThenByDescending(f => f.Id).Select(f => f.Outcome).FirstOrDefault() ?? "").StartsWith(FollowUpOutcomes.NoAnswer);
+        return want ? e : System.Linq.Expressions.Expression.Lambda<Func<Lead, bool>>(System.Linq.Expressions.Expression.Not(e.Body), e.Parameters);
+    }
+
+    /// <summary>
+    /// Leads that count as a new enquiry. A customer who orders without ever messaging gets a Converted "Website" lead stamped with the
+    /// order time (see <see cref="UpsertFromOrderAsync"/>); that is not a new lead and must not inflate the New leads figure.
+    /// </summary>
+    public static System.Linq.Expressions.Expression<Func<Lead, bool>> IsNewEnquiry { get; } =
+        l => !(l.Source == LeadSource.Website && l.SourceDetail != null && l.SourceDetail.StartsWith("Order "));
+
     /// <summary>Creates or updates the lead for an inbound WhatsApp message and saves. Safe against concurrent duplicate webhooks.</summary>
     public async Task<InboundResult> UpsertFromWhatsAppAsync(string phone, string? profileName, string? body, string? referralJson, string? referralDetail)
     {
@@ -390,18 +405,105 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     }
 
     /// <summary>Moves every open lead of a leaving employee: spread across the remaining team, or back to the admin queue.</summary>
-    public async Task<int> ReassignOpenLeadsAsync(long fromEmployeeId, bool spreadAcrossTeam, string changedBy)
+    public async Task<int> ReassignOpenLeadsAsync(long fromEmployeeId, bool spreadAcrossTeam, string changedBy) =>
+        (await HandOverAsync(fromEmployeeId, spreadAcrossTeam ? HandoverModes.Auto : HandoverModes.Unassigned, null, [], [], changedBy)).Leads;
+
+    public sealed record HandoverResult(int Leads, int FollowUps);
+
+    /// <summary>
+    /// Hands everything a leaving employee holds to others: open leads (and customers) and pending follow-ups.
+    /// <paramref name="mode"/>: "equal" deals them out one by one to whoever holds the fewest, so the team ends up level; "person" gives all to <paramref name="toEmployeeId"/>;
+    /// "unassigned" returns them to the admin queue; "auto" picks by who is online. Follow-ups go with their lead, so one person never holds the task without the lead.
+    /// <paramref name="leadPeople"/> / <paramref name="carePeople"/> are the active people allowed to work leads / customers (used by "equal" and "person").
+    /// </summary>
+    public async Task<HandoverResult> HandOverAsync(long fromEmployeeId, string mode, long? toEmployeeId, IReadOnlyCollection<long> leadPeople, IReadOnlyCollection<long> carePeople, string changedBy)
     {
         var open = await db.Leads.Where(l => l.AssignedToEmployeeId == fromEmployeeId
-            && (l.CustomerSince != null || (l.Status != LeadStatus.Converted && l.Status != LeadStatus.NotInterested))).ToListAsync(); // customers need an owner too
+            && (l.CustomerSince != null || (l.Status != LeadStatus.Converted && l.Status != LeadStatus.NotInterested))).OrderBy(l => l.CreatedAt).ToListAsync(); // customers need an owner too
+
+        var pool = leadPeople.Concat(carePeople).Where(id => id != fromEmployeeId).Distinct().ToList();
+        // How many open leads each possible receiver holds now; "equal" always hands the next one to the lightest.
+        var load = pool.Count == 0 ? [] : (await db.Leads.AsNoTracking().Where(l => l.AssignedToEmployeeId != null && pool.Contains(l.AssignedToEmployeeId.Value)
+                && (l.CustomerSince != null || (l.Status != LeadStatus.Converted && l.Status != LeadStatus.NotInterested)))
+            .GroupBy(l => l.AssignedToEmployeeId!.Value).Select(g => new { g.Key, N = g.Count() }).ToListAsync()).ToDictionary(x => x.Key, x => x.N);
+        foreach (var id in pool) load.TryAdd(id, 0);
+        var received = new Dictionary<long, (int Leads, int FollowUps)>();
+        void Got(long id, bool lead) { var r = received.GetValueOrDefault(id); received[id] = lead ? (r.Leads + 1, r.FollowUps) : (r.Leads, r.FollowUps + 1); }
+
+        long? Lightest(IReadOnlyCollection<long> from) =>
+            from.Where(id => id != fromEmployeeId).OrderBy(id => load.GetValueOrDefault(id)).ThenBy(id => id).Select(id => (long?)id).FirstOrDefault();
+
         foreach (var lead in open)
         {
-            var target = !spreadAcrossTeam ? null
-                : lead.CustomerSince != null ? await PickCareOwnerAsync(fromEmployeeId)
-                : await PickNextEmployeeAsync(fromEmployeeId, NeedsWhatsAppSwitch(lead));
-            await AssignAsync(lead, target?.Id, $"Employee removed ({(target is null ? "returned to admin queue" : "redistributed")})", changedBy);
+            long? target;
+            string how;
+            switch (mode)
+            {
+                case HandoverModes.Equal:
+                    target = Lightest(lead.CustomerSince != null ? carePeople : leadPeople) ?? Lightest(pool);
+                    how = "split evenly";
+                    break;
+                case HandoverModes.Person:
+                    target = toEmployeeId;
+                    how = "handed to one person";
+                    break;
+                case HandoverModes.Unassigned:
+                    target = null; how = "returned to admin queue";
+                    break;
+                default:
+                    target = (lead.CustomerSince != null ? await PickCareOwnerAsync(fromEmployeeId) : await PickNextEmployeeAsync(fromEmployeeId, NeedsWhatsAppSwitch(lead)))?.Id;
+                    how = target is null ? "returned to admin queue" : "redistributed";
+                    break;
+            }
+            await AssignAsync(lead, target, $"Employee removed ({how})", changedBy);
+            if (target is { } t) { load[t] = load.GetValueOrDefault(t) + 1; Got(t, true); }
             await db.SaveChangesAsync(); // persists LastAssignedAt so the rotation advances per lead
         }
+
+        // Pending follow-ups follow their lead to the lead's new owner; ones whose lead is not theirs (closed or owned by someone else) go to the same place the leads went.
+        var followUps = await db.FollowUps.Where(f => f.AssignedToEmployeeId == fromEmployeeId && f.Status == FollowUpStatus.Pending).OrderBy(f => f.DueAt).ToListAsync();
+        var fuLeadIds = followUps.Select(f => f.LeadId).Distinct().ToList();
+        var leadOwner = followUps.Count == 0 ? [] : await db.Leads.AsNoTracking().Where(l => fuLeadIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => l.AssignedToEmployeeId);
+        foreach (var f in followUps)
+        {
+            long? owner = leadOwner.GetValueOrDefault(f.LeadId);
+            if (owner == fromEmployeeId) owner = null;
+            if (owner is null)
+                owner = mode switch
+                {
+                    HandoverModes.Person => toEmployeeId,
+                    HandoverModes.Equal => Lightest(leadPeople) ?? Lightest(pool),
+                    HandoverModes.Auto => (await PickNextEmployeeAsync(fromEmployeeId, false))?.Id,
+                    _ => null,
+                };
+            f.AssignedToEmployeeId = owner;
+            f.ReminderSentAt = null; f.DueNotifiedAt = null; // the new owner gets the heads-up / due notice themselves
+            if (owner is { } o) Got(o, false);
+        }
+
+        var names = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
+        var from = names.GetValueOrDefault(fromEmployeeId) ?? "A team member";
+        foreach (var (id, r) in received)
+            db.Notifications.Add(new Notification
+            {
+                EmployeeId = id, Kind = "lead", Link = "/admin/leads",
+                Title = $"{from}'s work was handed to you",
+                Body = $"{r.Leads} lead(s) and {r.FollowUps} follow-up(s) are now yours.",
+            });
+        await db.SaveChangesAsync();
+        return new HandoverResult(open.Count, followUps.Count);
+    }
+
+    /// <summary>
+    /// Closes a lead's pending follow-ups that a person scheduled by hand (journey and order tasks are left alone); only those of <paramref name="type"/> when given.
+    /// Caller saves.
+    /// </summary>
+    public async Task<int> CloseOpenManualFollowUpsAsync(long leadId, string reason, string by, string? type = null)
+    {
+        var now = DateTime.UtcNow;
+        var open = (await db.FollowUps.Where(f => f.LeadId == leadId && f.Status == FollowUpStatus.Pending && f.Source == FollowUpSource.Manual && (type == null || f.Type == type)).ToListAsync())
+            .Where(f => f.Status == FollowUpStatus.Pending).ToList(); // re-checked: the caller may have just completed one in memory
+        foreach (var f in open) { f.Status = FollowUpStatus.Skipped; f.CompletedAt = now; f.CompletedBy = by; f.Outcome = Truncate(reason, 500); }
         return open.Count;
     }
     /// <summary>
@@ -489,6 +591,8 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         lead.Status = nextStatus;
         lead.UpdatedAt = DateTime.UtcNow;
         lead.ConvertedAt = nextStatus == LeadStatus.Converted ? lead.ConvertedAt ?? DateTime.UtcNow : null;
+        // Nobody should keep chasing someone who said no: their hand-made follow-ups stop appearing in the lists.
+        if (nextStatus == LeadStatus.NotInterested) await CloseOpenManualFollowUpsAsync(id, "Lead marked not interested", changedBy);
         await db.SaveChangesAsync();
         return true;
     }
