@@ -156,7 +156,7 @@ public class LeadListResponse : ApiResult
 }
 
 /// <summary>
-/// Tabs of the Leads panel. "new" = first enquiry today and nobody has started on it; "older" = the same, but it arrived on an earlier day and is still unopened;
+/// Tabs of the Leads panel. "new" = first enquiry today or yesterday and nobody has started on it; "older" = the same, but it arrived before yesterday and is still unopened;
 /// "follow-up" = being chased; "no-answer" = the last call or message got no answer; "not-interested" = closed for now.
 /// </summary>
 public static class LeadBuckets

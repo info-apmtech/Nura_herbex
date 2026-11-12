@@ -105,12 +105,13 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         // The Leads panel is split into tabs by what needs doing (new today / older and still unopened / follow-up / no answer / not interested);
         // the other panels keep one count per status.
         var todayStart = FollowUpService.TodayStartUtc();
+        var newFrom = todayStart.AddDays(-1); // "New" = arrived today or yesterday (Indian days); anything earlier and still unopened is "Older, not opened"
         var bucketed = view == LeadViews.Leads;
         Dictionary<string, int> statusCounts;
         if (bucketed)
         {
             statusCounts = [];
-            foreach (var b in LeadBuckets.All) statusCounts[b] = await InBucket(baseQuery, b, todayStart).CountAsync();
+            foreach (var b in LeadBuckets.All) statusCounts[b] = await InBucket(baseQuery, b, newFrom).CountAsync();
         }
         else
             statusCounts = (await baseQuery.GroupBy(l => l.Status).Select(g => new { g.Key, N = g.Count() }).ToListAsync()).ToDictionary(c => c.Key.ToCode(), c => c.N);
@@ -118,7 +119,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         var filtered = string.IsNullOrWhiteSpace(status)
             ? baseQuery
             : bucketed && LeadBuckets.All.Contains(status.Trim().ToLowerInvariant())
-                ? InBucket(baseQuery, status.Trim().ToLowerInvariant(), todayStart)
+                ? InBucket(baseQuery, status.Trim().ToLowerInvariant(), newFrom)
                 : LeadStatuses.TryParse(status, out var statusEnum)
                     ? baseQuery.Where(l => l.Status == statusEnum)
                     : baseQuery.Where(_ => false);
@@ -183,11 +184,11 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     /// <summary>True when the lead's most recent finished follow-up ended with "no answer".</summary>
     private System.Linq.Expressions.Expression<Func<Lead, bool>> NoAnswerOf(bool want) => LeadService.NoAnswerOf(db, want);
 
-    /// <summary>One tab of the Leads panel. New = first enquiry today, nobody started yet; Older = same but from an earlier day and still unopened.</summary>
-    private IQueryable<Lead> InBucket(IQueryable<Lead> q, string bucket, DateTime todayStart) => bucket switch
+    /// <summary>One tab of the Leads panel. New = first enquiry today or yesterday, nobody started yet; Older = same but from before yesterday and still unopened.</summary>
+    private IQueryable<Lead> InBucket(IQueryable<Lead> q, string bucket, DateTime newFrom) => bucket switch
     {
-        LeadBuckets.New => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.New && l.CreatedAt >= todayStart).Where(NoAnswerOf(false)),
-        LeadBuckets.Older => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.New && l.CreatedAt < todayStart).Where(NoAnswerOf(false)),
+        LeadBuckets.New => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.New && l.CreatedAt >= newFrom).Where(NoAnswerOf(false)),
+        LeadBuckets.Older => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.New && l.CreatedAt < newFrom).Where(NoAnswerOf(false)),
         LeadBuckets.FollowUp => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.FollowUp).Where(NoAnswerOf(false)),
         LeadBuckets.NoAnswer => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.New || l.Status == Nuraherbex.Shared.Models.LeadStatus.FollowUp).Where(NoAnswerOf(true)),
         LeadBuckets.NotInterested => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.NotInterested),
