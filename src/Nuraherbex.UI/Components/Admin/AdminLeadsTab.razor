@@ -675,7 +675,7 @@
 
     /// <summary>May see and manage everyone's people in this panel, not just their own.</summary>
     private bool Everyone => AdminAuth.CanAll(Mode);
-    /// <summary>Tabs of the Leads panel: new today, older and still unopened, follow-up, no answer, not interested.</summary>
+    /// <summary>Tabs of the Leads panel: new (today and yesterday), older and still unopened, follow-up, no answer, not interested.</summary>
     private static readonly string[] KpiStatuses = LeadBuckets.All;
     /// <summary>A lead becomes a customer only through a paid order, so "Converted" is not a choice here.</summary>
     private static readonly string[] EditableStatuses = [LeadStatuses.New, LeadStatuses.Interested, LeadStatuses.FollowUp, LeadStatuses.NotInterested];
@@ -851,8 +851,8 @@
             default:
                 return
                 [
-                    new("New", "Arrived today, awaiting a first reply", Accent(LeadStatuses.New), all.Where(l => BucketOf(l) == LeadBuckets.New).ToList()),
-                    new("Older, not opened", "Arrived on an earlier day, nobody started", Accent(LeadBuckets.Older), all.Where(l => BucketOf(l) == LeadBuckets.Older).ToList()),
+                    new("New", "Arrived today or yesterday, awaiting a first reply", Accent(LeadStatuses.New), all.Where(l => BucketOf(l) == LeadBuckets.New).ToList()),
+                    new("Older, not opened", "Arrived before yesterday, nobody started", Accent(LeadBuckets.Older), all.Where(l => BucketOf(l) == LeadBuckets.Older).ToList()),
                     new("Follow-up", "Needs a callback", Accent(LeadStatuses.FollowUp), all.Where(l => BucketOf(l) == LeadBuckets.FollowUp).ToList()),
                     new("No answer", "Last call or message unanswered", Accent(LeadBuckets.NoAnswer), all.Where(l => BucketOf(l) == LeadBuckets.NoAnswer).ToList()),
                     new("Not interested", "Closed for now", "#94a3b8", all.Where(l => BucketOf(l) == LeadBuckets.NotInterested).ToList()),
@@ -861,14 +861,14 @@
     }
 
     /// <summary>Same rule as the server: today is the Indian calendar day.</summary>
-    private static DateTime TodayStartUtc => DateTime.UtcNow.AddHours(5.5).Date.AddHours(-5.5);
+    private static DateTime NewFromUtc => DateTime.UtcNow.AddHours(5.5).Date.AddDays(-1).AddHours(-5.5); // start of yesterday, Indian time
 
     private static string BucketOf(LeadDto l)
     {
         if (l.Status == LeadStatuses.NotInterested) return LeadBuckets.NotInterested;
         if (l.NoAnswer && l.Status is LeadStatuses.New or LeadStatuses.FollowUp) return LeadBuckets.NoAnswer;
         if (l.Status == LeadStatuses.FollowUp) return LeadBuckets.FollowUp;
-        if (l.Status == LeadStatuses.New) return DateTime.SpecifyKind(l.CreatedAt, DateTimeKind.Utc) >= TodayStartUtc ? LeadBuckets.New : LeadBuckets.Older;
+        if (l.Status == LeadStatuses.New) return DateTime.SpecifyKind(l.CreatedAt, DateTimeKind.Utc) >= NewFromUtc ? LeadBuckets.New : LeadBuckets.Older;
         return l.Status;
     }
 
@@ -1176,9 +1176,9 @@
 
     private static string KpiHint(string status) => status switch
     {
-        LeadBuckets.Older => "From earlier days, still unopened",
+        LeadBuckets.Older => "Before yesterday, still unopened",
         LeadBuckets.NoAnswer => "Last call or message unanswered",
-        LeadStatuses.New => "Arrived today, awaiting first reply",
+        LeadStatuses.New => "Today and yesterday, awaiting first reply",
         LeadStatuses.Interested => "Showing buying intent",
         LeadStatuses.FollowUp => "Needs a callback",
         LeadStatuses.Converted => "Became customers",
