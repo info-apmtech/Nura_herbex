@@ -205,7 +205,9 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<EmployeeResponse> AdminCreateEmployeeAsync(EmployeeSaveRequest r) => Call<EmployeeResponse>(HttpMethod.Post, "api/admin/employees", r, Who.Admin);
     public Task<EmployeeResponse> AdminUpdateEmployeeAsync(long id, EmployeeSaveRequest r) => Call<EmployeeResponse>(HttpMethod.Put, $"api/admin/employees/{id}", r, Who.Admin);
     public Task<ApiResult> AdminSetEmployeeWhatsAppAsync(long id, bool active) => Call<ApiResult>(HttpMethod.Put, $"api/admin/employees/{id}/whatsapp", new WhatsAppActiveRequest { Active = active }, Who.Admin);
-    public Task<ApiResult> AdminRemoveEmployeeAsync(long id, bool spreadLeads) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/employees/{id}?reassign={(spreadLeads ? "auto" : "unassigned")}", null, Who.Admin);
+    /// <param name="reassign">"equal" (split evenly), an employee id (everything to one person), "unassigned" (admin queue) or "auto".</param>
+    public Task<ApiResult> AdminRemoveEmployeeAsync(long id, string reassign) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/employees/{id}?reassign={Uri.EscapeDataString(reassign)}", null, Who.Admin);
+    public Task<HandoverPreviewResponse> AdminHandoverPreviewAsync(long id) => Call<HandoverPreviewResponse>(HttpMethod.Get, $"api/admin/employees/{id}/handover", null, Who.Admin);
     public Task<ApiResult> AdminLeadSettingsAsync(bool autoAssign) => Call<ApiResult>(HttpMethod.Put, "api/admin/leads/settings", new LeadSettingsRequest { AutoAssign = autoAssign }, Who.Admin);
     public Task<MessageTemplatesResponse> AdminMessageTemplatesAsync() => Call<MessageTemplatesResponse>(HttpMethod.Get, "api/admin/leads/templates", null, Who.Admin);
     public Task<ApiResult> AdminSaveMessageTemplatesAsync(MessageTemplatesSettings s) => Call<ApiResult>(HttpMethod.Put, "api/admin/leads/templates", s, Who.Admin);
@@ -281,6 +283,7 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<MetaConnectionResponse> AdminTestMetaConnectionAsync() => Call<MetaConnectionResponse>(HttpMethod.Post, "api/admin/ads/connection/test", null, Who.Admin);
     public Task<MetaConnectionResponse> AdminDisconnectMetaAsync() => Call<MetaConnectionResponse>(HttpMethod.Delete, "api/admin/ads/connection", null, Who.Admin);
     public Task<ApiResult> AdminLeadStatusAsync(long id, LeadStatusRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/status", r, Who.Admin);
+    public Task<ApiResult> AdminLeadNoAnswerAsync(long id, LeadNoAnswerRequest r) => Call<ApiResult>(HttpMethod.Post, $"api/admin/leads/{id}/no-answer", r, Who.Admin);
     public Task<ApiResult> AdminLeadNotesAsync(long id, LeadNotesRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/notes", r, Who.Admin);
     public Task<AdminProductListResponse> AdminCatalogAsync() => Call<AdminProductListResponse>(HttpMethod.Get, "api/admin/catalog/products", null, Who.Admin);
     public Task<AdminProductResponse> AdminSaveProductAsync(AdminProductDto p, bool create) => Call<AdminProductResponse>(create ? HttpMethod.Post : HttpMethod.Put, "api/admin/catalog/products" + (create ? "" : "/" + Uri.EscapeDataString(p.Id)), p, Who.Admin);

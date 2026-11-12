@@ -148,6 +148,8 @@ public class FollowUpService(
 
         var createdBy = myId?.ToString(CultureInfo.InvariantCulture) ?? actor;
         var item = NewItem(lead, r.Type, string.IsNullOrWhiteSpace(r.Title) ? DefaultTitle(r.Type, lead.Name) : r.Title.Trim(), r.Notes, due, owner, FollowUpSource.Manual, createdBy, await ReminderDaysAsync());
+        // One schedule per lead and kind: the new date replaces an older hand-made follow-up of the same type instead of stacking up beside it (the cause of old dates showing again and again).
+        await leads.CloseOpenManualFollowUpsAsync(lead.Id, "Replaced by a newer follow-up", createdBy, r.Type);
         db.FollowUps.Add(item);
 
         // Scheduling a follow-up means the lead is being worked on.
@@ -215,6 +217,7 @@ public class FollowUpService(
             if (next <= now) return (false, "Choose a callback time in the future.");
             var again = NewItem(lead, item.Type == FollowUpTypes.Order ? FollowUpTypes.Call : item.Type, item.Title.StartsWith("Retry: ") ? item.Title : "Retry: " + item.Title, null, next, item.AssignedToEmployeeId, FollowUpSource.Manual, completedBy, await ReminderDaysAsync());
             again.OrderId = null;
+            await leads.CloseOpenManualFollowUpsAsync(lead.Id, "Replaced by the next attempt", completedBy, again.Type);
             db.FollowUps.Add(again);
             message = $"Completed. Next follow-up set for {FormatDue(next)}.";
         }
@@ -222,6 +225,23 @@ public class FollowUpService(
         await db.SaveChangesAsync();
         await CloseJourneyIfFinishedAsync(item);
         return (true, message);
+    }
+
+    /// <summary>
+    /// One-click "No answer" from the lead screen: finishes the lead's open hand-made follow-up (or logs a call made just now) with outcome "no answer",
+    /// which books the retry. The lead then shows under the No answer tab until a later follow-up gets a different result.
+    /// </summary>
+    public async Task<(bool Ok, string Message)> LogNoAnswerAsync(Lead lead, DateTime? nextDue, string? note, string actor, long? actorId)
+    {
+        var open = await db.FollowUps.Where(f => f.LeadId == lead.Id && f.Status == FollowUpStatus.Pending && f.Source == FollowUpSource.Manual).OrderBy(f => f.DueAt).FirstOrDefaultAsync();
+        if (open is null)
+        {
+            var by = actorId?.ToString(CultureInfo.InvariantCulture) ?? actor;
+            open = NewItem(lead, FollowUpTypes.Call, DefaultTitle(FollowUpTypes.Call, lead.Name), null, Clock(), lead.AssignedToEmployeeId ?? actorId, FollowUpSource.Manual, by, 0);
+            db.FollowUps.Add(open);
+            await db.SaveChangesAsync();
+        }
+        return await CompleteAsync(open, new FollowUpCompleteRequest { Outcome = FollowUpOutcomes.NoAnswer, Note = note, NextDueAt = nextDue }, actor, actorId);
     }
 
     private async Task CloseJourneyIfFinishedAsync(FollowUp item)
@@ -313,6 +333,7 @@ public class FollowUpService(
         var started = await EnsureStartedAtAsync();
         var settings = await GetSettingsAsync();
         await SyncOrdersAsync(settings, started);
+        await TidyManualFollowUpsAsync();
         await AddMissingJourneyStepsAsync();
         await SendRemindersAsync();
         if (settings.AutoSend) await AutoSendAsync();
@@ -398,6 +419,35 @@ public class FollowUpService(
         if (!sent) return;
         lead.WelcomeSentAt = now;
         await SaveQuietlyAsync();
+    }
+
+    /// <summary>
+    /// Cleans up follow-ups that pile up on the same lead: when a lead holds several pending hand-made follow-ups of one type only the newest stays, and ones for a lead that said
+    /// "not interested" are closed. Without this, a lead from the 5th, 6th or 7th keeps showing as overdue next to its real schedule.
+    /// </summary>
+    private async Task TidyManualFollowUpsAsync()
+    {
+        var pending = db.FollowUps.Where(f => f.Status == FollowUpStatus.Pending && f.Source == FollowUpSource.Manual);
+        var crowded = await pending.GroupBy(f => f.LeadId).Where(g => g.Count() > 1).Select(g => g.Key).Take(200).ToListAsync();
+        var closed = db.Leads.Where(l => l.Status == LeadStatus.NotInterested).Select(l => l.Id);
+        var rows = await pending.Where(f => crowded.Contains(f.LeadId) || closed.Contains(f.LeadId)).ToListAsync();
+        if (rows.Count == 0) return;
+        var rowLeads = rows.Select(r => r.LeadId).Distinct().ToList();
+        var closedIds = (await db.Leads.AsNoTracking().Where(l => l.Status == LeadStatus.NotInterested && rowLeads.Contains(l.Id)).Select(l => l.Id).ToListAsync()).ToHashSet();
+        var now = Clock();
+        var tidied = 0;
+        foreach (var g in rows.GroupBy(r => (r.LeadId, r.Type))) // newest of each type stays
+        {
+            var keep = closedIds.Contains(g.Key.LeadId) ? null : g.OrderByDescending(r => r.Id).First();
+            foreach (var f in g.Where(r => r != keep))
+            {
+                f.Status = FollowUpStatus.Skipped; f.CompletedAt = now; f.CompletedBy = "auto";
+                f.Outcome = keep is null ? "Lead marked not interested" : "Replaced by a newer follow-up";
+                tidied++;
+            }
+        }
+        await db.SaveChangesAsync();
+        log.LogInformation("[FollowUp] Tidied {Count} duplicate or stale follow-up(s)", tidied);
     }
 
     private async Task SaveQuietlyAsync()
@@ -544,6 +594,10 @@ public class FollowUpService(
         var q = db.FollowUps.AsNoTracking().Where(f => f.DueAt >= from && f.DueAt < tomorrow);
         if (onlyEmployee is { } me) q = q.Where(f => f.AssignedToEmployeeId == me);
         var items = await q.Select(f => new Slim(f.Id, f.Type, f.Status, f.DueAt, f.CompletedAt, f.CompletedBy, f.AssignedToEmployeeId, f.StepKey, f.Source)).ToListAsync();
+        // Overdue is a backlog, not a period figure: tasks that fell due before this window and are still open count too, so the report agrees with the Follow-ups list.
+        var backlogQ = db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Pending && f.DueAt < from);
+        if (onlyEmployee is { } me0) backlogQ = backlogQ.Where(f => f.AssignedToEmployeeId == me0);
+        var everything = items.Concat(await backlogQ.Select(f => new Slim(f.Id, f.Type, f.Status, f.DueAt, f.CompletedAt, f.CompletedBy, f.AssignedToEmployeeId, f.StepKey, f.Source)).ToListAsync()).ToList();
 
         bool OnTime(DateTime due, DateTime? done) => done is { } d && d < TimeZoneInfo.ConvertTimeToUtc(TimeZoneInfo.ConvertTimeFromUtc(due, Ist).Date.AddDays(1), Ist);
         bool IsDone(FollowUpStatus s) => s == FollowUpStatus.Done;
@@ -552,12 +606,13 @@ public class FollowUpService(
         var names = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
         FollowUpReportRow Row(string label, long? emp, IEnumerable<Slim> set)
         {
-            var list = set.ToList();
+            var all = set.ToList();
+            var list = all.Where(x => x.DueAt >= from).ToList(); // due inside the period; older open tasks only add to Overdue
             var done = list.Count(x => IsDone(x.Status));
             return new FollowUpReportRow
             {
                 Label = label, EmployeeId = emp, Due = list.Count, Done = done,
-                Overdue = list.Count(x => IsOverdue(x.Status, x.DueAt)),
+                Overdue = all.Count(x => IsOverdue(x.Status, x.DueAt)),
                 OnTimePercent = done == 0 ? 0 : (int)Math.Round(100.0 * list.Count(x => IsDone(x.Status) && OnTime(x.DueAt, x.CompletedAt)) / done),
             };
         }
@@ -567,7 +622,7 @@ public class FollowUpService(
             Success = true, Days = days, From = from,
             Due = items.Count, Done = items.Count(i => IsDone(i.Status)),
             DoneOnTime = items.Count(i => IsDone(i.Status) && OnTime(i.DueAt, i.CompletedAt)),
-            Overdue = items.Count(i => IsOverdue(i.Status, i.DueAt)),
+            Overdue = everything.Count(i => IsOverdue(i.Status, i.DueAt)),
             Pending = items.Count(i => i.Status == FollowUpStatus.Pending && !IsOverdue(i.Status, i.DueAt)),
             AutoSent = items.Count(i => i.CompletedBy == "auto"),
         };
@@ -582,15 +637,15 @@ public class FollowUpService(
         var empIds = names.Keys.Where(id => onlyEmployee is null || id == onlyEmployee).ToList();
         foreach (var id in empIds)
         {
-            var row = Row(names[id], id, items.Where(i => i.AssignedToEmployeeId == id));
+            var row = Row(names[id], id, everything.Where(i => i.AssignedToEmployeeId == id));
             if (owned.TryGetValue(id, out var o)) { row.OpenLeads = o.Open; row.ConvertedLeads = o.Won; }
             report.ByEmployee.Add(row);
         }
-        if (onlyEmployee is null && items.Any(i => i.AssignedToEmployeeId == null))
-            report.ByEmployee.Add(Row("Unassigned", null, items.Where(i => i.AssignedToEmployeeId == null)));
+        if (onlyEmployee is null && everything.Any(i => i.AssignedToEmployeeId == null))
+            report.ByEmployee.Add(Row("Unassigned", null, everything.Where(i => i.AssignedToEmployeeId == null)));
         report.ByEmployee = report.ByEmployee.OrderByDescending(r => r.Due).ToList();
 
-        report.ByType = items.GroupBy(i => i.Type).Select(g => Row(g.Key, null, g)).OrderByDescending(r => r.Due).ToList();
+        report.ByType = everything.GroupBy(i => i.Type).Select(g => Row(g.Key, null, g)).OrderByDescending(r => r.Due).ToList();
 
         // 15-day journey funnel.
         var journey = items.Where(i => i.Source == FollowUpSource.Journey && i.StepKey != null).GroupBy(i => i.StepKey!).ToDictionary(g => g.Key, g => g.ToList());
@@ -608,7 +663,7 @@ public class FollowUpService(
         report.ReviewRequests = report.Journey.FirstOrDefault(j => j.StepKey == "day8-review")?.Done ?? 0;
 
         // Funnel numbers (company-wide, admins only see these in the UI).
-        var leadsQ = db.Leads.AsNoTracking().Where(l => l.CreatedAt >= from);
+        var leadsQ = db.Leads.AsNoTracking().Where(l => l.CreatedAt >= from).Where(LeadService.IsNewEnquiry);
         if (onlyEmployee is { } e1) leadsQ = leadsQ.Where(l => l.AssignedToEmployeeId == e1);
         report.NewLeads = await leadsQ.CountAsync();
         var wonQ = db.Leads.AsNoTracking().Where(l => l.ConvertedAt != null && l.ConvertedAt >= from);

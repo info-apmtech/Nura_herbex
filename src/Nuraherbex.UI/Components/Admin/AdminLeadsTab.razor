@@ -192,9 +192,15 @@
                 }
                 else
                 {
+                    LeadDto? prevLead = null;
                     @foreach (var l in VisibleLeads)
                     {
                         var lead = l;
+                        @if (FollowUpHeads && (prevLead is null || prevLead.FollowUpToday != lead.FollowUpToday))
+                        {
+                            <div class="ld-group">@(lead.FollowUpToday ? "Follow-up due today" : "Other follow-ups, by next date")</div>
+                        }
+                        prevLead = lead;
                         <button type="button" @key="lead.Id" @onclick="() => OpenAsync(lead.Id)"
                                 class="@($"ld-row {(_selected?.Lead?.Id == lead.Id ? "is-selected" : "")} {(lead.UnreadCount > 0 ? "has-unread" : "")}")">
                             <span class="ld-avatar" style="background:@AvatarColor(lead)">@Initials(lead)</span>
@@ -212,7 +218,7 @@
                                     <span class="ld-conv-line"><Icon Name="HeartPulse" Size="11" />Converted by <strong>@(lead.ConvertedByName ?? "website order")</strong></span>
                                 }
                                 <span class="ld-row-meta">
-                                    <span class="@($"ld-pill {lead.Status}")">@Label(lead.Status)</span>
+                                    <span class="@($"ld-pill {CurrentStatus(lead)}")">@Label(CurrentStatus(lead))</span>
                                     @if (lead.OpenOrders > 0) { <span class="ld-pill ld-open" title="An order is not delivered yet"><Icon Name="Truck" Size="10" />On the way</span> }
                                     <span class="ld-src"><Icon Name="MessageCircle" Size="11" />@SourceLabel(lead.Source)@(string.IsNullOrEmpty(lead.SourceDetail) ? "" : " · " + lead.SourceDetail)</span>
                                     @if (lead.AssignedToEmployeeId is null && Everyone) { <span class="ld-pill ld-unowned">Unassigned</span> }
@@ -257,9 +263,7 @@
                     }
                     else
                     {
-                        <select class="ld-status-select" aria-label="Lead status" title="Mark who is interested. A lead becomes a customer when a paid order is placed." disabled="@_busy" value="@lead.Status" @onchange="OnStatusChanged">
-                            @foreach (var s in EditableStatuses) { <option value="@s" selected="@(s == lead.Status)">@Label(s)</option> }
-                        </select>
+                        <span class="@($"ld-pill ld-hstatus {CurrentStatus(lead)}")" title="Change it from the Status buttons on the right">@Label(CurrentStatus(lead))</span>
                     }
                 </header>
 
@@ -294,13 +298,7 @@
                     @if (AdminAuth.Can("tasks")) { <button type="button" class="ld-btn" title="Create a task about this lead" @onclick="() => NewTaskFor(lead.Id)"><Icon Name="Check" Size="13" /> Task</button> }
                 </div>
 
-                <nav class="ld-dtabs" role="tablist">
-                    <button type="button" role="tab" class="@($"ld-dtab {(_tab == "chat" ? "is-active" : "")}")" @onclick='() => _tab = "chat"'>Conversation</button>
-                    <button type="button" role="tab" class="@($"ld-dtab {(_tab == "info" ? "is-active" : "")}")" @onclick='() => _tab = "info"'>Details &amp; notes</button>
-                </nav>
-
-                @if (_tab == "chat")
-                {
+                <div class="ld-one">
                     <div class="ld-chat">
                         @if (lead.ConsentStatus == "opted_out")
                         {
@@ -500,77 +498,86 @@
                             }
                         </div>
                     </div>
-                }
-                else
-                {
-                    <div class="ld-info">
-                        <div class="ld-card">
+                    <aside class="ld-side" aria-label="About this lead">
+                        <section class="ld-sec">
+                            <h4>Status</h4>
+                            @if (lead.IsCustomer)
+                            {
+                                <span class="ld-pill converted">Customer</span>
+                            }
+                            else
+                            {
+                                <div class="ld-quick" role="group" aria-label="Set status">
+                                    @foreach (var s in QuickStatuses)
+                                    {
+                                        var st = s;
+                                        <button type="button" class="@($"ld-q q-{st} {(CurrentStatus(lead) == st ? "is-on" : "")}")" aria-pressed="@(CurrentStatus(lead) == st)" disabled="@_busy" @onclick="() => SetQuickAsync(st)">@Label(st)</button>
+                                    }
+                                </div>
+                                <small class="ld-muted">No answer books a retry for tomorrow 10 am.</small>
+                            }
+                        </section>
+
+                        <section class="ld-sec">
+                            <h4>Follow-ups <button type="button" class="ld-link" @onclick="() => _composer = true">+ Schedule</button></h4>
+                            @{
+                                var pendingFu = _selected.FollowUps.Where(f => f.Status == "pending").ToList();
+                                var closedFu = _selected.FollowUps.Where(f => f.Status != "pending").ToList();
+                                var shownFu = pendingFu.Concat(_showAllFu ? closedFu : closedFu.Take(2)).ToList();
+                            }
+                            @if (shownFu.Count == 0)
+                            {
+                                <p class="fu-hint">Nothing scheduled. Add a call or message so this lead is not forgotten.</p>
+                            }
+                            <div class="fu-list tight">
+                                @foreach (var fu in shownFu)
+                                {
+                                    <FollowUpCard @key="fu.Id" Item="fu" ShowLead="false" IsAdmin="Everyone" Team="_team" OnChanged="OnFollowUpChanged" />
+                                }
+                            </div>
+                            @if (closedFu.Count > 2) { <button type="button" class="ld-link" @onclick="() => _showAllFu = !_showAllFu">@(_showAllFu ? "Show fewer" : $"Show all {closedFu.Count} finished")</button> }
+                        </section>
+
+                        <section class="ld-sec">
+                            <h4>Notes</h4>
+                            <textarea placeholder="Interest, objections, preferred call time…" aria-label="Internal notes" @bind="_notes" @bind:event="oninput"></textarea>
+                            <div class="ld-actions">
+                                @if (!string.IsNullOrEmpty(_toast)) { <small>@_toast</small> }
+                                <button type="button" class="ld-btn primary" disabled="@_busy" @onclick="SaveNotesAsync">Save notes</button>
+                            </div>
+                        </section>
+
+                        <section class="ld-sec">
                             <h4>Contact</h4>
                             <dl class="ld-dl">
                                 <dt>Name</dt><dd>@lead.Name</dd>
                                 <dt>Phone</dt><dd>+@lead.Phone</dd>
-                                <dt>Email</dt><dd>@(string.IsNullOrEmpty(lead.Email) ? "—" : lead.Email)</dd>
-                                <dt>Store account</dt><dd>@(string.IsNullOrEmpty(lead.CustomerId) ? "None (guest checkout or not ordered)" : lead.CustomerId)</dd>
-                            </dl>
-                        </div>
-                        @if (lead.IsCustomer)
-                        {
-                            <div class="ld-card">
-                                <h4>Customer care</h4>
-                                <dl class="ld-dl">
-                                    <dt>Converted by</dt><dd><strong>@(lead.ConvertedByName ?? "A website order")</strong></dd>
-                                    <dt>Customer since</dt><dd>@(lead.CustomerSince is { } cs ? AdminFmt.DateTimeShort(cs) : "—")</dd>
-                                    <dt>Care owner</dt><dd>@(lead.AssignedToName ?? "Unassigned")</dd>
-                                    <dt>Orders on the way</dt><dd>@lead.OpenOrders</dd>
-                                </dl>
-                            </div>
-                        }
-                        <div class="ld-card">
-                            <h4>@(lead.IsCustomer ? "Lead history" : "Lead")</h4>
-                            <dl class="ld-dl">
-                                <dt>Status</dt><dd><span class="@($"ld-pill {lead.Status}")">@Label(lead.Status)</span></dd>
+                                @if (!string.IsNullOrEmpty(lead.Email)) { <dt>Email</dt><dd>@lead.Email</dd> }
                                 <dt>Source</dt><dd>@SourceLabel(lead.Source)@(string.IsNullOrEmpty(lead.SourceDetail) ? "" : " · " + lead.SourceDetail)</dd>
-                                <dt>Created</dt><dd>@AdminFmt.DateTimeShort(lead.CreatedAt)</dd>
+                                <dt>Came in</dt><dd>@AdminFmt.DateTimeShort(lead.CreatedAt)</dd>
                                 <dt>Last contact</dt><dd>@AdminFmt.DateTimeShort(lead.LastContactAt)</dd>
-                                @if (lead.ConvertedAt is { } cv) { <dt>Converted</dt><dd>@AdminFmt.DateTimeShort(cv)</dd> }
+                                @if (lead.IsCustomer)
+                                {
+                                    <dt>Converted by</dt><dd>@(lead.ConvertedByName ?? "A website order")</dd>
+                                    <dt>Customer since</dt><dd>@(lead.CustomerSince is { } cs ? AdminFmt.DateTimeShort(cs) : "—")</dd>
+                                }
                             </dl>
-                        </div>
-                        <div class="ld-card">
-                            <h4>WhatsApp consent</h4>
-                            <dl class="ld-dl">
-                                <dt>Marketing</dt>
-                                <dd class="@(lead.ConsentStatus == "opted_in" ? "ld-ok" : lead.ConsentStatus == "opted_out" ? "ld-bad" : "ld-warn")">@ConsentLabel(lead.ConsentStatus)</dd>
-                                <dt>Reply window</dt>
-                                <dd class="@(WindowOpen(lead) ? "ld-ok" : "ld-warn")">@(WindowOpen(lead) ? "Open · " + WindowLeft(lead) + " left" : "Closed — templates only")</dd>
-                            </dl>
-                            @if (lead.ConsentStatus != "opted_out")
-                            {
-                                <div class="ld-actions">
-                                    <small>Opt-in lets follow-up messages be sent automatically. Only record it after the customer agreed.</small>
-                                    @if (lead.ConsentStatus == "opted_in")
-                                    {
-                                        <button type="button" class="ld-btn" disabled="@_busy" @onclick='() => SetConsentAsync("unknown")'>Clear</button>
-                                    }
-                                    else
-                                    {
-                                        <button type="button" class="ld-btn" disabled="@_busy" @onclick='() => SetConsentAsync("opted_in")'>Customer agreed</button>
-                                    }
-                                </div>
-                            }
-                        </div>
-                        <div class="ld-card wide">
-                            <h4>Customer &amp; orders</h4>
-                            <div class="lo-stats">
-                                <div><span>Orders</span><strong>@lead.OrderCount</strong></div>
-                                <div><span>Lifetime value</span><strong>₹@AdminFmt.Inr(lead.LifetimeValue)</strong></div>
-                                <div><span>Last order</span><strong>@(lead.LastOrderAt is { } lo ? AdminFmt.DateTimeShort(lo) : "—")</strong></div>
-                            </div>
+                            @if (!string.IsNullOrEmpty(lead.FirstMessage)) { <p class="ld-quote">“@lead.FirstMessage”</p> }
+                        </section>
+
+                        <section class="ld-sec">
+                            <h4>Orders <button type="button" class="ld-link" @onclick="() => _orderDialog = true">+ Create order</button></h4>
                             @if (_selected.Orders.Count == 0)
                             {
-                                <p class="fu-hint">No orders yet. When the customer agrees to buy, use <strong>Order</strong> to place it for them.</p>
+                                <p class="fu-hint">No orders yet. When the customer agrees to buy, use <strong>Create order</strong>.</p>
                             }
                             else
                             {
+                                <div class="lo-stats">
+                                    <div><span>Orders</span><strong>@lead.OrderCount</strong></div>
+                                    <div><span>Lifetime</span><strong>₹@AdminFmt.Inr(lead.LifetimeValue)</strong></div>
+                                    <div><span>Last order</span><strong>@(lead.LastOrderAt is { } lo ? AdminFmt.DateTimeShort(lo) : "—")</strong></div>
+                                </div>
                                 <div class="lo-orders">
                                     @foreach (var o in _selected.Orders)
                                     {
@@ -588,81 +595,64 @@
                                     }
                                 </div>
                             }
-                            <div class="ld-actions"><button type="button" class="ld-btn primary" @onclick="() => _orderDialog = true"><Icon Name="Package" Size="13" /> Create order</button></div>
-                        </div>
-                        <div class="ld-card wide">
-                            <h4>Follow-ups</h4>
-                            @if (_selected.FollowUps.Count == 0)
-                            {
-                                <p class="fu-hint">No follow-ups yet. Schedule a call or message so this lead is not forgotten.</p>
-                            }
-                            <div class="fu-list tight">
-                                @foreach (var fu in _selected.FollowUps)
+                        </section>
+
+                        <details class="ld-more">
+                            <summary>History, owner changes &amp; WhatsApp consent</summary>
+                            <div class="ld-more-body">
+                                <h5>WhatsApp consent</h5>
+                                <dl class="ld-dl">
+                                    <dt>Marketing</dt>
+                                    <dd class="@(lead.ConsentStatus == "opted_in" ? "ld-ok" : lead.ConsentStatus == "opted_out" ? "ld-bad" : "ld-warn")">@ConsentLabel(lead.ConsentStatus)</dd>
+                                    <dt>Reply window</dt>
+                                    <dd class="@(WindowOpen(lead) ? "ld-ok" : "ld-warn")">@(WindowOpen(lead) ? "Open · " + WindowLeft(lead) + " left" : "Closed — templates only")</dd>
+                                </dl>
+                                @if (lead.ConsentStatus != "opted_out")
                                 {
-                                    <FollowUpCard @key="fu.Id" Item="fu" ShowLead="false" IsAdmin="Everyone" Team="_team" OnChanged="OnFollowUpChanged" />
+                                    <div class="ld-actions">
+                                        <small>Opt-in lets follow-up messages be sent automatically. Only record it after the customer agreed.</small>
+                                        @if (lead.ConsentStatus == "opted_in")
+                                        {
+                                            <button type="button" class="ld-btn" disabled="@_busy" @onclick='() => SetConsentAsync("unknown")'>Clear</button>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="ld-btn" disabled="@_busy" @onclick='() => SetConsentAsync("opted_in")'>Customer agreed</button>
+                                        }
+                                    </div>
+                                }
+
+                                <h5>Owner changes</h5>
+                                @if (_selected.Assignments.Count == 0) { <p class="ld-muted">No owner changes yet.</p> }
+                                else
+                                {
+                                    <ul class="ld-tl">
+                                        @foreach (var a in _selected.Assignments)
+                                        {
+                                            <li>@(a.FromName is null ? "Assigned" : a.FromName + " →") <strong>@(a.ToName ?? "Unassigned")</strong>
+                                                <small>@AdminFmt.DateTimeShort(a.CreatedAt) · @a.ChangedBy@(string.IsNullOrEmpty(a.Reason) ? "" : " · " + a.Reason)</small></li>
+                                        }
+                                    </ul>
+                                }
+
+                                <h5>Everything that changed</h5>
+                                @if (_selected.Audit.Count == 0) { <p class="ld-muted">No changes recorded yet.</p> }
+                                else
+                                {
+                                    <ul class="ld-tl">
+                                        @foreach (var a in _selected.Audit)
+                                        {
+                                            <li>
+                                                <strong>@a.Summary</strong>
+                                                <small>@AdminFmt.DateTimeShort(a.CreatedAt) · @(a.Automatic ? "system (" + a.Actor + ")" : a.Actor)@(string.IsNullOrEmpty(a.Detail) ? "" : " · " + a.Detail)</small>
+                                            </li>
+                                        }
+                                    </ul>
                                 }
                             </div>
-                            <div class="ld-actions"><button type="button" class="ld-btn primary" @onclick="() => _composer = true"><Icon Name="Plus" Size="13" /> Schedule follow-up</button></div>
-                        </div>
-                        <div class="ld-card">
-                            <h4>First message</h4>
-                            <p class="ld-quote">@(string.IsNullOrEmpty(lead.FirstMessage) ? "—" : lead.FirstMessage)</p>
-                        </div>
-                        <div class="ld-card wide">
-                            <h4>Internal notes</h4>
-                            <textarea placeholder="Interest, objections, preferred call time…" aria-label="Internal notes" @bind="_notes" @bind:event="oninput"></textarea>
-                            <div class="ld-actions">
-                                @if (!string.IsNullOrEmpty(_toast)) { <small>@_toast</small> }
-                                <button type="button" class="ld-btn primary" disabled="@_busy" @onclick="SaveNotesAsync">Save notes</button>
-                            </div>
-                        </div>
-                        <div class="ld-card">
-                            <h4>Assignment</h4>
-                            <dl class="ld-dl">
-                                <dt>Owner</dt><dd>@(lead.AssignedToName ?? "Unassigned")</dd>
-                                <dt>Assigned</dt><dd>@(lead.AssignedAt is { } aa ? AdminFmt.DateTimeShort(aa) : "—")</dd>
-                            </dl>
-                            @if (_selected.Assignments.Count > 0)
-                            {
-                                <ul class="ld-tl" style="margin-top:14px">
-                                    @foreach (var a in _selected.Assignments)
-                                    {
-                                        <li>@(a.FromName is null ? "Assigned" : a.FromName + " →") <strong>@(a.ToName ?? "Unassigned")</strong>
-                                            <small>@AdminFmt.DateTimeShort(a.CreatedAt) · @a.ChangedBy@(string.IsNullOrEmpty(a.Reason) ? "" : " · " + a.Reason)</small></li>
-                                    }
-                                </ul>
-                            }
-                        </div>
-                        <div class="ld-card wide">
-                            <h4>Audit trail</h4>
-                            @if (_selected.Audit.Count == 0) { <p class="ld-muted">No changes recorded yet.</p> }
-                            else
-                            {
-                                <ul class="ld-tl">
-                                    @foreach (var a in _selected.Audit)
-                                    {
-                                        <li>
-                                            <strong>@a.Summary</strong>
-                                            <small>@AdminFmt.DateTimeShort(a.CreatedAt) · @(a.Automatic ? "system (" + a.Actor + ")" : a.Actor)@(string.IsNullOrEmpty(a.Detail) ? "" : " · " + a.Detail)</small>
-                                        </li>
-                                    }
-                                </ul>
-                            }
-                        </div>
-                        <div class="ld-card wide">
-                            <h4>Status history</h4>
-                            <ul class="ld-tl">
-                                @foreach (var h in _selected.History)
-                                {
-                                    <li>
-                                        <span class="@($"ld-pill {h.ToStatus}")">@Label(h.ToStatus)</span>@(h.FromStatus is null ? "" : " from " + Label(h.FromStatus))
-                                        <small>@AdminFmt.DateTimeShort(h.CreatedAt) · @h.ChangedBy@(string.IsNullOrEmpty(h.Note) ? "" : " · " + h.Note)</small>
-                                    </li>
-                                }
-                            </ul>
-                        </div>
-                    </div>
-                }
+                        </details>
+                    </aside>
+                </div>
             }
         </section>
     </div>
@@ -685,7 +675,8 @@
 
     /// <summary>May see and manage everyone's people in this panel, not just their own.</summary>
     private bool Everyone => AdminAuth.CanAll(Mode);
-    private static readonly string[] KpiStatuses = [LeadStatuses.New, LeadStatuses.FollowUp, LeadStatuses.NotInterested];
+    /// <summary>Tabs of the Leads panel: new today, older and still unopened, follow-up, no answer, not interested.</summary>
+    private static readonly string[] KpiStatuses = LeadBuckets.All;
     /// <summary>A lead becomes a customer only through a paid order, so "Converted" is not a choice here.</summary>
     private static readonly string[] EditableStatuses = [LeadStatuses.New, LeadStatuses.Interested, LeadStatuses.FollowUp, LeadStatuses.NotInterested];
     private static readonly string[] Palette = ["#235b40", "#2f6f8f", "#7a5aa6", "#b5792a", "#a24b5a", "#3f7d7a", "#5b6f2c"];
@@ -824,6 +815,9 @@
     private static string ViewOf(LeadDto l) => l.IsCustomer ? LeadViews.Care : l.Status == LeadStatuses.Interested ? LeadViews.Interested : LeadViews.Leads;
     private static string StageOf(LeadDto l) => MessageStages.Of(l.Status, l.IsCustomer);
 
+    /// <summary>The Follow-up and No answer tabs are ordered by due date (today first) and get section headings.</summary>
+    private bool FollowUpHeads => Mode == LeadViews.Leads && _statusFilter is LeadBuckets.FollowUp or LeadBuckets.NoAnswer;
+
     private List<LeadDto> VisibleLeads => _quick switch
     {
         "unread" => _leads.Where(l => l.UnreadCount > 0).ToList(),
@@ -857,11 +851,25 @@
             default:
                 return
                 [
-                    new("New", "Awaiting a first reply", Accent(LeadStatuses.New), all.Where(l => l.Status == LeadStatuses.New).ToList()),
-                    new("Follow-up", "Needs a callback", Accent(LeadStatuses.FollowUp), all.Where(l => l.Status == LeadStatuses.FollowUp).ToList()),
-                    new("Not interested", "Closed for now", "#94a3b8", all.Where(l => l.Status == LeadStatuses.NotInterested).ToList()),
+                    new("New", "Arrived today, awaiting a first reply", Accent(LeadStatuses.New), all.Where(l => BucketOf(l) == LeadBuckets.New).ToList()),
+                    new("Older, not opened", "Arrived on an earlier day, nobody started", Accent(LeadBuckets.Older), all.Where(l => BucketOf(l) == LeadBuckets.Older).ToList()),
+                    new("Follow-up", "Needs a callback", Accent(LeadStatuses.FollowUp), all.Where(l => BucketOf(l) == LeadBuckets.FollowUp).ToList()),
+                    new("No answer", "Last call or message unanswered", Accent(LeadBuckets.NoAnswer), all.Where(l => BucketOf(l) == LeadBuckets.NoAnswer).ToList()),
+                    new("Not interested", "Closed for now", "#94a3b8", all.Where(l => BucketOf(l) == LeadBuckets.NotInterested).ToList()),
                 ];
         }
+    }
+
+    /// <summary>Same rule as the server: today is the Indian calendar day.</summary>
+    private static DateTime TodayStartUtc => DateTime.UtcNow.AddHours(5.5).Date.AddHours(-5.5);
+
+    private static string BucketOf(LeadDto l)
+    {
+        if (l.Status == LeadStatuses.NotInterested) return LeadBuckets.NotInterested;
+        if (l.NoAnswer && l.Status is LeadStatuses.New or LeadStatuses.FollowUp) return LeadBuckets.NoAnswer;
+        if (l.Status == LeadStatuses.FollowUp) return LeadBuckets.FollowUp;
+        if (l.Status == LeadStatuses.New) return DateTime.SpecifyKind(l.CreatedAt, DateTimeKind.Utc) >= TodayStartUtc ? LeadBuckets.New : LeadBuckets.Older;
+        return l.Status;
     }
 
     private string QuickClass(string quick) => $"ld-kpi {(_quick == quick ? "is-active" : "")}";
@@ -926,7 +934,7 @@
         if (spinner) { _loading = true; StateHasChanged(); }
         var res = await Api.AdminLeadsAsync(_statusFilter, null, _query, _assignee, 100, Mode);
         if (_cts.IsCancellationRequested) return;
-        if (res.Success && keepOrder && _leads.Count > 0)
+        if (res.Success && keepOrder && _leads.Count > 0 && !FollowUpHeads) // the due-date lists are re-ordered by the server each time
         {
             var fresh = res.Leads.ToDictionary(x => x.Id);
             var known = _leads.Select(x => x.Id).ToHashSet();
@@ -1001,11 +1009,20 @@
         await MaybeDraftAsync();
     }
 
-    private async Task OnStatusChanged(ChangeEventArgs e)
+    /// <summary>The status buttons on the lead screen. "No answer" logs the attempt and books a retry; the others set the status.</summary>
+    private static readonly string[] QuickStatuses = [LeadStatuses.New, LeadStatuses.Interested, LeadStatuses.FollowUp, LeadBuckets.NoAnswer, LeadStatuses.NotInterested];
+    private bool _showAllFu;
+
+    /// <summary>What to show for a lead: "no-answer" while its last follow-up got no answer, otherwise its status.</summary>
+    private static string CurrentStatus(LeadDto l) => l.NoAnswer && l.Status is LeadStatuses.New or LeadStatuses.FollowUp ? LeadBuckets.NoAnswer : l.Status;
+
+    private async Task SetQuickAsync(string status)
     {
-        if (_selected?.Lead is not { } lead || e.Value?.ToString() is not { Length: > 0 } status || status == lead.Status) return;
+        if (_selected?.Lead is not { } lead || status == CurrentStatus(lead)) return;
         _busy = true;
-        var res = await Api.AdminLeadStatusAsync(lead.Id, new LeadStatusRequest { Status = status });
+        var res = status == LeadBuckets.NoAnswer
+            ? await Api.AdminLeadNoAnswerAsync(lead.Id, new LeadNoAnswerRequest())
+            : await Api.AdminLeadStatusAsync(lead.Id, new LeadStatusRequest { Status = status });
         _toast = res.Message;
         await RefreshDetailAsync(lead.Id, keepNotes: true);
         await LoadAsync(false);
@@ -1148,6 +1165,8 @@
 
     private static string Accent(string status) => status switch
     {
+        LeadBuckets.Older => "#b45309",
+        LeadBuckets.NoAnswer => "#7c3aed",
         LeadStatuses.New => "#2b6a98",
         LeadStatuses.Interested => "#68499f",
         LeadStatuses.FollowUp => "#c8932e",
@@ -1157,7 +1176,9 @@
 
     private static string KpiHint(string status) => status switch
     {
-        LeadStatuses.New => "Awaiting first reply",
+        LeadBuckets.Older => "From earlier days, still unopened",
+        LeadBuckets.NoAnswer => "Last call or message unanswered",
+        LeadStatuses.New => "Arrived today, awaiting first reply",
         LeadStatuses.Interested => "Showing buying intent",
         LeadStatuses.FollowUp => "Needs a callback",
         LeadStatuses.Converted => "Became customers",
@@ -1166,6 +1187,8 @@
 
     private static string Label(string status) => status switch
     {
+        LeadBuckets.Older => "Older, not opened",
+        LeadBuckets.NoAnswer => "No answer",
         LeadStatuses.New => "New",
         LeadStatuses.Interested => "Interested",
         LeadStatuses.FollowUp => "Follow-up",

@@ -217,8 +217,84 @@ await db.SaveChangesAsync();
 var dash = await new CrmDashboardService(db).BuildAsync(30, null);
 Check(dash.MedianFirstReplyMinutes == 12, "First reply time counts the first person's reply, not the auto-reply");
 Check(dash.AwaitingFirstReply >= 1, "A message answered only by the auto-reply counts as waiting");
+// A person who enquired through a Meta ad is a new lead; a record created only because someone ordered is not.
+await leads.UpsertFromWhatsAppAsync("919800000111", "Meera", "hi", "{\"headline\":\"Stamix ad\"}", "Stamix ad");
+dash = await new CrmDashboardService(db).BuildAsync(30, null);
+var orderOnlyLeads = await db.Leads.CountAsync(l => l.Source == LeadSource.Website && l.SourceDetail != null && l.SourceDetail.StartsWith("Order "));
+var everyLead = await db.Leads.CountAsync();
+Check(orderOnlyLeads >= 1 && dash.NewLeads == everyLead - orderOnlyLeads && dash.AdLeads == 1, "New leads leave out order-created records and count Meta-ad leads separately");
 Check(dash.NewLeads > 0 && dash.Funnel.Count == 5 && dash.ByEmployee.Count == 2, "Dashboard has leads, funnel and a row per employee");
 Check(dash.NeedsAttention.Any(a => a.Reason.StartsWith("Overdue")) , "Overdue follow-ups show up under needs attention");
+
+// ---- 13b. One follow-up schedule per lead, the report agrees with the list, and handing work over when staff leave -------
+{
+    var zed = new Employee { Name = "Zed", Email = "z@x.test", Role = EmployeeRole.Sales };
+    var xan = new Employee { Name = "Xan", Email = "xa@x.test", Role = EmployeeRole.Sales };
+    var yul = new Employee { Name = "Yul", Email = "y@x.test", Role = EmployeeRole.Sales };
+    db.Employees.AddRange(zed, xan, yul);
+    await db.SaveChangesAsync();
+    var zLeads = new List<Lead>();
+    for (var i = 0; i < 5; i++)
+    {
+        var l = (await leads.UpsertFromWhatsAppAsync($"91980001000{i}", $"Zed lead {i}", "hello", null, null)).Lead;
+        await leads.AssignAsync(l, zed.Id, "test", "test");
+        zLeads.Add(l);
+    }
+    await db.SaveChangesAsync();
+
+    // Scheduling twice for the same lead leaves one pending follow-up (the older date no longer lingers).
+    var a = zLeads[0];
+    var soon = FollowUpService.Clock().AddDays(1);
+    await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = a.Id, Type = FollowUpTypes.Call, DueAt = soon }, "test", true, null);
+    await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = a.Id, Type = FollowUpTypes.Call, DueAt = soon.AddDays(2) }, "test", true, null);
+    Check(await db.FollowUps.CountAsync(f => f.LeadId == a.Id && f.Status == FollowUpStatus.Pending && f.Source == FollowUpSource.Manual) == 1, "A lead keeps a single pending hand-made follow-up");
+
+    // A lead that says "not interested" stops being chased.
+    var b = zLeads[1];
+    await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = b.Id, Type = FollowUpTypes.Call, DueAt = soon }, "test", true, null);
+    await leads.ChangeStatusAsync(b.Id, LeadStatuses.NotInterested, "no", "test");
+    Check(!await db.FollowUps.AnyAsync(f => f.LeadId == b.Id && f.Status == FollowUpStatus.Pending), "Not interested closes the lead's hand-made follow-ups");
+
+    // One-click "No answer": logs the naAttempt and books a naRetry for the next morning, even when the lead had no follow-up yet.
+    var c = zLeads[2];
+    var (naOk, _) = await svc.LogNoAnswerAsync(c, null, null, "test", null);
+    var naRetry = await db.FollowUps.FirstOrDefaultAsync(f => f.LeadId == c.Id && f.Status == FollowUpStatus.Pending);
+    var naAttempt = await db.FollowUps.FirstOrDefaultAsync(f => f.LeadId == c.Id && f.Status == FollowUpStatus.Done);
+    Check(naOk && naRetry is not null && naRetry.Title.StartsWith("Retry: ") && naRetry.DueAt > FollowUpService.Clock() && naAttempt?.Outcome?.StartsWith(FollowUpOutcomes.NoAnswer) == true, "No answer logs the naAttempt and books a naRetry");
+    await svc.LogNoAnswerAsync(c, null, null, "test", null);
+    Check(await db.FollowUps.CountAsync(f => f.LeadId == c.Id && f.Status == FollowUpStatus.Pending) == 1, "Repeated no-answers keep a single naRetry");
+
+    // Equal split: five leads over two empty colleagues end up 3 and 2, and the follow-up goes with its lead.
+    var open = await db.Leads.CountAsync(l => l.AssignedToEmployeeId == zed.Id && l.Status != LeadStatus.NotInterested);
+    var fuBefore = await db.FollowUps.CountAsync(f => f.AssignedToEmployeeId == zed.Id && f.Status == FollowUpStatus.Pending);
+    var res = await leads.HandOverAsync(zed.Id, HandoverModes.Equal, null, [xan.Id, yul.Id], [xan.Id, yul.Id], "test");
+    var xl = await db.Leads.CountAsync(l => l.AssignedToEmployeeId == xan.Id); var yl = await db.Leads.CountAsync(l => l.AssignedToEmployeeId == yul.Id);
+    Check(res.Leads == open && Math.Abs(xl - yl) <= 1 && xl + yl == open, "Equal split deals the leaving person's leads out evenly");
+    Check(res.FollowUps == fuBefore && !await db.FollowUps.AnyAsync(f => f.AssignedToEmployeeId == zed.Id && f.Status == FollowUpStatus.Pending), "Follow-ups move with the leads");
+    var fuLead = await db.FollowUps.FirstAsync(f => f.LeadId == a.Id && f.Status == FollowUpStatus.Pending);
+    Check(fuLead.AssignedToEmployeeId == (await db.Leads.FirstAsync(l => l.Id == a.Id)).AssignedToEmployeeId, "A follow-up belongs to whoever now owns its lead");
+
+    // Everything to one person.
+    var more = (await leads.UpsertFromWhatsAppAsync("919800010090", "Zed extra", "hi", null, null)).Lead;
+    await leads.AssignAsync(more, xan.Id, "test", "test"); await db.SaveChangesAsync();
+    var yulBefore = await db.Leads.CountAsync(l => l.AssignedToEmployeeId == yul.Id);
+    await leads.HandOverAsync(xan.Id, HandoverModes.Person, yul.Id, [yul.Id], [yul.Id], "test");
+    Check(await db.Leads.CountAsync(l => l.AssignedToEmployeeId == xan.Id && l.Status != LeadStatus.NotInterested) == 0 && await db.Leads.CountAsync(l => l.AssignedToEmployeeId == yul.Id) > yulBefore, "Handing over to one person gives them everything");
+
+    // The leads report: every status is shown and the figures add up to the total, with No answer split out.
+    var leadReport = await new ReportService(db, wa).BuildAsync("leads", DateTime.UtcNow.AddDays(-30), DateTime.UtcNow.AddDays(1), "test", null);
+    int Fig(string label) => int.Parse(leadReport!.Summary.First(s => s.Label == label).Value.Split(' ')[0]);
+    var parts = Fig("New, not started") + Fig("In follow-up") + Fig("No answer") + Fig("Interested") + Fig("Not interested") + Fig("Converted");
+    Check(leadReport is not null && parts == Fig("Leads in this period") && Fig("No answer") >= 1 && leadReport.Rows.Any(r => r[7] == "no-answer"), "Lead report statuses add up to the total and include No answer");
+    Check(leadReport!.Columns.Contains("Last follow-up result") && leadReport.Columns.Contains("Next follow-up"), "Lead report shows the last and next follow-up");
+
+    // The report's overdue figure includes tasks that fell due before the window, like the list does.
+    var oldOne = await db.FollowUps.FirstAsync(f => f.Status == FollowUpStatus.Pending && f.AssignedToEmployeeId == yul.Id);
+    oldOne.DueAt = FollowUpService.Clock().AddDays(-20); await db.SaveChangesAsync();
+    var narrow = await svc.ReportAsync(3, null);
+    var overdueList = await db.FollowUps.CountAsync(f => f.Status == FollowUpStatus.Pending && f.DueAt < FollowUpService.TodayStartUtc());
+    Check(narrow.Overdue == overdueList, "Report overdue matches the follow-up list");
+}
 
 // ---- 14. Reply assistant: drafted replies (built-in guide when no AI key) ------------------------------------------
 db.Products.AddRange(new Product { Id = "p1", Sku = "S1", Name = "Stamix Canister", Price = 1899, Status = ProductStatus.Active }, new Product { Id = "p2", Sku = "S2", Name = "Stamix Duo", Price = 3499, Status = ProductStatus.Active });
