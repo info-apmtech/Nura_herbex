@@ -517,6 +517,7 @@ await AdsChecks.RunAsync(db, Check);
 
 await ChangedByChecks.RunAsync(Check);
 await EnumStorageChecks.RunAsync(Check);
+await CustomerOrdersChecks.RunAsync(Check);
 
 Console.WriteLine($"\n{checks} follow-up checks passed. No external services contacted.");
 

@@ -136,6 +136,8 @@ public static class PageRules
         // store
         if (Is("/api/admin/orders")) return For(m, "orders");
         if (Is("/api/admin/payments")) return For(m, "payments");
+        if (m == "POST" && path.StartsWith("/api/admin/customers/") && path.EndsWith("/order") && path.Split('/', StringSplitOptions.RemoveEmptyEntries).Length == 5)
+            return For(m, "customers", "orders");
         if (Is("/api/admin/customers")) return For(m, "customers");
         if (Is("/api/admin/reviews")) return For(m, "reviews");
         if (Is("/api/admin/batches")) return For(m, "batches");

@@ -544,6 +544,15 @@ public class CustomerResponse : ApiResult
     public CustomerDto? Customer { get; set; }
 }
 
+/// <summary>Admin "Add Customer" dialog: name and phone are required; email and shipping address are optional.</summary>
+public class AdminCreateCustomerRequest
+{
+    public string FullName { get; set; } = "";
+    public string Phone { get; set; } = "";
+    public string? Email { get; set; }
+    public AddressDto? ShippingAddress { get; set; }
+}
+
 public class PincodeCheckResponse
 {
     public bool Success { get; set; }

@@ -147,6 +147,35 @@ try {
     $db = (Call 'GET' '/api/admin/crm/dashboard?days=30' $null $tb).Body
     Assert ([decimal]$db.revenue -eq 0 -and $db.orders -eq 0) "a colleague's dashboard does not include those sales"
     Assert ((Call 'GET' '/api/admin/crm/dashboard' $null $null).Status -eq 401) 'the dashboard needs a login'
+
+    # --- manual customer + create order from customers tab ---
+    Assert ((Call 'POST' '/api/admin/customers' @{ fullName = ''; phone = '9840011223' } $admin).Status -eq 400) 'manual customer requires full name'
+    Assert ((Call 'POST' '/api/admin/customers' @{ fullName = 'Bad Phone'; phone = '12345' } $admin).Status -eq 400) 'manual customer requires valid 10-15 digit phone'
+    Assert ((Call 'POST' '/api/admin/customers' @{ fullName = 'Partial Addr'; phone = '9840011223'; shippingAddress = @{ city = 'Chennai' } } $admin).Status -eq 400) 'manual customer rejects incomplete address'
+
+    $c1 = Call 'POST' '/api/admin/customers' @{ fullName = 'Suresh Walkin'; phone = '+91 98400 11223' } $admin
+    Assert ($c1.Status -eq 201 -and $c1.Body.customer.id -like 'CUST-*' -and $c1.Body.customer.phone -eq '9840011223' -and $c1.Body.customer.email -eq '') 'admin adds a customer with name + phone only'
+    $custId = $c1.Body.customer.id
+    Assert ((Call 'POST' '/api/admin/customers' @{ fullName = 'Dup Phone'; phone = '09840011223' } $admin).Status -eq 409) 'duplicate phone is rejected across formatting variants'
+    $c2 = Call 'POST' '/api/admin/customers' @{ fullName = 'Lakshmi NoEmail'; phone = '9840011224' } $admin
+    Assert ($c2.Status -eq 201 -and $c2.Body.customer.email -eq '') 'multiple customers without email are allowed'
+
+    Assert ((Call 'POST' '/api/admin/customers/CUST-000000/order' @{ items = @(@{ productId = $product.id; quantity = 1 }); address = $addr } $admin).Status -eq 404) 'missing customer returns 404'
+    $co1 = Call 'POST' "/api/admin/customers/$custId/order" @{ items = @(@{ productId = $product.id; quantity = 1 }); address = $addr; alreadyPaid = $false } $admin
+    Assert ($co1.Status -eq 201 -and $co1.Body.orderId -match '^\d{14}$' -and $co1.Body.totalAmount -gt 0) 'admin creates a COD order for a customer'
+    $co2 = Call 'POST' "/api/admin/customers/$custId/order" @{ items = @(@{ productId = $product.id; quantity = 1 }); email = 'suresh.buyer@example.test'; address = $addr; alreadyPaid = $true; paymentReference = 'UPI-CUST-1' } $admin
+    Assert ($co2.Status -eq 201 -and $co2.Body.orderId -match '^\d{14}$') 'admin creates a paid order for the same customer with email backfill'
+
+    $custRows = (Call 'GET' '/api/admin/customers' $null $admin).Body.customers
+    $sureshRow = $custRows | Where-Object { $_.id -eq $custId }
+    $expectedCustSpend = [decimal]$co1.Body.totalAmount + [decimal]$co2.Body.totalAmount
+    Assert ($sureshRow.ordersCount -eq 2 -and [decimal]$sureshRow.totalSpent -eq $expectedCustSpend -and $sureshRow.email -eq 'suresh.buyer@example.test' -and $sureshRow.shippingAddress.pincode -eq '600001') 'customer registry reflects orders, spend, backfilled email and address'
+    Assert (($sureshRow.orders | Where-Object { $_.customerId -eq $custId }).Count -eq 2) 'customer orders map the exact customerId'
+    $adminOrders = (Call 'GET' '/api/admin/orders' $null $admin).Body.orders
+    Assert (($adminOrders | Where-Object { $_.id -eq $co1.Body.orderId }).customerId -eq $custId -and ($adminOrders | Where-Object { $_.id -eq $co2.Body.orderId }).paymentStatus -eq 'PAID') 'admin orders list includes customer-created orders with customerId'
+    $sureshLead = (Call 'GET' '/api/admin/leads?view=care' $null $admin).Body.leads | Where-Object { $_.customerId -eq $custId }
+    Assert ($null -ne $sureshLead -and $sureshLead.status -eq 'converted') 'customer order upserts a converted lead linked to customerId'
+    Assert ((Call 'POST' "/api/admin/customers/$custId/order" @{ items = @(@{ productId = $product.id; quantity = 1 }); address = $addr } $ta).Status -eq 403) 'sales user without customers/orders rights is forbidden'
 } catch {
     $failure = $_
     if (!$process.HasExited) { $process.Kill() }

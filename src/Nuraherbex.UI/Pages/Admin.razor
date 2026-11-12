@@ -40,7 +40,7 @@ else
             @if (_activeTab == "orders") { <AdminOrdersTab Orders="_orders" Loading="_ordersLoading" OnReload="LoadOrdersAsync" /> }
             else if (_activeTab == "shipping") { <AdminShippingTab /> }
             else if (_activeTab == "payments") { <AdminPaymentsTab Attempts="_payments" Loading="_paymentsLoading" OnReload="LoadPaymentsAsync" /> }
-            else if (_activeTab == "customers") { <AdminCustomersTab Customers="_customers" Loading="_customersLoading" OnReload="LoadCustomersAsync" /> }
+            else if (_activeTab == "customers") { <AdminCustomersTab Customers="_customers" Loading="_customersLoading" OnReload="LoadCustomersAsync" OnOrderCreated="OnCustomerOrderCreatedAsync" /> }
             else if (_activeTab == "batches") { <AdminBatchesTab Batches="_batches" Loading="_batchesLoading" OnReload="LoadBatchesAsync" /> }
             else if (_activeTab == "formulation") { <AdminFormulationTab Ingredients="_ingredients" Metrics="_metrics" IngredientsChanged="OnIngredientsChanged" MetricsChanged="OnMetricsChanged" /> }
             else if (_activeTab == "content") { <AdminPageContentEditor /><AdminContentTab /> }
@@ -236,6 +236,13 @@ else
         var res = await Api.AdminCustomersAsync(); RecordError("Customers", res);
         if (res.Success) _customers = res.Customers;
         _customersLoading = false; StateHasChanged();
+    }
+
+    private async Task OnCustomerOrderCreatedAsync()
+    {
+        var jobs = new List<Task> { LoadCustomersAsync() };
+        if (AdminAuth.Can("orders")) jobs.Add(LoadOrdersAsync());
+        await Task.WhenAll(jobs);
     }
 
     private async Task LoadBatchesAsync()

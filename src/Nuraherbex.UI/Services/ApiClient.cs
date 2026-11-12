@@ -288,5 +288,7 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<AdminCouponListResponse> AdminCouponsAsync() => Call<AdminCouponListResponse>(HttpMethod.Get, "api/admin/catalog/coupons", null, Who.Admin);
     public Task<AdminCouponResponse> AdminSaveCouponAsync(CouponDto c, bool create) => Call<AdminCouponResponse>(create ? HttpMethod.Post : HttpMethod.Put, "api/admin/catalog/coupons" + (create ? "" : "/" + Uri.EscapeDataString(c.Code)), c, Who.Admin);
     public Task<ApiResult> AdminDisableCouponAsync(string code) => Call<ApiResult>(HttpMethod.Delete, "api/admin/catalog/coupons/" + Uri.EscapeDataString(code), null, Who.Admin);
+    public Task<CustomerResponse> AdminCreateCustomerAsync(AdminCreateCustomerRequest r) => Call<CustomerResponse>(HttpMethod.Post, "api/admin/customers", r, Who.Admin);
+    public Task<LeadOrderResponse> AdminCustomerOrderAsync(string id, LeadOrderRequest r) => Call<LeadOrderResponse>(HttpMethod.Post, $"api/admin/customers/{Uri.EscapeDataString(id)}/order", r, Who.Admin);
     public Task<CustomerResponse> AdminUpdateCustomerAsync(string id, UpdateProfileRequest r) => Call<CustomerResponse>(HttpMethod.Put, "api/admin/customers/" + Uri.EscapeDataString(id), r, Who.Admin);
 }

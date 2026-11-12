@@ -1,0 +1,147 @@
+@inject ApiClient Api
+
+@* Step 1–2: Add a customer manually from the Customers tab (Full Name + Phone required; Email + Shipping Address optional). *@
+<div class="fu-modal-backdrop" @onclick="OnClose">
+    <div class="fu-modal lo" role="dialog" aria-modal="true" aria-label="Add customer" @onclick:stopPropagation="true">
+        <header>
+            <h3>Add customer</h3>
+            <button type="button" class="em-x" aria-label="Close" @onclick="OnClose"><Icon Name="X" Size="16" /></button>
+        </header>
+
+        <form @onsubmit="SaveAsync" @onsubmit:preventDefault novalidate style="display:flex;flex-direction:column;min-height:0;overflow:hidden;flex:1">
+            <div class="fu-form">
+                <div class="fu-step"><span>1</span> Customer details</div>
+                <div class="lo-grid">
+                    @Field("name", "Full name", "(required)", "text", 200, "Customer full name", _name, v => _name = v)
+                    @Field("phone", "Phone number", "(required)", "tel", 20, "10-digit mobile number", _phone, v => _phone = v)
+                    @Field("email", "Email", "(optional)", "email", 256, "name@example.com", _email, v => _email = v, wide: true)
+                </div>
+
+                <div class="fu-step"><span>2</span> Default delivery address (optional)</div>
+                <p class="fu-hint"><Icon Name="Info" Size="12" /> Leave all address fields blank if unknown, or fill in the complete address.</p>
+                <div class="lo-grid">
+                    @Field("address", "Address line 1", null, "text", 500, "House / street", _a.AddressLine1, v => _a.AddressLine1 = v, wide: true)
+                    @Field("area", "Area / Landmark", "(optional)", "text", 500, null, _a.AddressLine2 ?? "", v => _a.AddressLine2 = v, wide: true)
+                    @Field("city", "City", null, "text", 100, null, _a.City, v => _a.City = v)
+                    @Field("state", "State", null, "text", 100, null, _a.State, v => _a.State = v)
+                    @Field("pincode", "Pincode", "(6 digits)", "text", 6, null, _a.Pincode, v => _a.Pincode = v)
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_error)) { <div class="fu-flash bad lo-error" role="alert"><Icon Name="AlertCircle" Size="14" /> @_error</div> }
+
+            <footer>
+                <button type="button" class="ld-btn" disabled="@_busy" @onclick="OnClose">Cancel</button>
+                <button type="submit" class="ld-btn primary" disabled="@_busy">@(_busy ? "Saving…" : "Create customer")</button>
+            </footer>
+        </form>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<CustomerResponse?> OnCreated { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private readonly Dictionary<string, string> _errors = new();
+    private readonly AddressDto _a = new();
+    private string _name = "", _phone = "", _email = "";
+    private string? _error;
+    private bool _busy;
+
+    private static string Digits(string? s) => new((s ?? "").Where(char.IsDigit).ToArray());
+
+    private RenderFragment Field(string key, string label, string? hint, string type, int max, string? placeholder, string value, Action<string> set, bool wide = false) => b =>
+    {
+        var err = _errors.GetValueOrDefault(key);
+        b.OpenElement(0, "label"); b.AddAttribute(1, "class", $"fu-field{(wide ? " wide" : "")}{(err is null ? "" : " has-error")}");
+        b.OpenElement(2, "span"); b.AddAttribute(3, "class", "lo-lbl"); b.AddContent(4, label);
+        if (hint is not null) { b.OpenElement(5, "small"); b.AddContent(6, hint); b.CloseElement(); }
+        b.CloseElement();
+        b.OpenElement(7, "input"); b.AddAttribute(8, "type", type); b.AddAttribute(9, "maxlength", max);
+        if (placeholder is not null) b.AddAttribute(10, "placeholder", placeholder);
+        if (key == "pincode") b.AddAttribute(11, "inputmode", "numeric");
+        else if (key == "phone") b.AddAttribute(11, "inputmode", "tel");
+        b.AddAttribute(12, "aria-invalid", err is null ? "false" : "true");
+        b.AddAttribute(13, "value", value);
+        b.AddAttribute(14, "oninput", EventCallback.Factory.Create<ChangeEventArgs>(this, e => { set(e.Value?.ToString() ?? ""); ClearFieldError(key); }));
+        b.CloseElement();
+        if (err is not null) { b.OpenElement(15, "em"); b.AddAttribute(16, "class", "lo-err"); b.AddContent(17, err); b.CloseElement(); }
+        b.CloseElement();
+    };
+
+    private void ClearFieldError(string key)
+    {
+        _errors.Remove(key);
+        if (key is "address" or "area" or "city" or "state" or "pincode" && !AnyAddressText())
+        {
+            _errors.Remove("address");
+            _errors.Remove("city");
+            _errors.Remove("state");
+            _errors.Remove("pincode");
+        }
+    }
+
+    private bool AnyAddressText() =>
+        !string.IsNullOrWhiteSpace(_a.AddressLine1)
+        || !string.IsNullOrWhiteSpace(_a.AddressLine2)
+        || !string.IsNullOrWhiteSpace(_a.City)
+        || !string.IsNullOrWhiteSpace(_a.State)
+        || !string.IsNullOrWhiteSpace(_a.Pincode);
+
+    private bool Validate()
+    {
+        _errors.Clear();
+        if (string.IsNullOrWhiteSpace(_name))
+            _errors["name"] = "Enter the customer's name.";
+        else if (_name.Trim().Length > 200)
+            _errors["name"] = "Name must be 200 characters or fewer.";
+
+        var digits = Digits(_phone);
+        if (digits.Length is < 10 or > 15)
+            _errors["phone"] = "Enter a valid phone number (10–15 digits).";
+
+        if (!string.IsNullOrWhiteSpace(_email) && !System.Text.RegularExpressions.Regex.IsMatch(_email.Trim(), @"^[^\s@]+@[^\s@]+\.[^\s@]+$"))
+            _errors["email"] = "Enter a valid email, like name@example.com.";
+
+        if (AnyAddressText())
+        {
+            if (string.IsNullOrWhiteSpace(_a.AddressLine1)) _errors["address"] = "Enter the house / street address.";
+            if (string.IsNullOrWhiteSpace(_a.City)) _errors["city"] = "Enter the city.";
+            if (string.IsNullOrWhiteSpace(_a.State)) _errors["state"] = "Enter the state.";
+            if (!System.Text.RegularExpressions.Regex.IsMatch((_a.Pincode ?? "").Trim(), @"^[1-9][0-9]{5}$"))
+                _errors["pincode"] = "Enter a valid 6-digit pincode.";
+        }
+
+        _error = _errors.Count > 0 ? "Please fix the highlighted fields." : null;
+        return _errors.Count == 0;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_busy || !Validate()) return;
+        _error = null;
+        _busy = true;
+        var hasAddress = AnyAddressText();
+        var res = await Api.AdminCreateCustomerAsync(new AdminCreateCustomerRequest
+        {
+            FullName = _name.Trim(),
+            Phone = _phone.Trim(),
+            Email = string.IsNullOrWhiteSpace(_email) ? null : _email.Trim(),
+            ShippingAddress = hasAddress
+                ? new AddressDto
+                {
+                    AddressLine1 = _a.AddressLine1.Trim(),
+                    AddressLine2 = string.IsNullOrWhiteSpace(_a.AddressLine2) ? "" : _a.AddressLine2.Trim(),
+                    City = _a.City.Trim(),
+                    State = _a.State.Trim(),
+                    Pincode = _a.Pincode.Trim(),
+                    Country = "India",
+                }
+                : null,
+        });
+        _busy = false;
+        if (res.Success) await OnCreated.InvokeAsync(res);
+        else _error = res.Message ?? "Could not add the customer.";
+    }
+}
+

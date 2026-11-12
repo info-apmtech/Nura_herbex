@@ -27,14 +27,16 @@ public class LeadOrderLineRequest
     public int Quantity { get; set; } = 1;
 }
 
-/// <summary>Create an order for a lead (e.g. a customer who agreed to buy on WhatsApp).</summary>
+/// <summary>Create an order for a lead (e.g. a customer who agreed to buy on WhatsApp) or customer.</summary>
 public class LeadOrderRequest
 {
     public List<LeadOrderLineRequest> Items { get; set; } = new();
     public string? CouponCode { get; set; }
     public string? CustomerName { get; set; }
-    /// <summary>Required for the order confirmation e-mail.</summary>
+    /// <summary>Optional. Used for the order confirmation e-mail and backfilled onto blank customer records.</summary>
     public string Email { get; set; } = "";
+    /// <summary>Optional phone override/backfill (used when creating an order for a customer whose saved account has no phone yet).</summary>
+    public string? Phone { get; set; }
     public AddressDto Address { get; set; } = new();
     /// <summary>False = cash on delivery. True = the customer already paid (UPI / bank transfer).</summary>
     public bool AlreadyPaid { get; set; }

@@ -133,12 +133,15 @@ public partial class OrderService(
     public async Task<List<Order>> ListAllAsync() =>
         await db.Orders.AsNoTracking().OrderByDescending(o => o.CreatedAt).ToListAsync();
 
-    public async Task<List<Order>> ListForCustomerAsync(string email, string phone)
+    public async Task<List<Order>> ListForCustomerAsync(string email, string phone, string? customerId = null)
     {
         var e = (email ?? "").Trim().ToLowerInvariant();
-        var p = new string((phone ?? "").Where(char.IsDigit).ToArray());
+        var forms = CustomerAuthService.PhoneForms(phone);
+        var cid = (customerId ?? "").Trim();
         return await db.Orders.AsNoTracking()
-            .Where(o => (e != "" && o.CustomerEmail == e) || (p != "" && o.CustomerPhone == p))
+            .Where(o =>
+                (cid != "" && o.CustomerId == cid) ||
+                (string.IsNullOrEmpty(o.CustomerId) && ((e != "" && o.CustomerEmail == e) || (forms.Length > 0 && forms.Contains(o.CustomerPhone)))))
             .OrderByDescending(o => o.CreatedAt).ToListAsync();
     }
 

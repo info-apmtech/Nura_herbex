@@ -1,6 +1,8 @@
+@inject AdminSession AdminAuth
+
 <div class="space-y-4">
 
-    @* Top Toolbar: Search & Refresh *@
+    @* Top Toolbar: Search, Add Customer & Refresh *@
     <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div class="flex items-center gap-2.5 flex-1">
             <div class="relative flex-1 max-w-md">
@@ -16,6 +18,16 @@
         </div>
 
         <div class="flex items-center gap-2 self-end sm:self-auto">
+            @if (AdminAuth.CanAll("customers"))
+            {
+                <button type="button"
+                        @onclick="() => _addCustomer = true"
+                        class="admin-btn admin-btn-primary"
+                        title="Add a new customer manually">
+                    <Icon Name="Plus" Size="14" />
+                    <span>Add Customer</span>
+                </button>
+            }
             <ExportButton Title="Customers" FileName="nura-customers" Columns="@(new[] { "Customer ID", "Name", "Email", "Phone", "City", "State", "Orders", "Total spent (Rs)", "Last order", "Joined" })" Rows="ExportRows" Disabled="@(FilteredCustomers.Count == 0)" />
             <button @onclick="() => OnReload.InvokeAsync()"
                     disabled="@Loading"
@@ -26,6 +38,15 @@
             </button>
         </div>
     </div>
+
+    @if (!string.IsNullOrEmpty(_notice))
+    {
+        <div class="em-note ok" role="status">
+            <Icon Name="CheckCircle2" Size="15" />
+            <span>@_notice</span>
+            <button type="button" class="em-x" aria-label="Dismiss" @onclick="() => _notice = null"><Icon Name="X" Size="14" /></button>
+        </div>
+    }
 
     @* Metrics Overview Grid *@
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -155,7 +176,14 @@
                                     <div class="space-y-1">
                                         <div class="flex items-center gap-1.5 text-zinc-300">
                                             <Icon Name="Mail" Size="11" Class="text-zinc-500 shrink-0" />
-                                            <span class="truncate max-w-[180px]">@cust.Email</span>
+                                            @if (!string.IsNullOrEmpty(cust.Email))
+                                            {
+                                                <span class="truncate max-w-[180px]">@cust.Email</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-zinc-500 italic">No email</span>
+                                            }
                                         </div>
                                         @if (!string.IsNullOrEmpty(cust.Phone))
                                         {
@@ -212,13 +240,26 @@
                                     ₹@AdminFmt.Inr(cust.TotalSpent)
                                 </td>
 
-                                @* Action: Inspect *@
+                                @* Actions *@
                                 <td class="px-4 py-3 text-right whitespace-nowrap">
-                                    <button @onclick="() => _selected = cust"
-                                            class="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ml-auto">
-                                        <Icon Name="Eye" Size="12" />
-                                        <span>View Profile</span>
-                                    </button>
+                                    <div class="inline-flex items-center justify-end gap-1.5">
+                                        @if (CanCreateOrder)
+                                        {
+                                            <button type="button"
+                                                    @onclick="() => OpenOrderDialog(cust)"
+                                                    class="px-2.5 py-1 rounded-md border text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5 oa-primary"
+                                                    title="Create order for this customer">
+                                                <Icon Name="Package" Size="12" />
+                                                <span>Create Order</span>
+                                            </button>
+                                        }
+                                        <button type="button"
+                                                @onclick="() => _selected = cust"
+                                                class="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5">
+                                            <Icon Name="Eye" Size="12" />
+                                            <span>View Profile</span>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         }
@@ -279,7 +320,7 @@
                         <span>Email Address</span>
                     </div>
                     <div class="tabular-nums text-zinc-200 break-all select-all">
-                        @sc.Email
+                        @if (!string.IsNullOrEmpty(sc.Email)) { @sc.Email } else { <span class="text-zinc-500 italic">Not provided</span> }
                     </div>
                 </div>
 
@@ -383,13 +424,39 @@
 
             @* Actions *@
             <div class="flex gap-2.5 pt-3 border-t border-zinc-800">
-                <button @onclick="@(() => _selected = null)"
-                        class="w-full py-2 px-4 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 font-medium text-xs cursor-pointer transition-colors">
+                @if (CanCreateOrder)
+                {
+                    <button type="button"
+                            @onclick="() => OpenOrderDialog(sc)"
+                            class="admin-btn admin-btn-primary">
+                        <Icon Name="Package" Size="14" />
+                        <span>Create Order</span>
+                    </button>
+                }
+                <button type="button"
+                        @onclick="@(() => _selected = null)"
+                        class="flex-1 py-2 px-4 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 font-medium text-xs cursor-pointer transition-colors">
                     Close customer details
                 </button>
             </div>
         </div>
     </div>
+}
+
+@if (_addCustomer)
+{
+    <AddCustomerDialog OnClose="() => _addCustomer = false" OnCreated="OnCustomerCreatedAsync" />
+}
+
+@if (_orderCustomer is { } oc)
+{
+    <LeadOrderDialog CustomerId="@oc.Id"
+                     LeadName="@(string.IsNullOrEmpty(oc.FullName) ? "Customer" : oc.FullName)"
+                     LeadEmail="@oc.Email"
+                     CustomerPhone="@oc.Phone"
+                     InitialAddress="oc.ShippingAddress"
+                     OnClose="() => _orderCustomer = null"
+                     OnCreated="OnCustomerOrderCreatedAsync" />
 }
 
 @code {
@@ -400,9 +467,46 @@
     [Parameter] public List<AdminCustomerDto> Customers { get; set; } = new();
     [Parameter] public bool Loading { get; set; }
     [Parameter] public EventCallback OnReload { get; set; }
+    [Parameter] public EventCallback OnOrderCreated { get; set; }
 
     private string _search = "";
+    private string? _notice;
+    private bool _addCustomer;
     private AdminCustomerDto? _selected;
+    private AdminCustomerDto? _orderCustomer;
+
+    private bool CanCreateOrder => AdminAuth.CanAll("customers") || AdminAuth.CanAll("orders");
+
+    protected override void OnParametersSet()
+    {
+        if (_selected is not null)
+            _selected = Customers.FirstOrDefault(c => c.Id == _selected.Id) ?? _selected;
+    }
+
+    private void OpenOrderDialog(AdminCustomerDto customer)
+    {
+        _notice = null;
+        _orderCustomer = customer;
+    }
+
+    private async Task OnCustomerCreatedAsync(CustomerResponse? res)
+    {
+        _addCustomer = false;
+        _search = "";
+        _page = 1;
+        _notice = res?.Message ?? "Customer added.";
+        await OnReload.InvokeAsync();
+    }
+
+    private async Task OnCustomerOrderCreatedAsync(string? message)
+    {
+        _orderCustomer = null;
+        _notice = message ?? "Order created.";
+        if (OnOrderCreated.HasDelegate)
+            await OnOrderCreated.InvokeAsync();
+        else
+            await OnReload.InvokeAsync();
+    }
 
     private static int OrderCount(AdminCustomerDto c) => c.OrdersCount > 0 ? c.OrdersCount : c.Orders.Count;
 

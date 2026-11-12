@@ -210,14 +210,28 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
 
         try
         {
+            var resolvedCustomerId = !string.IsNullOrWhiteSpace(lead.CustomerId) ? lead.CustomerId : null;
+            if (resolvedCustomerId is null)
+            {
+                var pForms = PhoneForms(lead.Phone);
+                if (pForms.Length > 0)
+                    resolvedCustomerId = await db.Customers.AsNoTracking().Where(c => pForms.Contains(c.Phone)).Select(c => c.Id).FirstOrDefaultAsync();
+                if (resolvedCustomerId is null)
+                {
+                    var lMail = (!string.IsNullOrWhiteSpace(r.Email) ? r.Email : lead.Email ?? "").Trim().ToLowerInvariant();
+                    if (lMail != "")
+                        resolvedCustomerId = await db.Customers.AsNoTracking().Where(c => c.Email == lMail).Select(c => c.Id).FirstOrDefaultAsync();
+                }
+            }
+
             var order = await orders.CreateAsync(new CreateOrderRequest
             {
-                Customer = new CheckoutCustomerDto { FullName = string.IsNullOrWhiteSpace(r.CustomerName) ? lead.Name : r.CustomerName.Trim(), Phone = Last10(lead.Phone), Email = (r.Email ?? "").Trim() },
+                Customer = new CheckoutCustomerDto { Id = resolvedCustomerId, FullName = string.IsNullOrWhiteSpace(r.CustomerName) ? lead.Name : r.CustomerName.Trim(), Phone = Last10(lead.Phone), Email = (r.Email ?? "").Trim() },
                 Shipping = r.Address,
                 Items = r.Items.GroupBy(i => i.ProductId).Select(g => new CartLineDto { Id = g.Key, Quantity = g.Sum(x => x.Quantity) }).ToList(),
                 CouponCode = string.IsNullOrWhiteSpace(r.CouponCode) ? null : r.CouponCode.Trim(),
                 PaymentMethod = r.AlreadyPaid ? "ONLINE" : "COD",
-            }, null, emailOptional: true);
+            }, resolvedCustomerId, emailOptional: true);
 
             if (r.AlreadyPaid)
                 order = await orders.MarkPaidAsync(order.Id, string.IsNullOrWhiteSpace(r.PaymentReference) ? $"CRM-{DateTime.UtcNow:yyyyMMddHHmmss}" : r.PaymentReference.Trim(), null, "{\"source\":\"crm-manual\"}");

@@ -409,6 +409,109 @@ public class AdminController(
         Products = (await db.Products.AsNoTracking().OrderBy(p => p.Price).ToListAsync()).Select(p => p.ToDto()).ToList(),
     };
 
+    [HttpPost("customers"), Authorize(Roles = "admin,sales")]
+    public async Task<IActionResult> CreateCustomer(AdminCreateCustomerRequest r)
+    {
+        var (customer, status, error) = await customers.CreateByAdminAsync(r);
+        if (customer is null)
+            return StatusCode(status, new CustomerResponse { Success = false, Message = error });
+        return StatusCode(201, new CustomerResponse
+        {
+            Success = true,
+            Customer = customer,
+            Message = $"Customer {customer.FullName} ({customer.Id}) added.",
+        });
+    }
+
+    [HttpPost("customers/{id}/order"), Authorize(Roles = "admin,sales")]
+    public async Task<IActionResult> CreateCustomerOrder(string id, LeadOrderRequest r, [FromServices] LeadService leads)
+    {
+        var customer = await db.Customers.FirstOrDefaultAsync(c => c.Id == id);
+        if (customer is null) return NotFound(new ApiResult { Success = false, Message = "Customer not found." });
+
+        if (r.Items.Count == 0 || r.Items.Any(i => string.IsNullOrWhiteSpace(i.ProductId) || i.Quantity < 1 || i.Quantity > 20))
+            return BadRequest(new ApiResult { Success = false, Message = "Choose at least one product (1 to 20 of each)." });
+
+        var emailInput = !string.IsNullOrWhiteSpace(r.Email)
+            ? r.Email.Trim().ToLowerInvariant()
+            : (customer.Email ?? "").Trim().ToLowerInvariant();
+        if (emailInput.Length > 0 && (emailInput.Length > 256 || !System.Text.RegularExpressions.Regex.IsMatch(emailInput, @"^[^\s@]+@[^\s@]+\.[^\s@]+$")))
+            return BadRequest(new ApiResult { Success = false, Message = "That email address is not valid. Fix it or leave it blank." });
+
+        var rawPhone = !string.IsNullOrWhiteSpace(r.Phone) ? r.Phone : customer.Phone;
+        var phoneDigits = new string((rawPhone ?? "").Where(char.IsDigit).ToArray());
+        if (phoneDigits.Length is < 10 or > 15)
+            return BadRequest(new ApiResult { Success = false, Message = "A valid phone number (10–15 digits) is required to place an order." });
+        var orderPhone = CustomerAuthService.CanonicalPhone(phoneDigits);
+
+        var orderName = string.IsNullOrWhiteSpace(r.CustomerName) ? customer.FullName : r.CustomerName.Trim();
+        if (orderName.Length > 200)
+            return BadRequest(new ApiResult { Success = false, Message = "Customer name must be 200 characters or fewer." });
+
+        try
+        {
+            var order = await orders.CreateAsync(new CreateOrderRequest
+            {
+                Customer = new CheckoutCustomerDto
+                {
+                    Id = customer.Id,
+                    FullName = orderName,
+                    Phone = orderPhone,
+                    Email = emailInput,
+                },
+                Shipping = r.Address,
+                Items = r.Items.GroupBy(i => i.ProductId).Select(g => new CartLineDto { Id = g.Key, Quantity = g.Sum(x => x.Quantity) }).ToList(),
+                CouponCode = string.IsNullOrWhiteSpace(r.CouponCode) ? null : r.CouponCode.Trim(),
+                PaymentMethod = r.AlreadyPaid ? OrderPaymentMethods.Online : OrderPaymentMethods.Cod,
+            }, customer.Id, emailOptional: true);
+
+            if (r.AlreadyPaid)
+                order = await orders.MarkPaidAsync(order.Id, string.IsNullOrWhiteSpace(r.PaymentReference) ? $"CUST-{DateTime.UtcNow:yyyyMMddHHmmss}" : r.PaymentReference.Trim(), null, "{\"source\":\"admin-customer\"}");
+
+            var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "admin";
+            var tracked = await db.Orders.FirstAsync(o => o.Id == order.Id);
+            tracked.Notes = string.IsNullOrWhiteSpace(tracked.Notes) ? $"Created in Customers by {actor}" : $"{tracked.Notes} | Created in Customers by {actor}";
+
+            var touchedCustomer = false;
+            if (string.IsNullOrWhiteSpace(customer.ShippingAddress?.AddressLine1) && !string.IsNullOrWhiteSpace(tracked.ShippingAddress.AddressLine1))
+            {
+                customer.ShippingAddress = tracked.ShippingAddress;
+                touchedCustomer = true;
+            }
+            if (string.IsNullOrWhiteSpace(customer.Email) && emailInput.Length > 0
+                && !await db.Customers.AnyAsync(other => other.Id != customer.Id && other.Email == emailInput))
+            {
+                await customers.SetEmailAsync(customer, emailInput);
+                touchedCustomer = true;
+            }
+            if (string.IsNullOrWhiteSpace(customer.Phone))
+            {
+                var canonicalPhone = CustomerAuthService.CanonicalPhone(phoneDigits);
+                var forms = CustomerAuthService.PhoneForms(canonicalPhone);
+                if (!await db.Customers.AnyAsync(other => other.Id != customer.Id && forms.Contains(other.Phone)))
+                {
+                    customer.Phone = canonicalPhone;
+                    touchedCustomer = true;
+                }
+            }
+            if (touchedCustomer) customer.UpdatedAt = DateTime.UtcNow;
+
+            await db.SaveChangesAsync();
+            await leads.UpsertFromOrderAsync(tracked);
+
+            log.LogInformation("[Customer] {Who} created order {Order} for customer {Id}", actor, order.Id, customer.Id);
+            var notifyChannel = string.IsNullOrEmpty(emailInput) ? "WhatsApp" : "WhatsApp and e-mail";
+            return StatusCode(201, new LeadOrderResponse
+            {
+                Success = true,
+                OrderId = order.Id,
+                TotalAmount = order.TotalAmount,
+                Message = $"Order {order.Id} created for ₹{order.TotalAmount:N0}. Confirmation is queued via {notifyChannel}.",
+            });
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
+    }
+
     [HttpPut("customers/{id}")]
     public async Task<IActionResult> UpdateCustomer(string id, UpdateProfileRequest r)
     {
@@ -421,7 +524,8 @@ public class AdminController(
             return BadRequest(new ApiResult { Message = "Enter a complete address and a valid six-digit Indian pincode." });
         var customer = await db.Customers.FindAsync(id);
         if (customer is null) return NotFound(new ApiResult { Message = "Customer not found." });
-        if (await db.Customers.AnyAsync(c => c.Id != id && c.Phone == phone)) return Conflict(new ApiResult { Message = "This phone number is already used by another customer." });
+        var phoneForms = CustomerAuthService.PhoneForms(phone);
+        if (await db.Customers.AnyAsync(c => c.Id != id && phoneForms.Contains(c.Phone))) return Conflict(new ApiResult { Message = "This phone number is already used by another customer." });
         try { await customers.SetEmailAsync(customer, r.Email); }
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Message = ex.Message }); }
         customer.FullName = r.FullName.Trim(); customer.Phone = phone; customer.ShippingAddress = address; customer.UpdatedAt = DateTime.UtcNow;
