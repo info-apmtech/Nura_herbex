@@ -26,7 +26,10 @@
         <button type="button" role="tab" aria-selected="@(_tab == "chat")" class="@(_tab == "chat" ? "is-on" : "")" @onclick='() => _tab = "chat"'>Conversations <small>@Convs.Count.ToString("N0")</small></button>
         <button type="button" role="tab" aria-selected="@(_tab == "log")" class="@(_tab == "log" ? "is-on" : "")" @onclick='() => _tab = "log"'>Message log <small>@_messages.Count.ToString("N0")</small></button>
         <button type="button" role="tab" aria-selected="@(_tab == "send")" class="@(_tab == "send" ? "is-on" : "")" @onclick='() => _tab = "send"'>Send a message</button>
-        <button type="button" role="tab" aria-selected="@(_tab == "usage")" class="@(_tab == "usage" ? "is-on" : "")" @onclick='() => _tab = "usage"'>Usage &amp; budget</button>
+        @if (AdminAuth.IsAdmin)
+        {
+            <button type="button" role="tab" aria-selected="@(_tab == "usage")" class="@(_tab == "usage" ? "is-on" : "")" @onclick='() => _tab = "usage"'>Usage &amp; budget</button>
+        }
         <button type="button" role="tab" aria-selected="@(_tab == "setup")" class="@(_tab == "setup" ? "is-on" : "")" @onclick='() => _tab = "setup"'>Connection setup</button>
     </nav>
 
@@ -164,7 +167,7 @@
             </form>
         </section>
     }
-    else if (_tab == "usage")
+    else if (_tab == "usage" && AdminAuth.IsAdmin)
     {
         <WhatsAppUsageBar Editable="@AdminAuth.CanAll("whatsapp")" />
     }

@@ -9,7 +9,15 @@
             <p>Each employee signs in at <strong>/admin</strong> with their own email and password. What each person can open is decided by their <strong>designation</strong> (see Designations &amp; rights).</p>
         </div>
         <div class="em-head-actions">
-            <ExportButton Title="Employees" FileName="nura-employees" Columns="@(new[] { "Name", "Email", "Phone", "Role", "Designation", "Department", "Status", "Open leads", "Open tasks", "Last sign-in", "Created" })" Rows="ExportRows" Disabled="@(_employees.Count == 0)" />
+            <ExportButton Title="Employees" FileName="nura-employees" Columns="@(new[] { "Name", "Email", "Phone", "Role", "Designation", "Department", "Status", "Open leads", "Open tasks", "Last sign-in", "Created" })" Rows="ExportRows" Disabled="@(FilteredEmployees.Count == 0)" />
+            @if (_employees.Any(e => !e.IsActive))
+            {
+                <label class="em-switch" title="Show or hide removed employees">
+                    <input type="checkbox" @bind="_showInactive" />
+                    <span class="em-track"><span class="em-knob"></span></span>
+                    <span class="em-switch-label">Show removed (@_employees.Count(e => !e.IsActive))</span>
+                </label>
+            }
             <label class="em-switch" title="When on, every new lead goes to the next active sales executive in turn.">
                 <input type="checkbox" checked="@_autoAssign" disabled="@_busy" @onchange="OnAutoAssignChanged" />
                 <span class="em-track"><span class="em-knob"></span></span>
@@ -83,12 +91,12 @@
                     {
                         <tr><td colspan="10" class="em-empty">Loading team…</td></tr>
                     }
-                    else if (_employees.Count == 0)
+                    else if (FilteredEmployees.Count == 0)
                     {
                         <tr><td colspan="10" class="em-empty"><strong>No employees yet</strong>Add your first sales executive so new leads can be assigned and followed up.</td></tr>
                     }
                     @{ var sn = (_page - 1) * _size; }
-                    @foreach (var e in _employees.Skip((_page - 1) * _size).Take(_size))
+                    @foreach (var e in FilteredEmployees.Skip((_page - 1) * _size).Take(_size))
                     {
                         var emp = e;
                         <tr @key="emp.Id" class="@(emp.IsActive ? "" : "is-off")">
@@ -111,7 +119,7 @@
                                         <span class="wa-toggle-track"><i></i></span><span class="wa-toggle-label">@(emp.WhatsAppActive ? "Active" : "Off")</span>
                                     </button>
                                 }
-                                else { <span class="fu-hint">â€”</span> }
+                                else { <span class="fu-hint">—</span> }
                             </td>
                             <td><i class="@($"tk-dot {(emp.IsOnline ? "on" : "")}")"></i>@(emp.IsOnline ? "Online · " : "")@(emp.LastLoginAt is { } t ? AdminFmt.DateTimeShort(t) : "Never")</td>
                             <td class="em-actions">
@@ -126,7 +134,7 @@
                 </tbody>
             </table>
         </div>
-    <Pager Total="@_employees.Count" @bind-Page="_page" @bind-PageSize="_size" Label="employees" />
+    <Pager Total="@FilteredEmployees.Count" @bind-Page="_page" @bind-PageSize="_size" Label="employees" />
     </div>
     <AdminReplyAssistantCard />
 
@@ -185,7 +193,18 @@
 
 @code {
     private int _page = 1, _size = 10;
-    private IEnumerable<IReadOnlyList<string>> ExportRows() => _employees.Select(e => (IReadOnlyList<string>)new[] { e.Name, e.Email, e.Phone, e.Role, e.DesignationName ?? "", e.DepartmentName ?? "", e.IsActive ? "Active" : "Inactive", e.OpenLeads.ToString(), e.OpenTasks.ToString(), e.LastLoginAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "Never", e.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd") });
+    private bool _showInactive;
+    private List<EmployeeDto> FilteredEmployees
+    {
+        get
+        {
+            var list = _employees.Where(e => _showInactive || e.IsActive).ToList();
+            var maxPage = Math.Max(1, (int)Math.Ceiling(list.Count / (double)_size));
+            if (_page > maxPage) _page = maxPage;
+            return list;
+        }
+    }
+    private IEnumerable<IReadOnlyList<string>> ExportRows() => FilteredEmployees.Select(e => (IReadOnlyList<string>)new[] { e.Name, e.Email, e.Phone, e.Role, e.DesignationName ?? "", e.DepartmentName ?? "", e.IsActive ? "Active" : "Inactive", e.OpenLeads.ToString(), e.OpenTasks.ToString(), e.LastLoginAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "Never", e.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd") });
 
     private static readonly string[] Palette = ["#235b40", "#2f6f8f", "#7a5aa6", "#b5792a", "#a24b5a", "#3f7d7a", "#5b6f2c"];
 

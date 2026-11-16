@@ -31,10 +31,13 @@
 @if (_selected is not null)
 {
     var o = _selected;
-    var payText = o.PaymentStatus == "PAID"
-        ? $"Paid{(string.IsNullOrEmpty(o.PaymentRef) ? "" : " · " + o.PaymentRef)}"
-        : o.PaymentMethod == "COD" ? "COD · due on delivery" : "Unpaid · pending gateway";
-    var payTone = o.PaymentStatus == "PAID" ? "is-ok" : o.PaymentMethod == "COD" ? "is-info" : "is-warn";
+    var isOffline = o.ShippingMode == ShippingMode.Offline;
+    var payText = o.PaymentStatus == "COD_COLLECTED"
+        ? $"COD · collected{(string.IsNullOrEmpty(o.PaymentRef) ? "" : " · " + o.PaymentRef)}"
+        : o.PaymentStatus == "PAID"
+            ? $"Paid{(string.IsNullOrEmpty(o.PaymentRef) ? "" : " · " + o.PaymentRef)}"
+            : o.PaymentMethod == "COD" ? "COD · due on delivery" : "Unpaid · pending gateway";
+    var payTone = o.PaymentStatus is "PAID" or "COD_COLLECTED" ? "is-ok" : o.PaymentMethod == "COD" ? "is-info" : "is-warn";
     <div @onclick="CloseOrder" class="ot-overlay">
         <div @onclick:stopPropagation class="ot-dialog" role="dialog" aria-modal="true" aria-label="@($"Order {o.Id}")">
 
@@ -45,6 +48,7 @@
                     <p>@o.CustomerName · @o.CustomerPhone</p>
                 </div>
                 <div class="ot-head-chips">
+                    <span class="@($"ot-chip {(isOffline ? "is-warn" : "is-info")}")">@(isOffline ? "Offline shipping" : "Online shipping")</span>
                     <span class="@($"ot-chip {payTone}")">@payText</span>
                     <span class="ot-chip">@(string.IsNullOrWhiteSpace(o.DeliveryStatus) ? o.FulfillmentStatus : o.DeliveryStatus)</span>
                 </div>
@@ -55,12 +59,17 @@
                 @* ---------------- left: shipment details + milestones ---------------- *@
                 <div class="ot-col">
                     <dl class="ot-facts">
-                        <div><dt>Courier</dt><dd>@(string.IsNullOrEmpty(o.ShiprocketCourier) ? (o.Courier ?? "Pending assignment") : o.ShiprocketCourier)</dd></div>
+                        <div><dt>Shipping mode</dt><dd>@(isOffline ? "Offline (Local / Chennai delivery)" : "Online (Courier)")</dd></div>
+                        @if (isOffline && !string.IsNullOrWhiteSpace(o.OfflineDispatchNote))
+                        {
+                            <div><dt>Dispatch note</dt><dd>@o.OfflineDispatchNote</dd></div>
+                        }
+                        <div><dt>Courier</dt><dd>@(isOffline ? "Local / Offline dispatch" : string.IsNullOrEmpty(o.ShiprocketCourier) ? (o.Courier ?? "Pending assignment") : o.ShiprocketCourier)</dd></div>
                         <div>
                             <dt>AWB / tracking code</dt>
                             <dd>
-                                <span>@(string.IsNullOrEmpty(o.ShiprocketAwb) ? "Not assigned yet" : o.ShiprocketAwb)</span>
-                                @if (!string.IsNullOrEmpty(o.ShiprocketAwb))
+                                <span>@(isOffline ? "N/A (Offline delivery)" : string.IsNullOrEmpty(o.ShiprocketAwb) ? "Not assigned yet" : o.ShiprocketAwb)</span>
+                                @if (!isOffline && !string.IsNullOrEmpty(o.ShiprocketAwb))
                                 {
                                     var awb = o.ShiprocketAwb!;
                                     <button type="button" @onclick="() => CopyAsync(awb)" class="ot-copy" title="Copy AWB" aria-label="Copy AWB">
@@ -111,9 +120,16 @@
 
                 @* ---- Shipping ---- *@
                 @{
-                    var canBook = string.IsNullOrEmpty(o.ShiprocketAwb) && o.FulfillmentStatus == "PENDING";
-                    var shadowfaxLive = o.Courier == "Shadowfax" && !string.IsNullOrEmpty(o.ShiprocketAwb) && o.FulfillmentStatus is not ("CANCELLED" or "DELIVERED" or "RTO");
+                    var canBook = !isOffline && string.IsNullOrEmpty(o.ShiprocketAwb) && o.FulfillmentStatus == "PENDING";
+                    var shadowfaxLive = !isOffline && o.Courier == "Shadowfax" && !string.IsNullOrEmpty(o.ShiprocketAwb) && o.FulfillmentStatus is not ("CANCELLED" or "DELIVERED" or "RTO");
                     var canLabel = shadowfaxLive && o.FulfillmentStatus is not ("PICKED_UP" or "IN_TRANSIT" or "OUT_FOR_DELIVERY");
+                }
+                @if (isOffline && o.FulfillmentStatus == "PENDING")
+                {
+                    <section class="oa-group">
+                        <h5>Offline local dispatch</h5>
+                        <p class="oa-hint">Courier booking is skipped for offline orders. Download the GST invoice below, hand over the parcel locally, update COD collection if paid, and click <strong>Mark as delivered</strong>.</p>
+                    </section>
                 }
                 @if (canBook || canLabel || !string.IsNullOrWhiteSpace(_shippingLabelUrl))
                 {
@@ -167,12 +183,39 @@
                 <section class="oa-group">
                     <h5>Invoice &amp; customer messages</h5>
                     <div class="oa-row">
-                        <button type="button" disabled="@_busy" @onclick="OpenInvoiceAsync" class="oa-btn oa-info" title="Opens the GST invoice (18% GST included in the price)"><Icon Name="FileText" Size="14" /><span>View GST invoice</span></button>
+                        <button type="button" disabled="@_busy" @onclick="OpenInvoiceAsync" class="oa-btn oa-info" title="Opens the printable GST invoice"><Icon Name="FileText" Size="14" /><span>View GST invoice</span></button>
+                        <button type="button" disabled="@_busy" @onclick="DownloadInvoiceAsync" class="oa-btn oa-info" title="Downloads the GST invoice PDF directly"><Icon Name="Download" Size="14" /><span>Download PDF invoice</span></button>
                         <button type="button" disabled="@_busy" @onclick="@(() => SendEmailAsync("confirmation"))" class="oa-btn oa-neutral"><Icon Name="Mail" Size="14" /><span>Email: order confirmation</span></button>
                         <button type="button" disabled="@_busy" @onclick="@(() => SendEmailAsync("delivered"))" class="oa-btn oa-neutral"><Icon Name="Mail" Size="14" /><span>Email: delivered</span></button>
                         <button type="button" disabled="@_busy" @onclick="SendWhatsAppUpdateAsync" class="oa-btn oa-success"><Icon Name="MessageCircle" Size="14" /><span>Send WhatsApp update</span></button>
                     </div>
                 </section>
+
+                @* ---- Manual COD & payment status control ---- *@
+                @if (o.FulfillmentStatus is not ("CANCELLED" or "RTO"))
+                {
+                    <section class="oa-group">
+                        <h5>COD &amp; payment collection</h5>
+                        <div class="oa-fields" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:8px">
+                            <label>Payment reference<input type="text" maxlength="100" placeholder="Cash receipt / UPI ref" @bind="_payRefInput" /></label>
+                            <label>Collection note<input type="text" maxlength="300" placeholder="Collected by / remarks" @bind="_payNoteInput" /></label>
+                        </div>
+                        <div class="oa-row">
+                            @if (o.PaymentStatus != "COD_COLLECTED")
+                            {
+                                <button type="button" disabled="@_busy" @onclick='() => UpdatePaymentAsync("COD_COLLECTED")' class="oa-btn oa-success"><Icon Name="CheckCircle2" Size="14" /><span>Mark COD collected</span></button>
+                            }
+                            @if (o.PaymentStatus != "PAID")
+                            {
+                                <button type="button" disabled="@_busy" @onclick='() => UpdatePaymentAsync("PAID")' class="oa-btn oa-primary"><Icon Name="CheckCircle2" Size="14" /><span>Mark online / UPI paid</span></button>
+                            }
+                            @if (o.PaymentStatus == "COD_COLLECTED")
+                            {
+                                <button type="button" disabled="@_busy" @onclick='() => UpdatePaymentAsync("COD_PENDING")' class="oa-btn oa-neutral"><span>Revert to COD pending</span></button>
+                            }
+                        </div>
+                    </section>
+                }
 
                 @* ---- Status ---- *@
                 @if (o.DeliveryStatus != "Delivered" || o.PaymentStatus == "REFUND_PENDING")
@@ -316,8 +359,18 @@
                 </div>
 
                                 <div class="admin-fields">
+                    <label>Shipping mode
+                        <select @bind="_new.ShippingMode">
+                            <option value="@ShippingMode.Online">Online Shipping (Courier)</option>
+                            <option value="@ShippingMode.Offline">Offline Shipping (Local / Chennai)</option>
+                        </select>
+                    </label>
                     <label>Coupon code (optional)<input maxlength="64" @bind="_new.CouponCode" placeholder="e.g. WELCOME10" /></label>
                     <label>Payment method<select @bind="_new.PaymentMethod"><option value="COD">Cash on delivery</option><option value="ONLINE">Online / manual payment</option></select></label>
+                    @if (_new.ShippingMode == ShippingMode.Offline)
+                    {
+                        <label class="admin-span-2">Offline dispatch note<input maxlength="500" @bind="_new.OfflineDispatchNote" placeholder="e.g. Chennai local runner / hand delivery" /></label>
+                    }
                     @if (_new.PaymentMethod == "ONLINE") { <label class="admin-span-2"><span><input type="checkbox" @bind="_new.MarkPaid" /> Payment already collected</span><small>Only select this after confirming receipt. This records payment; it does not charge the customer.</small></label> }
                 </div><div class="pt-2 flex gap-2.5">
                     <button type="submit" disabled="@(_creating || string.IsNullOrEmpty(_new.ProductId))"
@@ -343,8 +396,14 @@
     private IReadOnlyList<OrderDto> _view = Array.Empty<OrderDto>();
     private Task OnFiltered(IReadOnlyList<OrderDto> v) { _view = v; StateHasChanged(); return Task.CompletedTask; }
 
-    private static string Courier(OrderDto o) => string.IsNullOrWhiteSpace(o.ShiprocketCourier) ? o.Courier ?? "" : o.ShiprocketCourier;
-    private static string PaymentLabel(OrderDto o) => o.PaymentStatus == "PAID" ? "Online · paid" : o.PaymentMethod == "COD" ? "COD" : o.PaymentStatus == "FAILED" ? "Online · failed" : "Online · pending";
+    private static string Courier(OrderDto o) => o.ShippingMode == ShippingMode.Offline ? "Offline" : string.IsNullOrWhiteSpace(o.ShiprocketCourier) ? o.Courier ?? "" : o.ShiprocketCourier;
+    private static string PaymentLabel(OrderDto o) => o.PaymentStatus switch
+    {
+        "PAID" => "Online · paid",
+        "COD_COLLECTED" => "COD · collected",
+        "FAILED" => "Online · failed",
+        _ => o.PaymentMethod == "COD" ? "COD · pending" : "Online · pending",
+    };
     private static string StatusTone(OrderDto o) => o.DeliveryStatus switch { "Delivered" => "good", "Payment Pending" => "warn", _ => "muted" };
 
     // Filters: every one reads its choices from the orders themselves, with counts.
@@ -381,10 +440,11 @@
             new() { Header = "Discount (Rs)", Text = o => o.DiscountAmount.ToString("0.##"), SortKey = o => o.DiscountAmount, Align = "right", Hidden = true },
             new() { Header = "Shipping (Rs)", Text = o => o.ShippingFee.ToString("0.##"), SortKey = o => o.ShippingFee, Align = "right", Hidden = true },
             new() { Header = "Total (Rs)", Text = o => o.TotalAmount.ToString("0.##"), SortKey = o => o.TotalAmount, Align = "right", Cell = o => b => b.AddContent(0, "₹" + AdminFmt.Inr(o.TotalAmount)) },
-            new() { Header = "Payment", Text = PaymentLabel, Tone = o => o.PaymentStatus == "PAID" ? "good" : o.PaymentStatus == "FAILED" ? "bad" : o.PaymentMethod == "COD" ? "muted" : "warn" },
+            new() { Header = "Payment", Text = PaymentLabel, Tone = o => o.PaymentStatus is "PAID" or "COD_COLLECTED" ? "good" : o.PaymentStatus == "FAILED" ? "bad" : o.PaymentMethod == "COD" ? "muted" : "warn" },
             new() { Header = "Courier", Text = Courier },
-            new() { Header = "AWB", Text = o => o.ShiprocketAwb ?? "", Cell = o => b =>
+            new() { Header = "AWB", Text = o => o.ShippingMode == ShippingMode.Offline ? "Offline" : (o.ShiprocketAwb ?? ""), Cell = o => b =>
                 {
+                    if (o.ShippingMode == ShippingMode.Offline) { b.AddContent(0, "Offline (local)"); return; }
                     var awb = o.ShiprocketAwb;
                     b.AddContent(0, string.IsNullOrEmpty(awb) ? "Pending AWB" : awb);
                     if (string.IsNullOrEmpty(awb)) return;
@@ -402,6 +462,7 @@
     private string? _shippingLabelUrl;
     private string? _actionMessage;
     private bool _actionOk;
+    private string _payRefInput = "", _payNoteInput = "";
 
     private List<ProductDto> _catalog = new();
     private bool _showAdd;
@@ -435,6 +496,8 @@
         _parcelBreadth = order.ParcelBreadthCm; _parcelHeight = order.ParcelHeightCm;
         _shippingLabelUrl = order.ShippingLabelUrl;
         _actionMessage = null;
+        _payRefInput = order.PaymentRef ?? "";
+        _payNoteInput = "";
     }
 
     private void CloseOrder() { _selected = null; _shippingLabelUrl = null; _actionMessage = null; }
@@ -559,6 +622,34 @@
         _busy = false;
         if (res.Success && !string.IsNullOrEmpty(res.Data)) await Browser.OpenUrlAsync(res.Data);
         else { _actionOk = false; _actionMessage = res.Message ?? "Could not open the invoice."; }
+    }
+
+    private async Task DownloadInvoiceAsync()
+    {
+        if (_selected is null) return;
+        _busy = true; _actionMessage = null;
+        var res = await Api.AdminInvoiceDownloadUrlAsync(_selected.Id);
+        _busy = false;
+        if (res.Success && !string.IsNullOrEmpty(res.Data)) await Browser.OpenUrlAsync(res.Data);
+        else { _actionOk = false; _actionMessage = res.Message ?? "Could not download the invoice PDF."; }
+    }
+
+    private async Task UpdatePaymentAsync(string status)
+    {
+        if (_selected is null) return;
+        _busy = true; _actionMessage = null;
+        var res = await Api.AdminUpdateOrderPaymentAsync(_selected.Id, new UpdateOrderPaymentRequest
+        {
+            PaymentStatus = status,
+            PaymentRef = string.IsNullOrWhiteSpace(_payRefInput) ? null : _payRefInput.Trim(),
+            Note = string.IsNullOrWhiteSpace(_payNoteInput) ? null : _payNoteInput.Trim(),
+        });
+        _actionOk = res.Success;
+        _actionMessage = res.Message ?? (res.Success ? "Payment status updated." : "Could not update payment status.");
+        if (res.Success) ApplyUpdated(res.Order);
+        _busy = false;
+        await OnReload.InvokeAsync();
+        await ReloadSelectedAsync(false);
     }
 
     private async Task CancelShipmentAsync()

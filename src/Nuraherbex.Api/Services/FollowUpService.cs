@@ -139,6 +139,7 @@ public class FollowUpService(
     {
         var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == r.LeadId);
         if (lead is null || (!isAdmin && lead.AssignedToEmployeeId != myId)) return (null, "Lead not found.");
+        if (lead.Status == LeadStatus.New) return (null, "Follow-up cannot be set on New leads. Mark the lead as Interested first.");
         if (!FollowUpTypes.All.Contains(r.Type)) return (null, "Unknown follow-up type.");
         var due = AsUtc(r.DueAt);
         if (due < Clock().AddMinutes(-5)) return (null, "Choose a time in the future.");
@@ -152,11 +153,11 @@ public class FollowUpService(
         await leads.CloseOpenManualFollowUpsAsync(lead.Id, "Replaced by a newer follow-up", createdBy, r.Type);
         db.FollowUps.Add(item);
 
-        // Scheduling a follow-up means the lead is being worked on.
-        if (lead.Status is LeadStatus.New or LeadStatus.Interested)
+        // Scheduling a follow-up from Interested (or NoAnswer) automatically moves the lead to Follow-up.
+        if (lead.Status is LeadStatus.Interested or LeadStatus.NoAnswer)
         {
             LeadStatus? fromStatus = Enum.IsDefined(lead.Status) ? lead.Status : null;
-            db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, FromStatus = fromStatus, ToStatus = LeadStatus.FollowUp, Note = "Follow-up scheduled", ChangedBy = createdBy });
+            db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, FromStatus = fromStatus, ToStatus = LeadStatus.FollowUp, Note = "Follow-up scheduled", ChangedBy = createdBy, CreatedAt = Clock() });
             lead.Status = LeadStatus.FollowUp;
             lead.UpdatedAt = Clock();
         }
@@ -195,12 +196,21 @@ public class FollowUpService(
         item.Status = FollowUpStatus.Done;
         item.CompletedAt = now;
         item.CompletedBy = completedBy;
+        if (item.AssignedToEmployeeId == null && actorId is not null) item.AssignedToEmployeeId = actorId;
         item.Outcome = Truncate(string.IsNullOrEmpty(note) ? r.Outcome : $"{r.Outcome}: {note}", 500);
 
         var lead = await db.Leads.FirstAsync(l => l.Id == item.LeadId);
+        if (!string.IsNullOrWhiteSpace(note))
+        {
+            var baseNotes = !string.IsNullOrWhiteSpace(lead.Notes) ? lead.Notes : lead.AssessmentNotes;
+            lead.Notes = string.IsNullOrWhiteSpace(baseNotes)
+                ? Truncate(note, 4000)
+                : Truncate($"{baseNotes}\n{note}", 4000);
+            lead.UpdatedAt = now;
+        }
         switch (r.Outcome)
         {
-            case FollowUpOutcomes.Interested when lead.Status is LeadStatus.New or LeadStatus.FollowUp or LeadStatus.NotInterested:
+            case FollowUpOutcomes.Interested when lead.Status is LeadStatus.New or LeadStatus.FollowUp or LeadStatus.NotInterested or LeadStatus.NoAnswer:
                 await leads.ChangeStatusAsync(lead.Id, LeadStatuses.Interested, note ?? "Follow-up outcome", completedBy); break;
             case FollowUpOutcomes.NotInterested when lead.Status != LeadStatus.Converted:
                 await leads.ChangeStatusAsync(lead.Id, LeadStatuses.NotInterested, note ?? "Follow-up outcome", completedBy); break;
@@ -213,13 +223,44 @@ public class FollowUpService(
         string message = "Follow-up completed";
         if (r.Outcome is FollowUpOutcomes.NoAnswer or FollowUpOutcomes.Callback)
         {
-            var next = r.NextDueAt is { } n ? AsUtc(n) : AtTenAm(now, 1);
-            if (next <= now) return (false, "Choose a callback time in the future.");
-            var again = NewItem(lead, item.Type == FollowUpTypes.Order ? FollowUpTypes.Call : item.Type, item.Title.StartsWith("Retry: ") ? item.Title : "Retry: " + item.Title, null, next, item.AssignedToEmployeeId, FollowUpSource.Manual, completedBy, await ReminderDaysAsync());
-            again.OrderId = null;
-            await leads.CloseOpenManualFollowUpsAsync(lead.Id, "Replaced by the next attempt", completedBy, again.Type);
-            db.FollowUps.Add(again);
-            message = $"Completed. Next follow-up set for {FormatDue(next)}.";
+            lead.NoAnswerAttempts += 1;
+            lead.NoAnswerStartedAt ??= now;
+            lead.LastNoAnswerAt = now;
+            lead.UpdatedAt = now;
+
+            if (lead.NoAnswerAttempts >= 7)
+            {
+                LeadStatus? prev = Enum.IsDefined(lead.Status) ? lead.Status : null;
+                lead.Status = LeadStatus.NotInterested;
+                db.LeadStatusHistory.Add(new LeadStatusHistory
+                {
+                    LeadId = lead.Id, FromStatus = prev, ToStatus = LeadStatus.NotInterested,
+                    Note = $"Auto-moved to Not Interested after {lead.NoAnswerAttempts} unanswered attempts", ChangedBy = completedBy, CreatedAt = now,
+                });
+                await leads.CloseOpenManualFollowUpsAsync(lead.Id, "Auto-closed after 7 unanswered attempts", completedBy);
+                message = "Attempt 7/7 unanswered — lead automatically moved to Not Interested.";
+            }
+            else
+            {
+                var next = r.NextDueAt is { } n ? AsUtc(n) : AtTenAm(now, 1);
+                if (next <= now) return (false, "Choose a retry time in the future.");
+                if (lead.Status != LeadStatus.NoAnswer)
+                {
+                    LeadStatus? prev = Enum.IsDefined(lead.Status) ? lead.Status : null;
+                    lead.Status = LeadStatus.NoAnswer;
+                    db.LeadStatusHistory.Add(new LeadStatusHistory
+                    {
+                        LeadId = lead.Id, FromStatus = prev, ToStatus = LeadStatus.NoAnswer,
+                        Note = string.IsNullOrWhiteSpace(note) ? $"No answer (attempt {lead.NoAnswerAttempts}/7)" : $"No answer ({lead.NoAnswerAttempts}/7): {note}",
+                        ChangedBy = completedBy, CreatedAt = now,
+                    });
+                }
+                var again = NewItem(lead, item.Type == FollowUpTypes.Order ? FollowUpTypes.Call : item.Type, item.Title.StartsWith("Retry: ") ? item.Title : "Retry: " + item.Title, null, next, lead.AssignedToEmployeeId ?? item.AssignedToEmployeeId ?? actorId, FollowUpSource.Manual, completedBy, await ReminderDaysAsync());
+                again.OrderId = null;
+                await leads.CloseOpenManualFollowUpsAsync(lead.Id, "Replaced by the next attempt", completedBy, again.Type);
+                db.FollowUps.Add(again);
+                message = $"No answer attempt {lead.NoAnswerAttempts}/7 logged. Next retry set for {FormatDue(next)}.";
+            }
         }
 
         await db.SaveChangesAsync();
@@ -371,9 +412,9 @@ public class FollowUpService(
                 }
 
                 var active = o.FulfillmentStatus is not ("DELIVERED" or "CANCELLED" or "RTO");
-                if (o.FulfillmentStatus == "PENDING" && string.IsNullOrEmpty(o.ShiprocketAwb) && now - o.CreatedAt > TimeSpan.FromHours(2))
+                if (o.ShippingMode != ShippingMode.Offline && o.FulfillmentStatus == "PENDING" && string.IsNullOrEmpty(o.ShiprocketAwb) && now - o.CreatedAt > TimeSpan.FromHours(2))
                     await Raise("order-unbooked", $"Order {o.Id} has no courier booking", $"Placed {FormatDue(o.CreatedAt)}. {Truncate(o.Notes, 220)}");
-                if (active && o.FulfillmentStatus is "AWB_ASSIGNED" or "PICKED_UP" or "IN_TRANSIT" or "OUT_FOR_DELIVERY" or "SHIPMENT_CREATED"
+                if (o.ShippingMode != ShippingMode.Offline && active && o.FulfillmentStatus is "AWB_ASSIGNED" or "PICKED_UP" or "IN_TRANSIT" or "OUT_FOR_DELIVERY" or "SHIPMENT_CREATED"
                     && now - (o.LastShippingEventAt ?? o.UpdatedAt) > TimeSpan.FromDays(3))
                     await Raise("order-stuck", $"Shipment for order {o.Id} has not moved in 3 days", $"Status: {o.DeliveryStatus}. AWB {o.ShiprocketAwb}. Check the courier and update the customer.");
                 if (o.FulfillmentStatus == "RTO")
@@ -458,7 +499,7 @@ public class FollowUpService(
 
     private async Task EnrollAsync(Lead lead, Order order, DateTime anchor)
     {
-        var enrollment = new JourneyEnrollment { LeadId = lead.Id, OrderId = order.Id, AnchorAt = anchor };
+        var enrollment = new JourneyEnrollment { LeadId = lead.Id, OrderId = order.Id, AnchorAt = anchor, CreatedAt = Clock() };
         db.JourneyEnrollments.Add(enrollment);
         try { await db.SaveChangesAsync(); }
         catch (DbUpdateException) { db.ChangeTracker.Clear(); return; } // another worker enrolled it first
@@ -584,14 +625,29 @@ public class FollowUpService(
 
     private sealed record Slim(long Id, string Type, FollowUpStatus Status, DateTime DueAt, DateTime? CompletedAt, string? CompletedBy, long? AssignedToEmployeeId, string? StepKey, FollowUpSource Source);
 
-    public async Task<FollowUpReportResponse> ReportAsync(int days, long? onlyEmployee)
+    public async Task<FollowUpReportResponse> ReportAsync(int days, long? onlyEmployee, DateTime? customFrom = null, DateTime? customTo = null)
     {
         days = Math.Clamp(days, 1, 365);
         var todayStart = TodayStartUtc();
         var tomorrow = todayStart.AddDays(1);
-        var from = todayStart.AddDays(-(days - 1));
+        DateTime from;
+        DateTime toExclusive;
+        if (customFrom.HasValue && customTo.HasValue)
+        {
+            var f = customFrom.Value.Date;
+            var t = customTo.Value.Date;
+            if (f > t) (f, t) = (t, f);
+            from = TimeZoneInfo.ConvertTimeToUtc(f, Ist);
+            toExclusive = TimeZoneInfo.ConvertTimeToUtc(t.AddDays(1), Ist);
+            days = Math.Max(1, (t - f).Days + 1);
+        }
+        else
+        {
+            from = todayStart.AddDays(-(days - 1));
+            toExclusive = tomorrow;
+        }
 
-        var q = db.FollowUps.AsNoTracking().Where(f => f.DueAt >= from && f.DueAt < tomorrow);
+        var q = db.FollowUps.AsNoTracking().Where(f => f.DueAt >= from && f.DueAt < toExclusive);
         if (onlyEmployee is { } me) q = q.Where(f => f.AssignedToEmployeeId == me);
         var items = await q.Select(f => new Slim(f.Id, f.Type, f.Status, f.DueAt, f.CompletedAt, f.CompletedBy, f.AssignedToEmployeeId, f.StepKey, f.Source)).ToListAsync();
         // Overdue is a backlog, not a period figure: tasks that fell due before this window and are still open count too, so the report agrees with the Follow-ups list.
@@ -619,7 +675,7 @@ public class FollowUpService(
 
         var report = new FollowUpReportResponse
         {
-            Success = true, Days = days, From = from,
+            Success = true, Days = days, From = from, To = toExclusive.AddSeconds(-1),
             Due = items.Count, Done = items.Count(i => IsDone(i.Status)),
             DoneOnTime = items.Count(i => IsDone(i.Status) && OnTime(i.DueAt, i.CompletedAt)),
             Overdue = everything.Count(i => IsOverdue(i.Status, i.DueAt)),
@@ -631,7 +687,7 @@ public class FollowUpService(
 
         // By employee (admins) — includes leads owned and converted in the period.
         var owned = await db.Leads.AsNoTracking().Where(l => l.AssignedToEmployeeId != null).GroupBy(l => l.AssignedToEmployeeId!.Value)
-            .Select(g => new { Id = g.Key, Open = g.Count(l => l.Status != LeadStatus.Converted && l.Status != LeadStatus.NotInterested), Won = g.Count(l => l.ConvertedAt != null && l.ConvertedAt >= from) })
+            .Select(g => new { Id = g.Key, Open = g.Count(l => l.Status != LeadStatus.Converted && l.Status != LeadStatus.NotInterested), Won = g.Count(l => l.ConvertedAt != null && l.ConvertedAt >= from && l.ConvertedAt < toExclusive) })
             .ToDictionaryAsync(x => x.Id);
         var groups = items.GroupBy(i => i.AssignedToEmployeeId);
         var empIds = names.Keys.Where(id => onlyEmployee is null || id == onlyEmployee).ToList();
@@ -663,20 +719,20 @@ public class FollowUpService(
         report.ReviewRequests = report.Journey.FirstOrDefault(j => j.StepKey == "day8-review")?.Done ?? 0;
 
         // Funnel numbers (company-wide, admins only see these in the UI).
-        var leadsQ = db.Leads.AsNoTracking().Where(l => l.CreatedAt >= from).Where(LeadService.IsNewEnquiry);
+        var leadsQ = db.Leads.AsNoTracking().Where(l => l.CreatedAt >= from && l.CreatedAt < toExclusive).Where(LeadService.IsNewEnquiry);
         if (onlyEmployee is { } e1) leadsQ = leadsQ.Where(l => l.AssignedToEmployeeId == e1);
         report.NewLeads = await leadsQ.CountAsync();
-        var wonQ = db.Leads.AsNoTracking().Where(l => l.ConvertedAt != null && l.ConvertedAt >= from);
+        var wonQ = db.Leads.AsNoTracking().Where(l => l.ConvertedAt != null && l.ConvertedAt >= from && l.ConvertedAt < toExclusive);
         if (onlyEmployee is { } e2) wonQ = wonQ.Where(l => l.AssignedToEmployeeId == e2);
         report.ConvertedLeads = await wonQ.CountAsync();
-        report.ReviewsReceived = await db.Reviews.AsNoTracking().CountAsync(r => r.CreatedAt >= from);
-        var enrollments = await db.JourneyEnrollments.AsNoTracking().Where(e => e.CreatedAt >= from).Select(e => new { e.LeadId, e.OrderId, e.AnchorAt }).ToListAsync();
+        report.ReviewsReceived = await db.Reviews.AsNoTracking().CountAsync(r => r.CreatedAt >= from && r.CreatedAt < toExclusive);
+        var enrollments = await db.JourneyEnrollments.AsNoTracking().Where(e => e.CreatedAt >= from && e.CreatedAt < toExclusive).Select(e => new { e.LeadId, e.OrderId, e.AnchorAt }).ToListAsync();
         report.JourneysStarted = enrollments.Count;
         if (enrollments.Count > 0)
         {
             var orderIds = enrollments.Select(e => e.OrderId).ToList();
             var phones = await db.Orders.AsNoTracking().Where(o => orderIds.Contains(o.Id)).Select(o => new { o.Id, o.CustomerPhone }).ToListAsync();
-            var later = await db.Orders.AsNoTracking().Where(o => o.CreatedAt >= from && !orderIds.Contains(o.Id)).Select(o => new { o.CustomerPhone, o.CreatedAt }).ToListAsync();
+            var later = await db.Orders.AsNoTracking().Where(o => o.CreatedAt >= from && o.CreatedAt < toExclusive && !orderIds.Contains(o.Id)).Select(o => new { o.CustomerPhone, o.CreatedAt }).ToListAsync();
             report.Reorders = enrollments.Count(e => phones.Any(p => p.Id == e.OrderId && later.Any(l => l.CustomerPhone == p.CustomerPhone && l.CreatedAt > e.AnchorAt)));
         }
 
@@ -684,8 +740,8 @@ public class FollowUpService(
         var span = Math.Min(days, 31);
         for (var i = span - 1; i >= 0; i--)
         {
-            var dayStart = todayStart.AddDays(-i);
-            var dayEnd = dayStart.AddDays(1);
+            var dayEnd = toExclusive.AddDays(-i);
+            var dayStart = dayEnd.AddDays(-1);
             var day = items.Where(x => x.DueAt >= dayStart && x.DueAt < dayEnd).ToList();
             report.Trend.Add(new FollowUpTrendPoint { Day = TimeZoneInfo.ConvertTimeFromUtc(dayStart, Ist).ToString("dd MMM", CultureInfo.InvariantCulture), Due = day.Count, Done = day.Count(x => IsDone(x.Status)) });
         }

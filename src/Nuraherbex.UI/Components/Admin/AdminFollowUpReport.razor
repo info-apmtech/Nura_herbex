@@ -5,13 +5,14 @@
     <div class="fr-bar">
         <p>@(AdminAuth.CanAll("followups") ? "How well the team follows up, and how the 15-day journey is performing." : "Your follow-up performance.")</p>
         <a class="ld-btn" href="/admin/reports"><Icon Name="FileText" Size="14" /> Detailed list with comments</a>
-        <div class="fr-range" role="group" aria-label="Report period">
-            @foreach (var d in new[] { 7, 30, 90 })
-            {
-                var days = d;
-                <button type="button" class="@($"fu-chip {(_days == days ? "is-picked" : "")}")" @onclick="() => LoadAsync(days)">Last @days days</button>
-            }
-        </div>
+        <DateRangeFilter
+            SelectedDays="@_days"
+            IsCustom="@_isCustom"
+            FromDate="@_from"
+            ToDate="@_to"
+            RangeText="@RangeSummary"
+            OnPresetSelected="OnPresetSelectedAsync"
+            OnRangeSelected="OnRangeSelectedAsync" />
     </div>
 
     @if (_r is null)
@@ -128,14 +129,37 @@
     private IEnumerable<IReadOnlyList<string>> TypeRows() => _r!.ByType.Select(t => (IReadOnlyList<string>)new[] { FuFmt.TypeLabel(t.Label), t.Due.ToString(), t.Done.ToString(), t.Overdue.ToString() });
     private FollowUpReportResponse? _r;
     private int _days = 30;
+    private bool _isCustom;
+    private string _from = "";
+    private string _to = "";
     private string? _error;
 
+    private string RangeSummary => _r is null ? "" : $"{_r.From.ToLocalTime():d MMM} – {(_r.To?.ToLocalTime() ?? DateTime.Now):d MMM yyyy}";
+
     protected override Task OnInitializedAsync() => LoadAsync(30);
+
+    private async Task OnPresetSelectedAsync(int days)
+    {
+        _days = days;
+        _isCustom = false;
+        await LoadAsync(days);
+    }
+
+    private async Task OnRangeSelectedAsync((string From, string To) range)
+    {
+        _from = range.From;
+        _to = range.To;
+        _isCustom = true;
+        var res = await Api.AdminFollowUpReportAsync(from: _from, to: _to);
+        if (res.Success) { _r = res; _error = null; }
+        else _error = res.Message ?? "Could not load the report.";
+    }
 
     private async Task LoadAsync(int days)
     {
         _days = days;
-        var res = await Api.AdminFollowUpReportAsync(days);
+        _isCustom = false;
+        var res = await Api.AdminFollowUpReportAsync(days: days);
         if (res.Success) { _r = res; _error = null; }
         else _error = res.Message ?? "Could not load the report.";
     }

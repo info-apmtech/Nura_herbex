@@ -95,7 +95,7 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
         var adLeads = await periodQ.CountAsync(l => db.LeadSourceEvents.Any(e => e.LeadId == l.Id && e.ReferralJson != null));
         var noOwner = await periodQ.CountAsync(l => l.AssignedToEmployeeId == null);
         var bySource = (await periodQ.GroupBy(l => l.Source).Select(g => new { g.Key, N = g.Count() }).ToListAsync()).OrderByDescending(x => x.N).FirstOrDefault();
-        // "No answer" is not a stored status: it is a New or Follow-up lead whose last finished follow-up got no answer. It is split out so the status figures add up to the total.
+        // "No answer" includes both formal LeadStatus.NoAnswer and legacy New/Follow-up leads whose last finished follow-up got no answer.
         var naNew = await periodQ.Where(l => l.Status == LeadStatus.New).CountAsync(LeadService.NoAnswerOf(db, true));
         var naFollow = await periodQ.Where(l => l.Status == LeadStatus.FollowUp).CountAsync(LeadService.NoAnswerOf(db, true));
         var naIds = (await periodQ.Where(l => l.Status == LeadStatus.New || l.Status == LeadStatus.FollowUp).Where(LeadService.NoAnswerOf(db, true)).Select(l => l.Id).Take(MaxRows).ToListAsync()).ToHashSet();
@@ -110,8 +110,8 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
             .GroupBy(x => x.LeadId).ToDictionary(g => g.Key, g => g.First().Outcome!);
         var nextDue = (await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Pending && ids.Contains(f.LeadId)).GroupBy(f => f.LeadId).Select(g => new { g.Key, At = g.Min(x => x.DueAt) }).ToListAsync())
             .ToDictionary(x => x.Key, x => x.At);
-        // "Status" shows what the Leads tabs show: no-answer for a lead whose last follow-up got no answer, otherwise the stored status.
-        string StatusOf(Lead l) => naIds.Contains(l.Id) ? FollowUpOutcomes.NoAnswer : l.Status.ToCode();
+        // "Status" shows what the Leads tabs show: no-answer for LeadStatus.NoAnswer or legacy leads whose last follow-up got no answer.
+        string StatusOf(Lead l) => (l.Status == LeadStatus.NoAnswer || naIds.Contains(l.Id)) ? LeadStatuses.NoAnswer : l.Status.ToCode();
         var res = new ReportResponse { Columns = ["Lead ID", "Created", "Name", "Phone", "Email", "Source", "Campaign / detail", "Status", "Owner", "Notes", "Latest comment", "Follow-ups", "Last contact", "Converted on", "Consent", "First message", "Last follow-up result", "Next follow-up"] };
         foreach (var l in leads)
         {
@@ -124,6 +124,7 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
         }
         int N(LeadStatus s) => byStatus.GetValueOrDefault(s);
         var won = N(LeadStatus.Converted);
+        var noAnswerTotal = N(LeadStatus.NoAnswer) + naNew + naFollow;
         // Every lead is in exactly one of: New, In follow-up, No answer, Interested, Not interested, Converted.
         res.Summary =
         [
@@ -131,7 +132,7 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
             S("From Meta ads", adLeads, "Arrived through a Click-to-WhatsApp ad: compare this with Meta"),
             S("New, not started", N(LeadStatus.New) - naNew, "Nobody has worked on them yet"),
             S("In follow-up", N(LeadStatus.FollowUp) - naFollow, "Being chased"),
-            S("No answer", naNew + naFollow, "The last call or message got no answer; a retry is booked", naNew + naFollow > 0 ? "warn" : "neutral"),
+            S("No answer", noAnswerTotal, "The last call or message got no answer; a retry is booked", noAnswerTotal > 0 ? "warn" : "neutral"),
             S("Interested", N(LeadStatus.Interested), "Hot leads"),
             S("Not interested", N(LeadStatus.NotInterested), "Closed for now"),
             S("Converted", $"{won} ({Pct(won, total)})", "Placed an order; the percentage is of this period's leads", "good"),

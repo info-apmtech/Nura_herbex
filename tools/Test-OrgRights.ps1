@@ -71,10 +71,11 @@ try {
     $packer = Call 'POST' '/api/admin/designations' @{ name = 'Packer'; departmentId = $wh; level = 2; rights = @{ orders = 2; tasks = 1 } } $admin
     $viewer = Call 'POST' '/api/admin/designations' @{ name = 'Order Viewer'; level = 2; rights = @{ orders = 1 } } $admin
     $orgMgr = Call 'POST' '/api/admin/designations' @{ name = 'Org Manager'; level = 6; rights = @{ team = 2; tasks = 2; leads = 1 } } $admin
-    Assert ($packer.Status -eq 201 -and $viewer.Status -eq 201 -and $orgMgr.Status -eq 201) 'admin creates designations with page rights'
+    $custMgr = Call 'POST' '/api/admin/designations' @{ name = 'Customer Manager'; level = 3; rights = @{ customers = 2 } } $admin
+    Assert ($packer.Status -eq 201 -and $viewer.Status -eq 201 -and $orgMgr.Status -eq 201 -and $custMgr.Status -eq 201) 'admin creates designations with page rights'
     Assert ((Call 'POST' '/api/admin/designations' @{ name = 'Bad'; level = 99; rights = @{} } $admin).Status -eq 400) 'seniority outside 1-10 is refused'
     $dl = (Call 'GET' '/api/admin/designations' $null $admin).Body.designations
-    $dPacker = ($dl | Where-Object { $_.name -eq 'Packer' }).id; $dViewer = ($dl | Where-Object { $_.name -eq 'Order Viewer' }).id; $dMgr = ($dl | Where-Object { $_.name -eq 'Org Manager' }).id
+    $dPacker = ($dl | Where-Object { $_.name -eq 'Packer' }).id; $dViewer = ($dl | Where-Object { $_.name -eq 'Order Viewer' }).id; $dMgr = ($dl | Where-Object { $_.name -eq 'Org Manager' }).id; $dCustMgr = ($dl | Where-Object { $_.name -eq 'Customer Manager' }).id
     Assert ((($dl | Where-Object { $_.name -eq 'Packer' }).rights.orders) -eq 2 -and ($dl | Where-Object { $_.name -eq 'Packer' }).departmentName -eq 'Warehouse') 'rights and department are stored on the designation'
 
     # --- people ---
@@ -82,7 +83,8 @@ try {
     $yId = Staff 'Viewer Vik' 'vik@example.test' $dViewer
     $zId = Staff 'Default Dee' 'dee@example.test' $null
     $wId = Staff 'Manager Mo' 'mo@example.test' $dMgr
-    $tx = Login 'pat@example.test'; $ty = Login 'vik@example.test'; $tz = Login 'dee@example.test'; $tw = Login 'mo@example.test'
+    $cmId = Staff 'CustMgr Cam' 'cam@example.test' $dCustMgr
+    $tx = Login 'pat@example.test'; $ty = Login 'vik@example.test'; $tz = Login 'dee@example.test'; $tw = Login 'mo@example.test'; $tcm = Login 'cam@example.test'
     $vx = (Call 'GET' '/api/admin/verify' $null $tx).Body.user
     Assert ($vx.rights.orders -eq 2 -and $vx.designation -eq 'Packer' -and $vx.department -eq 'Warehouse' -and -not $vx.rights.payments) 'the signed-in person receives their page rights, designation and department'
     $vz = (Call 'GET' '/api/admin/verify' $null $tz).Body.user
@@ -96,7 +98,13 @@ try {
     Assert ((Call 'GET' '/api/admin/employees' $null $tx).Status -eq 403) 'the team list is closed without the team page'
     Assert ((Call 'GET' '/api/admin/orders' $null $ty).Status -eq 200) 'view-only can read'
     Assert ((Call 'POST' '/api/admin/orders/NH-NONE/deliver' @{} $ty).Status -eq 403) 'view-only cannot change orders'
+    Assert ((Call 'POST' '/api/admin/customers' @{} $ty).Status -eq 403) 'view-only order staff cannot add customers'
+    Assert ((Call 'POST' '/api/admin/customers/CUST-NONE/order' @{} $ty).Status -eq 403) 'view-only order staff cannot create customer orders'
     Assert ((Call 'POST' '/api/admin/orders/NH-NONE/deliver' @{} $tx).Status -ne 403) 'full access reaches the order action (not blocked by rights)'
+    Assert ((Call 'POST' '/api/admin/customers' @{} $tx).Status -eq 403) 'orders-only staff cannot add customers without customers full access'
+    Assert ((Call 'POST' '/api/admin/customers/CUST-NONE/order' @{} $tx).Status -ne 403) 'full orders access reaches customer order creation (not blocked by rights)'
+    Assert ((Call 'POST' '/api/admin/customers' @{ fullName = 'Cam Cust'; phone = '9840099887' } $tcm).Status -eq 201) 'full customers access can add a customer'
+    Assert ((Call 'POST' '/api/admin/customers/CUST-NONE/order' @{} $tcm).Status -ne 403) 'full customers access reaches customer order creation even without orders page'
     Assert ((Call 'GET' '/api/admin/orders' $null $tz).Status -eq 403) 'default staff cannot open orders'
     Assert ((Call 'GET' '/api/admin/leads' $null $tz).Status -eq 200) 'default staff can still open leads'
     Assert ((Call 'GET' '/api/admin/whatsapp/messages' $null $ty).Status -eq 403) 'the WhatsApp log is closed to view-only order staff'

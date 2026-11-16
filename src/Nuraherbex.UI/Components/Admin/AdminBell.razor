@@ -14,24 +14,69 @@
         <section class="bell-panel" role="dialog" aria-label="Notifications">
             <header>
                 <strong>Notifications</strong>
-                @if (_unread > 0) { <button type="button" class="fu-link" @onclick="ReadAllAsync">Mark all read</button> }
-            </header>
-            <div class="bell-list">
-                @if (_items.Count == 0)
+                @if (GetCategoryUnread(_activeCategory) > 0)
                 {
-                    <p class="bell-empty">You are all caught up.<small>Reminders for follow-ups, overdue tasks and order problems show up here.</small></p>
-                }
-                @foreach (var n in _items)
-                {
-                    var item = n;
-                    <button type="button" class="@($"bell-item k-{item.Kind} {(item.IsRead ? "" : "is-new")}")" @onclick="() => OpenAsync(item)">
-                        <span class="bell-dot"></span>
-                        <span>
-                            <strong>@item.Title</strong>
-                            @if (!string.IsNullOrEmpty(item.Body)) { <small>@item.Body</small> }
-                            <em>@FuFmt.Due(item.CreatedAt)</em>
-                        </span>
+                    <button type="button" class="fu-link" @onclick="ReadAllAsync">
+                        @(_activeCategory == NotificationCategories.All ? "Mark all read" : "Mark category read")
                     </button>
+                }
+            </header>
+
+            <div class="bell-categories">
+                @foreach (var cat in _categories)
+                {
+                    var catKey = cat.Key;
+                    var isActive = _activeCategory == catKey;
+                    var count = GetCategoryUnread(catKey);
+                    <button type="button" class="bell-cat-pill @(isActive ? "is-active" : "")" @onclick="() => SelectCategoryAsync(catKey)">
+                        <span>@cat.Label</span>
+                        @if (count > 0)
+                        {
+                            <span class="bell-cat-badge">@(count > 99 ? "99+" : count.ToString())</span>
+                        }
+                    </button>
+                }
+            </div>
+
+            <div class="bell-list">
+                @if (_loadingCategory && FilteredItems.Count == 0)
+                {
+                    <div class="bell-empty">
+                        <div class="bell-empty-icon animate-pulse">
+                            <Icon Name="Loader2" Size="28" Class="animate-spin" />
+                        </div>
+                        <p>Loading notifications…</p>
+                    </div>
+                }
+                else if (FilteredItems.Count == 0)
+                {
+                    <div class="bell-empty">
+                        <div class="bell-empty-icon">
+                            <Icon Name="@GetEmptyIcon(_activeCategory)" Size="28" />
+                        </div>
+                        <p>@GetEmptyMessage(_activeCategory)</p>
+                        <small>@GetEmptySubMessage(_activeCategory)</small>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var n in FilteredItems)
+                    {
+                        var item = n;
+                        <button type="button" class="@($"bell-item k-{item.Kind} cat-{item.Category} {(item.IsRead ? "" : "is-new")}")" @onclick="() => OpenAsync(item)">
+                            <div class="bell-item-icon @($"icon-{item.Category}")">
+                                <Icon Name="@GetItemIcon(item)" Size="16" />
+                            </div>
+                            <div class="bell-item-body">
+                                <div class="bell-item-title-row">
+                                    <strong>@item.Title</strong>
+                                    <span class="bell-dot" title="@(item.IsRead ? "Read" : "Unread")"></span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(item.Body)) { <small>@item.Body</small> }
+                                <em>@FuFmt.Due(item.CreatedAt)</em>
+                            </div>
+                        </button>
+                    }
                 }
             </div>
         </section>
@@ -41,8 +86,22 @@
 @code {
     private readonly CancellationTokenSource _cts = new();
     private List<NotificationDto> _items = new();
+    private readonly Dictionary<string, List<NotificationDto>> _categoryItems = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, int> _categoryCounts = new(StringComparer.OrdinalIgnoreCase);
     private int _unread;
     private bool _open;
+    private bool _loadingCategory;
+    private string _activeCategory = NotificationCategories.All;
+
+    private record CategoryTab(string Key, string Label);
+    private static readonly CategoryTab[] _categories =
+    {
+        new(NotificationCategories.All, "All"),
+        new(NotificationCategories.FollowUps, "Follow-ups"),
+        new(NotificationCategories.Leads, "Leads"),
+        new(NotificationCategories.Orders, "Orders"),
+        new(NotificationCategories.Tasks, "Tasks"),
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -60,23 +119,134 @@
 
     private async Task LoadAsync()
     {
-        var res = await Api.AdminNotificationsAsync();
+        await LoadCategoryAsync(_activeCategory);
+        if (_activeCategory != NotificationCategories.All && !_categoryItems.ContainsKey(NotificationCategories.All))
+        {
+            await LoadCategoryAsync(NotificationCategories.All);
+        }
+    }
+
+    private async Task LoadCategoryAsync(string catKey)
+    {
+        var catParam = catKey == NotificationCategories.All ? null : catKey;
+        var res = await Api.AdminNotificationsAsync(catParam);
         if (_cts.IsCancellationRequested || !res.Success) return;
-        _items = res.Items; _unread = res.Unread;
+
+        _categoryItems[catKey] = res.Items;
+        if (catKey == NotificationCategories.All)
+        {
+            _items = res.Items;
+        }
+        _unread = res.Unread;
+        if (res.CategoryCounts is not null && res.CategoryCounts.Count > 0)
+        {
+            _categoryCounts = res.CategoryCounts;
+        }
         StateHasChanged();
     }
 
-    private async Task Toggle() { _open = !_open; if (_open) await LoadAsync(); }
+    private async Task Toggle()
+    {
+        _open = !_open;
+        if (_open)
+        {
+            await LoadCategoryAsync(_activeCategory);
+        }
+    }
 
-    private async Task ReadAllAsync() { await Api.AdminReadAllNotificationsAsync(); await LoadAsync(); }
+    private async Task SelectCategoryAsync(string key)
+    {
+        _activeCategory = key;
+        if (!_categoryItems.ContainsKey(key))
+        {
+            _loadingCategory = true;
+            StateHasChanged();
+        }
+        await LoadCategoryAsync(key);
+        _loadingCategory = false;
+        StateHasChanged();
+    }
+
+    private int GetCategoryUnread(string catKey)
+    {
+        if (_categoryCounts.TryGetValue(catKey, out var count)) return count;
+        if (catKey == NotificationCategories.All) return _items.Count(i => !i.IsRead);
+        return _items.Count(i => !i.IsRead && NotificationCategories.MatchesCategory(i.Kind, catKey));
+    }
+
+    private List<NotificationDto> FilteredItems
+    {
+        get
+        {
+            if (_categoryItems.TryGetValue(_activeCategory, out var itemsForCat))
+                return itemsForCat;
+            return _activeCategory == NotificationCategories.All
+                ? _items
+                : _items.Where(i => NotificationCategories.MatchesCategory(i.Kind, _activeCategory)).ToList();
+        }
+    }
+
+    private async Task ReadAllAsync()
+    {
+        var catToMark = _activeCategory == NotificationCategories.All ? null : _activeCategory;
+        await Api.AdminReadAllNotificationsAsync(catToMark);
+        _categoryItems.Clear();
+        await LoadCategoryAsync(_activeCategory);
+    }
 
     private async Task OpenAsync(NotificationDto n)
     {
         if (!n.IsRead) await Api.AdminReadNotificationAsync(n.Id);
         _open = false;
         if (!string.IsNullOrEmpty(n.Link)) Nav.NavigateTo(n.Link);
+        _categoryItems.Clear();
         await LoadAsync();
     }
+
+    private static string GetItemIcon(NotificationDto item) => item.Kind switch
+    {
+        "reminder" => "Clock",
+        "due" => "Clock",
+        "overdue" => "PhoneMissed",
+        "lead" => "User",
+        "transfer" => "Users",
+        "order" => "ShoppingBag",
+        "warning" => "AlertCircle",
+        _ => item.Category switch
+        {
+            NotificationCategories.FollowUps => "Clock",
+            NotificationCategories.Leads => "Users",
+            NotificationCategories.Orders => "ShoppingBag",
+            _ => "CheckCircle2"
+        }
+    };
+
+    private static string GetEmptyIcon(string cat) => cat switch
+    {
+        NotificationCategories.FollowUps => "Clock",
+        NotificationCategories.Leads => "Users",
+        NotificationCategories.Orders => "ShoppingBag",
+        NotificationCategories.Tasks => "CheckCircle2",
+        _ => "Bell"
+    };
+
+    private static string GetEmptyMessage(string cat) => cat switch
+    {
+        NotificationCategories.FollowUps => "No follow-up notifications",
+        NotificationCategories.Leads => "No lead notifications",
+        NotificationCategories.Orders => "No order notifications",
+        NotificationCategories.Tasks => "No task notifications",
+        _ => "You are all caught up"
+    };
+
+    private static string GetEmptySubMessage(string cat) => cat switch
+    {
+        NotificationCategories.FollowUps => "Overdue calls, schedule alerts and reminder follow-ups appear here.",
+        NotificationCategories.Leads => "Transfers, handovers and newly assigned leads appear here.",
+        NotificationCategories.Orders => "Unbooked COD, delayed delivery, and order alerts appear here.",
+        NotificationCategories.Tasks => "WhatsApp quotas, staff status, and daily tasks appear here.",
+        _ => "Reminders for follow-ups, overdue tasks and order problems show up here."
+    };
 
     public void Dispose() { _cts.Cancel(); _cts.Dispose(); }
 }

@@ -10,14 +10,14 @@
             <h3>Sales dashboard</h3>
             <p>@(AdminAuth.CanAll("crm") ? "How leads turn into customers, how fast the team replies, and what needs a person right now." : "Your leads, your replies and your sales.")</p>
         </div>
-        <div class="sd-period" role="group" aria-label="Period">
-            @foreach (var d in new[] { 7, 30, 90 })
-            {
-                var days = d;
-                <button type="button" class="@(_days == days ? "is-on" : "")" aria-pressed="@(_days == days)" @onclick="() => LoadAsync(days)">@(days)D</button>
-            }
-            @if (_r is not null) { <span class="sd-range">@_r.From.ToLocalTime().ToString("d MMM", CultureInfo.InvariantCulture) – @DateTime.Now.ToString("d MMM yyyy", CultureInfo.InvariantCulture)</span> }
-        </div>
+        <DateRangeFilter
+            SelectedDays="@_days"
+            IsCustom="@_isCustom"
+            FromDate="@_from"
+            ToDate="@_to"
+            RangeText="@RangeSummary"
+            OnPresetSelected="OnPresetSelectedAsync"
+            OnRangeSelected="OnRangeSelectedAsync" />
     </header>
 
     @if (_r is null)
@@ -135,9 +135,14 @@
 @code {
     private CrmDashboardResponse? _r;
     private int _days = 30;
+    private bool _isCustom;
+    private string _from = "";
+    private string _to = "";
     private string? _error;
     private List<DataColumn<CrmSourceRow>> _sourceCols = [];
     private List<DataColumn<CrmEmployeeRow>> _teamCols = [];
+
+    private string RangeSummary => _r is null ? "" : $"{_r.From.ToLocalTime():d MMM} – {(_r.To?.ToLocalTime() ?? DateTime.Now):d MMM yyyy}";
 
     protected override async Task OnInitializedAsync()
     {
@@ -164,10 +169,28 @@
         await LoadAsync(30);
     }
 
+    private async Task OnPresetSelectedAsync(int days)
+    {
+        _days = days;
+        _isCustom = false;
+        await LoadAsync(days);
+    }
+
+    private async Task OnRangeSelectedAsync((string From, string To) range)
+    {
+        _from = range.From;
+        _to = range.To;
+        _isCustom = true;
+        var res = await Api.AdminCrmDashboardAsync(from: _from, to: _to);
+        if (res.Success) { _r = res; _error = null; }
+        else _error = res.Message ?? "Could not load the dashboard.";
+    }
+
     private async Task LoadAsync(int days)
     {
         _days = days;
-        var res = await Api.AdminCrmDashboardAsync(days);
+        _isCustom = false;
+        var res = await Api.AdminCrmDashboardAsync(days: days);
         if (res.Success) { _r = res; _error = null; }
         else _error = res.Message ?? "Could not load the dashboard.";
     }

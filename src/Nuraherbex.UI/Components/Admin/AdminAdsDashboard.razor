@@ -109,7 +109,10 @@
                 @foreach (var p in Presets)
                 {
                     var preset = p;
-                    <button type="button" class="@(_preset == preset.Key ? "is-on" : "")" aria-pressed="@(_preset == preset.Key)" @onclick="() => SetPresetAsync(preset.Key)">@preset.Label</button>
+                    <button type="button" class="@(_preset == preset.Key ? "is-on" : "")" aria-pressed="@(_preset == preset.Key)" @onclick="() => SetPresetAsync(preset.Key)">
+                        @if (preset.Key == "custom") { <Icon Name="Calendar" Size="13" /> }
+                        <span>@preset.Label</span>
+                    </button>
                 }
             </div>
             @if (_preset == "custom")

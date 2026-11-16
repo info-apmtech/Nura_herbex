@@ -1,4 +1,5 @@
 @inject ApiClient Api
+@inject NavigationManager Nav
 
 @* One follow-up task. Used on the Follow-ups page and inside a lead. *@
 <article class="@($"fu-card {(Item.Status != "pending" ? "is-closed" : Item.IsOverdue ? "is-overdue" : "")}")">
@@ -23,9 +24,20 @@
             @if (!string.IsNullOrEmpty(FuFmt.Origin(Item))) { <span class="fu-tag">@FuFmt.Origin(Item)</span> }
             @if (IsAdmin && ShowOwner) { <span class="@($"fu-tag {(Item.AssignedToEmployeeId is null ? "warn" : "")}")">@(Item.AssignedToName ?? "Unassigned")</span> }
             @if (!string.IsNullOrEmpty(Item.OrderId)) { <span class="fu-tag">@Item.OrderId</span> }
+            @if (!string.IsNullOrEmpty(Item.Priority))
+            {
+                <button type="button"
+                        class="@($"fu-tag-btn {(Item.Priority == "high" ? "prio-high" : "prio-normal")}")"
+                        @onclick="TogglePriorityAsync"
+                        disabled="@_busy"
+                        title="Lead priority: @(Item.Priority == "high" ? "High" : "Normal") (click to toggle)">
+                    <Icon Name="@(Item.Priority == "high" ? "Flame" : "Shield")" Size="11" />
+                    <span>@(Item.Priority == "high" ? "High" : "Normal")</span>
+                </button>
+            }
         </div>
 
-        @if (Item.Status == "pending" && !string.IsNullOrWhiteSpace(Item.Notes))
+        @if (Item.Status == "pending" && !string.IsNullOrWhiteSpace(Item.Notes) && _mode != "")
         {
             <p class="fu-note">@Item.Notes</p>
         }
@@ -59,12 +71,19 @@
                 </div>
                 @if (_outcome == FollowUpOutcomes.Callback)
                 {
-                    <label class="fu-field">Call back on
+                    <label class="fu-field">Next follow-up on
                         <input type="datetime-local" min="@FuFmt.DateInput(DateTime.Now)" value="@FuFmt.DateInput(_next)" @onchange="e => _next = Parse(e.Value, _next)" />
                     </label>
                 }
-                <label class="fu-field">Note <span>(optional)</span>
-                    <input type="text" maxlength="300" placeholder="e.g. Wants the 3-month pack, will pay Friday" @bind="_note" @bind:event="oninput" />
+                @if (!string.IsNullOrWhiteSpace(Item.LeadNotes))
+                {
+                    <div class="fu-curr-note-box">
+                        <span class="fu-curr-note-lbl">Current Notes / Remarks:</span>
+                        <div class="fu-curr-note-text">@Item.LeadNotes</div>
+                    </div>
+                }
+                <label class="fu-field">Add Note / Remarks <span>(optional)</span>
+                    <input type="text" maxlength="400" placeholder="e.g. Wants the 3-month pack, will pay Friday" @bind="_note" @bind:event="oninput" />
                 </label>
                 <div class="fu-actions">
                     <button type="button" class="ld-btn" @onclick="Close">Cancel</button>
@@ -105,6 +124,66 @@
         }
     </div>
 
+    @if (_mode == "")
+    {
+        <div class="fu-center-info">
+            <div class="fu-cal-card" title="Calendar schedule details for this follow-up">
+                <div class="fu-cal-hdr">
+                    <span class="fu-cal-lbl">
+                        <Icon Name="Calendar" Size="12" />
+                        <span>Calendar Schedule</span>
+                    </span>
+                    @if (Item.Status == "pending")
+                    {
+                        @if (Item.IsOverdue)
+                        {
+                            <span class="fu-cal-badge-late">Overdue</span>
+                        }
+                        else
+                        {
+                            <span class="fu-cal-badge-ok">Scheduled</span>
+                        }
+                    }
+                    else
+                    {
+                        <span class="fu-cal-badge-done">@(Item.Status == "skipped" ? "Skipped" : "Completed")</span>
+                    }
+                </div>
+                <div class="fu-cal-time">
+                    <Icon Name="Clock" Size="12" />
+                    <span>@FuFmt.FullSchedule(Item.DueAt)</span>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Item.Notes))
+                {
+                    <div class="fu-cal-note">
+                        <span class="fu-cal-note-tag">Schedule Note:</span> @Item.Notes
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(Item.CreatedBy))
+                {
+                    <div class="fu-cal-booked">
+                        <span>Booked by:</span> @(Item.CreatedBy == "system" || Item.CreatedBy == "auto" ? "System Auto" : Item.CreatedBy)
+                    </div>
+                }
+            </div>
+
+            <div class="fu-lead-notes" title="Current notes and remarks for this lead">
+                <span class="fu-lead-notes-lbl">
+                    <Icon Name="FileText" Size="11" />
+                    <span>Lead Notes / Remarks</span>
+                </span>
+                @if (!string.IsNullOrWhiteSpace(Item.LeadNotes))
+                {
+                    <div class="fu-lead-notes-text">@Item.LeadNotes</div>
+                }
+                else
+                {
+                    <div class="fu-lead-notes-empty">No notes yet · Click Done to add</div>
+                }
+            </div>
+        </div>
+    }
+
     @if (Item.Status == "pending" && _mode == "")
     {
         <div class="fu-side">
@@ -131,16 +210,15 @@
     private sealed record OutcomeChoice(string Code, string Label, string Hint);
     private static readonly OutcomeChoice[] Outcomes =
     [
-        new(FollowUpOutcomes.Done, "Completed", "Did what was needed"),
+        new(FollowUpOutcomes.Callback, "No Answer Follow-up", "Pick a time"),
+        new(FollowUpOutcomes.NoAnswer, "No answer", "Try again tomorrow"),
         new(FollowUpOutcomes.Interested, "Interested", "Wants to buy or needs time"),
         new(FollowUpOutcomes.Converted, "Ordered", "Customer placed an order"),
-        new(FollowUpOutcomes.NoAnswer, "No answer", "Try again tomorrow"),
-        new(FollowUpOutcomes.Callback, "Call back later", "Pick a time"),
         new(FollowUpOutcomes.NotInterested, "Not interested", "Close this lead"),
     ];
 
     private string _mode = "";
-    private string _outcome = FollowUpOutcomes.Done;
+    private string _outcome = FollowUpOutcomes.Callback;
     private string _note = "";
     private string _owner = "";
     private DateTime _next = FuFmt.AtTen(1);
@@ -151,7 +229,7 @@
     private string Quick(int i) => $"fu-chip {(_next == (i == 0 ? FuFmt.AtTen(1) : i == 1 ? FuFmt.AtTen(2) : FuFmt.AtTen(7)) ? "is-picked" : "")}";
     private static DateTime Parse(object? v, DateTime fallback) => DateTime.TryParse(v?.ToString(), out var d) ? d : fallback;
 
-    private void OpenComplete() { _mode = "complete"; _outcome = FollowUpOutcomes.Done; _note = ""; _message = null; _next = FuFmt.AtTen(1); }
+    private void OpenComplete() { _mode = "complete"; _outcome = FollowUpOutcomes.Callback; _note = ""; _message = null; _next = FuFmt.AtTen(1); }
     private void OpenResched() { _mode = "resched"; _message = null; _owner = ""; _next = FuFmt.AtTen(1); }
     private void Close() { _mode = ""; }
 
@@ -165,11 +243,25 @@
     private async Task CompleteAsync()
     {
         _busy = true;
-        await Finish(await Api.AdminCompleteFollowUpAsync(Item.Id, new FollowUpCompleteRequest
+        var outcome = _outcome;
+        var leadId = Item.LeadId;
+        var res = await Api.AdminCompleteFollowUpAsync(Item.Id, new FollowUpCompleteRequest
         {
-            Outcome = _outcome, Note = string.IsNullOrWhiteSpace(_note) ? null : _note.Trim(),
-            NextDueAt = _outcome == FollowUpOutcomes.Callback ? FuFmt.ToUtc(_next) : _outcome == FollowUpOutcomes.NoAnswer ? null : null,
-        }));
+            Outcome = outcome, Note = string.IsNullOrWhiteSpace(_note) ? null : _note.Trim(),
+            NextDueAt = outcome == FollowUpOutcomes.Callback ? FuFmt.ToUtc(_next) : null,
+        });
+        await Finish(res);
+        if (res.Success)
+        {
+            if (outcome == FollowUpOutcomes.NotInterested)
+            {
+                Nav.NavigateTo($"/admin/leads?status={LeadBuckets.NotInterested}&open={leadId}");
+            }
+            else if (outcome == FollowUpOutcomes.Converted)
+            {
+                Nav.NavigateTo($"/admin/care?open={leadId}");
+            }
+        }
     }
 
     private async Task RescheduleAsync()
@@ -180,4 +272,22 @@
 
     private async Task SendAsync() { _busy = true; await Finish(await Api.AdminSendFollowUpAsync(Item.Id)); }
     private async Task SkipAsync() { _busy = true; await Finish(await Api.AdminSkipFollowUpAsync(Item.Id)); }
+
+    private async Task TogglePriorityAsync()
+    {
+        var nextPrio = Item.Priority == "high" ? "normal" : "high";
+        _busy = true;
+        var res = await Api.AdminLeadPriorityAsync(Item.LeadId, new LeadPriorityRequest { Priority = nextPrio });
+        _busy = false;
+        if (res.Success)
+        {
+            Item.Priority = nextPrio;
+            await OnChanged.InvokeAsync(res.Message);
+        }
+        else
+        {
+            _message = res.Message;
+            _ok = false;
+        }
+    }
 }

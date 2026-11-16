@@ -108,6 +108,9 @@ public class Order
     public string DeliveryStatus { get; set; } = "Order Placed";
     public List<TrackingEventDto> DeliveryTrackingEvents { get; set; } = new();
     public string? Notes { get; set; }
+    /// <summary>Online = 1 (Shiprocket/Shadowfax courier) | Offline = 2 (local Chennai / direct hand delivery).</summary>
+    public ShippingMode ShippingMode { get; set; } = ShippingMode.Online;
+    public string? OfflineDispatchNote { get; set; }
 }
 
 public class Payment
@@ -253,6 +256,36 @@ public class Lead
     public long? ConvertedByEmployeeId { get; set; }
     /// <summary>When the one-time customer welcome message went out.</summary>
     public DateTime? WelcomeSentAt { get; set; }
+
+    /// <summary>Normal = 1 | High = 2 (used for Hot Leads prioritization).</summary>
+    public LeadPriority Priority { get; set; } = LeadPriority.Normal;
+    /// <summary>Sequential unanswered follow-up count; at 7 attempts moves automatically to NotInterested.</summary>
+    public int NoAnswerAttempts { get; set; }
+    public DateTime? NoAnswerStartedAt { get; set; }
+    public DateTime? LastNoAnswerAt { get; set; }
+
+    // Pending Transfers
+    public long? PendingTransferToEmployeeId { get; set; }
+    public long? PendingTransferFromEmployeeId { get; set; }
+    public DateTime? PendingTransferRequestedAt { get; set; }
+    public string? PendingTransferReason { get; set; }
+
+    // Assessment Form (must be filled before entering Notes on New leads)
+    public int? Age { get; set; }
+    public string? Gender { get; set; }
+    public string? MaritalStatus { get; set; }
+    public string? WorkType { get; set; }
+    public string? ProblemDuration { get; set; }
+    public string? PreviousSupplements { get; set; }
+    public string? AssessmentNotes { get; set; }
+    public bool IsSmoking { get; set; }
+    public bool IsDrinking { get; set; }
+    public List<string> HealthConcerns { get; set; } = new();
+    public List<string> PrimaryConcerns { get; set; } = new();
+    public List<string> HealthConditions { get; set; } = new();
+    public string? OtherHealthConcern { get; set; }
+    public bool HasAssessment { get; set; }
+    public DateTime? AssessmentUpdatedAt { get; set; }
 }
 
 /// <summary>Chat state for a lead: unread count and the 24h WhatsApp customer-service window.</summary>
@@ -482,4 +515,39 @@ public class TaskActivity
     public string Actor { get; set; } = "";
     public string Text { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class BulkCampaign
+{
+    public long Id { get; set; }
+    public string Title { get; set; } = "";
+    public string Category { get; set; } = BulkCategories.AllLeads;
+    public string? TemplateName { get; set; }
+    public List<string> TemplateParams { get; set; } = new();
+    public string? CustomMessage { get; set; }
+    public string? DriveFileUrl { get; set; }
+    public string? DriveFileName { get; set; }
+    /// <summary>queued | running | completed | stopped | failed</summary>
+    public string Status { get; set; } = "queued";
+    public int TotalTarget { get; set; }
+    public int SentCount { get; set; }
+    public int FailedCount { get; set; }
+    public int SkippedCount { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? CompletedAt { get; set; }
+}
+
+public class BulkCampaignRecipient
+{
+    public long Id { get; set; }
+    public long CampaignId { get; set; }
+    public long LeadId { get; set; }
+    public string Name { get; set; } = "";
+    public string Phone { get; set; } = "";
+    /// <summary>pending | sent | failed | skipped</summary>
+    public string Status { get; set; } = "pending";
+    public string Mode { get; set; } = "text";
+    public string? Error { get; set; }
+    public DateTime? SentAt { get; set; }
 }

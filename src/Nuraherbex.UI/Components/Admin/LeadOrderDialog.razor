@@ -51,6 +51,10 @@
             <div class="lo-grid">
                 @Field("name", "Name", null, "text", 200, null, _name, v => _name = v)
                 @Field("email", "Email", "(optional)", "email", 200, "name@example.com", _email, v => _email = v)
+                @if (_needsPhone)
+                {
+                    @Field("phone", "Phone", "(required)", "tel", 20, "10-digit mobile number", _phone, v => _phone = v, true)
+                }
                 @Field("address", "Address", null, "text", 200, "House / street", _a.AddressLine1, v => _a.AddressLine1 = v, true)
                 @Field("area", "Area", "(optional)", "text", 200, null, _a.AddressLine2 ?? "", v => _a.AddressLine2 = v, true)
                 @Field("city", "City", null, "text", 100, null, _a.City, v => _a.City = v)
@@ -58,7 +62,18 @@
                 @Field("pincode", "Pincode", "(6 digits)", "text", 6, null, _a.Pincode, v => _a.Pincode = v)
             </div>
 
-            <div class="fu-step"><span>3</span> How is it paid?</div>
+            <div class="fu-step"><span>3</span> Delivery mode</div>
+            <div class="fu-types two">
+                <button type="button" class="@($"fu-type {(_shippingMode == ShippingMode.Online ? "is-picked" : "")}")" @onclick="() => _shippingMode = ShippingMode.Online">Online Shipping (Courier)</button>
+                <button type="button" class="@($"fu-type {(_shippingMode == ShippingMode.Offline ? "is-picked" : "")}")" @onclick="() => _shippingMode = ShippingMode.Offline">Offline Shipping (Local / Chennai)</button>
+            </div>
+            @if (_shippingMode == ShippingMode.Offline)
+            {
+                <input type="text" class="fu-input" maxlength="500" placeholder="Offline dispatch note (e.g. Local rider / Chennai direct delivery)" @bind="_offlineNote" @bind:event="oninput" />
+                <p class="fu-hint"><Icon Name="Info" Size="12" /> Offline order skips courier booking. You can download a manual GST invoice PDF and mark COD collected manually.</p>
+            }
+
+            <div class="fu-step"><span>4</span> How is it paid?</div>
             <div class="fu-types two">
                 <button type="button" class="@($"fu-type {(!_paid ? "is-picked" : "")}")" @onclick="() => _paid = false">Cash on delivery</button>
                 <button type="button" class="@($"fu-type {(_paid ? "is-picked" : "")}")" @onclick="() => _paid = true">Already paid (UPI / bank)</button>
@@ -67,11 +82,11 @@
             {
                 <input type="text" class="fu-input" maxlength="80" placeholder="Payment reference, e.g. UPI transaction id" aria-invalid="@(_errors.ContainsKey("ref") ? "true" : "false")" @bind="_ref" @bind:event="oninput" @bind:after="ClearRefError" />
                 @if (_errors.TryGetValue("ref", out var refErr)) { <em class="lo-err">@refErr</em> }
-                <p class="fu-hint"><Icon Name="Info" Size="12" /> Only choose this once the money is in your account. The order is marked paid and goes straight to shipping.</p>
+                <p class="fu-hint"><Icon Name="Info" Size="12" /> Only choose this once the money is in your account. The order is marked paid.</p>
             }
             else
             {
-                <p class="fu-hint"><Icon Name="Info" Size="12" /> The customer pays the courier on delivery.</p>
+                <p class="fu-hint"><Icon Name="Info" Size="12" /> @(_shippingMode == ShippingMode.Offline ? "The customer pays cash on local delivery (update COD status in Orders once collected)." : "The customer pays the courier on delivery.")</p>
             }
 
         </div>
@@ -99,6 +114,7 @@
         b.OpenElement(7, "input"); b.AddAttribute(8, "type", type); b.AddAttribute(9, "maxlength", max);
         if (placeholder is not null) b.AddAttribute(10, "placeholder", placeholder);
         if (key == "pincode") b.AddAttribute(11, "inputmode", "numeric");
+        else if (key == "phone") b.AddAttribute(11, "inputmode", "tel");
         b.AddAttribute(12, "aria-invalid", err is null ? "false" : "true");
         b.AddAttribute(13, "value", value);
         b.AddAttribute(14, "oninput", EventCallback.Factory.Create<ChangeEventArgs>(this, e => { set(e.Value?.ToString() ?? ""); _errors.Remove(key); }));
@@ -107,38 +123,58 @@
         b.CloseElement();
     };
 
+    private static string Digits(string? s) => new((s ?? "").Where(char.IsDigit).ToArray());
+
     private bool Validate()
     {
         _errors.Clear();
         if (_lines.Count == 0) { _error = "Choose at least one product."; return false; }
         if (string.IsNullOrWhiteSpace(_name)) _errors["name"] = "Enter the customer's name.";
-        if (!string.IsNullOrWhiteSpace(_email) && !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(_email.Trim())) _errors["email"] = "Enter a valid email, like name@example.com.";
+        if (!string.IsNullOrWhiteSpace(_email) && !System.Text.RegularExpressions.Regex.IsMatch(_email.Trim(), @"^[^\s@]+@[^\s@]+\.[^\s@]+$")) _errors["email"] = "Enter a valid email, like name@example.com.";
+        if (_needsPhone && Digits(_phone).Length is < 10 or > 15) _errors["phone"] = "Enter a valid phone number (10–15 digits).";
         if (string.IsNullOrWhiteSpace(_a.AddressLine1)) _errors["address"] = "Enter the house / street address.";
         if (string.IsNullOrWhiteSpace(_a.City)) _errors["city"] = "Enter the city.";
         if (string.IsNullOrWhiteSpace(_a.State)) _errors["state"] = "Enter the state.";
-        if (!System.Text.RegularExpressions.Regex.IsMatch(_a.Pincode ?? "", @"^\d{6}$")) _errors["pincode"] = "Enter a 6-digit pincode.";
+        if (!System.Text.RegularExpressions.Regex.IsMatch((_a.Pincode ?? "").Trim(), @"^[1-9][0-9]{5}$")) _errors["pincode"] = "Enter a valid 6-digit pincode.";
         if (_paid && string.IsNullOrWhiteSpace(_ref)) _errors["ref"] = "Enter the payment reference.";
         _error = _errors.Count > 0 ? "Please fix the highlighted fields." : null;
         return _errors.Count == 0;
     }
 
-    [Parameter, EditorRequired] public long LeadId { get; set; }
+    [Parameter] public long? LeadId { get; set; }
+    [Parameter] public string? CustomerId { get; set; }
     [Parameter] public string LeadName { get; set; } = "";
     [Parameter] public string? LeadEmail { get; set; }
+    [Parameter] public string? CustomerPhone { get; set; }
+    [Parameter] public AddressDto? InitialAddress { get; set; }
     [Parameter] public EventCallback<string?> OnCreated { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
+    private bool IsCustomerMode => !string.IsNullOrWhiteSpace(CustomerId);
     private List<ProductDto>? _products;
     private readonly Dictionary<string, int> _lines = new();
     private OrderTotalsDto? _totals;
     private readonly AddressDto _a = new();
-    private string _name = "", _email = "", _coupon = "", _ref = "";
+    private string _name = "", _email = "", _phone = "", _coupon = "", _ref = "", _offlineNote = "";
     private string? _error, _priceError;
-    private bool _paid, _busy;
+    private bool _paid, _busy, _needsPhone;
+    private ShippingMode _shippingMode = ShippingMode.Online;
 
     protected override async Task OnInitializedAsync()
     {
-        _name = LeadName; _email = LeadEmail ?? "";
+        _name = LeadName;
+        _email = LeadEmail ?? "";
+        _phone = CustomerPhone ?? "";
+        _needsPhone = IsCustomerMode && Digits(_phone).Length < 10;
+        if (InitialAddress is { } init)
+        {
+            _a.AddressLine1 = init.AddressLine1 ?? "";
+            _a.AddressLine2 = init.AddressLine2 ?? "";
+            _a.City = init.City ?? "";
+            _a.State = init.State ?? "";
+            _a.Pincode = init.Pincode ?? "";
+            _a.Country = string.IsNullOrWhiteSpace(init.Country) ? "India" : init.Country;
+        }
         _products = await Api.GetProductsAsync();
     }
 
@@ -168,12 +204,26 @@
     {
         if (!Validate()) return;
         _error = null; _busy = true;
-        var res = await Api.AdminLeadOrderAsync(LeadId, new LeadOrderRequest
+        var req = new LeadOrderRequest
         {
             Items = _lines.Select(kv => new LeadOrderLineRequest { ProductId = kv.Key, Quantity = kv.Value }).ToList(),
             CouponCode = string.IsNullOrWhiteSpace(_coupon) ? null : _coupon.Trim(),
-            CustomerName = _name, Email = _email, Address = _a, AlreadyPaid = _paid, PaymentReference = _paid ? _ref : null,
-        });
+            CustomerName = _name,
+            Email = _email,
+            Phone = IsCustomerMode && !string.IsNullOrWhiteSpace(_phone) ? _phone : null,
+            Address = _a,
+            AlreadyPaid = _paid,
+            PaymentReference = _paid ? _ref : null,
+            ShippingMode = _shippingMode,
+            OfflineDispatchNote = _shippingMode == ShippingMode.Offline && !string.IsNullOrWhiteSpace(_offlineNote) ? _offlineNote.Trim() : null,
+        };
+        LeadOrderResponse res;
+        if (IsCustomerMode)
+            res = await Api.AdminCustomerOrderAsync(CustomerId!, req);
+        else if (LeadId is { } lid)
+            res = await Api.AdminLeadOrderAsync(lid, req);
+        else
+            res = new LeadOrderResponse { Success = false, Message = "No lead or customer selected." };
         _busy = false;
         if (res.Success) await OnCreated.InvokeAsync(res.Message);
         else _error = res.Message ?? "Could not create the order.";

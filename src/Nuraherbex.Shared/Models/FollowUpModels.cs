@@ -106,6 +106,8 @@ public class FollowUpDto
     public string Type { get; set; } = FollowUpTypes.Call;
     public string Title { get; set; } = "";
     public string? Notes { get; set; }
+    public string? LeadNotes { get; set; }
+    public string Priority { get; set; } = LeadPriorities.Normal;
     public string? SuggestedMessage { get; set; }
     public DateTime DueAt { get; set; }
     /// <summary>pending | done | skipped</summary>
@@ -114,6 +116,7 @@ public class FollowUpDto
     public string? Outcome { get; set; }
     public DateTime? CompletedAt { get; set; }
     public string? CompletedBy { get; set; }
+    public string? CreatedBy { get; set; }
     /// <summary>manual | journey | system</summary>
     public string Source { get; set; } = "manual";
     public string? StepKey { get; set; }
@@ -199,10 +202,35 @@ public class JourneyStepDto
     public bool HasTemplate { get; set; }
 }
 
+public static class NotificationCategories
+{
+    public const string All = "all";
+    public const string FollowUps = "followups";
+    public const string Leads = "leads";
+    public const string Orders = "orders";
+    public const string Tasks = "tasks";
+
+    public static string FromKind(string? kind) => (kind ?? "").ToLowerInvariant() switch
+    {
+        "overdue" or "due" or "reminder" => FollowUps,
+        "lead" or "transfer" => Leads,
+        "order" => Orders,
+        _ => Tasks,
+    };
+
+    public static bool MatchesCategory(string? kind, string? category)
+    {
+        if (string.IsNullOrEmpty(category) || string.Equals(category, All, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return string.Equals(FromKind(kind), category, StringComparison.OrdinalIgnoreCase);
+    }
+}
+
 public class NotificationDto
 {
     public long Id { get; set; }
     public string Kind { get; set; } = "info";
+    public string Category { get; set; } = NotificationCategories.Tasks;
     public string Title { get; set; } = "";
     public string? Body { get; set; }
     public string? Link { get; set; }
@@ -217,6 +245,7 @@ public class NotificationListResponse : ApiResult
 {
     public List<NotificationDto> Items { get; set; } = new();
     public int Unread { get; set; }
+    public Dictionary<string, int> CategoryCounts { get; set; } = new();
 }
 
 // ---- Reports ----
@@ -225,6 +254,7 @@ public class FollowUpReportResponse : ApiResult
 {
     public int Days { get; set; }
     public DateTime From { get; set; }
+    public DateTime? To { get; set; }
     public int Due { get; set; }
     public int Done { get; set; }
     public int DoneOnTime { get; set; }

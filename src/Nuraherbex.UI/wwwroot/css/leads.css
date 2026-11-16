@@ -67,6 +67,8 @@
 .ld-dhead{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--ld-green);color:#fff}
 .ld-dhead .ld-avatar{background:#ffffff26!important;border:1px solid #ffffff3d}
 .ld-back{display:none;border:0;background:transparent;color:#fff;width:32px;height:32px;border-radius:8px;place-items:center}
+.ld-back.is-always{display:grid;background:#ffffff1a;color:#fff}
+.ld-back.is-always:hover{background:#ffffff30}
 .ld-who{flex:1;min-width:0}
 .ld-who strong{display:block;font-size:15px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff}
 .ld-who span{font-size:12px;color:#cfe5d6;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -210,3 +212,59 @@
 .ld-work{grid-template-rows:minmax(0,1fr)}
 .ld-list,.ld-detail{min-height:0;overflow:hidden}
 @media(max-width:900px){.ld-work{grid-template-rows:none}}
+
+/* Pending Transfers Queue */
+.ld-transfer-banner{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 18px;background:linear-gradient(135deg,#f5f3ff 0%,#ede9fe 100%);border-bottom:1px solid #ddd6fe}
+.ld-tb-left{display:flex;align-items:flex-start;gap:12px;min-width:0}
+.ld-tb-icon{width:36px;height:36px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ld-tb-text{display:flex;flex-direction:column;gap:2px;font-size:13px;color:#3b0764}
+.ld-tb-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ld-tb-head strong{font-size:14px;font-weight:700;color:#4c1d95}
+.ld-tb-time{font-size:11.5px;color:#6b21a8}
+.ld-tb-countdown{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:6px;background:#fde8e8;color:#9b1c1c;font-weight:700;font-size:11px}
+.ld-tb-note{font-size:12px;color:#581c87;background:rgba(255,255,255,0.7);padding:2px 8px;border-radius:4px;width:fit-content;margin-top:2px}
+.ld-tb-sub{font-size:11.5px;color:#6b21a8;margin-top:2px}
+.ld-tb-buttons{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.ld-btn-accept{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;background:#16a34a;color:#fff;font-weight:700;font-size:13px;border:none;cursor:pointer;transition:background .15s}
+.ld-btn-accept:hover:not(:disabled){background:#15803d}
+.ld-btn-reject{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;background:#fff;color:#dc2626;font-weight:700;font-size:13px;border:1px solid #f87171;cursor:pointer;transition:all .15s}
+.ld-btn-reject:hover:not(:disabled){background:#fef2f2;border-color:#dc2626}
+.ld-pill.ld-transfer{background:#f5f3ff;color:#6d28d9;border-color:#ddd6fe}
+.ld-transfer-chip{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;background:#fff1f2;color:#be123c;font-size:10px;font-weight:700}
+.ld-row-transfer-acts{display:inline-flex;align-items:center;gap:5px;margin-left:6px}
+.ld-btn-accept-sm{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:#16a34a;color:#fff;font-weight:650;font-size:11px;border:none;cursor:pointer}
+.ld-btn-accept-sm:hover:not(:disabled){background:#15803d}
+.ld-btn-reject-sm{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;background:#fff;color:#dc2626;font-weight:650;font-size:11px;border:1px solid #fca5a5;cursor:pointer}
+.ld-btn-reject-sm:hover:not(:disabled){background:#fef2f2}
+@media(max-width:768px){.ld-transfer-banner{flex-direction:column;align-items:flex-start}.ld-tb-buttons{width:100%;justify-content:flex-end}}
+
+/* Bulk multi-select bar & checkboxes */
+.ld-select-all-row{display:flex;align-items:center;justify-content:space-between;padding:6px 14px;background:#faf7fd;border-bottom:1px solid var(--ld-line);font-size:12px}
+.ld-check-all-label{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;color:var(--ld-ink)}
+.ld-lead-checkbox{width:16px;height:16px;accent-color:#7c3aed;cursor:pointer}
+.ld-check-col{display:flex;align-items:center;justify-content:center;padding-right:2px;flex-shrink:0;align-self:center}
+.ld-bcard-check{position:absolute;top:10px;right:10px;z-index:2}
+.ld-bcard{position:relative}
+.ld-row.is-checked,.ld-bcard.is-checked{background:#f5f3ff;border-left-color:#7c3aed}
+.ld-sel-active-pill{display:inline-block;padding:2px 8px;border-radius:12px;background:#ede9fe;color:#6d28d9;font-weight:700;font-size:11px}
+.ld-link-btn{border:none;background:transparent;color:#6b7280;font-size:11.5px;text-decoration:underline;cursor:pointer;padding:0}
+.ld-link-btn:hover{color:#1b1233}
+
+/* Floating / Top Bulk Action Bar */
+.ld-bulk-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;background:#2e1065;color:#fff;border-bottom:2px solid #7c3aed;box-shadow:0 4px 12px rgba(46,16,101,.2);animation:slideDown .2s ease-out;z-index:10}
+@keyframes slideDown{from{transform:translateY(-10px);opacity:0}to{transform:translateY(0);opacity:1}}
+.ld-bulk-bar-left{display:flex;align-items:center;gap:8px;font-size:13px}
+.ld-bulk-count-badge{background:#7c3aed;color:#fff;font-weight:800;font-size:12px;padding:2px 8px;border-radius:10px}
+.ld-bulk-bar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ld-bulk-dest-label{font-size:12px;font-weight:600;color:#ddd6fe}
+.ld-bulk-dest-select{padding:5px 10px;border-radius:6px;border:1px solid #7c3aed;background:#fff;color:#1b1233;font-size:12.5px;font-weight:600}
+.ld-bulk-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:6px;font-size:12.5px;font-weight:700;border:none;cursor:pointer;transition:all .15s ease}
+.ld-bulk-btn-transfer{background:#10b981;color:#fff}
+.ld-bulk-btn-transfer:hover:not(:disabled){background:#059669}
+.ld-bulk-btn-accept{background:#16a34a;color:#fff}
+.ld-bulk-btn-accept:hover:not(:disabled){background:#15803d}
+.ld-bulk-btn-reject{background:#ef4444;color:#fff}
+.ld-bulk-btn-reject:hover:not(:disabled){background:#dc2626}
+.ld-bulk-btn-cancel{background:rgba(255,255,255,.15);color:#fff}
+.ld-bulk-btn-cancel:hover{background:rgba(255,255,255,.25)}
+@media(max-width:768px){.ld-bulk-bar{flex-direction:column;align-items:flex-start}.ld-bulk-bar-actions{width:100%;justify-content:flex-end}}

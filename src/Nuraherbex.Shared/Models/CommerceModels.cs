@@ -306,6 +306,56 @@ public sealed class OrderPaymentStatusJsonConverter : JsonConverter<OrderPayment
         => writer.WriteStringValue(value.ToCode());
 }
 
+[JsonConverter(typeof(ShippingModeJsonConverter))]
+public enum ShippingMode
+{
+    Online = 1,
+    Offline = 2,
+}
+
+public static class ShippingModes
+{
+    public const string Online = "ONLINE";
+    public const string Offline = "OFFLINE";
+    public static readonly string[] All = [Online, Offline];
+
+    public static string ToCode(this ShippingMode mode) => mode switch
+    {
+        ShippingMode.Offline => Offline,
+        _ => Online,
+    };
+
+    public static bool TryParse(string? value, out ShippingMode mode)
+    {
+        switch (value?.Trim().ToUpperInvariant())
+        {
+            case Online: mode = ShippingMode.Online; return true;
+            case Offline: mode = ShippingMode.Offline; return true;
+            default: mode = default; return false;
+        }
+    }
+}
+
+public sealed class ShippingModeJsonConverter : JsonConverter<ShippingMode>
+{
+    public override ShippingMode Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            var s = reader.GetString();
+            if (ShippingModes.TryParse(s, out var parsed) || Enum.TryParse(s, ignoreCase: true, out parsed) && Enum.IsDefined(parsed))
+                return parsed;
+            throw new JsonException($"Unknown shipping mode '{s}'.");
+        }
+        if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var raw) && Enum.IsDefined(typeof(ShippingMode), raw))
+            return (ShippingMode)raw;
+        throw new JsonException($"Invalid token '{reader.TokenType}' for {nameof(ShippingMode)}.");
+    }
+
+    public override void Write(Utf8JsonWriter writer, ShippingMode value, JsonSerializerOptions options)
+        => writer.WriteStringValue(value.ToCode());
+}
+
 public class AddressDto
 {
     public string AddressLine1 { get; set; } = "";
@@ -375,6 +425,9 @@ public class OrderDto
     public string DeliveryStatus { get; set; } = "Order Placed";
     public List<TrackingEventDto> DeliveryTrackingEvents { get; set; } = new();
     public string? Notes { get; set; }
+    /// <summary>ONLINE (Shiprocket/Shadowfax courier) | OFFLINE (local Chennai / hand delivery without courier).</summary>
+    public ShippingMode ShippingMode { get; set; } = ShippingMode.Online;
+    public string? OfflineDispatchNote { get; set; }
 
     // Enrichment (populated by /orders/track and /auth/my-orders)
     public string? ShiprocketTrackUrl { get; set; }
@@ -399,6 +452,9 @@ public class CreateOrderRequest
     public string? CouponCode { get; set; }
     /// <summary>COD | ONLINE</summary>
     public string PaymentMethod { get; set; } = "COD";
+    /// <summary>ONLINE | OFFLINE</summary>
+    public ShippingMode ShippingMode { get; set; } = ShippingMode.Online;
+    public string? OfflineDispatchNote { get; set; }
 }
 
 public class CreateOrderResponse : ApiResult
@@ -544,6 +600,15 @@ public class CustomerResponse : ApiResult
     public CustomerDto? Customer { get; set; }
 }
 
+/// <summary>Admin "Add Customer" dialog: name and phone are required; email and shipping address are optional.</summary>
+public class AdminCreateCustomerRequest
+{
+    public string FullName { get; set; } = "";
+    public string Phone { get; set; } = "";
+    public string? Email { get; set; }
+    public AddressDto? ShippingAddress { get; set; }
+}
+
 public class PincodeCheckResponse
 {
     public bool Success { get; set; }
@@ -605,6 +670,17 @@ public class AdminCreateOrderRequest
     /// <summary>COD | ONLINE</summary>
     public string PaymentMethod { get; set; } = "ONLINE";
     public bool MarkPaid { get; set; } = true;
+    /// <summary>ONLINE | OFFLINE</summary>
+    public ShippingMode ShippingMode { get; set; } = ShippingMode.Online;
+    public string? OfflineDispatchNote { get; set; }
+}
+
+public class UpdateOrderPaymentRequest
+{
+    /// <summary>COD_COLLECTED | PAID | COD_PENDING | PENDING | REFUNDED</summary>
+    public string PaymentStatus { get; set; } = OrderPaymentStatuses.CodCollected;
+    public string? PaymentRef { get; set; }
+    public string? Note { get; set; }
 }
 
 public class ShipmentResultDto

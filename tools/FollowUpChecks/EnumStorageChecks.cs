@@ -449,7 +449,7 @@ public static class EnumStorageChecks
         empRow.Name = "Arun Renamed";
         await db.SaveChangesAsync();
 
-        var fuList = await fuCtrl.List("done", null, null, inbound.Lead.Id);
+        var fuList = await fuCtrl.List("done", null, null, null, inbound.Lead.Id);
         check(fuList.Items.Count == 2 && fuList.Items.All(i => i.CompletedBy == "Arun Renamed" && i.Source == "manual")
               && fuList.Items.Any(i => i.Status == "done") && fuList.Items.Any(i => i.Status == "skipped"),
             "Enum: FollowUpController.List resolves CompletedBy ID to current employee name and returns string status/source");
@@ -612,7 +612,7 @@ public static class EnumStorageChecks
         var replySuggestion = await new ReplyAssistantService(db, Options.Create(new AiOptions()), storeOptions, cache, NullLogger<ReplyAssistantService>.Instance)
             .SuggestAsync(inbound.Lead, new ReplySuggestRequest { Fresh = true });
         check(invoiceHtmlPaid.Contains("Online Payment") && invoiceHtmlPaid.Contains("PAID")
-              && invoiceHtmlCod.Contains("Cash on Delivery") && invoiceHtmlCod.Contains("PAYMENT DUE")
+              && invoiceHtmlCod.Contains("Cash on Delivery") && invoiceHtmlCod.Contains("COD PENDING")
               && waStatusCod.Contains("Cash on Delivery") && waStatusPaid.Contains("PAID")
               && emailSentOk && sentEmails.Any(e => e.Body.Contains("Cash on Delivery"))
               && replySuggestion.Success,

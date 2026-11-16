@@ -26,6 +26,7 @@ public static class Mapping
         LastShippingEventAt = o.LastShippingEventAt, FulfillmentStatus = o.FulfillmentStatus, Courier = o.Courier, ShiprocketOrderId = o.ShiprocketOrderId, ShiprocketShipmentId = o.ShiprocketShipmentId,
         ShiprocketAwb = o.ShiprocketAwb, ShiprocketCourier = o.ShiprocketCourier,
         DeliveryStatus = o.DeliveryStatus, DeliveryTrackingEvents = o.DeliveryTrackingEvents, Notes = o.Notes,
+        ShippingMode = o.ShippingMode, OfflineDispatchNote = o.OfflineDispatchNote,
     };
 
     public static CustomerDto ToDto(this Customer c) => new()
@@ -81,10 +82,13 @@ public static class Mapping
             ? names.GetValueOrDefault(id) ?? "Former employee"
         : who;
 
-    public static FollowUpDto ToDto(this FollowUp f, string leadName, string leadPhone, string? ownerName, IReadOnlyDictionary<long, string>? employeeNames = null) => new()
+    public static FollowUpDto ToDto(this FollowUp f, string leadName, string leadPhone, string? ownerName, IReadOnlyDictionary<long, string>? employeeNames = null, string? leadNotes = null, string? priority = null) => new()
     {
         Id = f.Id, LeadId = f.LeadId, LeadName = leadName, LeadPhone = leadPhone, OrderId = f.OrderId,
         AssignedToEmployeeId = f.AssignedToEmployeeId, AssignedToName = ownerName, Type = f.Type, Title = f.Title, Notes = f.Notes,
+        LeadNotes = leadNotes,
+        Priority = priority ?? LeadPriorities.Normal,
+        CreatedBy = employeeNames is null ? f.CreatedBy : ResolveActor(f.CreatedBy, employeeNames),
         SuggestedMessage = f.SuggestedMessage, DueAt = f.DueAt, Status = f.Status.ToCode(), Outcome = f.Outcome, CompletedAt = f.CompletedAt,
         CompletedBy = employeeNames is null ? f.CompletedBy : ResolveActor(f.CompletedBy, employeeNames),
         Source = f.Source.ToCode(), StepKey = f.StepKey, RemindAt = f.RemindAt, CreatedAt = f.CreatedAt,
@@ -106,6 +110,30 @@ public static class Mapping
         CreatedAt = l.CreatedAt, LastContactAt = l.LastContactAt, ConvertedAt = l.ConvertedAt,
         AssignedToEmployeeId = l.AssignedToEmployeeId, AssignedAt = l.AssignedAt,
         CustomerSince = l.CustomerSince, ConvertedByEmployeeId = l.ConvertedByEmployeeId,
+        Priority = l.Priority.ToCode(),
+        NoAnswerAttempts = l.NoAnswerAttempts,
+        MaxNoAnswerAttempts = 7,
+        NoAnswerStartedAt = l.NoAnswerStartedAt,
+        LastNoAnswerAt = l.LastNoAnswerAt,
+        Age = l.Age,
+        Gender = l.Gender,
+        MaritalStatus = l.MaritalStatus,
+        WorkType = l.WorkType,
+        ProblemDuration = l.ProblemDuration,
+        PreviousSupplements = l.PreviousSupplements,
+        AssessmentNotes = l.AssessmentNotes,
+        IsSmoking = l.IsSmoking,
+        IsDrinking = l.IsDrinking,
+        HealthConcerns = l.HealthConcerns ?? new(),
+        PrimaryConcerns = (l.PrimaryConcerns is { Count: > 0 } ? l.PrimaryConcerns : (l.HealthConcerns ?? new()).Where(c => !LeadAssessmentOptions.HealthConditions.Take(2).Contains(c, StringComparer.OrdinalIgnoreCase)).ToList()),
+        HealthConditions = (l.HealthConditions is { Count: > 0 } ? l.HealthConditions : (l.HealthConcerns ?? new()).Where(c => LeadAssessmentOptions.HealthConditions.Take(2).Contains(c, StringComparer.OrdinalIgnoreCase)).ToList()),
+        OtherHealthConcern = l.OtherHealthConcern,
+        HasAssessment = l.HasAssessment,
+        AssessmentUpdatedAt = l.AssessmentUpdatedAt,
+        PendingTransferToEmployeeId = l.PendingTransferToEmployeeId,
+        PendingTransferFromEmployeeId = l.PendingTransferFromEmployeeId,
+        PendingTransferRequestedAt = l.PendingTransferRequestedAt,
+        PendingTransferReason = l.PendingTransferReason,
     };
 
     /// <summary>Indian-style timestamp used in tracking timelines ("5/10/2026, 3:42:10 pm").</summary>

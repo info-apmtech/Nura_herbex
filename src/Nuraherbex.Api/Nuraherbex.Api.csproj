@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
     <ProjectReference Include="..\Nuraherbex.Shared\Nuraherbex.Shared.csproj" />
@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <None Update="Content\library-samples\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Update="appsettings.Local.json" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -30,6 +31,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>da22650d-b825-46f1-bffe-0f8ab5bf731f</UserSecretsId>
+    <NoWarn>$(NoWarn);NU1900;NU1902;NU1903</NoWarn>
   </PropertyGroup>
 
 </Project>

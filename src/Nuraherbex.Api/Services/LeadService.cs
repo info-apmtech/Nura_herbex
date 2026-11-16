@@ -30,11 +30,14 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
 
     public sealed record InboundResult(Lead Lead, bool Created);
 
-    /// <summary>True (or false when <paramref name="want"/> is false) when the lead's most recent finished follow-up ended with "no answer". One rule shared by the Leads tabs and the reports.</summary>
+    /// <summary>True (or false when <paramref name="want"/> is false) when the lead is in No Answer (status = NoAnswer, or most recent finished follow-up ended with "no answer"). One rule shared by the Leads tabs and reports.</summary>
     public static System.Linq.Expressions.Expression<Func<Lead, bool>> NoAnswerOf(NuraDbContext db, bool want)
     {
-        System.Linq.Expressions.Expression<Func<Lead, bool>> e = l => (db.FollowUps.Where(f => f.LeadId == l.Id && f.Status == FollowUpStatus.Done && f.Outcome != null)
-            .OrderByDescending(f => f.CompletedAt).ThenByDescending(f => f.Id).Select(f => f.Outcome).FirstOrDefault() ?? "").StartsWith(FollowUpOutcomes.NoAnswer);
+        System.Linq.Expressions.Expression<Func<Lead, bool>> e = l =>
+            l.Status == LeadStatus.NoAnswer
+            || (l.Status != LeadStatus.NotInterested && l.Status != LeadStatus.Converted && l.Status != LeadStatus.Interested
+                && (db.FollowUps.Where(f => f.LeadId == l.Id && f.Status == FollowUpStatus.Done && f.Outcome != null)
+                    .OrderByDescending(f => f.CompletedAt).ThenByDescending(f => f.Id).Select(f => f.Outcome).FirstOrDefault() ?? "").StartsWith(FollowUpOutcomes.NoAnswer));
         return want ? e : System.Linq.Expressions.Expression.Lambda<Func<Lead, bool>>(System.Linq.Expressions.Expression.Not(e.Body), e.Parameters);
     }
 
@@ -87,6 +90,18 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
             // Replace a placeholder name (the bare number) once WhatsApp shows the real profile name.
             if (!string.IsNullOrWhiteSpace(profileName) && lead.Name == lead.Phone) lead.Name = profileName.Trim();
             if (lead.SourceDetail is null && referralDetail is not null) lead.SourceDetail = referralDetail;
+            // Customer replied on WhatsApp: reset No-Answer streak and resume follow-up if needed.
+            if (lead.NoAnswerAttempts > 0 || lead.Status == LeadStatus.NoAnswer)
+            {
+                lead.NoAnswerAttempts = 0;
+                lead.NoAnswerStartedAt = null;
+                lead.LastNoAnswerAt = null;
+                if (lead.Status == LeadStatus.NoAnswer)
+                {
+                    db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, FromStatus = LeadStatus.NoAnswer, ToStatus = LeadStatus.FollowUp, Note = "Customer replied on WhatsApp", ChangedBy = "system", CreatedAt = now });
+                    lead.Status = LeadStatus.FollowUp;
+                }
+            }
         }
 
         // Keep attribution: the first contact, and any later Click-to-WhatsApp ad referral.
@@ -347,6 +362,13 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
             var emp = await db.Employees.FirstOrDefaultAsync(e => e.Id == id);
             if (emp is not null) emp.LastAssignedAt = now;
         }
+
+        // Pending follow-ups follow their lead to the new owner
+        var pendingFu = await db.FollowUps.Where(f => f.LeadId == lead.Id && f.Status == FollowUpStatus.Pending).ToListAsync();
+        foreach (var f in pendingFu)
+        {
+            f.AssignedToEmployeeId = employeeId;
+        }
     }
 
     /// <summary>Gives an unassigned lead to the next employee in the rotation when auto-assign is on. Caller saves.</summary>
@@ -434,6 +456,9 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         long? Lightest(IReadOnlyCollection<long> from) =>
             from.Where(id => id != fromEmployeeId).OrderBy(id => load.GetValueOrDefault(id)).ThenBy(id => id).Select(id => (long?)id).FirstOrDefault();
 
+        // Pending follow-ups follow their lead to the lead's new owner; ones whose lead is not theirs (closed or owned by someone else) go to the same place the leads went.
+        var followUps = await db.FollowUps.Where(f => f.AssignedToEmployeeId == fromEmployeeId && f.Status == FollowUpStatus.Pending).OrderBy(f => f.DueAt).ToListAsync();
+
         foreach (var lead in open)
         {
             long? target;
@@ -461,8 +486,6 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
             await db.SaveChangesAsync(); // persists LastAssignedAt so the rotation advances per lead
         }
 
-        // Pending follow-ups follow their lead to the lead's new owner; ones whose lead is not theirs (closed or owned by someone else) go to the same place the leads went.
-        var followUps = await db.FollowUps.Where(f => f.AssignedToEmployeeId == fromEmployeeId && f.Status == FollowUpStatus.Pending).OrderBy(f => f.DueAt).ToListAsync();
         var fuLeadIds = followUps.Select(f => f.LeadId).Distinct().ToList();
         var leadOwner = followUps.Count == 0 ? [] : await db.Leads.AsNoTracking().Where(l => fuLeadIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => l.AssignedToEmployeeId);
         foreach (var f in followUps)
@@ -496,6 +519,65 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     }
 
     /// <summary>
+    /// Checks for pending transfers that have been waiting > 24 hours without action by the receiver,
+    /// and automatically returns each one back to the original sender (transferrer).
+    /// </summary>
+    public async Task<int> ExpirePendingTransfersAsync()
+    {
+        var cutoff = DateTime.UtcNow.AddHours(-24);
+        var expired = await db.Leads
+            .Where(l => l.PendingTransferToEmployeeId != null && l.PendingTransferRequestedAt != null && l.PendingTransferRequestedAt <= cutoff)
+            .ToListAsync();
+
+        if (expired.Count == 0) return 0;
+
+        var empIds = expired.Select(l => l.PendingTransferToEmployeeId)
+            .Concat(expired.Select(l => l.PendingTransferFromEmployeeId))
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        var names = await db.Employees.AsNoTracking().Where(e => empIds.Contains(e.Id)).ToDictionaryAsync(e => e.Id, e => e.Name);
+
+        var now = DateTime.UtcNow;
+        foreach (var lead in expired)
+        {
+            var receiverId = lead.PendingTransferToEmployeeId;
+            var senderId = lead.PendingTransferFromEmployeeId;
+            var receiverName = receiverId.HasValue ? names.GetValueOrDefault(receiverId.Value) ?? "Receiver" : "Employee";
+            var senderName = senderId.HasValue ? names.GetValueOrDefault(senderId.Value) ?? "Original owner" : "Admin";
+
+            // Return to original owner (sender)
+            lead.AssignedToEmployeeId = senderId;
+            lead.AssignedAt = now;
+            lead.UpdatedAt = now;
+
+            // Clear pending transfer fields
+            lead.PendingTransferToEmployeeId = null;
+            lead.PendingTransferFromEmployeeId = null;
+            lead.PendingTransferRequestedAt = null;
+            lead.PendingTransferReason = null;
+
+            // Follow-ups stay with/return to original owner
+            var fus = await db.FollowUps.Where(f => f.LeadId == lead.Id && f.Status == FollowUpStatus.Pending).ToListAsync();
+            foreach (var f in fus) f.AssignedToEmployeeId = senderId;
+
+            db.LeadAssignmentHistory.Add(new LeadAssignmentHistory
+            {
+                LeadId = lead.Id,
+                FromEmployeeId = receiverId,
+                ToEmployeeId = senderId,
+                Reason = $"Transfer auto-expired (24h without action from {receiverName}); returned to {senderName}",
+                ChangedBy = "auto",
+                CreatedAt = now,
+            });
+        }
+
+        await db.SaveChangesAsync();
+        return expired.Count;
+    }
+
+    /// <summary>
     /// Closes a lead's pending follow-ups that a person scheduled by hand (journey and order tasks are left alone); only those of <paramref name="type"/> when given.
     /// Caller saves.
     /// </summary>
@@ -514,7 +596,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     public async Task<Lead> UpsertFromOrderAsync(Order o)
     {
         var norm = NormalizePhone(o.CustomerPhone);
-        var now = DateTime.UtcNow;
+        var now = FollowUpService.Clock();
         var lead = await db.Leads.FirstOrDefaultAsync(l => l.Phone == norm);
         if (lead is null)
         {
@@ -574,10 +656,11 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         return leadId;
     }
 
-    /// <summary>Why a status change is not allowed, or null. A lead becomes a customer only through a paid order, and a customer stays one.</summary>
+    /// <summary>Why a status change is not allowed, or null. New leads cannot jump directly to Follow-up; a lead becomes a customer only through a paid/COD order.</summary>
     public static string? StatusBlock(Lead lead, string status) =>
         status == LeadStatuses.Converted && lead.CustomerSince is null ? "A lead becomes a customer when a paid or cash-on-delivery order is placed. Use “Create order” on the lead."
         : lead.CustomerSince is not null && status != LeadStatuses.Converted ? "This person is a paying customer, so they stay in Customer care."
+        : lead.Status == LeadStatus.New && status == LeadStatuses.FollowUp ? "Mark this New lead as Interested before moving it to Follow-up."
         : null;
 
     public async Task<bool> ChangeStatusAsync(long id, string status, string? note, string changedBy)
@@ -587,15 +670,131 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         if (lead is null || StatusBlock(lead, nextStatus.ToCode()) is not null) return false;
         if (lead.Status == nextStatus && string.IsNullOrWhiteSpace(note)) return true;
 
+        var now = FollowUpService.Clock();
         LeadStatus? fromStatus = Enum.IsDefined(lead.Status) ? lead.Status : null;
-        db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = id, FromStatus = fromStatus, ToStatus = nextStatus, Note = Truncate(note, 500), ChangedBy = changedBy });
+        db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = id, FromStatus = fromStatus, ToStatus = nextStatus, Note = Truncate(note, 500), ChangedBy = changedBy, CreatedAt = now });
         lead.Status = nextStatus;
-        lead.UpdatedAt = DateTime.UtcNow;
-        lead.ConvertedAt = nextStatus == LeadStatus.Converted ? lead.ConvertedAt ?? DateTime.UtcNow : null;
+        lead.UpdatedAt = now;
+        lead.ConvertedAt = nextStatus == LeadStatus.Converted ? lead.ConvertedAt ?? now : null;
+        if (nextStatus is LeadStatus.Interested or LeadStatus.Converted)
+        {
+            lead.NoAnswerAttempts = 0;
+            lead.NoAnswerStartedAt = null;
+            lead.LastNoAnswerAt = null;
+        }
+        else if (nextStatus == LeadStatus.NoAnswer && lead.NoAnswerStartedAt is null)
+        {
+            lead.NoAnswerStartedAt = now;
+        }
         // Nobody should keep chasing someone who said no: their hand-made follow-ups stop appearing in the lists.
         if (nextStatus == LeadStatus.NotInterested) await CloseOpenManualFollowUpsAsync(id, "Lead marked not interested", changedBy);
         await db.SaveChangesAsync();
         return true;
+    }
+
+    public async Task<(bool Ok, string Message)> SaveNotesAsync(long id, string? rawNotes)
+    {
+        var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == id);
+        if (lead is null) return (false, "Lead not found");
+        var notes = rawNotes?.Trim();
+        if (lead.Status == LeadStatus.New && !lead.HasAssessment && !string.IsNullOrEmpty(notes))
+            return (false, "Complete and save the Assessment Form before adding notes for a New lead.");
+        lead.Notes = string.IsNullOrEmpty(notes) ? null : Truncate(notes, 4000);
+        lead.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return (true, "Notes saved");
+    }
+
+    public async Task<(bool Ok, string Message)> UpdateDetailsAsync(long id, LeadDetailsUpdateRequest r)
+    {
+        var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == id);
+        if (lead is null) return (false, "Lead not found");
+        if (string.IsNullOrWhiteSpace(r.Name)) return (false, "Name is required.");
+        if (!string.IsNullOrWhiteSpace(r.Email) && !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(r.Email.Trim()))
+            return (false, "Enter a valid email address or leave it blank.");
+
+        var notes = r.Notes?.Trim();
+        if (lead.Status == LeadStatus.New && !lead.HasAssessment && !string.IsNullOrEmpty(notes) && !string.Equals(notes, lead.Notes, StringComparison.Ordinal))
+            return (false, "Complete and save the Assessment Form before adding notes for a New lead.");
+
+        lead.Name = Truncate(r.Name.Trim(), 200)!;
+        lead.Email = string.IsNullOrWhiteSpace(r.Email) ? null : Truncate(r.Email.Trim(), 200);
+        lead.Notes = string.IsNullOrEmpty(notes) ? null : Truncate(notes, 4000);
+        lead.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return (true, "Details updated");
+    }
+
+    public async Task<(bool Ok, string Message)> ChangePriorityAsync(long id, LeadPriority priority, string? note, string changedBy)
+    {
+        var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == id);
+        if (lead is null) return (false, "Lead not found");
+        if (lead.Priority == priority) return (true, $"Priority is {priority.ToCode()}");
+        var prev = lead.Priority;
+        lead.Priority = priority;
+        lead.UpdatedAt = DateTime.UtcNow;
+        db.LeadStatusHistory.Add(new LeadStatusHistory
+        {
+            LeadId = id, FromStatus = lead.Status, ToStatus = lead.Status,
+            Note = Truncate(string.IsNullOrWhiteSpace(note) ? $"Priority changed: {prev.ToCode()} -> {priority.ToCode()}" : note.Trim(), 500),
+            ChangedBy = changedBy,
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Priority set to {priority.ToCode()}");
+    }
+
+    public async Task<(bool Ok, string Message)> SaveAssessmentAsync(long id, LeadAssessmentRequest r, string changedBy)
+    {
+        var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == id);
+        if (lead is null) return (false, "Lead not found");
+        if (r.Age is < 10 or > 120) return (false, "Enter a valid age between 10 and 120.");
+        if (string.IsNullOrWhiteSpace(r.Gender)) return (false, "Select Gender.");
+        if (string.IsNullOrWhiteSpace(r.MaritalStatus)) return (false, "Select Marital Status.");
+        if (string.IsNullOrWhiteSpace(r.WorkType)) return (false, "Select Work Type.");
+
+        var primary = (r.PrimaryConcerns is { Count: > 0 }
+                ? r.PrimaryConcerns
+                : (r.HealthConcerns ?? new()).Where(c => !LeadAssessmentOptions.HealthConditions.Take(2).Contains(c, StringComparer.OrdinalIgnoreCase)))
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var conditions = (r.HealthConditions is { Count: > 0 }
+                ? r.HealthConditions
+                : (r.HealthConcerns ?? new()).Where(c => LeadAssessmentOptions.HealthConditions.Take(2).Contains(c, StringComparer.OrdinalIgnoreCase)))
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (primary.Count == 0 && conditions.Count == 0) return (false, "Select at least one Primary Concern.");
+        if (primary.Contains("Others", StringComparer.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(r.OtherHealthConcern))
+            return (false, "Specify the health concern in the 'Others' box.");
+
+        var now = DateTime.UtcNow;
+        if (!string.IsNullOrWhiteSpace(r.Name))
+            lead.Name = Truncate(r.Name.Trim(), 200)!;
+        lead.Age = r.Age;
+        lead.Gender = Truncate(r.Gender.Trim(), 32);
+        lead.MaritalStatus = Truncate(r.MaritalStatus.Trim(), 32);
+        lead.WorkType = Truncate(r.WorkType.Trim(), 64);
+        lead.ProblemDuration = Truncate(r.ProblemDuration?.Trim(), 100);
+        lead.PreviousSupplements = Truncate(r.PreviousSupplements?.Trim(), 32);
+        lead.AssessmentNotes = Truncate(r.AssessmentNotes?.Trim(), 2000);
+        if (!string.IsNullOrWhiteSpace(r.AssessmentNotes) && string.IsNullOrWhiteSpace(lead.Notes))
+            lead.Notes = Truncate(r.AssessmentNotes.Trim(), 2000);
+        lead.IsSmoking = r.IsSmoking;
+        lead.IsDrinking = r.IsDrinking;
+        lead.PrimaryConcerns = primary;
+        lead.HealthConditions = conditions;
+        lead.HealthConcerns = primary.Concat(conditions).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        lead.OtherHealthConcern = primary.Contains("Others", StringComparer.OrdinalIgnoreCase) ? Truncate(r.OtherHealthConcern?.Trim(), 500) : null;
+        lead.HasAssessment = true;
+        lead.AssessmentUpdatedAt = now;
+        lead.UpdatedAt = now;
+        await db.SaveChangesAsync();
+        return (true, "Assessment saved. Notes are now unlocked.");
     }
 
     private static void SetConsent(Lead lead, string status, DateTime now)

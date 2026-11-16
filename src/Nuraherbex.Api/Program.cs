@@ -81,6 +81,9 @@ builder.Services.Configure<MetaAdsOptions>(cfg.GetSection(MetaAdsOptions.Section
 builder.Services.AddHttpClient<MetaAdsService>(h => h.Timeout = TimeSpan.FromSeconds(60));
 builder.Services.AddScoped<AdsReportService>();
 builder.Services.AddHostedService<MetaAdsWorker>();
+builder.Services.Configure<GoogleDriveOptions>(cfg.GetSection(GoogleDriveOptions.Section));
+builder.Services.AddHttpClient<GoogleDriveService>(h => h.Timeout = TimeSpan.FromSeconds(25));
+builder.Services.AddScoped<BulkMessageService>();
 builder.Services.AddHttpClient<WhatsAppService>();
 
 // ---- Auth (JWT for customers and admins) ----------------------------------------------
@@ -198,7 +201,12 @@ if (cfg.GetValue("Database:AutoCreate", true))
     {
         // SQL Server: apply EF migrations (creates/updates tables). InMemory has no schema, so just ensure it exists.
         if (provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase)) await db.Database.EnsureCreatedAsync();
-        else await db.Database.MigrateAsync();
+        else
+        {
+            try { await db.Database.MigrateAsync(); }
+            catch (Exception mex) { app.Logger.LogWarning(mex, "EF Migration notice on startup: {Message}", mex.Message); }
+            await EnsureCrmSchemaAsync(db, app.Logger);
+        }
         await DbSeeder.SeedAsync(db, cfg.GetValue("Database:SeedDemoBatch", false));
         await WhatsAppMediaBackfill.RunAsync(db, app.Logger);
         await OrgSeeder.RunAsync(db, app.Logger);
@@ -240,5 +248,134 @@ app.Lifetime.ApplicationStarted.Register(() => _ = Task.Run(async () =>
     try { await app.Services.GetRequiredService<ShippingSettingsStore>().LoadAsync(app.Services); }
     catch (Exception ex) { app.Logger.LogWarning(ex, "[Shipping] Saved courier settings could not be loaded; using appsettings."); }
 }));
+
+static async Task EnsureCrmSchemaAsync(NuraDbContext db, ILogger log)
+{
+    try
+    {
+        await db.Database.ExecuteSqlRawAsync(@"
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('orders') AND name = 'OfflineDispatchNote')
+                ALTER TABLE [orders] ADD [OfflineDispatchNote] nvarchar(500) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('orders') AND name = 'ShippingMode')
+                ALTER TABLE [orders] ADD [ShippingMode] int NOT NULL DEFAULT 1;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'Age')
+                ALTER TABLE [leads] ADD [Age] int NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'AssessmentUpdatedAt')
+                ALTER TABLE [leads] ADD [AssessmentUpdatedAt] datetime2 NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'Gender')
+                ALTER TABLE [leads] ADD [Gender] nvarchar(32) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'HasAssessment')
+                ALTER TABLE [leads] ADD [HasAssessment] bit NOT NULL DEFAULT 0;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'HealthConcerns')
+                ALTER TABLE [leads] ADD [HealthConcerns] nvarchar(max) NOT NULL DEFAULT '[]';
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'IsDrinking')
+                ALTER TABLE [leads] ADD [IsDrinking] bit NOT NULL DEFAULT 0;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'IsSmoking')
+                ALTER TABLE [leads] ADD [IsSmoking] bit NOT NULL DEFAULT 0;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'LastNoAnswerAt')
+                ALTER TABLE [leads] ADD [LastNoAnswerAt] datetime2 NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'MaritalStatus')
+                ALTER TABLE [leads] ADD [MaritalStatus] nvarchar(32) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'NoAnswerAttempts')
+                ALTER TABLE [leads] ADD [NoAnswerAttempts] int NOT NULL DEFAULT 0;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'NoAnswerStartedAt')
+                ALTER TABLE [leads] ADD [NoAnswerStartedAt] datetime2 NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'OtherHealthConcern')
+                ALTER TABLE [leads] ADD [OtherHealthConcern] nvarchar(500) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'Priority')
+                ALTER TABLE [leads] ADD [Priority] int NOT NULL DEFAULT 1;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'WorkType')
+                ALTER TABLE [leads] ADD [WorkType] nvarchar(64) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'ProblemDuration')
+                ALTER TABLE [leads] ADD [ProblemDuration] nvarchar(100) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'PreviousSupplements')
+                ALTER TABLE [leads] ADD [PreviousSupplements] nvarchar(32) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'AssessmentNotes')
+                ALTER TABLE [leads] ADD [AssessmentNotes] nvarchar(2000) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'PrimaryConcerns')
+                ALTER TABLE [leads] ADD [PrimaryConcerns] nvarchar(max) NOT NULL DEFAULT '[]';
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'HealthConditions')
+                ALTER TABLE [leads] ADD [HealthConditions] nvarchar(max) NOT NULL DEFAULT '[]';
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'PendingTransferToEmployeeId')
+                ALTER TABLE [leads] ADD [PendingTransferToEmployeeId] bigint NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'PendingTransferFromEmployeeId')
+                ALTER TABLE [leads] ADD [PendingTransferFromEmployeeId] bigint NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'PendingTransferRequestedAt')
+                ALTER TABLE [leads] ADD [PendingTransferRequestedAt] datetime2 NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'PendingTransferReason')
+                ALTER TABLE [leads] ADD [PendingTransferReason] nvarchar(500) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'bulk_campaigns')
+            BEGIN
+                CREATE TABLE [bulk_campaigns] (
+                    [Id] bigint NOT NULL IDENTITY,
+                    [Title] nvarchar(200) NOT NULL,
+                    [Category] nvarchar(32) NOT NULL,
+                    [TemplateName] nvarchar(120) NULL,
+                    [TemplateParams] nvarchar(max) NOT NULL,
+                    [CustomMessage] nvarchar(max) NULL,
+                    [DriveFileUrl] nvarchar(1000) NULL,
+                    [DriveFileName] nvarchar(300) NULL,
+                    [Status] nvarchar(32) NOT NULL,
+                    [TotalTarget] int NOT NULL,
+                    [SentCount] int NOT NULL,
+                    [FailedCount] int NOT NULL,
+                    [SkippedCount] int NOT NULL,
+                    [CreatedBy] nvarchar(200) NOT NULL,
+                    [CreatedAt] datetime2 NOT NULL,
+                    [CompletedAt] datetime2 NULL,
+                    CONSTRAINT [PK_bulk_campaigns] PRIMARY KEY ([Id])
+                );
+                CREATE INDEX [IX_bulk_campaigns_CreatedAt] ON [bulk_campaigns] ([CreatedAt]);
+            END
+
+            IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'bulk_campaign_recipients')
+            BEGIN
+                CREATE TABLE [bulk_campaign_recipients] (
+                    [Id] bigint NOT NULL IDENTITY,
+                    [CampaignId] bigint NOT NULL,
+                    [LeadId] bigint NOT NULL,
+                    [Name] nvarchar(200) NOT NULL,
+                    [Phone] nvarchar(32) NOT NULL,
+                    [Status] nvarchar(32) NOT NULL,
+                    [Mode] nvarchar(16) NOT NULL,
+                    [Error] nvarchar(500) NULL,
+                    [SentAt] datetime2 NULL,
+                    CONSTRAINT [PK_bulk_campaign_recipients] PRIMARY KEY ([Id])
+                );
+                CREATE INDEX [IX_bulk_campaign_recipients_CampaignId_Status] ON [bulk_campaign_recipients] ([CampaignId], [Status]);
+            END
+        ");
+        log.LogInformation("[Startup] CRM schema verification completed successfully.");
+    }
+    catch (Exception ex)
+    {
+        log.LogWarning(ex, "[Startup] CRM schema check warning: {Message}", ex.Message);
+    }
+}
 
 app.Run();

@@ -22,7 +22,7 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
     /// <param name="scope">overdue | today | tomorrow | later | upcoming (tomorrow and later) | done | messages | sent | open (default: everything not done)</param>
     /// <param name="assignee">admin only: "unassigned", "me" or an employee id</param>
     [HttpGet("followups")]
-    public async Task<FollowUpListResponse> List([FromQuery] string? scope, [FromQuery] string? assignee, [FromQuery] string? type, [FromQuery] long? leadId, [FromQuery] int take = 200)
+    public async Task<FollowUpListResponse> List([FromQuery] string? scope, [FromQuery] string? assignee, [FromQuery] string? type, [FromQuery] string? priority, [FromQuery] long? leadId, [FromQuery] int take = 200)
     {
         var q = _db.FollowUps.AsNoTracking().AsQueryable();
         if (!CanAll("followups")) q = q.Where(f => f.AssignedToEmployeeId == MyId);
@@ -31,6 +31,11 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
         else if (long.TryParse(assignee, out var aid)) q = q.Where(f => f.AssignedToEmployeeId == aid);
         if (!string.IsNullOrWhiteSpace(type)) q = q.Where(f => f.Type == type);
         if (leadId is { } lid) q = q.Where(f => f.LeadId == lid);
+        if (!string.IsNullOrWhiteSpace(priority) && LeadPriorities.TryParse(priority, out var prioEnum))
+        {
+            var pIds = await _db.Leads.AsNoTracking().Where(l => l.Priority == prioEnum).Select(l => l.Id).ToListAsync();
+            q = q.Where(f => pIds.Contains(f.LeadId));
+        }
 
         var today = FollowUpService.TodayStartUtc();
         var tomorrow = today.AddDays(1);
@@ -67,20 +72,32 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
     private async Task<List<FollowUpDto>> MapAsync(List<FollowUp> rows)
     {
         var leadIds = rows.Select(r => r.LeadId).Distinct().ToList();
-        var leadMap = await _db.Leads.AsNoTracking().Where(l => leadIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => new { l.Name, l.Phone });
+        var leadMap = await _db.Leads.AsNoTracking().Where(l => leadIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => new { l.Name, l.Phone, l.Notes, l.AssessmentNotes, l.Priority });
         var owners = await _db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
         return rows.Select(r =>
         {
             leadMap.TryGetValue(r.LeadId, out var l);
-            return r.ToDto(l?.Name ?? "Unknown lead", l?.Phone ?? "", r.AssignedToEmployeeId is { } id ? owners.GetValueOrDefault(id) : null, owners);
+            var leadNotes = !string.IsNullOrWhiteSpace(l?.Notes) ? l.Notes : l?.AssessmentNotes;
+            var prio = l?.Priority.ToCode() ?? LeadPriorities.Normal;
+            return r.ToDto(l?.Name ?? "Unknown lead", l?.Phone ?? "", r.AssignedToEmployeeId is { } id ? owners.GetValueOrDefault(id) : null, owners, leadNotes, prio);
         }).ToList();
     }
 
-    /// <summary>The follow-up if the caller may touch it: any for admins, only their own for sales (404 otherwise).</summary>
+    /// <summary>The follow-up if the caller may touch it: any for admins, their own or on their leads for sales (404 otherwise).</summary>
     private async Task<FollowUp?> FindAsync(long id)
     {
         var f = await _db.FollowUps.FirstOrDefaultAsync(x => x.Id == id);
-        return f is null || (!CanAll("followups") && f.AssignedToEmployeeId != MyId) ? null : f;
+        if (f is null) return null;
+        if (CanAll("followups") || CanAll("leads") || CanAll("care") || CanAll("interested")) return f;
+        if (MyId is null) return f;
+        if (f.AssignedToEmployeeId == MyId) return f;
+
+        // An employee can also touch any follow-up on a lead assigned to them or unassigned
+        var lead = await _db.Leads.AsNoTracking().FirstOrDefaultAsync(l => l.Id == f.LeadId);
+        if (lead != null && (lead.AssignedToEmployeeId == MyId || (f.AssignedToEmployeeId == null && lead.AssignedToEmployeeId == null)))
+            return f;
+
+        return null;
     }
 
     private static NotFoundObjectResult NoItem() => new(new ApiResult { Success = false, Message = "Follow-up not found" });
@@ -98,6 +115,7 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
     {
         var item = await FindAsync(id);
         if (item is null) return NoItem();
+        if (item.AssignedToEmployeeId == null && MyId is not null) item.AssignedToEmployeeId = MyId;
         var (ok, message) = await followUps.CompleteAsync(item, r, MyActorId, MyId);
         return ok ? Ok(new ApiResult { Success = true, Message = message }) : BadRequest(new ApiResult { Success = false, Message = message });
     }
@@ -112,7 +130,8 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
         if (due < FollowUpService.Clock().AddMinutes(-5)) return BadRequest(new ApiResult { Success = false, Message = "Choose a time in the future." });
         if (CanAll("followups") && r.AssignedToEmployeeId is { } emp && !await _db.Employees.AnyAsync(e => e.Id == emp && e.IsActive))
             return BadRequest(new ApiResult { Success = false, Message = "That employee is not active." });
-        await followUps.RescheduleAsync(item, due, r.AssignedToEmployeeId, changeOwner: CanAll("followups") && r.AssignedToEmployeeId is not null);
+        var targetOwner = CanAll("followups") && r.AssignedToEmployeeId is not null ? r.AssignedToEmployeeId : item.AssignedToEmployeeId ?? MyId;
+        await followUps.RescheduleAsync(item, due, targetOwner, changeOwner: true);
         return Ok(new ApiResult { Success = true, Message = $"Rescheduled to {FollowUpService.FormatDue(due)}" });
     }
 
@@ -123,6 +142,7 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
         var item = await FindAsync(id);
         if (item is null) return NoItem();
         if (item.Status != FollowUpStatus.Pending) return BadRequest(new ApiResult { Success = false, Message = "This follow-up is already closed." });
+        if (item.AssignedToEmployeeId == null && MyId is not null) item.AssignedToEmployeeId = MyId;
         item.Status = FollowUpStatus.Skipped; item.CompletedAt = FollowUpService.Clock(); item.CompletedBy = MyActorId; item.Outcome = "skipped";
         await _db.SaveChangesAsync();
         return Ok(new ApiResult { Success = true, Message = "Follow-up skipped" });
@@ -166,13 +186,16 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
 
     // ---- Reports ---------------------------------------------------------------------------
 
+    private static DateTime? ParseDate(string? s) =>
+        DateTime.TryParseExact(s, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d) ? d.Date : null;
+
     [HttpGet("crm/dashboard")]
-    public async Task<CrmDashboardResponse> CrmDashboard([FromServices] CrmDashboardService crm, [FromQuery] int days = 30) =>
-        await crm.BuildAsync(days, CanAll("crm") ? null : MyId);
+    public async Task<CrmDashboardResponse> CrmDashboard([FromServices] CrmDashboardService crm, [FromQuery] int days = 30, [FromQuery] string? from = null, [FromQuery] string? to = null) =>
+        await crm.BuildAsync(days, CanAll("crm") ? null : MyId, ParseDate(from), ParseDate(to));
 
     [HttpGet("followups/report")]
-    public async Task<FollowUpReportResponse> Report([FromQuery] int days = 30) =>
-        await followUps.ReportAsync(days, CanAll("followups") ? null : MyId);
+    public async Task<FollowUpReportResponse> Report([FromQuery] int days = 30, [FromQuery] string? from = null, [FromQuery] string? to = null) =>
+        await followUps.ReportAsync(days, CanAll("followups") ? null : MyId, ParseDate(from), ParseDate(to));
 
     // ---- Notifications ----------------------------------------------------------------------
 
@@ -180,15 +203,56 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
         _db.Notifications.Where(n => n.EmployeeId == MyId || ((IsAdmin || CanAll("followups")) && n.EmployeeId == null));
 
     [HttpGet("notifications")]
-    public async Task<NotificationListResponse> Notifications([FromServices] StaffAvailability presence)
+    public async Task<NotificationListResponse> Notifications([FromServices] StaffAvailability presence, [FromQuery] string? category = null)
     {
         if (MyId is { } me) await presence.CheckInAsync(me); // the bell polls every 30 s, which doubles as the online signal
         var q = MyNotifications().AsNoTracking();
-        var items = await q.OrderByDescending(n => n.CreatedAt).Take(30).ToListAsync();
+
+        var unreadKinds = await q.Where(n => n.ReadAt == null).Select(n => n.Kind).ToListAsync();
+        var categoryCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            [NotificationCategories.All] = unreadKinds.Count,
+            [NotificationCategories.FollowUps] = unreadKinds.Count(k => NotificationCategories.FromKind(k) == NotificationCategories.FollowUps),
+            [NotificationCategories.Leads] = unreadKinds.Count(k => NotificationCategories.FromKind(k) == NotificationCategories.Leads),
+            [NotificationCategories.Orders] = unreadKinds.Count(k => NotificationCategories.FromKind(k) == NotificationCategories.Orders),
+            [NotificationCategories.Tasks] = unreadKinds.Count(k => NotificationCategories.FromKind(k) == NotificationCategories.Tasks),
+        };
+
+        var query = q;
+        if (!string.IsNullOrEmpty(category) && !string.Equals(category, NotificationCategories.All, StringComparison.OrdinalIgnoreCase))
+        {
+            var cat = category.Trim().ToLowerInvariant();
+            query = cat switch
+            {
+                NotificationCategories.FollowUps => query.Where(n => n.Kind == "overdue" || n.Kind == "due" || n.Kind == "reminder"),
+                NotificationCategories.Leads => query.Where(n => n.Kind == "lead" || n.Kind == "transfer"),
+                NotificationCategories.Orders => query.Where(n => n.Kind == "order"),
+                NotificationCategories.Tasks => query.Where(n => n.Kind != "overdue" && n.Kind != "due" && n.Kind != "reminder" && n.Kind != "lead" && n.Kind != "transfer" && n.Kind != "order"),
+                _ => query
+            };
+        }
+
+        var isAll = string.IsNullOrEmpty(category) || string.Equals(category, NotificationCategories.All, StringComparison.OrdinalIgnoreCase);
+        var items = await query.OrderBy(n => n.ReadAt == null ? 0 : 1)
+                               .ThenByDescending(n => n.CreatedAt)
+                               .Take(isAll ? 100 : 50)
+                               .ToListAsync();
         return new NotificationListResponse
         {
-            Success = true, Unread = await q.CountAsync(n => n.ReadAt == null),
-            Items = items.Select(n => new NotificationDto { Id = n.Id, Kind = n.Kind, Title = n.Title, Body = n.Body, Link = n.Link, CreatedAt = n.CreatedAt, IsRead = n.ReadAt != null }).ToList(),
+            Success = true,
+            Unread = unreadKinds.Count,
+            CategoryCounts = categoryCounts,
+            Items = items.Select(n => new NotificationDto
+            {
+                Id = n.Id,
+                Kind = n.Kind,
+                Category = NotificationCategories.FromKind(n.Kind),
+                Title = n.Title,
+                Body = n.Body,
+                Link = n.Link,
+                CreatedAt = n.CreatedAt,
+                IsRead = n.ReadAt != null
+            }).ToList(),
         };
     }
 
@@ -221,10 +285,22 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
     }
 
     [HttpPut("notifications/read-all")]
-    public async Task<IActionResult> ReadAll()
+    public async Task<IActionResult> ReadAll([FromQuery] string? category = null)
     {
         var now = FollowUpService.Clock();
-        foreach (var n in await MyNotifications().Where(n => n.ReadAt == null).ToListAsync()) n.ReadAt = now;
+        var q = MyNotifications().Where(n => n.ReadAt == null);
+        if (!string.IsNullOrEmpty(category) && !string.Equals(category, NotificationCategories.All, StringComparison.OrdinalIgnoreCase))
+        {
+            q = category.ToLowerInvariant() switch
+            {
+                NotificationCategories.FollowUps => q.Where(n => n.Kind == "overdue" || n.Kind == "due" || n.Kind == "reminder"),
+                NotificationCategories.Leads => q.Where(n => n.Kind == "lead" || n.Kind == "transfer"),
+                NotificationCategories.Orders => q.Where(n => n.Kind == "order"),
+                NotificationCategories.Tasks => q.Where(n => n.Kind != "overdue" && n.Kind != "due" && n.Kind != "reminder" && n.Kind != "lead" && n.Kind != "transfer" && n.Kind != "order"),
+                _ => q
+            };
+        }
+        foreach (var n in await q.ToListAsync()) n.ReadAt = now;
         await _db.SaveChangesAsync();
         return Ok(new ApiResult { Success = true });
     }

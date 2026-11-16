@@ -131,10 +131,10 @@ Check(none is null && errPast is not null, "A follow-up in the past is rejected"
 var (noAccess, errOwner) = await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = lead.Id, Type = "call", DueAt = now.AddDays(1) }, "Karthik", false, karthik);
 Check(noAccess is null && errOwner == "Lead not found.", "A sales user cannot schedule on a colleague's lead");
 var fresh = await db.Leads.FirstAsync(l => l.Phone == "919876500002");
-fresh.Status = LeadStatus.New; fresh.CustomerSince = null; fresh.AssignedToEmployeeId = priya; await db.SaveChangesAsync(); // a plain lead: customers stay customers
+fresh.Status = LeadStatus.Interested; fresh.CustomerSince = null; fresh.AssignedToEmployeeId = priya; await db.SaveChangesAsync(); // interested leads can be scheduled
 var (mine, _) = await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = fresh.Id, Type = "call", DueAt = now.AddDays(5), Notes = "Wants 3-month pack" }, "Priya", false, priya);
 Check(mine is not null && mine.RemindAt == mine.DueAt.AddDays(-2) && mine.AssignedToEmployeeId == priya, "Manual follow-up is owned by the lead owner with a 2-day reminder");
-Check((await db.Leads.FirstAsync(l => l.Id == fresh.Id)).Status == LeadStatus.FollowUp, "Scheduling moves a new lead to Follow-up");
+Check((await db.Leads.FirstAsync(l => l.Id == fresh.Id)).Status == LeadStatus.FollowUp, "Scheduling moves an interested lead to Follow-up");
 Check((await db.LeadStatusHistory.OrderByDescending(h => h.Id).FirstAsync(h => h.LeadId == fresh.Id)).ChangedBy == priya.ToString(), "Scheduling records employee id in status ChangedBy");
 
 // ---- 9. Completing ---------------------------------------------------------------------------------------------
@@ -223,7 +223,7 @@ dash = await new CrmDashboardService(db).BuildAsync(30, null);
 var orderOnlyLeads = await db.Leads.CountAsync(l => l.Source == LeadSource.Website && l.SourceDetail != null && l.SourceDetail.StartsWith("Order "));
 var everyLead = await db.Leads.CountAsync();
 Check(orderOnlyLeads >= 1 && dash.NewLeads == everyLead - orderOnlyLeads && dash.AdLeads == 1, "New leads leave out order-created records and count Meta-ad leads separately");
-Check(dash.NewLeads > 0 && dash.Funnel.Count == 5 && dash.ByEmployee.Count == 2, "Dashboard has leads, funnel and a row per employee");
+Check(dash.NewLeads > 0 && dash.Funnel.Count == LeadStatuses.All.Length && dash.ByEmployee.Count == 2, "Dashboard has leads, funnel and a row per employee");
 Check(dash.NeedsAttention.Any(a => a.Reason.StartsWith("Overdue")) , "Overdue follow-ups show up under needs attention");
 
 // ---- 13b. One follow-up schedule per lead, the report agrees with the list, and handing work over when staff leave -------
@@ -244,13 +244,16 @@ Check(dash.NeedsAttention.Any(a => a.Reason.StartsWith("Overdue")) , "Overdue fo
 
     // Scheduling twice for the same lead leaves one pending follow-up (the older date no longer lingers).
     var a = zLeads[0];
+    var b = zLeads[1];
+    a.Status = LeadStatus.Interested;
+    b.Status = LeadStatus.Interested;
+    await db.SaveChangesAsync();
     var soon = FollowUpService.Clock().AddDays(1);
     await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = a.Id, Type = FollowUpTypes.Call, DueAt = soon }, "test", true, null);
     await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = a.Id, Type = FollowUpTypes.Call, DueAt = soon.AddDays(2) }, "test", true, null);
     Check(await db.FollowUps.CountAsync(f => f.LeadId == a.Id && f.Status == FollowUpStatus.Pending && f.Source == FollowUpSource.Manual) == 1, "A lead keeps a single pending hand-made follow-up");
 
     // A lead that says "not interested" stops being chased.
-    var b = zLeads[1];
     await svc.CreateManualAsync(new FollowUpCreateRequest { LeadId = b.Id, Type = FollowUpTypes.Call, DueAt = soon }, "test", true, null);
     await leads.ChangeStatusAsync(b.Id, LeadStatuses.NotInterested, "no", "test");
     Check(!await db.FollowUps.AnyAsync(f => f.LeadId == b.Id && f.Status == FollowUpStatus.Pending), "Not interested closes the lead's hand-made follow-ups");
@@ -578,7 +581,7 @@ await AdsChecks.RunAsync(db, Check);
 
 // ---- 17. ChangedBy stores employee id when taking unowned lead via follow-up ---------------------------------------
 {
-    var queueLead = new Lead { Phone = "919876599999", Name = "Queue Lead", Status = LeadStatus.New };
+    var queueLead = new Lead { Phone = "919876599999", Name = "Queue Lead", Status = LeadStatus.Interested };
     db.Leads.Add(queueLead);
     await db.SaveChangesAsync();
     var (assignedItem, assignErr) = await svc.CreateManualAsync(
@@ -593,6 +596,8 @@ await AdsChecks.RunAsync(db, Check);
 
 await ChangedByChecks.RunAsync(Check);
 await EnumStorageChecks.RunAsync(Check);
+await CustomerOrdersChecks.RunAsync(Check);
+await CrmOverhaulChecks.RunAsync(Check);
 
 Console.WriteLine($"\n{checks} follow-up checks passed. No external services contacted.");
 

@@ -1,0 +1,114 @@
+@using System.Globalization
+
+<div class="drf-wrap">
+    <div class="drf-pills" role="group" aria-label="Date Period">
+        @foreach (var p in Presets)
+        {
+            var days = p;
+            var isOn = !_isCustom && SelectedDays == days;
+            <button type="button"
+                    class="@($"drf-pill {(isOn ? "is-on" : "")}")"
+                    aria-pressed="@isOn"
+                    @onclick="() => SelectPresetAsync(days)">
+                @(days)D
+            </button>
+        }
+        <button type="button"
+                class="@($"drf-pill drf-cal-btn {(_isCustom ? "is-on" : "")}")"
+                aria-pressed="@_isCustom"
+                @onclick="ToggleCustom"
+                title="Choose custom dates from calendar">
+            <Icon Name="Calendar" Size="13" />
+            <span>Custom</span>
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(RangeText))
+    {
+        <span class="drf-range-text">@RangeText</span>
+    }
+
+    @if (_openCustom)
+    {
+        <div class="drf-popover" @onclick:stopPropagation>
+            <div class="drf-popover-head">
+                <span class="drf-popover-title"><Icon Name="Calendar" Size="13" /> Custom Date Range</span>
+                <button type="button" class="drf-close-btn" @onclick="CloseCustom" aria-label="Close"><Icon Name="X" Size="12" /></button>
+            </div>
+            <div class="drf-popover-body">
+                <label class="drf-input-field">
+                    <span>From</span>
+                    <input type="date" value="@_from" max="@_to" @onchange="e => _from = e.Value?.ToString() ?? _from" />
+                </label>
+                <label class="drf-input-field">
+                    <span>To</span>
+                    <input type="date" value="@_to" min="@_from" max="@Today" @onchange="e => _to = e.Value?.ToString() ?? _to" />
+                </label>
+            </div>
+            <div class="drf-popover-foot">
+                <button type="button" class="drf-act-btn" @onclick="CloseCustom">Cancel</button>
+                <button type="button" class="drf-act-btn primary" @onclick="ApplyCustomAsync">Apply</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int SelectedDays { get; set; } = 30;
+    [Parameter] public bool IsCustom { get; set; }
+    [Parameter] public string? FromDate { get; set; }
+    [Parameter] public string? ToDate { get; set; }
+    [Parameter] public string? RangeText { get; set; }
+    [Parameter] public int[] Presets { get; set; } = [7, 30, 90];
+    [Parameter] public EventCallback<int> OnPresetSelected { get; set; }
+    [Parameter] public EventCallback<(string From, string To)> OnRangeSelected { get; set; }
+
+    private bool _openCustom;
+    private bool _isCustom;
+    private string _from = "";
+    private string _to = "";
+    private static string Today => DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    protected override void OnParametersSet()
+    {
+        _isCustom = IsCustom;
+        if (!string.IsNullOrEmpty(FromDate)) _from = FromDate;
+        else if (string.IsNullOrEmpty(_from)) _from = DateTime.Now.AddDays(-29).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        if (!string.IsNullOrEmpty(ToDate)) _to = ToDate;
+        else if (string.IsNullOrEmpty(_to)) _to = Today;
+    }
+
+    private async Task SelectPresetAsync(int days)
+    {
+        _isCustom = false;
+        _openCustom = false;
+        await OnPresetSelected.InvokeAsync(days);
+    }
+
+    private void ToggleCustom()
+    {
+        _openCustom = !_openCustom;
+    }
+
+    private void CloseCustom()
+    {
+        _openCustom = false;
+    }
+
+    private async Task ApplyCustomAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_from)) _from = DateTime.Now.AddDays(-29).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        if (string.IsNullOrWhiteSpace(_to)) _to = Today;
+        if (string.CompareOrdinal(_from, _to) > 0)
+        {
+            var temp = _from;
+            _from = _to;
+            _to = temp;
+        }
+        _isCustom = true;
+        _openCustom = false;
+        await OnRangeSelected.InvokeAsync((_from, _to));
+    }
+}
+

@@ -11,6 +11,32 @@ public class CustomerAuthService(NuraDbContext db, TokenService tokens, EmailSer
 {
     private static string Digits(string? s) => new((s ?? "").Where(char.IsDigit).ToArray());
 
+    internal static string Last10(string? phone)
+    {
+        var d = Digits(phone);
+        return d.Length > 10 ? d[^10..] : d;
+    }
+
+    internal static string CanonicalPhone(string digits) =>
+        digits.Length == 12 && digits.StartsWith("91") ? digits[2..]
+        : digits.Length == 11 && digits[0] == '0' ? digits[1..]
+        : digits;
+
+    internal static string[] PhoneForms(string? phone)
+    {
+        var d = Digits(phone);
+        if (d.Length == 0) return [];
+        var set = new HashSet<string>(StringComparer.Ordinal) { d };
+        if (d.Length == 10 || (d.Length == 12 && d.StartsWith("91")) || (d.Length == 11 && d[0] == '0'))
+        {
+            var l10 = d[^10..];
+            set.Add(l10);
+            set.Add("91" + l10);
+            set.Add("0" + l10);
+        }
+        return set.ToArray();
+    }
+
     public async Task<Customer?> FindAsync(string? query)
     {
         var q = (query ?? "").Trim().ToLowerInvariant();
@@ -162,11 +188,11 @@ public class CustomerAuthService(NuraDbContext db, TokenService tokens, EmailSer
 
         var previous = customer.Email;
         customer.Email = mail;
-        if (!string.IsNullOrWhiteSpace(previous))
-        {
-            foreach (var order in await db.Orders.Where(o => o.CustomerEmail == previous).ToListAsync())
-                order.CustomerEmail = mail;
-        }
+        var linked = await db.Orders.Where(o =>
+            o.CustomerId == customer.Id ||
+            (string.IsNullOrEmpty(o.CustomerId) && !string.IsNullOrWhiteSpace(previous) && o.CustomerEmail == previous)).ToListAsync();
+        foreach (var order in linked)
+            order.CustomerEmail = mail;
         return true;
     }
 
@@ -224,13 +250,91 @@ public class CustomerAuthService(NuraDbContext db, TokenService tokens, EmailSer
         if (!valid) throw new InvalidOperationException("The uploaded file is not a valid supported image.");
         return dataUrl;
     }
+    public async Task<(CustomerDto? Customer, int ErrorStatus, string? Error)> CreateByAdminAsync(AdminCreateCustomerRequest r)
+    {
+        var name = (r.FullName ?? "").Trim();
+        if (name.Length == 0)
+            return (null, 400, "Customer name is required.");
+        if (name.Length > 200)
+            return (null, 400, "Customer name must be 200 characters or fewer.");
+
+        var rawDigits = Digits(r.Phone);
+        if (rawDigits.Length is < 10 or > 15)
+            return (null, 400, "Enter a valid phone number with 10–15 digits.");
+        var phone = CanonicalPhone(rawDigits);
+        if (phone.Length is < 10 or > 15)
+            return (null, 400, "Enter a valid phone number with 10–15 digits.");
+        var forms = PhoneForms(phone);
+        if (await db.Customers.AnyAsync(c => forms.Contains(c.Phone)))
+            return (null, 409, "A customer with this phone number already exists.");
+
+        var mail = (r.Email ?? "").Trim().ToLowerInvariant();
+        if (mail.Length > 0)
+        {
+            if (mail.Length > 256 || !System.Text.RegularExpressions.Regex.IsMatch(mail, @"^[^\s@]+@[^\s@]+\.[^\s@]+$"))
+                return (null, 400, "Please enter a valid email address (or leave it blank).");
+            if (await db.Customers.AnyAsync(c => c.Email == mail))
+                return (null, 409, "A customer with this email address already exists.");
+        }
+
+        var address = new AddressDto();
+        if (r.ShippingAddress is { } a)
+        {
+            var line1 = (a.AddressLine1 ?? "").Trim();
+            var line2 = (a.AddressLine2 ?? "").Trim();
+            var city = (a.City ?? "").Trim();
+            var state = (a.State ?? "").Trim();
+            var pin = (a.Pincode ?? "").Trim();
+            if (line1.Length > 0 || line2.Length > 0 || city.Length > 0 || state.Length > 0 || pin.Length > 0)
+            {
+                if (line1.Length == 0 || line1.Length > 500 || line2.Length > 500 || city.Length == 0 || city.Length > 100 || state.Length == 0 || state.Length > 100 || !System.Text.RegularExpressions.Regex.IsMatch(pin, @"^[1-9][0-9]{5}$"))
+                    return (null, 400, "If adding an address, enter Address line 1, City, State, and a valid 6-digit Indian pincode (or leave all address fields blank).");
+                address = new AddressDto
+                {
+                    AddressLine1 = line1,
+                    AddressLine2 = line2,
+                    City = city,
+                    State = state,
+                    Pincode = pin,
+                    Country = string.IsNullOrWhiteSpace(a.Country) ? "India" : a.Country.Trim(),
+                };
+            }
+        }
+
+        string id;
+        do { id = $"CUST-{RandomNumberGenerator.GetInt32(100000, 1000000)}"; }
+        while (await db.Customers.AnyAsync(c => c.Id == id));
+
+        var customer = new Customer
+        {
+            Id = id,
+            FullName = name,
+            Email = mail,
+            Phone = phone,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(Convert.ToBase64String(RandomNumberGenerator.GetBytes(12))),
+            ShippingAddress = address,
+        };
+        db.Customers.Add(customer);
+        await db.SaveChangesAsync();
+        return (customer.ToDto(), 0, null);
+    }
+
     public async Task<List<AdminCustomerDto>> ListForAdminAsync()
     {
         var customers = await db.Customers.AsNoTracking().OrderByDescending(c => c.CreatedAt).ToListAsync();
         var all = await orders.ListAllAsync();
         return customers.Select(c =>
         {
-            var mine = all.Where(o => (c.Email != "" && o.CustomerEmail == c.Email) || (c.Phone != "" && o.CustomerPhone == c.Phone)).ToList();
+            var cEmail = (c.Email ?? "").Trim().ToLowerInvariant();
+            var cPhone = Last10(c.Phone);
+            var mine = all.Where(o =>
+            {
+                if (!string.IsNullOrEmpty(o.CustomerId))
+                    return o.CustomerId == c.Id;
+                var emailMatch = cEmail != "" && string.Equals(o.CustomerEmail, cEmail, StringComparison.OrdinalIgnoreCase);
+                var phoneMatch = cPhone.Length >= 10 && Last10(o.CustomerPhone) == cPhone;
+                return emailMatch || phoneMatch;
+            }).ToList();
             var dto = c.ToDto();
             return new AdminCustomerDto
             {

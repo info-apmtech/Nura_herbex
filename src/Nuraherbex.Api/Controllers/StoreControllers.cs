@@ -252,7 +252,7 @@ public class AuthController(CustomerAuthService auth, OrderService orders, Shipp
         var c = await auth.GetAsync(CurrentId ?? "");
         if (c is null) return NotFound(new ApiResult { Success = false, Message = "Customer not found" });
 
-        var list = (await orders.ListForCustomerAsync(c.Email, c.Phone)).Select(o => o.ToDto()).ToList();
+        var list = (await orders.ListForCustomerAsync(c.Email, c.Phone, c.Id)).Select(o => o.ToDto()).ToList();
         foreach (var dto in list)
             await shipping.EnrichTrackingAsync(dto);
         return Ok(new OrderListResponse { Success = true, Count = list.Count, Orders = list });
@@ -264,7 +264,7 @@ public class AuthController(CustomerAuthService auth, OrderService orders, Shipp
     {
         var c = await auth.GetAsync(CurrentId ?? "");
         if (c is null) return NotFound(new ApiResult { Success = false, Message = "Customer not found" });
-        var order = (await orders.ListForCustomerAsync(c.Email, c.Phone ?? "")).FirstOrDefault(o => o.Id == id);
+        var order = (await orders.ListForCustomerAsync(c.Email, c.Phone ?? "", c.Id)).FirstOrDefault(o => o.Id == id);
         if (order is null) return NotFound(new ApiResult { Success = false, Message = "Order not found" });
         if (order.FulfillmentStatus == "CANCELLED") return BadRequest(new ApiResult { Success = false, Message = "No invoice is available for a cancelled order." });
         return Ok(new ApiResult<string> { Success = true, Data = invoices.Url(order.Id) });
@@ -276,7 +276,7 @@ public class AuthController(CustomerAuthService auth, OrderService orders, Shipp
     {
         var c = await auth.GetAsync(CurrentId ?? "");
         if (c is null) return NotFound(new ApiResult { Success = false, Message = "Customer not found" });
-        var order = (await orders.ListForCustomerAsync(c.Email, c.Phone ?? "")).FirstOrDefault(o => o.Id == id);
+        var order = (await orders.ListForCustomerAsync(c.Email, c.Phone ?? "", c.Id)).FirstOrDefault(o => o.Id == id);
         if (order is null) return NotFound(new ApiResult { Success = false, Message = "Order not found" });
         try { return Ok(new ApiResult { Success = true, Message = await orders.CancelOrderAsync(id, reason, byCustomer: true) }); }
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }

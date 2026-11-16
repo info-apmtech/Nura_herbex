@@ -34,6 +34,8 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
     public DbSet<TaskChecklistItem> TaskChecklistItems => Set<TaskChecklistItem>();
     public DbSet<TaskActivity> TaskActivities => Set<TaskActivity>();
     public DbSet<LeadAssignmentHistory> LeadAssignmentHistory => Set<LeadAssignmentHistory>();
+    public DbSet<BulkCampaign> BulkCampaigns => Set<BulkCampaign>();
+    public DbSet<BulkCampaignRecipient> BulkCampaignRecipients => Set<BulkCampaignRecipient>();
 
     private static JsonSerializerOptions J => NuraJson.Options;
 
@@ -112,6 +114,8 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.Property(x => x.FulfillmentStatus).HasMaxLength(32);
             e.Property(x => x.ShiprocketAwb).HasMaxLength(64);
             e.Property(x => x.Courier).HasMaxLength(16);
+            e.Property(x => x.ShippingMode).HasConversion<int>();
+            e.Property(x => x.OfflineDispatchNote).HasMaxLength(500);
             e.Property(x => x.ParcelWeightKg).HasPrecision(9, 3);
             e.Property(x => x.ParcelLengthCm).HasPrecision(9, 2);
             e.Property(x => x.ParcelBreadthCm).HasPrecision(9, 2);
@@ -216,9 +220,23 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.Property(x => x.ConsentStatus).HasMaxLength(32);
             e.Property(x => x.ConsentSource).HasMaxLength(64);
             e.Property(x => x.CustomerId).HasMaxLength(64);
+            e.Property(x => x.Priority).HasConversion<int>();
+            e.Property(x => x.Gender).HasMaxLength(32);
+            e.Property(x => x.MaritalStatus).HasMaxLength(32);
+            e.Property(x => x.WorkType).HasMaxLength(64);
+            e.Property(x => x.ProblemDuration).HasMaxLength(100);
+            e.Property(x => x.PreviousSupplements).HasMaxLength(32);
+            e.Property(x => x.AssessmentNotes).HasMaxLength(2000);
+            e.Property(x => x.OtherHealthConcern).HasMaxLength(500);
+            e.Property(x => x.PendingTransferReason).HasMaxLength(500);
+            AsJson(e.Property(x => x.HealthConcerns));
+            AsJson(e.Property(x => x.PrimaryConcerns));
+            AsJson(e.Property(x => x.HealthConditions));
             e.HasIndex(x => x.Phone).IsUnique();
             e.HasIndex(x => new { x.Status, x.LastContactAt });
             e.HasIndex(x => x.AssignedToEmployeeId);
+            e.HasIndex(x => x.PendingTransferToEmployeeId);
+            e.HasIndex(x => x.PendingTransferRequestedAt);
         });
 
         b.Entity<Conversation>(e =>
@@ -383,6 +401,33 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             e.Property(x => x.Actor).HasMaxLength(200);
             e.Property(x => x.Text).HasMaxLength(500);
             e.HasIndex(x => x.TaskId);
+        });
+
+        b.Entity<BulkCampaign>(e =>
+        {
+            e.ToTable("bulk_campaigns");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(200);
+            e.Property(x => x.Category).HasMaxLength(32);
+            e.Property(x => x.TemplateName).HasMaxLength(120);
+            e.Property(x => x.DriveFileName).HasMaxLength(300);
+            e.Property(x => x.DriveFileUrl).HasMaxLength(1000);
+            e.Property(x => x.Status).HasMaxLength(32);
+            e.Property(x => x.CreatedBy).HasMaxLength(200);
+            AsJson(e.Property(x => x.TemplateParams));
+            e.HasIndex(x => x.CreatedAt);
+        });
+
+        b.Entity<BulkCampaignRecipient>(e =>
+        {
+            e.ToTable("bulk_campaign_recipients");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Phone).HasMaxLength(32);
+            e.Property(x => x.Status).HasMaxLength(32);
+            e.Property(x => x.Mode).HasMaxLength(16);
+            e.Property(x => x.Error).HasMaxLength(500);
+            e.HasIndex(x => new { x.CampaignId, x.Status });
         });
     }
 }
