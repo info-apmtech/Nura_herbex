@@ -12,6 +12,13 @@ public sealed class LeadAssignmentWorker(IServiceScopeFactory scopes, IOptions<F
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(5);
 
+    private async Task Step(string name, Func<Task<int>> run)
+    {
+        try { await run(); }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { log.LogError(ex, "[Lead] Assignment step failed: {Step}", name); }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!options.Value.WorkerEnabled) return;
@@ -23,9 +30,10 @@ public sealed class LeadAssignmentWorker(IServiceScopeFactory scopes, IOptions<F
             {
                 using var scope = scopes.CreateScope();
                 var leads = scope.ServiceProvider.GetRequiredService<LeadService>();
-                await leads.ReleaseAwayStaffAsync();
-                await leads.AssignWaitingAsync();
-                await leads.RebalanceAsync();
+                // each step on its own, so one failing never blocks the others
+                await Step("release away staff", leads.ReleaseAwayStaffAsync);
+                await Step("assign waiting leads", leads.AssignWaitingAsync);
+                await Step("share out unopened leads", leads.RebalanceAsync);
             }
             catch (OperationCanceledException) { return; }
             catch (Exception ex) { log.LogError(ex, "[Lead] Assignment cycle failed"); }
