@@ -76,6 +76,7 @@ builder.Services.AddScoped<ReportService>();
 builder.Services.Configure<AiOptions>(o => { cfg.GetSection(AiOptions.Section).Bind(o); if (string.IsNullOrWhiteSpace(o.ApiKey)) o.ApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? ""; });
 builder.Services.AddScoped<ReplyAssistantService>();
 builder.Services.AddHostedService<FollowUpWorker>();
+builder.Services.AddHostedService<LeadAssignmentWorker>();
 builder.Services.Configure<MetaAdsOptions>(cfg.GetSection(MetaAdsOptions.Section));
 builder.Services.AddHttpClient<MetaAdsService>(h => h.Timeout = TimeSpan.FromSeconds(60));
 builder.Services.AddScoped<AdsReportService>();

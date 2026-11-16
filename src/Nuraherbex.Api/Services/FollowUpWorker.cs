@@ -22,9 +22,7 @@ public sealed class FollowUpWorker(IServiceScopeFactory scopes, IOptions<FollowU
                 using var scope = scopes.CreateScope();
                 await scope.ServiceProvider.GetRequiredService<FollowUpService>().RunCycleAsync();
                 await scope.ServiceProvider.GetRequiredService<TaskService>().RunCycleAsync();
-                var leadService = scope.ServiceProvider.GetRequiredService<LeadService>();
-                await leadService.ReleaseAwayStaffAsync();
-                await leadService.AssignWaitingAsync(); // leads nobody holds yet; leads already given to someone are never moved around
+                // lead assignment and rebalancing run every few seconds in LeadAssignmentWorker
             }
             catch (OperationCanceledException) { return; }
             catch (Exception ex) { log.LogError(ex, "[FollowUp] Cycle failed"); }

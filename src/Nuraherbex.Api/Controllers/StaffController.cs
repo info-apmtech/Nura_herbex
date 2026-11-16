@@ -598,8 +598,8 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
             if (!StaffAvailability.IsOnline(emp)) return BadRequest(new ApiResult { Success = false, Message = $"{emp.Name} is not signed in right now, so they cannot be set active. They can switch it on themselves when they sign in." });
             emp.WhatsAppActive = true;
             await db.SaveChangesAsync();
-            var given = await leads.AssignWaitingAsync();
-            return Ok(new ApiResult { Success = true, Message = given > 0 ? $"{emp.Name} is WhatsApp active. {given} waiting lead(s) were given to them." : $"{emp.Name} is WhatsApp active." });
+            var given = await leads.AssignWaitingAsync() + await leads.RebalanceAsync();
+            return Ok(new ApiResult { Success = true, Message = given > 0 ? $"{emp.Name} is WhatsApp active. {given} unopened lead(s) were shared out, some to them." : $"{emp.Name} is WhatsApp active." });
         }
         var moved = await leads.SwitchOffWhatsAppAsync(id, $"WhatsApp switched off by {MyName}", MyActorId);
         return Ok(new ApiResult { Success = true, Message = moved > 0 ? $"{emp.Name} is WhatsApp off. {moved} pending lead(s) moved to other active people, or back to the admin queue if nobody else is active." : $"{emp.Name} is WhatsApp off." });

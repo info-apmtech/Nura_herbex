@@ -57,10 +57,13 @@ public class StaffAvailability(NuraDbContext db)
     /// <paramref name="page"/> limits it to people whose designation lets them open that page; <paramref name="departmentId"/> to one department.
     /// Returns null when nobody is online, so the work waits in the admin queue instead of landing on someone who is away.
     /// </summary>
-    public async Task<Employee?> PickAsync(string page, long? departmentId = null, long? excludeId = null, bool whatsAppOnly = false)
+    public async Task<Employee?> PickAsync(string page, long? departmentId = null, long? excludeId = null, bool whatsAppOnly = false, bool rotate = false)
     {
         var staff = await EligibleAsync(page, departmentId, excludeId, whatsAppOnly);
         if (staff.Count == 0) return null;
+        // True rotation: ignore workload, give it to whoever was given work longest ago (never-assigned first).
+        if (rotate)
+            return staff.OrderBy(e => e.LastAssignedAt == null ? 0 : 1).ThenBy(e => e.LastAssignedAt).ThenBy(e => e.Id).FirstOrDefault();
         var load = await WorkloadAsync();
         return staff
             .OrderBy(e => load.GetValueOrDefault(e.Id))

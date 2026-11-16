@@ -203,8 +203,8 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         await db.SaveChangesAsync();
     }
 
-    /// <summary>The online sales employee with the least open work, or null when nobody is signed in (the lead then waits in the admin queue).</summary>
-    public Task<Employee?> PickNextEmployeeAsync(long? excludeId = null, bool whatsAppOnly = true) => availability.PickAsync("leads", null, excludeId, whatsAppOnly);
+    /// <summary>The next online sales employee in a true rotation (whoever was given a lead longest ago), or null when nobody is signed in (the lead then waits in the admin queue).</summary>
+    public Task<Employee?> PickNextEmployeeAsync(long? excludeId = null, bool whatsAppOnly = true) => availability.PickAsync("leads", null, excludeId, whatsAppOnly, rotate: true);
 
     /// <summary>WhatsApp leads only go to staff who switched "WhatsApp active" on; leads from other sources (website orders) go to anyone signed in.</summary>
     private static bool NeedsWhatsAppSwitch(Lead lead) => lead.Source == LeadSource.WhatsApp;
@@ -290,10 +290,16 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         await AssignAsync(lead, next.Id, owner is null ? "Customer care: given to an available person" : $"Customer care: {owner.Name} is not available", "auto");
     }
 
+    /// <summary>Open leads (new, follow-up, interested) an employee holds; paid customers are excluded. With <paramref name="keepManual"/>, only ones the system assigned (not handed over by a person).</summary>
+    private IQueryable<Lead> OpenOf(long employeeId, bool keepManual = false) =>
+        db.Leads.Where(l => l.AssignedToEmployeeId == employeeId && l.CustomerSince == null
+            && (l.Status == LeadStatus.New || l.Status == LeadStatus.FollowUp || l.Status == LeadStatus.Interested)
+            && (!keepManual || (db.LeadAssignmentHistory.Where(h => h.LeadId == l.Id).OrderByDescending(h => h.CreatedAt).ThenByDescending(h => h.Id).Select(h => h.ChangedBy).FirstOrDefault() ?? "auto") == "auto"));
+
     /// <summary>
-    /// Shares unstarted leads out evenly when someone new comes online. People who are online and eligible are compared by how many unopened leads they hold;
-    /// while the fullest holds at least 2 more than the emptiest and has a movable unstarted lead (status "new", no team reply yet), the newest of those
-    /// moves to the emptiest person. Leads already being worked never move. Returns how many leads moved.
+    /// Shares open leads out evenly between everyone online and eligible (called when someone comes online and by the background worker).
+    /// People are compared by how many open leads they hold; while the fullest holds at least 2 more than the emptiest, one of the fullest's
+    /// system-assigned leads moves to the emptiest person (unopened first, with its pending follow-ups). Returns how many leads moved.
     /// </summary>
     public async Task<int> RebalanceAsync()
     {
@@ -303,21 +309,28 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         {
             var people = await availability.EligibleAsync("leads", null, null, wa);
             if (people.Count < 2) continue;
-            // Balance on the number of unopened leads each person holds (15 unopened across 3 people = 5 each), counting leads that cannot move too.
+            // Balance on ALL open leads each person holds (new, follow-up, interested; paid customers are left alone), so 76 open leads across 3 people = about 25 each.
             var load = new Dictionary<long, int>();
-            foreach (var p in people) load[p.Id] = await PendingOf(p.Id).CountAsync(l => (l.Source == LeadSource.WhatsApp) == wa);
-            for (var guard = 0; guard < 500; guard++)
+            foreach (var p in people) load[p.Id] = await OpenOf(p.Id).CountAsync(l => (l.Source == LeadSource.WhatsApp) == wa);
+            for (var guard = 0; guard < 2000; guard++)
             {
                 var receiver = people.OrderBy(p => load.GetValueOrDefault(p.Id)).ThenBy(p => p.LastAssignedAt == null ? 0 : 1).ThenBy(p => p.LastAssignedAt).ThenBy(p => p.Id).First();
                 Lead? lead = null; Employee? donor = null;
                 foreach (var d in people.Where(p => p.Id != receiver.Id && load.GetValueOrDefault(p.Id) - load.GetValueOrDefault(receiver.Id) >= 2).OrderByDescending(p => load.GetValueOrDefault(p.Id)))
                 {
-                    // the latest unopened lead moves first
-                    lead = await PendingOf(d.Id, keepManual: true).Where(l => (l.Source == LeadSource.WhatsApp) == wa).OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync();
+                    // unopened leads move first (newest first), then ones already being worked (least recently active first); hand-assigned leads never move
+                    lead = await OpenOf(d.Id, keepManual: true).Where(l => (l.Source == LeadSource.WhatsApp) == wa)
+                        .OrderBy(l => db.WhatsAppMessages.Any(m => m.LeadId == l.Id && m.Direction == "outbound" && m.SentBy != null && m.SentBy != "system" && m.SentBy != "auto") ? 1 : 0)
+                        .ThenByDescending(l => l.Status == LeadStatus.New ? l.CreatedAt : DateTime.MinValue)
+                        .ThenBy(l => l.LastContactAt)
+                        .FirstOrDefaultAsync();
                     if (lead is not null) { donor = d; break; }
                 }
                 if (lead is null || donor is null) break;
-                await AssignAsync(lead, receiver.Id, $"Shared out evenly: {receiver.Name} is online and {donor.Name} had unstarted leads waiting", "auto");
+                await AssignAsync(lead, receiver.Id, $"Shared out evenly: {receiver.Name} is online and {donor.Name} held more leads", "auto");
+                // pending follow-ups travel with the lead so one person never holds the task without the lead
+                foreach (var f in await db.FollowUps.Where(f => f.LeadId == lead.Id && f.Status == FollowUpStatus.Pending && f.AssignedToEmployeeId == donor.Id).ToListAsync())
+                { f.AssignedToEmployeeId = receiver.Id; f.ReminderSentAt = null; f.DueNotifiedAt = null; }
                 await db.SaveChangesAsync(); // so the next round sees the new workload
                 load[donor.Id] = load.GetValueOrDefault(donor.Id) - 1;
                 load[receiver.Id] = load.GetValueOrDefault(receiver.Id) + 1;
