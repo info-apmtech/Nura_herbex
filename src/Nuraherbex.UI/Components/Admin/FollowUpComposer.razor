@@ -74,11 +74,15 @@
             }
 
             @if (!string.IsNullOrEmpty(_error)) { <div class="fu-flash bad" role="alert">@_error</div> }
+            @if (_isNewLead)
+            {
+                <div class="fu-flash bad" role="alert">New leads cannot be scheduled for Follow-up directly. Mark this lead as <strong>Interested</strong> first.</div>
+            }
         </div>
 
         <footer>
             <button type="button" class="ld-btn" @onclick="OnClose">Cancel</button>
-            <button type="button" class="ld-btn primary" disabled="@(_busy || _lead is null)" @onclick="SaveAsync">@(_busy ? "Saving…" : "Schedule")</button>
+            <button type="button" class="ld-btn primary" disabled="@(_busy || _lead is null || _isNewLead)" @onclick="SaveAsync">@(_busy ? "Saving…" : "Schedule")</button>
         </footer>
     </div>
 </div>
@@ -87,10 +91,13 @@
     [Parameter] public long? LeadId { get; set; }
     [Parameter] public string? LeadName { get; set; }
     [Parameter] public string? LeadPhone { get; set; }
+    [Parameter] public string? LeadStatus { get; set; }
     [Parameter] public bool IsAdmin { get; set; }
     [Parameter] public List<EmployeeDto> Team { get; set; } = new();
     [Parameter] public EventCallback<string?> OnCreated { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
+
+    private bool _isNewLead => string.Equals(_lead?.Status ?? LeadStatus, LeadStatuses.New, StringComparison.OrdinalIgnoreCase);
 
     private static readonly string[] Types = [FollowUpTypes.Call, FollowUpTypes.WhatsApp, FollowUpTypes.Reorder, FollowUpTypes.Other];
 
@@ -107,7 +114,7 @@
 
     protected override void OnInitialized()
     {
-        if (LeadId is { } id) _lead = new LeadDto { Id = id, Name = LeadName ?? "Lead", Phone = LeadPhone ?? "" };
+        if (LeadId is { } id) _lead = new LeadDto { Id = id, Name = LeadName ?? "Lead", Phone = LeadPhone ?? "", Status = LeadStatus ?? "" };
     }
 
     private string Quick(DateTime t) => $"fu-chip {(_due == t ? "is-picked" : "")}";

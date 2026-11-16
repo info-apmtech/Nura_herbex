@@ -162,3 +162,13 @@ public class WhatsAppOptions
     public bool AutoReplyEnabled { get; set; } = true;
     public bool CanSend => !string.IsNullOrWhiteSpace(AccessToken) && !string.IsNullOrWhiteSpace(PhoneNumberId);
 }
+
+public class GoogleDriveOptions
+{
+    public const string Section = "GoogleDrive";
+    public string ServiceAccountEmail { get; set; } = "";
+    public string PrivateKeyPem { get; set; } = "";
+    public string RootFolderId { get; set; } = "";
+    public bool MakePublicOnShare { get; set; } = true;
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ServiceAccountEmail) && !string.IsNullOrWhiteSpace(PrivateKeyPem);
+}

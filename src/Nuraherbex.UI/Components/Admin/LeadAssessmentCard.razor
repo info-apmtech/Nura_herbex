@@ -1,0 +1,299 @@
+@inject ApiClient Api
+
+<section class="ld-sec ld-assess">
+    <h4>
+        <span>Assessment Form</span>
+        @if (Lead.HasAssessment)
+        {
+            <span class="ld-pill ld-ok-pill">Completed</span>
+        }
+        else if (Lead.Status == LeadStatuses.New)
+        {
+            <span class="ld-pill ld-req-pill">Required before Notes</span>
+        }
+    </h4>
+
+    @if (!_editing && Lead.HasAssessment)
+    {
+        <dl class="ld-dl ld-assess-view">
+            <dt>Name</dt><dd>@Lead.Name</dd>
+            <dt>Age / Gender</dt><dd>@(Lead.Age?.ToString() ?? "—") · @(Lead.Gender ?? "—") · @(Lead.MaritalStatus ?? "—")</dd>
+            <dt>Work type</dt><dd>@(Lead.WorkType ?? "—")</dd>
+            <dt>Duration</dt><dd>@(string.IsNullOrWhiteSpace(Lead.ProblemDuration) ? "—" : Lead.ProblemDuration)</dd>
+            <dt>Supplements</dt><dd>@(string.IsNullOrWhiteSpace(Lead.PreviousSupplements) ? "—" : Lead.PreviousSupplements)</dd>
+            <dt>Habits</dt>
+            <dd>
+                @if (!Lead.IsSmoking && !Lead.IsDrinking)
+                {
+                    <span>None</span>
+                }
+                else
+                {
+                    <span>@(string.Join(", ", new[] { Lead.IsSmoking ? "Smoking" : null, Lead.IsDrinking ? "Drinking" : null }.Where(x => x is not null)))</span>
+                }
+            </dd>
+            <dt>Primary concern</dt>
+            <dd>
+                @{
+                    var pConcerns = Lead.PrimaryConcerns.Count > 0
+                        ? Lead.PrimaryConcerns
+                        : (Lead.HealthConcerns ?? new()).Where(c => !LeadAssessmentOptions.HealthConditions.Take(2).Contains(c, StringComparer.OrdinalIgnoreCase)).ToList();
+                }
+                @(pConcerns.Count > 0 ? string.Join(", ", pConcerns) : "—")
+                @if (!string.IsNullOrWhiteSpace(Lead.OtherHealthConcern))
+                {
+                    <span> (@Lead.OtherHealthConcern)</span>
+                }
+            </dd>
+            <dt>Health conditions</dt>
+            <dd>
+                @{
+                    var hConditions = Lead.HealthConditions.Count > 0
+                        ? Lead.HealthConditions
+                        : (Lead.HealthConcerns ?? new()).Where(c => LeadAssessmentOptions.HealthConditions.Take(2).Contains(c, StringComparer.OrdinalIgnoreCase)).ToList();
+                }
+                @(hConditions.Count > 0 ? string.Join(", ", hConditions) : "None reported")
+            </dd>
+            @if (!string.IsNullOrWhiteSpace(Lead.AssessmentNotes))
+            {
+                <dt>Remarks</dt>
+                <dd class="ld-assess-notes-val">@Lead.AssessmentNotes</dd>
+            }
+        </dl>
+        <div class="ld-actions">
+            @if (!string.IsNullOrEmpty(_msg)) { <small class="ld-ok">@_msg</small> }
+            <button type="button" class="ld-btn" @onclick="StartEdit"><Icon Name="Edit3" Size="12" /> Edit</button>
+        </div>
+    }
+    else
+    {
+        <div class="ld-assess-grid">
+            <label>Name
+                <input type="text" maxlength="200" @bind="_name" @bind:event="oninput" placeholder="Customer name" />
+            </label>
+            <label>Age
+                <input type="number" min="10" max="120" @bind="_age" @bind:event="oninput" placeholder="Age (e.g. 34)" />
+            </label>
+            <label>Gender
+                <select @bind="_gender">
+                    <option value="">Select gender</option>
+                    @foreach (var g in LeadAssessmentOptions.Genders) { <option value="@g">@g</option> }
+                </select>
+            </label>
+            <label>Marital status
+                <select @bind="_marital">
+                    <option value="">Select marital status</option>
+                    @foreach (var m in LeadAssessmentOptions.MaritalStatuses) { <option value="@m">@m</option> }
+                </select>
+            </label>
+            <label class="ld-assess-wide">Work type
+                <select @bind="_workType">
+                    <option value="">Select work type</option>
+                    @foreach (var w in LeadAssessmentOptions.WorkTypes) { <option value="@w">@w</option> }
+                </select>
+            </label>
+            <label>Problem duration
+                <input type="text" maxlength="100" @bind="_problemDuration" @bind:event="oninput" placeholder="e.g. 6 months, 1 year" />
+            </label>
+            <label>Previous supplement usage
+                <select @bind="_previousSupplements">
+                    <option value="">Select (Yes / No)</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                </select>
+            </label>
+        </div>
+
+        <div class="ld-assess-habits">
+            <label class="ld-check"><input type="checkbox" @bind="_smoking" /> <span>Smoking</span></label>
+            <label class="ld-check"><input type="checkbox" @bind="_drinking" /> <span>Drinking</span></label>
+        </div>
+
+        <div class="ld-assess-concerns">
+            <span class="ld-assess-lbl">Primary Concern</span>
+            <div class="ld-chips">
+                @foreach (var pc in LeadAssessmentOptions.PrimaryConcerns)
+                {
+                    var item = pc;
+                    var picked = _primaryConcerns.Contains(item, StringComparer.OrdinalIgnoreCase);
+                    <button type="button" class="@($"ld-chip-opt {(picked ? "is-picked" : "")}")" @onclick="() => TogglePrimaryConcern(item)">@item</button>
+                }
+            </div>
+            @if (_primaryConcerns.Contains("Others", StringComparer.OrdinalIgnoreCase))
+            {
+                <input type="text" maxlength="500" class="ld-assess-other" placeholder="Specify other primary concern…" @bind="_otherConcern" @bind:event="oninput" />
+            }
+        </div>
+
+        <div class="ld-assess-concerns">
+            <span class="ld-assess-lbl">Health Conditions</span>
+            <div class="ld-chips">
+                @foreach (var hc in LeadAssessmentOptions.HealthConditions)
+                {
+                    var item = hc;
+                    var picked = _healthConditions.Contains(item, StringComparer.OrdinalIgnoreCase);
+                    <button type="button" class="@($"ld-chip-opt {(picked ? "is-picked" : "")}")" @onclick="() => ToggleHealthCondition(item)">@item</button>
+                }
+            </div>
+            @if (_healthConditions.Contains("Others", StringComparer.OrdinalIgnoreCase))
+            {
+                <input type="text" maxlength="500" class="ld-assess-other" placeholder="Specify other health condition (optional)…" @bind="_otherCondition" @bind:event="oninput" />
+            }
+        </div>
+
+        <div class="ld-assess-notes-box">
+            <span class="ld-assess-lbl">Remarks / Notes</span>
+            <textarea rows="3" class="ld-assess-notes" maxlength="2000" placeholder="General customer details, observations, extra notes…" @bind="_assessmentNotes" @bind:event="oninput"></textarea>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_err)) { <p class="ld-err-txt">@_err</p> }
+        @if (!string.IsNullOrEmpty(_msg)) { <p class="ld-ok-txt">@_msg</p> }
+
+        <div class="ld-actions">
+            @if (Lead.HasAssessment)
+            {
+                <button type="button" class="ld-btn" disabled="@_busy" @onclick="CancelEdit">Cancel</button>
+            }
+            <button type="button" class="ld-btn primary" disabled="@_busy" @onclick="SaveAsync">
+                @(_busy ? "Saving…" : Lead.HasAssessment ? "Update assessment" : "Save assessment")
+            </button>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public LeadDto Lead { get; set; } = default!;
+    [Parameter] public EventCallback<string?> OnSaved { get; set; }
+
+    private long _loadedLeadId;
+    private bool _editing;
+    private bool _busy;
+    private string? _err, _msg;
+
+    private string _name = "";
+    private int? _age;
+    private string _gender = "";
+    private string _marital = "";
+    private string _workType = "";
+    private string _problemDuration = "";
+    private string _previousSupplements = "";
+    private string _assessmentNotes = "";
+    private bool _smoking, _drinking;
+    private HashSet<string> _primaryConcerns = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _healthConditions = new(StringComparer.OrdinalIgnoreCase);
+    private string _otherConcern = "";
+    private string _otherCondition = "";
+
+    protected override void OnParametersSet()
+    {
+        if (Lead.Id != _loadedLeadId)
+        {
+            _loadedLeadId = Lead.Id;
+            _editing = !Lead.HasAssessment;
+            _err = null; _msg = null;
+            SyncFromLead();
+        }
+    }
+
+    private void SyncFromLead()
+    {
+        _name = Lead.Name == Lead.Phone ? "" : Lead.Name;
+        _age = Lead.Age;
+        _gender = Lead.Gender ?? "";
+        _marital = Lead.MaritalStatus ?? "";
+        _workType = Lead.WorkType ?? "";
+        _problemDuration = Lead.ProblemDuration ?? "";
+        _previousSupplements = Lead.PreviousSupplements ?? "";
+        _assessmentNotes = Lead.AssessmentNotes ?? "";
+        _smoking = Lead.IsSmoking;
+        _drinking = Lead.IsDrinking;
+
+        var existingPrimary = Lead.PrimaryConcerns.Count > 0
+            ? Lead.PrimaryConcerns
+            : (Lead.HealthConcerns ?? new()).Where(c => !LeadAssessmentOptions.HealthConditions.Take(2).Contains(c, StringComparer.OrdinalIgnoreCase));
+        _primaryConcerns = new HashSet<string>(existingPrimary, StringComparer.OrdinalIgnoreCase);
+
+        var existingConditions = Lead.HealthConditions.Count > 0
+            ? Lead.HealthConditions
+            : (Lead.HealthConcerns ?? new()).Where(c => LeadAssessmentOptions.HealthConditions.Take(2).Contains(c, StringComparer.OrdinalIgnoreCase));
+        _healthConditions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _otherCondition = "";
+        foreach (var c in existingConditions)
+        {
+            if (c.StartsWith("Others (", StringComparison.OrdinalIgnoreCase) && c.EndsWith(")"))
+            {
+                _healthConditions.Add("Others");
+                _otherCondition = c[8..^1];
+            }
+            else
+            {
+                _healthConditions.Add(c);
+            }
+        }
+
+        _otherConcern = Lead.OtherHealthConcern ?? "";
+    }
+
+    private void StartEdit() { SyncFromLead(); _err = null; _msg = null; _editing = true; }
+    private void CancelEdit() { SyncFromLead(); _err = null; _editing = false; }
+
+    private void TogglePrimaryConcern(string item)
+    {
+        if (!_primaryConcerns.Remove(item)) _primaryConcerns.Add(item);
+        if (!_primaryConcerns.Contains("Others", StringComparer.OrdinalIgnoreCase)) _otherConcern = "";
+    }
+
+    private void ToggleHealthCondition(string item)
+    {
+        if (!_healthConditions.Remove(item)) _healthConditions.Add(item);
+        if (!_healthConditions.Contains("Others", StringComparer.OrdinalIgnoreCase)) _otherCondition = "";
+    }
+
+    private async Task SaveAsync()
+    {
+        _err = null; _msg = null;
+        if (_age is null or < 10 or > 120) { _err = "Enter a valid age (10–120)."; return; }
+        if (string.IsNullOrWhiteSpace(_gender)) { _err = "Select Gender."; return; }
+        if (string.IsNullOrWhiteSpace(_marital)) { _err = "Select Marital Status."; return; }
+        if (string.IsNullOrWhiteSpace(_workType)) { _err = "Select Work Type."; return; }
+        if (_primaryConcerns.Count == 0) { _err = "Select at least one Primary Concern (e.g. Erection, Premature Ejaculation, Blood flow)."; return; }
+        if (_primaryConcerns.Contains("Others", StringComparer.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(_otherConcern))
+        {
+            _err = "Specify the primary concern in the 'Others' box.";
+            return;
+        }
+
+        var conditionsToSave = new List<string>();
+        foreach (var c in _healthConditions)
+        {
+            if (c.Equals("Others", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(_otherCondition))
+                conditionsToSave.Add($"Others ({_otherCondition.Trim()})");
+            else
+                conditionsToSave.Add(c);
+        }
+
+        _busy = true;
+        var res = await Api.AdminLeadAssessmentAsync(Lead.Id, new LeadAssessmentRequest
+        {
+            Name = string.IsNullOrWhiteSpace(_name) ? null : _name.Trim(),
+            Age = _age.Value,
+            Gender = _gender,
+            MaritalStatus = _marital,
+            WorkType = _workType,
+            ProblemDuration = string.IsNullOrWhiteSpace(_problemDuration) ? null : _problemDuration.Trim(),
+            PreviousSupplements = string.IsNullOrWhiteSpace(_previousSupplements) ? null : _previousSupplements.Trim(),
+            AssessmentNotes = string.IsNullOrWhiteSpace(_assessmentNotes) ? null : _assessmentNotes.Trim(),
+            IsSmoking = _smoking,
+            IsDrinking = _drinking,
+            PrimaryConcerns = _primaryConcerns.ToList(),
+            HealthConditions = conditionsToSave,
+            HealthConcerns = _primaryConcerns.Concat(conditionsToSave).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            OtherHealthConcern = _primaryConcerns.Contains("Others", StringComparer.OrdinalIgnoreCase) ? _otherConcern.Trim() : null,
+        });
+        _busy = false;
+        if (!res.Success) { _err = res.Message ?? "Could not save assessment."; return; }
+        _editing = false;
+        _msg = res.Message ?? "Assessment saved.";
+        await OnSaved.InvokeAsync(res.Message);
+    }
+}

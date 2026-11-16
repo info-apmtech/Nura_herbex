@@ -126,6 +126,8 @@ public static class PageRules
         // sales and work
         if (Is("/api/admin/crm")) return For(m, "crm");
         if (Is("/api/admin/ads")) return For(m, "campaigns"); // the controller limits "own records" to the person's leads and keeps Meta sync for everyone's-records
+        if (Is("/api/admin/bulk-messages")) return For(m, "bulk_messages");
+        if (Is("/api/admin/drive")) return For(m, "drive_files");
         if (Is("/api/admin/leads")) return For(m, "leads", "interested", "care"); // the controller checks the page that fits the person (lead, hot lead or customer)
         if (Is("/api/admin/followups")) return For(m, "followups");
         if (Is("/api/admin/tasks")) return For(m, "tasks");

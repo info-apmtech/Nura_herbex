@@ -1,0 +1,230 @@
+@inject ApiClient Api
+@inject AdminSession AdminAuth
+@inject BrowserInterop Browser
+
+<div class="dr-wrap">
+    @if (!string.IsNullOrEmpty(_notice))
+    {
+        <div class="@($"em-note {(_noticeOk ? "ok" : "bad")}")" role="status">
+            <Icon Name="@(_noticeOk ? "CheckCircle2" : "AlertCircle")" Size="16" />
+            <span>@_notice</span>
+            <button type="button" class="em-x" aria-label="Dismiss" @onclick="() => _notice = null"><Icon Name="X" Size="14" /></button>
+        </div>
+    }
+
+    <div class="dr-head">
+        <div class="dr-filters">
+            <div class="ld-search" style="max-width:340px;flex:1">
+                <Icon Name="Search" Size="15" />
+                <input type="search" placeholder="Search Drive files…" aria-label="Search Drive files"
+                       @bind="_q" @bind:event="oninput" @bind:after="LoadFilesAsync" />
+            </div>
+            <button type="button" class="@($"ld-tab {(_kind == "" ? "is-active" : "")}")" @onclick='() => SetKindAsync("")'>All</button>
+            <button type="button" class="@($"ld-tab {(_kind == LibraryKinds.Video ? "is-active" : "")}")" @onclick='() => SetKindAsync(LibraryKinds.Video)'>Videos</button>
+            <button type="button" class="@($"ld-tab {(_kind == LibraryKinds.Image ? "is-active" : "")}")" @onclick='() => SetKindAsync(LibraryKinds.Image)'>Images</button>
+            <button type="button" class="@($"ld-tab {(_kind == LibraryKinds.Pdf ? "is-active" : "")}")" @onclick='() => SetKindAsync(LibraryKinds.Pdf)'>PDFs / Docs</button>
+        </div>
+
+        <div style="display:flex;gap:8px;align-items:center">
+            <button type="button" class="ld-btn" disabled="@_loading" @onclick="LoadFilesAsync">
+                <Icon Name="RefreshCw" Size="14" /> Refresh
+            </button>
+            @if (AdminAuth.CanAll("drive_files"))
+            {
+                <button type="button" class="ld-btn" @onclick="() => _showSettings = !_showSettings">
+                    <Icon Name="SlidersHorizontal" Size="14" /> @(_showSettings ? "Hide settings" : "Drive settings")
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (_showSettings && AdminAuth.CanAll("drive_files"))
+    {
+        <section class="dr-settings">
+            <h4 style="margin:0;font-size:13px;font-weight:700">Google Drive Service Account Configuration</h4>
+            <p class="ld-muted" style="margin:0">Paste your Google Cloud Service Account JSON (or fill email &amp; private key individually), then share your target Google Drive folder with that service account email.</p>
+
+            <div class="dr-settings-grid">
+                <label class="wide">Paste Service Account JSON (auto-extracts email &amp; key)
+                    <textarea placeholder='{"type": "service_account", "client_email": "...", "private_key": "-----BEGIN PRIVATE KEY-----..."}'
+                              @bind="_saJson" @bind:event="oninput"></textarea>
+                </label>
+                <label>Service Account Email
+                    <input type="text" placeholder="nura-drive@project.iam.gserviceaccount.com" @bind="_saEmail" @bind:event="oninput" />
+                </label>
+                <label>Root Folder ID (optional — limits browsing to one Drive folder)
+                    <input type="text" placeholder="1AbCdEf..." @bind="_rootFolderId" @bind:event="oninput" />
+                </label>
+                <label class="wide">Private Key PEM (leave blank to keep existing key)
+                    <textarea placeholder="-----BEGIN PRIVATE KEY-----&#10;..." @bind="_privateKey" @bind:event="oninput"></textarea>
+                </label>
+            </div>
+
+            <label class="ld-check">
+                <input type="checkbox" @bind="_makePublic" />
+                <span>Automatically enable "Anyone with the link can view" when sharing files to WhatsApp</span>
+            </label>
+
+            <div class="ld-actions">
+                <button type="button" class="ld-btn primary" disabled="@_savingSettings" @onclick="SaveSettingsAsync">
+                    @(_savingSettings ? "Saving…" : "Save Drive Settings")
+                </button>
+            </div>
+        </section>
+    }
+
+    @if (_loading && _files.Count == 0)
+    {
+        <div class="ld-empty">Loading Google Drive files…</div>
+    }
+    else if (!_configured)
+    {
+        <div class="ld-empty">
+            <strong>Google Drive is not connected yet</strong>
+            <span>Click <strong>Drive settings</strong> above (Sales Manager / Operations access) to enter your Google Service Account credentials and Root Folder ID.</span>
+        </div>
+    }
+    else if (_files.Count == 0)
+    {
+        <div class="ld-empty">
+            <strong>No files found</strong>
+            <span>Try clearing filters or make sure the Google Drive folder is shared with your Service Account email.</span>
+        </div>
+    }
+    else
+    {
+        <div class="dr-grid">
+            @foreach (var df in _files)
+            {
+                var file = df;
+                <article class="dr-card">
+                    <div class="dr-card-top">
+                        <span class="dr-ico">@AdminFileLibrary.KindEmoji(file.Kind)</span>
+                        <div style="min-width:0;flex:1">
+                            <strong>@file.Name</strong>
+                            <small>@LibraryKinds.Label(file.Kind)@(file.Size > 0 ? " · " + AdminFileLibrary.Size(file.Size) : "")</small>
+                        </div>
+                    </div>
+                    <small class="ld-muted">@file.MimeType</small>
+                    <div class="fl-actions" style="margin-top:auto">
+                        <button type="button" class="ld-btn primary" disabled="@(_busyId == file.Id)" @onclick="() => CopyShareLinkAsync(file)">
+                            <Icon Name="@(_copiedId == file.Id ? "Check" : "Copy")" Size="13" />
+                            <span>@(_copiedId == file.Id ? "Copied!" : _busyId == file.Id ? "Sharing…" : "Copy share link")</span>
+                        </button>
+                        @if (!string.IsNullOrEmpty(file.WebViewLink))
+                        {
+                            <a class="ld-btn" href="@file.WebViewLink" target="_blank" rel="noopener">
+                                <Icon Name="ExternalLink" Size="13" /> Open
+                            </a>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<DriveFileDto> _files = new();
+    private bool _loading = true;
+    private bool _configured;
+    private string _q = "";
+    private string _kind = "";
+
+    private bool _showSettings;
+    private bool _savingSettings;
+    private string _saJson = "";
+    private string _saEmail = "";
+    private string _privateKey = "";
+    private string _rootFolderId = "";
+    private bool _makePublic = true;
+
+    private string? _busyId;
+    private string? _copiedId;
+    private string? _notice;
+    private bool _noticeOk;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var jobs = new List<Task> { LoadFilesAsync() };
+        if (AdminAuth.CanAll("drive_files")) jobs.Add(LoadSettingsAsync());
+        await Task.WhenAll(jobs);
+    }
+
+    private async Task SetKindAsync(string k)
+    {
+        _kind = k;
+        await LoadFilesAsync();
+    }
+
+    private async Task LoadFilesAsync()
+    {
+        _loading = true;
+        var res = await Api.AdminDriveFilesAsync(_q, _kind);
+        _configured = res.Configured;
+        _files = res.Success ? res.Files : new();
+        if (!res.Success && res.Configured)
+        {
+            _noticeOk = false;
+            _notice = res.Message ?? "Failed to load Google Drive files.";
+        }
+        _loading = false;
+    }
+
+    private async Task LoadSettingsAsync()
+    {
+        var res = await Api.AdminDriveSettingsAsync();
+        if (res.Success)
+        {
+            _saEmail = res.ServiceAccountEmail ?? "";
+            _rootFolderId = res.RootFolderId ?? "";
+            _makePublic = res.MakePublicOnShare;
+            if (!res.Configured) _showSettings = true;
+        }
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        _savingSettings = true; _notice = null;
+        var res = await Api.AdminSaveDriveSettingsAsync(new DriveSettingsSaveRequest
+        {
+            ServiceAccountJson = string.IsNullOrWhiteSpace(_saJson) ? null : _saJson.Trim(),
+            ServiceAccountEmail = string.IsNullOrWhiteSpace(_saEmail) ? null : _saEmail.Trim(),
+            PrivateKeyPem = string.IsNullOrWhiteSpace(_privateKey) ? null : _privateKey.Trim(),
+            RootFolderId = string.IsNullOrWhiteSpace(_rootFolderId) ? null : _rootFolderId.Trim(),
+            MakePublicOnShare = _makePublic,
+        });
+        _savingSettings = false;
+        _noticeOk = res.Success;
+        _notice = res.Message ?? (res.Success ? "Drive settings saved." : "Failed to save Drive settings.");
+        if (res.Success)
+        {
+            _saJson = ""; _privateKey = "";
+            await LoadSettingsAsync();
+            await LoadFilesAsync();
+        }
+    }
+
+    private async Task CopyShareLinkAsync(DriveFileDto file)
+    {
+        _busyId = file.Id; _notice = null;
+        var res = await Api.AdminDriveShareAsync(new DriveShareRequest { FileId = file.Id, FileName = file.Name });
+        _busyId = null;
+        if (res.Success && !string.IsNullOrEmpty(res.ShareUrl))
+        {
+            await Browser.CopyToClipboardAsync(res.ShareUrl);
+            _copiedId = file.Id;
+            _noticeOk = true;
+            _notice = $"Copied share link for {file.Name}.";
+            StateHasChanged();
+            await Task.Delay(1800);
+            if (_copiedId == file.Id) { _copiedId = null; StateHasChanged(); }
+        }
+        else
+        {
+            _noticeOk = false;
+            _notice = res.Message ?? "Could not share file.";
+        }
+    }
+}
+

@@ -1,0 +1,376 @@
+@inject ApiClient Api
+@inject AdminSession AdminAuth
+
+<div class="bm-wrap">
+    @if (!string.IsNullOrEmpty(_notice))
+    {
+        <div class="@($"em-note {(_noticeOk ? "ok" : "bad")}")" role="status">
+            <Icon Name="@(_noticeOk ? "CheckCircle2" : "AlertCircle")" Size="16" />
+            <span>@_notice</span>
+            <button type="button" class="em-x" aria-label="Dismiss" @onclick="() => _notice = null"><Icon Name="X" Size="14" /></button>
+        </div>
+    }
+
+    @* 1. Four audience categories *@
+    <div class="bm-cats" role="tablist" aria-label="Bulk audience category">
+        @foreach (var c in BulkCategories.All)
+        {
+            var cat = c;
+            <button type="button" role="tab" aria-selected="@(_category == cat)"
+                    class="@($"bm-cat {(_category == cat ? "is-on" : "")}")"
+                    @onclick="() => SelectCategoryAsync(cat)">
+                <strong>@BulkCategories.Label(cat)</strong>
+                <small>@CategoryHint(cat)</small>
+            </button>
+        }
+    </div>
+
+    @* 2. Audience preview metrics *@
+    <section class="ld-sec">
+        <h4>
+            <span>Audience Preview — @BulkCategories.Label(_category)</span>
+            <button type="button" class="ld-link" disabled="@_loadingPreview" @onclick="LoadPreviewAsync"><Icon Name="RefreshCw" Size="12" /> Refresh preview</button>
+        </h4>
+        @if (_loadingPreview && _preview is null)
+        {
+            <p class="ld-muted">Calculating audience…</p>
+        }
+        else if (_preview is not null)
+        {
+            <div class="bm-stats">
+                <div class="bm-stat"><span>Matched</span><strong>@_preview.TotalMatched</strong></div>
+                <div class="bm-stat"><span>Opted out</span><strong>@_preview.OptedOutExcluded</strong></div>
+                <div class="bm-stat"><span>Eligible</span><strong>@_preview.EligibleCount</strong></div>
+                <div class="bm-stat"><span>Inside 24h window</span><strong>@_preview.InsideWindowCount</strong></div>
+                <div class="bm-stat"><span>Outside 24h (template)</span><strong>@_preview.OutsideWindowCount</strong></div>
+            </div>
+            @if (_preview.Sample.Count > 0)
+            {
+                <div class="em-scroll" style="margin-top:12px">
+                    <table class="em-table">
+                        <thead>
+                            <tr><th>Name</th><th>Phone</th><th>Status</th><th>24h Window</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var s in _preview.Sample)
+                            {
+                                <tr>
+                                    <td>@s.Name</td>
+                                    <td>+@s.Phone</td>
+                                    <td><span class="@($"ld-pill {s.Status}")">@StatusLabel(s.Status)</span></td>
+                                    <td>@(s.InsideWindow ? "Open (free text ok)" : "Closed (Meta template)")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <p class="ld-muted" style="margin-top:8px">No eligible recipients currently match this category.</p>
+            }
+        }
+    </section>
+
+    <div class="bm-grid">
+        @* 3. Campaign Composer *@
+        <section class="ld-sec">
+            <h4>Send Bulk WhatsApp</h4>
+            <div class="bm-form">
+                <label>Campaign title
+                    <input type="text" maxlength="200" placeholder="@($"{BulkCategories.Label(_category)} campaign")" @bind="_title" @bind:event="oninput" />
+                </label>
+
+                <label>Free-form message (for contacts inside 24-hour window)
+                    <textarea maxlength="1500" placeholder="Hi {{name}}, check out our new pack…" @bind="_customMessage" @bind:event="oninput"></textarea>
+                </label>
+
+                <label>Approved Meta Template (required for contacts outside 24h window)
+                    <select value="@_templateName" @onchange="OnTemplateChanged">
+                        <option value="">None (only message inside 24h window)</option>
+                        @foreach (var tpl in _approvedTemplates)
+                        {
+                            <option value="@tpl.Name">@tpl.Title (@tpl.Name)</option>
+                        }
+                    </select>
+                </label>
+
+                @if (SelectedTemplate is { } selectedTpl)
+                {
+                    <div class="ld-tplsend-preview">@selectedTpl.Sampled()</div>
+                    @for (var idx = 0; idx < selectedTpl.Params.Length; idx++)
+                    {
+                        var i = idx;
+                        <label>@selectedTpl.Params[i] (template param @(i + 1))
+                            <input type="text" placeholder="@selectedTpl.Params[i]" value="@ParamAt(i)"
+                                   @oninput="e => SetParam(i, e.Value?.ToString())" />
+                        </label>
+                    }
+                }
+
+                @if (AdminAuth.Can("drive_files"))
+                {
+                    <div class="ld-sec" style="background:#faf8fd">
+                        <h4>
+                            <span>Attach Google Drive File (optional)</span>
+                            <button type="button" class="ld-link" disabled="@_driveLoading" @onclick="LoadDriveAsync">
+                                @(_driveLoading ? "Loading…" : _driveFiles.Count > 0 ? "Reload Drive" : "Browse Google Drive")
+                            </button>
+                        </h4>
+                        @if (!string.IsNullOrEmpty(_driveError))
+                        {
+                            <p class="ld-err-txt">@_driveError</p>
+                        }
+                        @if (_driveFiles.Count > 0)
+                        {
+                            <div class="bm-drive-row">
+                                <select @onchange="OnDriveSelected">
+                                    <option value="">Select a file from Google Drive…</option>
+                                    @foreach (var df in _driveFiles)
+                                    {
+                                        <option value="@df.Id" selected="@(_selectedDriveId == df.Id)">@df.Name (@LibraryKinds.Label(df.Kind))</option>
+                                    }
+                                </select>
+                                @if (!string.IsNullOrEmpty(_selectedDriveId))
+                                {
+                                    <button type="button" class="ld-btn" disabled="@_sharingDrive" @onclick="GenerateShareLinkAsync">
+                                        @(_sharingDrive ? "Creating link…" : "Get share link")
+                                    </button>
+                                }
+                            </div>
+                        }
+                        <label style="margin-top:8px">Drive share URL / file name
+                            <input type="url" placeholder="https://drive.google.com/…" @bind="_driveUrl" @bind:event="oninput" />
+                        </label>
+                        @if (!string.IsNullOrEmpty(_driveName))
+                        {
+                            <small class="ld-muted">Selected: @_driveName</small>
+                        }
+                    </div>
+                }
+
+                <div class="ld-actions">
+                    <button type="button" class="ld-btn primary" disabled="@(_sending || (_preview?.EligibleCount ?? 0) == 0)" @onclick="SendAsync">
+                        <Icon Name="Send" Size="14" /> @(_sending ? "Queuing campaign…" : $"Send to {_preview?.EligibleCount ?? 0} recipient(s)")
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        @* 4. Campaign History & Delivery Detail *@
+        <section class="ld-sec">
+            <h4>
+                <span>Recent Campaigns</span>
+                <button type="button" class="ld-link" @onclick="LoadCampaignsAsync"><Icon Name="RefreshCw" Size="12" /> Refresh</button>
+            </h4>
+            @if (_campaigns.Count == 0)
+            {
+                <p class="ld-muted">No bulk campaigns sent yet.</p>
+            }
+            else
+            {
+                <div style="display:flex;flex-direction:column;gap:8px">
+                    @foreach (var c in _campaigns)
+                    {
+                        var camp = c;
+                        <button type="button" class="cmp-item cmp-click" @onclick="() => OpenCampaignAsync(camp.Id)">
+                            <div class="cmp-txt">
+                                <strong>@camp.Title</strong>
+                                <small>@BulkCategories.Label(camp.Category) · @camp.Status · @camp.SentCount/@camp.TotalTarget sent (@camp.FailedCount failed, @camp.SkippedCount skipped)</small>
+                                <small>@AdminFmt.DateTimeShort(camp.CreatedAt) · by @camp.CreatedBy</small>
+                            </div>
+                            <span class="cmp-use">Inspect</span>
+                        </button>
+                    }
+                </div>
+            }
+
+            @if (_campaignDetail?.Campaign is { } dc)
+            {
+                <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--ld-line)">
+                    <h4><span>Campaign: @dc.Title</span><button type="button" class="ld-link" @onclick="() => _campaignDetail = null">Close</button></h4>
+                    <p class="ld-muted" style="margin-bottom:8px">Status: <strong>@dc.Status</strong> · Sent: @dc.SentCount · Failed: @dc.FailedCount · Skipped: @dc.SkippedCount</p>
+                    <div class="em-scroll" style="max-height:260px">
+                        <table class="em-table">
+                            <thead><tr><th>Lead</th><th>Phone</th><th>Mode</th><th>Status</th><th>Detail</th></tr></thead>
+                            <tbody>
+                                @foreach (var r in _campaignDetail.Recipients)
+                                {
+                                    <tr>
+                                        <td>@r.Name</td>
+                                        <td>+@r.Phone</td>
+                                        <td>@r.Mode</td>
+                                        <td>@r.Status</td>
+                                        <td>@(r.Error ?? (r.SentAt is { } sa ? AdminFmt.DateTimeShort(sa) : "—"))</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        </section>
+    </div>
+</div>
+
+@code {
+    private string _category = BulkCategories.HotLeads;
+    private BulkPreviewResponse? _preview;
+    private bool _loadingPreview;
+
+    private List<MetaTemplateDef> _approvedTemplates = new();
+    private string _title = "";
+    private string _customMessage = "";
+    private string _templateName = "";
+    private List<string> _templateParams = new();
+
+    private List<DriveFileDto> _driveFiles = new();
+    private bool _driveLoading, _sharingDrive;
+    private string? _driveError;
+    private string _selectedDriveId = "";
+    private string _driveUrl = "";
+    private string? _driveName;
+
+    private List<BulkCampaignDto> _campaigns = new();
+    private BulkCampaignDetailResponse? _campaignDetail;
+    private bool _sending;
+    private string? _notice;
+    private bool _noticeOk;
+
+    private MetaTemplateDef? SelectedTemplate => string.IsNullOrEmpty(_templateName) ? null : MetaTemplates.Find(_templateName);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadPreviewAsync(), LoadTemplatesAsync(), LoadCampaignsAsync());
+    }
+
+    private static string StatusLabel(string? status) => status switch
+    {
+        LeadStatuses.New => "New",
+        LeadStatuses.Interested => "Interested",
+        LeadStatuses.FollowUp => "Follow-up",
+        LeadStatuses.NoAnswer => "No Answer",
+        LeadStatuses.Converted => "Customer",
+        LeadStatuses.NotInterested => "Not Interested",
+        _ => status ?? "",
+    };
+
+    private static string CategoryHint(string cat) => cat switch
+    {
+        BulkCategories.Customers => "Paid buyers",
+        BulkCategories.NoAnswer => "Unanswered callbacks",
+        BulkCategories.HotLeads => "Interested prospects",
+        BulkCategories.AllLeads => "All active non-converted leads",
+        _ => "",
+    };
+
+    private async Task SelectCategoryAsync(string cat)
+    {
+        _category = cat;
+        await LoadPreviewAsync();
+    }
+
+    private async Task LoadPreviewAsync()
+    {
+        _loadingPreview = true;
+        var res = await Api.AdminBulkPreviewAsync(_category);
+        if (res.Success) _preview = res;
+        else { _notice = res.Message ?? "Failed to load audience preview."; _noticeOk = false; }
+        _loadingPreview = false;
+    }
+
+    private async Task LoadTemplatesAsync()
+    {
+        var res = await Api.AdminMessageTemplatesAsync();
+        if (res.Success)
+        {
+            var set = new HashSet<string>(res.Settings.ApprovedMetaTemplates, StringComparer.OrdinalIgnoreCase);
+            _approvedTemplates = MetaTemplates.All.Where(t => set.Contains(t.Name)).ToList();
+        }
+    }
+
+    private async Task LoadCampaignsAsync()
+    {
+        var res = await Api.AdminBulkCampaignsAsync();
+        if (res.Success) _campaigns = res.Campaigns;
+    }
+
+    private async Task OpenCampaignAsync(long id)
+    {
+        var res = await Api.AdminBulkCampaignDetailAsync(id);
+        if (res.Success) _campaignDetail = res;
+    }
+
+    private void OnTemplateChanged(ChangeEventArgs e)
+    {
+        _templateName = e.Value?.ToString() ?? "";
+        var tpl = SelectedTemplate;
+        _templateParams = tpl is null ? new() : Enumerable.Repeat("", tpl.Params.Length).ToList();
+    }
+
+    private string ParamAt(int i) => i < _templateParams.Count ? _templateParams[i] : "";
+    private void SetParam(int i, string? val)
+    {
+        while (_templateParams.Count <= i) _templateParams.Add("");
+        _templateParams[i] = val ?? "";
+    }
+
+    private async Task LoadDriveAsync()
+    {
+        _driveLoading = true; _driveError = null;
+        var res = await Api.AdminDriveFilesAsync();
+        if (!res.Success || !res.Configured)
+            _driveError = res.Message ?? "Google Drive is not configured yet.";
+        else
+            _driveFiles = res.Files;
+        _driveLoading = false;
+    }
+
+    private async Task OnDriveSelected(ChangeEventArgs e)
+    {
+        _selectedDriveId = e.Value?.ToString() ?? "";
+        var f = _driveFiles.FirstOrDefault(x => x.Id == _selectedDriveId);
+        _driveName = f?.Name;
+        if (f is not null && !string.IsNullOrEmpty(f.WebViewLink))
+            _driveUrl = f.WebViewLink;
+        await Task.CompletedTask;
+    }
+
+    private async Task GenerateShareLinkAsync()
+    {
+        if (string.IsNullOrEmpty(_selectedDriveId)) return;
+        _sharingDrive = true; _driveError = null;
+        var f = _driveFiles.FirstOrDefault(x => x.Id == _selectedDriveId);
+        var res = await Api.AdminDriveShareAsync(new DriveShareRequest { FileId = _selectedDriveId, FileName = f?.Name });
+        if (res.Success && !string.IsNullOrEmpty(res.ShareUrl))
+        {
+            _driveUrl = res.ShareUrl;
+            _driveName = res.File?.Name ?? f?.Name;
+        }
+        else _driveError = res.Message ?? "Could not generate Google Drive share link.";
+        _sharingDrive = false;
+    }
+
+    private async Task SendAsync()
+    {
+        _notice = null; _sending = true;
+        var res = await Api.AdminBulkSendAsync(new BulkSendRequest
+        {
+            Category = _category,
+            Title = string.IsNullOrWhiteSpace(_title) ? null : _title.Trim(),
+            CustomMessage = string.IsNullOrWhiteSpace(_customMessage) ? null : _customMessage.Trim(),
+            TemplateName = string.IsNullOrWhiteSpace(_templateName) ? null : _templateName,
+            TemplateParams = _templateParams,
+            DriveFileUrl = string.IsNullOrWhiteSpace(_driveUrl) ? null : _driveUrl.Trim(),
+            DriveFileName = _driveName,
+        });
+        _sending = false;
+        _noticeOk = res.Success;
+        _notice = res.Message ?? (res.Success ? "Campaign queued." : "Failed to start bulk campaign.");
+        if (res.Success)
+        {
+            await LoadCampaignsAsync();
+            if (res.Data is not null) await OpenCampaignAsync(res.Data.Id);
+        }
+    }
+}

@@ -232,9 +232,11 @@
 .ld.ld-v2 .ld-work.is-detail{display:block;height:auto;min-height:0;grid-template-columns:none}
 .ld.ld-v2 .ld-detail{width:min(880px,100%)}
 
-/* The message area never collapses; if the screen is really short the whole chat column scrolls instead. */
-.ld .ld-chat{overflow-y:auto}
-.ld .ld-scroll{flex:1 1 auto;min-height:280px}
+/* Keep the banner, template picker, and composer pinned while only the message history scrolls inside .ld-scroll. */
+.ld .ld-chat{overflow:hidden;min-height:0}
+.ld .ld-scroll{flex:1 1 0;min-height:110px;overflow-y:auto;overscroll-behavior:contain}
+.ld .ld-tplsend{max-height:190px;overflow-y:auto;flex-shrink:0}
+.ld .cmp{flex-shrink:0}
 
 /* Slimmer notices, header rows and composer so more of the screen is conversation. */
 .ld .ld-dhead{padding:8px 14px}
@@ -325,10 +327,23 @@
 @media (max-width:560px){.ld .cmp-item{flex-wrap:wrap}.ld .cmp-acts{width:100%}.ld .cmp-hint{display:none}}
 @media (prefers-reduced-motion:reduce){.ld .cmp-pop{animation:none}}
 
-/* ---------- One-screen lead view: conversation on the left, everything about the lead on the right (no tabs) ---------- */
-.ld .ld-one{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;overflow:hidden}
-.ld .ld-one>.ld-chat{min-width:0;min-height:0;border-right:1px solid var(--ld-line)}
-.ld .ld-side{min-height:0;overflow-y:auto;background:var(--ld-soft);padding:12px;display:flex;flex-direction:column;gap:10px}
+/* ---------- Full-screen lead workspace & side-left / chat-right placement ---------- */
+.admin-main .admin-content:has(.ld-work.is-detail.ld-fullscreen){padding-top:12px;padding-bottom:12px}
+.admin-main .admin-content:has(.ld-work.is-detail.ld-fullscreen)>.admin-section-heading,
+.admin-main .admin-content:has(.ld-work.is-detail.ld-fullscreen)>.admin-footer{display:none}
+.ld:has(.ld-work.is-detail.ld-fullscreen){gap:10px}
+.ld .ld-work.is-detail.ld-fullscreen{grid-template-columns:minmax(0,1fr);height:calc(100vh - 156px);height:calc(100dvh - 156px);min-height:420px}
+.ld.ld-v2 .ld-work.is-detail.ld-fullscreen{display:block;height:auto;min-height:0}
+.ld .ld-work.is-detail.ld-fullscreen>.ld-list{display:none}
+.ld:has(.ld-work.ld-fullscreen) .ld-kpis{display:none}
+.ld.ld-v2 .ld-work.is-detail.ld-fullscreen .ld-detail{width:100%;border-radius:0}
+.ld.ld-v2 .ld-back.is-always{background:var(--ld-soft);color:var(--ld-green)}
+.ld.ld-v2 .ld-back.is-always:hover{background:#e2e8f0}
+
+.ld .ld-one{flex:1;min-height:0;display:grid;grid-template-columns:minmax(340px,420px) minmax(0,1fr);grid-template-rows:minmax(0,1fr);overflow:hidden}
+.ld .ld-one>.ld-side{grid-column:1;grid-row:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;border-right:1px solid var(--ld-line)}
+.ld .ld-one>.ld-chat{grid-column:2;grid-row:1;min-width:0;min-height:0;overflow:hidden;border-right:0}
+.ld .ld-side{min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;background:var(--ld-soft);padding:12px;display:flex;flex-direction:column;gap:10px}
 .ld-sec{background:#fff;border:1px solid var(--ld-line);border-radius:12px;padding:12px;min-width:0}
 .ld-sec h4{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--ld-muted)}
 .ld-sec .ld-dl{grid-template-columns:92px 1fr;gap:6px 10px;font-size:12.5px}
@@ -339,9 +354,13 @@
 .ld-q:hover{border-color:var(--ld-green)}
 .ld-q.is-on{background:var(--ld-green);border-color:var(--ld-green);color:#fff}
 .ld-q.q-no-answer.is-on{background:#6d28d9;border-color:#6d28d9}
-.ld-link{border:0;background:none;color:var(--ld-green);font-weight:600;font-size:12px;text-transform:none;letter-spacing:0;padding:0}
+.ld-q.q-high.is-on{background:#c2410c;border-color:#c2410c;color:#fff}
+.ld-link{display:inline-flex;align-items:center;gap:4px;border:0;background:none;color:var(--ld-green);font-weight:600;font-size:12px;text-transform:none;letter-spacing:0;padding:0}
 .ld-link:hover{text-decoration:underline}
-.ld-pill.no-answer{background:#ede9fe;color:#6d28d9}
+.ld-pill.no-answer{background:#ede9fe;color:#6d28d9;border-color:#ddd6fe}
+.ld-pill.ld-prio-high{background:#ffedd5;color:#c2410c;border-color:#fed7aa}
+.ld-pill.ld-ok-pill{background:#e3f1e7;color:#1f7a4a;border-color:#cfe5d6}
+.ld-pill.ld-req-pill{background:#fdf3dc;color:#98681a;border-color:#f1e2b9}
 .ld-pill.ld-hstatus{margin-left:auto;font-size:12px;padding:5px 12px}
 .ld-more{background:#fff;border:1px solid var(--ld-line);border-radius:12px;padding:10px 12px}
 .ld-more summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ld-muted)}
@@ -349,8 +368,82 @@
 .ld-side .fu-list.tight{gap:8px}
 .ld.ld-v2 .ld-detail{width:min(1120px,100%)}
 @media(max-width:1000px){
-  .ld .ld-one{grid-template-columns:1fr;overflow-y:auto}
-  .ld .ld-one>.ld-chat{border-right:0;border-bottom:1px solid var(--ld-line);min-height:70vh}
-  .ld .ld-side{overflow:visible}
+  .ld .ld-work.is-detail.ld-fullscreen{height:auto;min-height:0}
+  .ld .ld-one{grid-template-columns:1fr;grid-template-rows:auto auto;overflow-y:auto}
+  .ld .ld-one>.ld-chat{grid-column:1;grid-row:1;border-right:0;border-bottom:1px solid var(--ld-line);min-height:65vh;max-height:80vh}
+  .ld .ld-one>.ld-side{grid-column:1;grid-row:2;border-right:0;overflow:visible}
 }
 .ld .ld-group{position:sticky;top:0;z-index:1;padding:6px 14px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--ld-muted);background:var(--ld-soft);border-bottom:1px solid var(--ld-line)}
+
+/* ---------- Details Edit, Notes Lock, Assessment Form, Priority & Subtabs ---------- */
+.ld-edit-fields{display:flex;flex-direction:column;gap:8px}
+.ld-edit-fields label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;font-weight:650;color:#4b5563}
+.ld-edit-fields input{width:100%!important;height:36px!important;min-height:0!important;border:1px solid var(--ld-line)!important;border-radius:8px!important;padding:0 10px!important;font-size:13px;background:#fff!important}
+.ld-edit-fields input:focus{border-color:var(--ld-green)!important}
+.ld-lock-hint{display:flex;align-items:flex-start;gap:6px;margin:8px 0 0;padding:8px 10px;border-radius:8px;background:#fffbeb;border:1px solid #f1e2b9;color:#8a5f12;font-size:12px;line-height:1.4}
+.ld-lock-hint svg{flex:none;margin-top:2px}
+.ld-notes-box{margin-top:10px;padding-top:10px;border-top:1px solid #f3effa}
+.ld-notes-lbl{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ld-muted);margin-bottom:4px}
+.ld-notes-val{margin:0;font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--ld-ink)}
+.ld-prio-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:8px;border-top:1px solid #f3effa;font-size:12px;color:var(--ld-muted);font-weight:600}
+.lo-inv-links{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:12px}
+
+.ld-assess-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.ld-assess-grid label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;font-weight:650;color:#4b5563}
+.ld-assess-grid label.ld-assess-wide{grid-column:1/-1}
+.ld-assess-grid input,.ld-assess-grid select,.ld-assess-other{width:100%!important;height:36px!important;min-height:0!important;border:1px solid var(--ld-line)!important;border-radius:8px!important;padding:0 10px!important;font-size:12.5px;background:#fff!important;color:var(--ld-ink)}
+.ld-assess-grid input:focus,.ld-assess-grid select:focus,.ld-assess-other:focus{border-color:var(--ld-green)!important;outline:0}
+.ld-assess-habits{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 8px}
+.ld-check{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ld-ink);cursor:pointer}
+.ld-assess-lbl{display:block;font-size:11.5px;font-weight:650;color:#4b5563;margin-bottom:6px}
+.ld-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ld-chip-opt{border:1px solid var(--ld-line);background:#fff;color:var(--ld-ink);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600}
+.ld-chip-opt:hover{border-color:var(--ld-green)}
+.ld-chip-opt.is-picked{background:var(--ld-green);border-color:var(--ld-green);color:#fff}
+.ld-assess-other{margin-top:8px}
+.ld-assess-concerns{margin-top:10px}
+.ld-assess-notes-box{margin-top:10px}
+.ld-assess-notes{width:100%!important;border:1px solid var(--ld-line)!important;border-radius:8px!important;padding:8px 10px!important;font-size:12.5px;background:#fff!important;color:var(--ld-ink);resize:vertical}
+.ld-assess-notes:focus{border-color:var(--ld-green)!important;outline:0}
+.ld-assess-notes-val{white-space:pre-wrap;margin:0}
+.ld-err-txt{margin:8px 0 0;font-size:12px;color:#b3382c;font-weight:600}
+.ld-ok-txt{margin:8px 0 0;font-size:12px;color:#1f7a4a;font-weight:600}
+
+.cmp-subtabs{display:flex;gap:6px;padding:2px 2px 6px;border-bottom:1px solid #f0e9f8;margin-bottom:4px}
+.cmp-subtab{border:1px solid var(--ld-line);background:#fff;color:#4b5563;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:650;cursor:pointer}
+.cmp-subtab.is-on{background:var(--ld-green);border-color:var(--ld-green);color:#fff}
+
+/* ---------- Bulk Messaging & Google Drive pages ---------- */
+.bm-wrap,.dr-wrap{display:flex;flex-direction:column;gap:16px}
+.bm-cats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.bm-cat{display:flex;flex-direction:column;gap:4px;text-align:left;background:#fff;border:1px solid var(--ld-line);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.bm-cat:hover{border-color:#c6a9ea}
+.bm-cat.is-on{border-color:var(--ld-green);box-shadow:0 0 0 1px var(--ld-green);background:#fbf8fe}
+.bm-cat strong{font-size:14px;color:var(--ld-ink)}
+.bm-cat small{font-size:12px;color:var(--ld-muted)}
+.bm-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,1fr);gap:16px;align-items:start}
+.bm-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.bm-stat{background:#faf8fd;border:1px solid var(--ld-line);border-radius:10px;padding:10px 12px}
+.bm-stat span{display:block;font-size:11px;font-weight:650;text-transform:uppercase;color:var(--ld-muted)}
+.bm-stat strong{display:block;font-size:20px;font-weight:700;margin-top:2px;color:var(--ld-ink)}
+.bm-form{display:flex;flex-direction:column;gap:12px}
+.bm-form label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:650;color:#4b5563}
+.bm-form input,.bm-form select,.bm-form textarea{width:100%;border:1px solid var(--ld-line);border-radius:9px;padding:8px 11px;font:inherit;font-size:13px;background:#fff;color:var(--ld-ink)}
+.bm-form textarea{min-height:92px;resize:vertical}
+.bm-drive-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.bm-drive-row select{flex:1;min-width:200px}
+.dr-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.dr-filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:1}
+.dr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.dr-card{background:#fff;border:1px solid var(--ld-line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;box-shadow:0 2px 4px #37135a08}
+.dr-card-top{display:flex;align-items:center;gap:10px}
+.dr-ico{width:38px;height:38px;border-radius:10px;background:#f3eefa;display:grid;place-items:center;font-size:19px;flex:none}
+.dr-card-top strong{display:block;font-size:13.5px;color:var(--ld-ink);word-break:break-word}
+.dr-card-top small{color:var(--ld-muted);font-size:11.5px}
+.dr-settings{background:#fff;border:1px solid var(--ld-line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.dr-settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.dr-settings label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:650;color:#4b5563}
+.dr-settings label.wide{grid-column:1/-1}
+.dr-settings textarea{min-height:110px;font-family:ui-monospace,monospace;font-size:12px}
+@media(max-width:960px){.bm-cats{grid-template-columns:repeat(2,minmax(0,1fr))}.bm-grid{grid-template-columns:1fr}.bm-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dr-settings-grid{grid-template-columns:1fr}}
+

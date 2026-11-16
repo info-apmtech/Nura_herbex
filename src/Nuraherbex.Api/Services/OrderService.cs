@@ -40,6 +40,7 @@ public partial class OrderService(
         var calc = await products.CalculateAsync(req.Items, req.CouponCode);
         var t = calc.Totals;
         var isCod = string.Equals(req.PaymentMethod, OrderPaymentMethods.Cod, StringComparison.OrdinalIgnoreCase);
+        var isOffline = req.ShippingMode == ShippingMode.Offline;
 
         string id;
         do { id = NewOrderId(); } while (await db.Orders.AnyAsync(o => o.Id == id));
@@ -57,13 +58,16 @@ public partial class OrderService(
             ShippingFee = t.ShippingFee, TaxAmount = t.TaxAmount, TotalAmount = t.FinalTotal,
             PaymentMethod = isCod ? OrderPaymentMethod.Cod : OrderPaymentMethod.Online, PaymentStatus = isCod ? OrderPaymentStatus.CodPending : OrderPaymentStatus.Pending,
             FulfillmentStatus = "PENDING",
+            ShippingMode = req.ShippingMode,
+            OfflineDispatchNote = string.IsNullOrWhiteSpace(req.OfflineDispatchNote) ? null : req.OfflineDispatchNote.Trim(),
+            Courier = isOffline ? "Offline" : null,
             ParcelWeightKg = calc.Parcel.WeightKg, ParcelLengthCm = calc.Parcel.LengthCm,
             ParcelBreadthCm = calc.Parcel.BreadthCm, ParcelHeightCm = calc.Parcel.HeightCm,
-            Notes = isCod ? "Cash on Delivery order" : "Pending online payment settlement",
-            DeliveryStatus = isCod ? "Order Confirmed" : "Payment Pending",
+            Notes = isCod ? (isOffline ? "Offline Cash on Delivery order" : "Cash on Delivery order") : "Pending online payment settlement",
+            DeliveryStatus = isCod ? (isOffline ? "Order Confirmed (Offline Delivery)" : "Order Confirmed") : "Payment Pending",
             DeliveryTrackingEvents =
             [
-                new() { Status = isCod ? "Order Confirmed (Cash on Delivery)" : "Order Created (Awaiting Payment)", Time = Mapping.TimelineStamp(), Done = true, Active = true },
+                new() { Status = isCod ? (isOffline ? "Order Confirmed (Offline / Local Delivery)" : "Order Confirmed (Cash on Delivery)") : "Order Created (Awaiting Payment)", Time = Mapping.TimelineStamp(), Done = true, Active = true },
             ],
         };
 
@@ -88,10 +92,17 @@ public partial class OrderService(
 
         if (isCod)
         {
-            order.Courier = shipping.ProviderFor(order);
-            await db.SaveChangesAsync();
-            NotifyConfirmed(order);
-            AutoBookInBackground(order.Id);
+            if (!isOffline)
+            {
+                order.Courier = shipping.ProviderFor(order);
+                await db.SaveChangesAsync();
+                NotifyConfirmed(order);
+                AutoBookInBackground(order.Id);
+            }
+            else
+            {
+                NotifyConfirmed(order);
+            }
         }
         return order;
     }
@@ -166,11 +177,14 @@ public partial class OrderService(
         await products.DecrementStockAsync(order);
         await db.SaveChangesAsync();
 
-        order.Courier = shipping.ProviderFor(order);
+        order.Courier = order.ShippingMode == ShippingMode.Offline ? "Offline" : shipping.ProviderFor(order);
+        if (order.ShippingMode == ShippingMode.Offline)
+            order.DeliveryStatus = "Order Confirmed (Offline Delivery)";
         await db.SaveChangesAsync();
 
         NotifyConfirmed(order);
-        AutoBookInBackground(order.Id);
+        if (order.ShippingMode != ShippingMode.Offline)
+            AutoBookInBackground(order.Id);
         return order;
     }
 
@@ -180,14 +194,14 @@ public partial class OrderService(
         db.ChangeTracker.Clear();
         var order = await GetAsync(orderId) ?? throw new InvalidOperationException($"Order {orderId} not found");
         if (order.FulfillmentStatus == "DELIVERED") return order;
-        if (order.FulfillmentStatus is "CANCELLED" or "RTO" || string.IsNullOrWhiteSpace(order.ShiprocketAwb))
-            throw new InvalidOperationException("Only an active shipment can be marked delivered.");
+        if (order.FulfillmentStatus is "CANCELLED" or "RTO" || (order.ShippingMode != ShippingMode.Offline && string.IsNullOrWhiteSpace(order.ShiprocketAwb)))
+            throw new InvalidOperationException("Only an active shipment (or an offline order) can be marked delivered.");
         order.DeliveredAt = DateTime.UtcNow;
         order.FulfillmentStatus = "DELIVERED";
         order.DeliveryStatus = "Delivered";
         if (order.PaymentMethod == OrderPaymentMethod.Cod) order.PaymentStatus = OrderPaymentStatus.CodCollected;
         order.UpdatedAt = DateTime.UtcNow;
-        order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto { Status = "Delivered to Recipient", Time = Mapping.TimelineStamp(), Done = true, Active = true }];
+        order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto { Status = order.ShippingMode == ShippingMode.Offline ? "Delivered (Offline / Local Delivery)" : "Delivered to Recipient", Time = Mapping.TimelineStamp(), Done = true, Active = true }];
         await db.SaveChangesAsync();
 
         InBackground(async (email, whatsapp) =>
@@ -198,12 +212,47 @@ public partial class OrderService(
         return order;
     }
 
+    /// <summary>Manually update COD / offline / payment collection status on an order.</summary>
+    public async Task<Order> UpdatePaymentStatusAsync(string orderId, UpdateOrderPaymentRequest req, string actor)
+    {
+        if (!OrderPaymentStatuses.TryParse(req.PaymentStatus, out var nextStatus)
+            || nextStatus is not (OrderPaymentStatus.CodCollected or OrderPaymentStatus.Paid or OrderPaymentStatus.CodPending or OrderPaymentStatus.Pending or OrderPaymentStatus.Refunded))
+            throw new InvalidOperationException("Unsupported payment status update.");
+
+        await using var lease = await operationLock.AcquireAsync(orderId);
+        db.ChangeTracker.Clear();
+        var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
+        if (order.FulfillmentStatus is "CANCELLED" or "RTO" && nextStatus is not OrderPaymentStatus.Refunded)
+            throw new InvalidOperationException("Cannot collect payment on a cancelled or returned order.");
+
+        var wasStockTaken = order.PaymentStatus is OrderPaymentStatus.Paid or OrderPaymentStatus.CodPending or OrderPaymentStatus.CodCollected;
+        var takesStock = nextStatus is OrderPaymentStatus.Paid or OrderPaymentStatus.CodPending or OrderPaymentStatus.CodCollected;
+        if (!wasStockTaken && takesStock)
+            await products.DecrementStockAsync(order);
+
+        order.PaymentStatus = nextStatus;
+        if (!string.IsNullOrWhiteSpace(req.PaymentRef))
+            order.PaymentRef = req.PaymentRef.Trim();
+        else if (nextStatus is OrderPaymentStatus.CodCollected or OrderPaymentStatus.Paid && string.IsNullOrWhiteSpace(order.PaymentRef))
+            order.PaymentRef = $"MANUAL-{DateTime.UtcNow:yyyyMMddHHmmss}";
+
+        var noteText = string.IsNullOrWhiteSpace(req.Note) ? null : req.Note.Trim();
+        var audit = $"Payment status set to {nextStatus.ToCode()} by {actor}" + (noteText is null ? "" : $" ({noteText})");
+        order.Notes = string.IsNullOrWhiteSpace(order.Notes) ? audit : $"{order.Notes} | {audit}";
+        order.DeliveryTrackingEvents = [.. order.DeliveryTrackingEvents, new TrackingEventDto { Status = audit, Time = Mapping.TimelineStamp(), Done = true }];
+        order.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return order;
+    }
+
     /// <summary>Manual / retry push to the active courier platform (admin).</summary>
     public async Task<ShiprocketResult> RetryShipmentAsync(string orderId)
     {
         await using var lease = await operationLock.AcquireAsync(orderId);
         db.ChangeTracker.Clear();
         var order = await GetAsync(orderId) ?? throw new KeyNotFoundException("Order not found");
+        if (order.ShippingMode == ShippingMode.Offline)
+            throw new InvalidOperationException("Offline orders are delivered locally without courier booking.");
         if (order.FulfillmentStatus is "CANCELLED" or "DELIVERED" or "RTO")
             throw new InvalidOperationException("A cancelled, returned, or delivered order cannot be booked.");
         if (order.FulfillmentReadyAt is null)

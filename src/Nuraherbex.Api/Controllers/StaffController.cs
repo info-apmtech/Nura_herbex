@@ -63,122 +63,170 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
 
     private static IQueryable<Lead> InView(IQueryable<Lead> q, string view) => view switch
     {
-        LeadViews.Care => q.Where(l => l.CustomerSince != null),
-        LeadViews.Interested => q.Where(l => l.CustomerSince == null && l.Status == Nuraherbex.Shared.Models.LeadStatus.Interested),
-        _ => q.Where(l => l.CustomerSince == null && l.Status != Nuraherbex.Shared.Models.LeadStatus.Interested),
+        LeadViews.Transfers => q.Where(l => l.PendingTransferToEmployeeId != null),
+        LeadViews.Care => q.Where(l => l.CustomerSince != null && l.PendingTransferToEmployeeId == null),
+        LeadViews.Interested => q.Where(l => l.CustomerSince == null && l.Status == Nuraherbex.Shared.Models.LeadStatus.Interested && l.PendingTransferToEmployeeId == null),
+        _ => q.Where(l => l.CustomerSince == null && l.Status != Nuraherbex.Shared.Models.LeadStatus.Interested && l.PendingTransferToEmployeeId == null),
     };
 
-    /// <param name="view">leads (new and follow-up), interested (hot leads) or care (paid customers).</param>
+    /// <param name="view">leads (new and follow-up), transfers (pending transfers), interested (hot leads) or care (paid customers).</param>
     /// <param name="assignee">managers only: "unassigned", "me" or an employee id. Everyone else always gets just their own people.</param>
     [HttpGet("leads")]
     public async Task<LeadListResponse> Leads([FromQuery] string? status, [FromQuery] string? source, [FromQuery] string? q, [FromQuery] string? assignee, [FromQuery] int take = 100, [FromQuery] string? view = null)
     {
-        view = LeadViews.All.Contains(view ?? "") ? view! : LeadViews.Leads;
-        if (Level(view) < 1) return new LeadListResponse { Success = false, Message = "Your designation does not give you access to this page." };
-
-        // Counts for the panel tabs: how many people sit in each panel the caller may open (scoped to their own when they only see their own).
-        var viewCounts = new Dictionary<string, int>();
-        foreach (var v in LeadViews.All)
+        try
         {
-            if (Level(v) < 1) continue;
-            var vq = InView(db.Leads.AsNoTracking(), v);
-            if (!CanAll(v)) vq = vq.Where(l => l.AssignedToEmployeeId == MyId);
-            viewCounts[v] = await vq.CountAsync();
-        }
+            await leads.ExpirePendingTransfersAsync();
+            view = LeadViews.All.Contains(view ?? "") ? view! : LeadViews.Leads;
+            var checkView = view == LeadViews.Transfers ? LeadViews.Leads : view;
+            if (Level(checkView) < 1) return new LeadListResponse { Success = false, Message = "Your designation does not give you access to this page." };
 
-        var baseQuery = InView(db.Leads.AsNoTracking(), view);
-        if (!CanAll(view)) baseQuery = baseQuery.Where(l => l.AssignedToEmployeeId == MyId);
-        else if (assignee == "unassigned") baseQuery = baseQuery.Where(l => l.AssignedToEmployeeId == null);
-        else if (assignee == "me") baseQuery = baseQuery.Where(l => l.AssignedToEmployeeId == MyId);
-        else if (long.TryParse(assignee, out var aid)) baseQuery = baseQuery.Where(l => l.AssignedToEmployeeId == aid);
-        var scopeQuery = baseQuery; // before search, for the unread total
-
-        if (!string.IsNullOrWhiteSpace(source))
-            baseQuery = LeadSources.TryParse(source, out var sourceEnum) ? baseQuery.Where(l => l.Source == sourceEnum) : baseQuery.Where(_ => false);
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            var term = q.Trim();
-            var digits = new string(term.Where(char.IsDigit).ToArray());
-            baseQuery = baseQuery.Where(l => l.Name.Contains(term) || (digits.Length > 0 && l.Phone.Contains(digits)) || (l.Email != null && l.Email.Contains(term)));
-        }
-
-        // The Leads panel is split into tabs by what needs doing (new today / older and still unopened / follow-up / no answer / not interested);
-        // the other panels keep one count per status.
-        var todayStart = FollowUpService.TodayStartUtc();
-        var newFrom = todayStart.AddDays(-1); // "New" = arrived today or yesterday (Indian days); anything earlier and still unopened is "Older, not opened"
-        var bucketed = view == LeadViews.Leads;
-        Dictionary<string, int> statusCounts;
-        if (bucketed)
-        {
-            statusCounts = [];
-            foreach (var b in LeadBuckets.All) statusCounts[b] = await InBucket(baseQuery, b, newFrom).CountAsync();
-        }
-        else
-            statusCounts = (await baseQuery.GroupBy(l => l.Status).Select(g => new { g.Key, N = g.Count() }).ToListAsync()).ToDictionary(c => c.Key.ToCode(), c => c.N);
-
-        var filtered = string.IsNullOrWhiteSpace(status)
-            ? baseQuery
-            : bucketed && LeadBuckets.All.Contains(status.Trim().ToLowerInvariant())
-                ? InBucket(baseQuery, status.Trim().ToLowerInvariant(), newFrom)
-                : LeadStatuses.TryParse(status, out var statusEnum)
-                    ? baseQuery.Where(l => l.Status == statusEnum)
-                    : baseQuery.Where(_ => false);
-        // Follow-up and No answer tabs are a work list: leads with a follow-up due today come first, then the rest by their next due date
-        // (missed ones before tomorrow's and later ones, leads with nothing booked last). Other lists show the latest conversations at the bottom.
-        var byDue = bucketed && status?.Trim().ToLowerInvariant() is LeadBuckets.FollowUp or LeadBuckets.NoAnswer;
-        var dayEnd = todayStart.AddDays(1);
-        IQueryable<Lead> ordered = byDue
-            ? filtered
-                .OrderBy(l => db.FollowUps.Any(f => f.LeadId == l.Id && f.Status == FollowUpStatus.Pending && f.DueAt >= todayStart && f.DueAt < dayEnd) ? 0 : 1)
-                .ThenBy(l => db.FollowUps.Any(f => f.LeadId == l.Id && f.Status == FollowUpStatus.Pending) ? 0 : 1)
-                .ThenBy(l => db.FollowUps.Where(f => f.LeadId == l.Id && f.Status == FollowUpStatus.Pending).Min(f => (DateTime?)f.DueAt))
-            : filtered.OrderByDescending(l => l.LastContactAt);
-        var rows = await ordered.Take(Math.Clamp(take, 1, 500))
-            .GroupJoin(db.Conversations.AsNoTracking(), l => l.Id, c => c.LeadId, (l, cs) => new { l, cs })
-            .SelectMany(x => x.cs.DefaultIfEmpty(), (x, c) => new { x.l, c })
-            .ToListAsync();
-        if (!byDue) rows.Reverse(); // the newest N were fetched; show them oldest first so the latest lead sits at the bottom
-
-        var ids = rows.Select(r => r.l.Id).ToList();
-        var last = await db.WhatsAppMessages.AsNoTracking()
-            .Where(m => m.LeadId != null && ids.Contains(m.LeadId.Value)
-                && m.Id == db.WhatsAppMessages.Where(x => x.LeadId == m.LeadId).Max(x => x.Id))
-            .ToListAsync();
-        var lastByLead = last.GroupBy(m => m.LeadId!.Value).ToDictionary(g => g.Key, g => g.First());
-        var names = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
-
-        var nextFu = (await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Pending && ids.Contains(f.LeadId)).GroupBy(f => f.LeadId).Select(g => new { g.Key, At = g.Min(x => x.DueAt) }).ToListAsync()).ToDictionary(x => x.Key, x => x.At);
-        var orderStats = await OrderStatsAsync(rows.Select(r => r.l));
-        var dueTodayIds = (await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Pending && f.DueAt >= todayStart && f.DueAt < dayEnd && ids.Contains(f.LeadId)).Select(f => f.LeadId).Distinct().ToListAsync()).ToHashSet();
-        var noAnswerIds = (await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Done && f.Outcome != null && ids.Contains(f.LeadId))
-                .OrderByDescending(f => f.CompletedAt).ThenByDescending(f => f.Id).Select(f => new { f.LeadId, f.Outcome }).ToListAsync())
-            .GroupBy(x => x.LeadId).Where(g => g.First().Outcome!.StartsWith(FollowUpOutcomes.NoAnswer)).Select(g => g.Key).ToHashSet();
-
-        return new LeadListResponse
-        {
-            Success = true,
-            Leads = rows.Select(r =>
+            // Counts for the panel tabs: how many people sit in each panel the caller may open (scoped to their own when they only see their own).
+            var viewCounts = new Dictionary<string, int>();
+            var viewUnread = new Dictionary<string, int>();
+            foreach (var v in LeadViews.All)
             {
-                var dto = r.l.ToDto(r.c);
-                dto.AssignedToName = r.l.AssignedToEmployeeId is { } eid ? names.GetValueOrDefault(eid) : null;
-                dto.ConvertedByName = r.l.ConvertedByEmployeeId is { } cid ? names.GetValueOrDefault(cid) : null;
-                if (nextFu.TryGetValue(r.l.Id, out var nf)) dto.NextFollowUpAt = nf;
-                dto.NoAnswer = noAnswerIds.Contains(r.l.Id);
-                dto.FollowUpToday = dueTodayIds.Contains(r.l.Id);
-                if (orderStats.TryGetValue(r.l.Id, out var os)) { dto.OrderCount = os.Count; dto.LifetimeValue = os.Value; dto.LastOrderAt = os.Last; dto.OpenOrders = os.Open; }
-                if (lastByLead.TryGetValue(r.l.Id, out var m))
+                var permKey = v == LeadViews.Transfers ? LeadViews.Leads : v;
+                if (Level(permKey) < 1) continue;
+                var vq = InView(db.Leads.AsNoTracking(), v);
+                if (v == LeadViews.Transfers)
                 {
-                    dto.LastMessage = string.IsNullOrEmpty(m.Body) ? Mapping.MessageLabel(m.Type) : m.Body.Length > 90 ? m.Body[..(char.IsHighSurrogate(m.Body[89]) ? 89 : 90)] + "…" : m.Body;
-                    dto.LastMessageDirection = m.Direction;
+                    if (!CanAll(permKey)) vq = vq.Where(l => l.PendingTransferToEmployeeId == MyId);
                 }
-                return dto;
-            }).ToList(),
-            Total = await filtered.CountAsync(),
-            StatusCounts = statusCounts,
-            ViewCounts = viewCounts,
-            UnreadTotal = await db.Conversations.AsNoTracking().Where(c => c.UnreadCount > 0 && scopeQuery.Any(l => l.Id == c.LeadId)).SumAsync(c => (int?)c.UnreadCount) ?? 0,
-            UnassignedCount = CanAll(view) ? await InView(db.Leads.AsNoTracking(), view).CountAsync(l => l.AssignedToEmployeeId == null) : 0,
-        };
+                else
+                {
+                    if (!CanAll(permKey)) vq = vq.Where(l => l.AssignedToEmployeeId == MyId);
+                }
+                viewCounts[v] = await vq.CountAsync();
+                viewUnread[v] = await db.Conversations.AsNoTracking().Where(c => c.UnreadCount > 0 && vq.Any(l => l.Id == c.LeadId)).SumAsync(c => (int?)c.UnreadCount) ?? 0;
+            }
+
+            if (Level(LeadViews.Leads) >= 1)
+            {
+                var naQ = InView(db.Leads.AsNoTracking(), LeadViews.Leads).Where(NoAnswerOf(true));
+                if (!CanAll(LeadViews.Leads)) naQ = naQ.Where(l => l.AssignedToEmployeeId == MyId);
+                viewCounts["no_answer"] = await naQ.CountAsync();
+            }
+
+            var baseQuery = InView(db.Leads.AsNoTracking(), view);
+            if (view == LeadViews.Transfers)
+            {
+                if (!CanAll(LeadViews.Leads)) baseQuery = baseQuery.Where(l => l.PendingTransferToEmployeeId == MyId);
+                else if (assignee == "me") baseQuery = baseQuery.Where(l => l.PendingTransferToEmployeeId == MyId);
+                else if (long.TryParse(assignee, out var aid)) baseQuery = baseQuery.Where(l => l.PendingTransferToEmployeeId == aid || l.PendingTransferFromEmployeeId == aid);
+            }
+            else
+            {
+                if (!CanAll(view)) baseQuery = baseQuery.Where(l => l.AssignedToEmployeeId == MyId);
+                else if (assignee == "unassigned") baseQuery = baseQuery.Where(l => l.AssignedToEmployeeId == null);
+                else if (assignee == "me") baseQuery = baseQuery.Where(l => l.AssignedToEmployeeId == MyId);
+                else if (long.TryParse(assignee, out var aid)) baseQuery = baseQuery.Where(l => l.AssignedToEmployeeId == aid);
+            }
+            var scopeQuery = baseQuery; // before search, for the unread total
+
+            if (!string.IsNullOrWhiteSpace(source))
+                baseQuery = LeadSources.TryParse(source, out var sourceEnum) ? baseQuery.Where(l => l.Source == sourceEnum) : baseQuery.Where(_ => false);
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var term = q.Trim();
+                var digits = new string(term.Where(char.IsDigit).ToArray());
+                baseQuery = baseQuery.Where(l => l.Name.Contains(term) || (digits.Length > 0 && l.Phone.Contains(digits)) || (l.Email != null && l.Email.Contains(term)));
+            }
+
+            // The Leads panel is split into tabs by what needs doing (new today / older and still unopened / follow-up / no answer / not interested);
+            // the other panels keep one count per status.
+            var todayStart = FollowUpService.TodayStartUtc();
+            var newFrom = todayStart.AddDays(-1); // "New" = arrived today or yesterday (Indian days); anything earlier and still unopened is "Older, not opened"
+            var bucketed = view == LeadViews.Leads;
+            Dictionary<string, int> statusCounts;
+            if (bucketed)
+            {
+                statusCounts = [];
+                foreach (var b in LeadBuckets.All) statusCounts[b] = await InBucket(baseQuery, b, newFrom).CountAsync();
+            }
+            else
+                statusCounts = (await baseQuery.GroupBy(l => l.Status).Select(g => new { g.Key, N = g.Count() }).ToListAsync()).ToDictionary(c => c.Key.ToCode(), c => c.N);
+
+            var filtered = string.IsNullOrWhiteSpace(status)
+                ? baseQuery
+                : bucketed && LeadBuckets.All.Contains(status.Trim().ToLowerInvariant())
+                    ? InBucket(baseQuery, status.Trim().ToLowerInvariant(), newFrom)
+                    : LeadStatuses.TryParse(status, out var statusEnum)
+                        ? baseQuery.Where(l => l.Status == statusEnum)
+                        : baseQuery.Where(_ => false);
+            // Follow-up and No answer tabs are a work list: leads with a follow-up due today come first, then the rest by their next due date
+            // (missed ones before tomorrow's and later ones, leads with nothing booked last). Hot leads sort by priority first. Other lists show the latest conversations at the bottom.
+            var byDue = bucketed && status?.Trim().ToLowerInvariant() is LeadBuckets.FollowUp or LeadBuckets.NoAnswer;
+            var byPriority = view == LeadViews.Interested;
+            var dayEnd = todayStart.AddDays(1);
+            IQueryable<Lead> ordered = byDue
+                ? filtered
+                    .OrderBy(l => db.FollowUps.Any(f => f.LeadId == l.Id && f.Status == FollowUpStatus.Pending && f.DueAt >= todayStart && f.DueAt < dayEnd) ? 0 : 1)
+                    .ThenBy(l => db.FollowUps.Any(f => f.LeadId == l.Id && f.Status == FollowUpStatus.Pending) ? 0 : 1)
+                    .ThenBy(l => db.FollowUps.Where(f => f.LeadId == l.Id && f.Status == FollowUpStatus.Pending).Min(f => (DateTime?)f.DueAt))
+                : byPriority
+                    ? filtered.OrderByDescending(l => l.Priority).ThenByDescending(l => l.LastContactAt)
+                    : filtered.OrderByDescending(l => l.LastContactAt);
+            var rows = await ordered.Take(Math.Clamp(take, 1, 500))
+                .GroupJoin(db.Conversations.AsNoTracking(), l => l.Id, c => c.LeadId, (l, cs) => new { l, cs })
+                .SelectMany(x => x.cs.DefaultIfEmpty(), (x, c) => new { x.l, c })
+                .ToListAsync();
+            if (!byDue && !byPriority) rows.Reverse(); // the newest N were fetched; show them oldest first so the latest lead sits at the bottom
+
+            var ids = rows.Select(r => r.l.Id).ToList();
+            var last = await db.WhatsAppMessages.AsNoTracking()
+                .Where(m => m.LeadId != null && ids.Contains(m.LeadId.Value)
+                    && m.Id == db.WhatsAppMessages.Where(x => x.LeadId == m.LeadId).Max(x => x.Id))
+                .ToListAsync();
+            var lastByLead = last.GroupBy(m => m.LeadId!.Value).ToDictionary(g => g.Key, g => g.First());
+            var names = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
+
+            var nextFu = (await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Pending && ids.Contains(f.LeadId)).GroupBy(f => f.LeadId).Select(g => new { g.Key, At = g.Min(x => x.DueAt) }).ToListAsync()).ToDictionary(x => x.Key, x => x.At);
+            var orderStats = await OrderStatsAsync(rows.Select(r => r.l));
+            var dueTodayIds = (await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Pending && f.DueAt >= todayStart && f.DueAt < dayEnd && ids.Contains(f.LeadId)).Select(f => f.LeadId).Distinct().ToListAsync()).ToHashSet();
+            var noAnswerIds = (await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Done && f.Outcome != null && ids.Contains(f.LeadId))
+                    .OrderByDescending(f => f.CompletedAt).ThenByDescending(f => f.Id).Select(f => new { f.LeadId, f.Outcome }).ToListAsync())
+                .GroupBy(x => x.LeadId).Where(g => g.First().Outcome!.StartsWith(FollowUpOutcomes.NoAnswer)).Select(g => g.Key).ToHashSet();
+
+            return new LeadListResponse
+            {
+                Success = true,
+                Leads = rows.Select(r =>
+                {
+                    var dto = r.l.ToDto(r.c);
+                    dto.AssignedToName = r.l.AssignedToEmployeeId is { } eid ? names.GetValueOrDefault(eid) : null;
+                    dto.ConvertedByName = r.l.ConvertedByEmployeeId is { } cid ? names.GetValueOrDefault(cid) : null;
+                    dto.PendingTransferToName = r.l.PendingTransferToEmployeeId is { } toId ? names.GetValueOrDefault(toId) : null;
+                    dto.PendingTransferFromName = r.l.PendingTransferFromEmployeeId is { } fromId ? names.GetValueOrDefault(fromId) : null;
+                    if (nextFu.TryGetValue(r.l.Id, out var nf)) dto.NextFollowUpAt = nf;
+                    dto.NoAnswer = r.l.Status == Nuraherbex.Shared.Models.LeadStatus.NoAnswer || noAnswerIds.Contains(r.l.Id);
+                    dto.FollowUpToday = dueTodayIds.Contains(r.l.Id);
+                    if (orderStats.TryGetValue(r.l.Id, out var os)) { dto.OrderCount = os.Count; dto.LifetimeValue = os.Value; dto.LastOrderAt = os.Last; dto.OpenOrders = os.Open; }
+                    if (lastByLead.TryGetValue(r.l.Id, out var m))
+                    {
+                        dto.LastMessage = string.IsNullOrEmpty(m.Body) ? Mapping.MessageLabel(m.Type) : m.Body.Length > 90 ? m.Body[..(char.IsHighSurrogate(m.Body[89]) ? 89 : 90)] + "…" : m.Body;
+                        dto.LastMessageDirection = m.Direction;
+                    }
+                    return dto;
+                }).ToList(),
+                Total = await filtered.CountAsync(),
+                StatusCounts = statusCounts,
+                ViewCounts = viewCounts,
+                ViewUnread = viewUnread,
+                UnreadTotal = await db.Conversations.AsNoTracking().Where(c => c.UnreadCount > 0 && scopeQuery.Any(l => l.Id == c.LeadId)).SumAsync(c => (int?)c.UnreadCount) ?? 0,
+                UnassignedCount = CanAll(view == LeadViews.Transfers ? LeadViews.Leads : view) ? await InView(db.Leads.AsNoTracking(), view).CountAsync(l => l.AssignedToEmployeeId == null) : 0,
+                PendingTransfersCount = await db.Leads.AsNoTracking().CountAsync(l => l.PendingTransferToEmployeeId == MyId),
+            };
+        }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "[StaffController.Leads] Failed to load leads: {Message}", ex.Message);
+            return new LeadListResponse
+            {
+                Success = false,
+                Message = $"Database error: {ex.Message}",
+            };
+        }
     }
 
     /// <summary>True when the lead's most recent finished follow-up ended with "no answer".</summary>
@@ -190,7 +238,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         LeadBuckets.New => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.New && l.CreatedAt >= newFrom).Where(NoAnswerOf(false)),
         LeadBuckets.Older => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.New && l.CreatedAt < newFrom).Where(NoAnswerOf(false)),
         LeadBuckets.FollowUp => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.FollowUp).Where(NoAnswerOf(false)),
-        LeadBuckets.NoAnswer => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.New || l.Status == Nuraherbex.Shared.Models.LeadStatus.FollowUp).Where(NoAnswerOf(true)),
+        LeadBuckets.NoAnswer => q.Where(NoAnswerOf(true)),
         LeadBuckets.NotInterested => q.Where(l => l.Status == Nuraherbex.Shared.Models.LeadStatus.NotInterested),
         _ => q.Where(_ => false),
     };
@@ -233,6 +281,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     {
         Id = o.Id, CreatedAt = o.CreatedAt, TotalAmount = o.TotalAmount, PaymentMethod = o.PaymentMethod.ToCode(), PaymentStatus = o.PaymentStatus.ToCode(),
         DeliveryStatus = o.DeliveryStatus, FulfillmentStatus = o.FulfillmentStatus, Courier = o.Courier,
+        ShippingMode = o.ShippingMode, OfflineDispatchNote = o.OfflineDispatchNote,
         Awb = string.IsNullOrEmpty(o.ShiprocketAwb) || o.ShiprocketAwb.StartsWith("SR-PENDING-") ? null : o.ShiprocketAwb,
         DeliveredAt = o.DeliveredAt, Items = string.Join(", ", o.Items.Select(i => $"{i.Name} x {i.Quantity}")),
     };
@@ -276,6 +325,8 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
                 Items = r.Items.GroupBy(i => i.ProductId).Select(g => new CartLineDto { Id = g.Key, Quantity = g.Sum(x => x.Quantity) }).ToList(),
                 CouponCode = string.IsNullOrWhiteSpace(r.CouponCode) ? null : r.CouponCode.Trim(),
                 PaymentMethod = r.AlreadyPaid ? "ONLINE" : "COD",
+                ShippingMode = r.ShippingMode,
+                OfflineDispatchNote = r.OfflineDispatchNote,
             }, resolvedCustomerId, emailOptional: true);
 
             if (r.AlreadyPaid)
@@ -294,14 +345,14 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
-    /// <summary>Loads a lead the caller may see: any lead for admins, only their own for sales (404 otherwise, so ids do not leak).</summary>
+    /// <summary>Loads a lead the caller may see: any lead for admins, only their own or pending transferred to them for sales (404 otherwise, so ids do not leak).</summary>
     private async Task<Lead?> FindLeadAsync(long id)
     {
         var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == id);
         if (lead is null) return null;
         var page = PageOf(lead); // customers follow Customer care rights, interested leads follow Hot leads rights
         if (Level(page) < 1) return null;
-        return !CanAll(page) && lead.AssignedToEmployeeId != MyId ? null : lead;
+        return !CanAll(page) && lead.AssignedToEmployeeId != MyId && lead.PendingTransferToEmployeeId != MyId ? null : lead;
     }
 
     private static NotFoundObjectResult NoLead() => new(new ApiResult { Success = false, Message = "Lead not found" });
@@ -309,12 +360,15 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     [HttpGet("leads/{id:long}")]
     public async Task<IActionResult> LeadDetail(long id)
     {
+        await leads.ExpirePendingTransfersAsync();
         var lead = await FindLeadAsync(id);
         if (lead is null) return NoLead();
         var convo = await db.Conversations.FirstOrDefaultAsync(c => c.LeadId == id);
         var dto = lead.ToDto(convo);
         if (lead.AssignedToEmployeeId is { } eid) dto.AssignedToName = await db.Employees.AsNoTracking().Where(e => e.Id == eid).Select(e => e.Name).FirstOrDefaultAsync();
         if (lead.ConvertedByEmployeeId is { } cid) dto.ConvertedByName = await db.Employees.AsNoTracking().Where(e => e.Id == cid).Select(e => e.Name).FirstOrDefaultAsync();
+        if (lead.PendingTransferToEmployeeId is { } toId) dto.PendingTransferToName = await db.Employees.AsNoTracking().Where(e => e.Id == toId).Select(e => e.Name).FirstOrDefaultAsync();
+        if (lead.PendingTransferFromEmployeeId is { } fromId) dto.PendingTransferFromName = await db.Employees.AsNoTracking().Where(e => e.Id == fromId).Select(e => e.Name).FirstOrDefaultAsync();
         if (convo is { UnreadCount: > 0 }) { convo.UnreadCount = 0; await db.SaveChangesAsync(); }
 
         var messages = await db.WhatsAppMessages.AsNoTracking().Where(m => m.LeadId == id).OrderByDescending(m => m.CreatedAt).Take(200).ToListAsync();
@@ -332,7 +386,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         return Ok(new LeadDetailResponse
         {
             Success = true, Lead = dto,
-            FollowUps = fus.Select(f => f.ToDto(lead.Name, lead.Phone, f.AssignedToEmployeeId is { } oid ? names.GetValueOrDefault(oid) : null, names)).ToList(),
+            FollowUps = fus.Select(f => f.ToDto(lead.Name, lead.Phone, f.AssignedToEmployeeId is { } oid ? names.GetValueOrDefault(oid) : null, names, !string.IsNullOrWhiteSpace(lead.Notes) ? lead.Notes : lead.AssessmentNotes, lead.Priority.ToCode())).ToList(),
             Orders = leadOrders.Select(ToLeadOrder).ToList(),
             Messages = messages.OrderBy(m => m.CreatedAt).Select(m => m.ToDto(signer)).ToList(),
             History = history.Select(h => new LeadStatusHistoryDto { FromStatus = h.FromStatus?.ToCode(), ToStatus = h.ToStatus.ToCode(), Note = h.Note, ChangedBy = ResolveChangedBy(h.ChangedBy, names, "system"), CreatedAt = h.CreatedAt }).ToList(),
@@ -395,11 +449,37 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     {
         var lead = await FindLeadAsync(id);
         if (lead is null) return NoLead();
-        var notes = r.Notes?.Trim();
-        lead.Notes = string.IsNullOrEmpty(notes) ? null : notes[..Math.Min(notes.Length, 4000)];
-        lead.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
-        return Ok(new ApiResult { Success = true, Message = "Notes saved" });
+        var (ok, message) = await leads.SaveNotesAsync(id, r.Notes);
+        return ok ? Ok(new ApiResult { Success = true, Message = message }) : BadRequest(new ApiResult { Success = false, Message = message });
+    }
+
+    [HttpPut("leads/{id:long}/details")]
+    public async Task<IActionResult> LeadDetails(long id, LeadDetailsUpdateRequest r)
+    {
+        var lead = await FindLeadAsync(id);
+        if (lead is null) return NoLead();
+        var (ok, message) = await leads.UpdateDetailsAsync(id, r);
+        return ok ? Ok(new ApiResult { Success = true, Message = message }) : BadRequest(new ApiResult { Success = false, Message = message });
+    }
+
+    [HttpPut("leads/{id:long}/priority")]
+    public async Task<IActionResult> LeadPriority(long id, LeadPriorityRequest r)
+    {
+        if (!LeadPriorities.TryParse(r.Priority, out var priority))
+            return BadRequest(new ApiResult { Success = false, Message = "Choose Normal or High priority." });
+        var lead = await FindLeadAsync(id);
+        if (lead is null) return NoLead();
+        var (ok, message) = await leads.ChangePriorityAsync(id, priority, r.Note, MyActorId);
+        return ok ? Ok(new ApiResult { Success = true, Message = message }) : BadRequest(new ApiResult { Success = false, Message = message });
+    }
+
+    [HttpPut("leads/{id:long}/assessment")]
+    public async Task<IActionResult> LeadAssessment(long id, LeadAssessmentRequest r)
+    {
+        var lead = await FindLeadAsync(id);
+        if (lead is null) return NoLead();
+        var (ok, message) = await leads.SaveAssessmentAsync(id, r, MyActorId);
+        return ok ? Ok(new ApiResult { Success = true, Message = message }) : BadRequest(new ApiResult { Success = false, Message = message });
     }
 
     /// <summary>Record the customer's WhatsApp consent after asking them (on a call or in chat). Unlocks automatic follow-up messages.</summary>
@@ -420,6 +500,10 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     [HttpPut("leads/{id:long}/assign")]
     public async Task<IActionResult> LeadAssign(long id, LeadAssignRequest r)
     {
+        if (r.AsTransfer && r.EmployeeId is { } targetEmp)
+        {
+            return await TransferLead(id, new LeadTransferRequest { EmployeeId = targetEmp, Reason = r.Reason });
+        }
         var lead = await FindLeadAsync(id);
         if (lead is null) return NoLead();
         if (r.EmployeeId is null && !CanAll(PageOf(lead))) return StatusCode(403, new ApiResult { Success = false, Message = "Only an administrator can unassign a lead." });
@@ -432,6 +516,349 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         await leads.AssignAsync(lead, r.EmployeeId, string.IsNullOrWhiteSpace(r.Reason) ? (CanAll(PageOf(lead)) ? "Assigned by manager" : "Transferred by owner") : r.Reason, MyActorId);
         await db.SaveChangesAsync();
         return Ok(new ApiResult { Success = true, Message = r.EmployeeId is null ? "Lead unassigned" : "Lead assigned" });
+    }
+
+    /// <summary>Transfer a lead to a colleague. Places it in the recipient's "Pending Transfers" queue awaiting Accept or Reject (auto-expires in 24h).</summary>
+    [HttpPost("leads/{id:long}/transfer")]
+    public async Task<IActionResult> TransferLead(long id, LeadTransferRequest r)
+    {
+        await leads.ExpirePendingTransfersAsync();
+        var lead = await FindLeadAsync(id);
+        if (lead is null) return NoLead();
+        if (r.EmployeeId <= 0) return BadRequest(new ApiResult { Success = false, Message = "Please select an employee to transfer to." });
+
+        var target = await db.Employees.AsNoTracking().FirstOrDefaultAsync(e => e.Id == r.EmployeeId && e.IsActive);
+        if (target is null) return BadRequest(new ApiResult { Success = false, Message = "That employee is not active." });
+        if (!CanAll(PageOf(lead)) && target.Role != EmployeeRole.Sales) return BadRequest(new ApiResult { Success = false, Message = "Leads can only be transferred to a sales employee." });
+        if (lead.AssignedToEmployeeId == r.EmployeeId && lead.PendingTransferToEmployeeId == null)
+            return BadRequest(new ApiResult { Success = false, Message = $"{target.Name} already owns this lead." });
+
+        var senderId = MyId ?? lead.AssignedToEmployeeId;
+        var now = DateTime.UtcNow;
+        lead.PendingTransferToEmployeeId = r.EmployeeId;
+        lead.PendingTransferFromEmployeeId = senderId;
+        lead.PendingTransferRequestedAt = now;
+        lead.PendingTransferReason = r.Reason;
+        lead.UpdatedAt = now;
+
+        db.LeadAssignmentHistory.Add(new LeadAssignmentHistory
+        {
+            LeadId = lead.Id,
+            FromEmployeeId = senderId,
+            ToEmployeeId = r.EmployeeId,
+            Reason = string.IsNullOrWhiteSpace(r.Reason) ? $"Transfer requested to {target.Name}" : $"Transfer requested to {target.Name}: {r.Reason.Trim()}",
+            ChangedBy = MyActorId,
+            CreatedAt = now,
+        });
+
+        db.Notifications.Add(new Notification
+        {
+            EmployeeId = target.Id,
+            Kind = "transfer",
+            Title = $"Lead transferred to you: {lead.Name}",
+            Body = $"Transferred by {MyName}. Awaiting your acceptance in Pending Transfers.",
+            Link = "/admin/leads?view=transfers",
+            CreatedAt = now,
+        });
+
+        await db.SaveChangesAsync();
+        return Ok(new ApiResult { Success = true, Message = $"Transfer request sent to {target.Name}. Waiting in Pending Transfers for acceptance." });
+    }
+
+    /// <summary>Accept an incoming lead transfer. The lead moves into the recipient's active leads list.</summary>
+    [HttpPost("leads/{id:long}/transfer/accept")]
+    public async Task<IActionResult> AcceptTransfer(long id)
+    {
+        await leads.ExpirePendingTransfersAsync();
+        var lead = await FindLeadAsync(id);
+        if (lead is null) return NoLead();
+        if (lead.PendingTransferToEmployeeId == null)
+            return BadRequest(new ApiResult { Success = false, Message = "This lead does not have a pending transfer." });
+
+        if (!CanAll(PageOf(lead)) && lead.PendingTransferToEmployeeId != MyId)
+            return StatusCode(403, new ApiResult { Success = false, Message = "You are not the designated recipient for this transfer." });
+
+        var receiverId = lead.PendingTransferToEmployeeId;
+        var senderId = lead.PendingTransferFromEmployeeId;
+        var now = DateTime.UtcNow;
+
+        lead.AssignedToEmployeeId = receiverId;
+        lead.AssignedAt = now;
+        lead.UpdatedAt = now;
+
+        lead.PendingTransferToEmployeeId = null;
+        lead.PendingTransferFromEmployeeId = null;
+        lead.PendingTransferRequestedAt = null;
+        lead.PendingTransferReason = null;
+
+        if (receiverId is { } rid)
+        {
+            var emp = await db.Employees.FirstOrDefaultAsync(e => e.Id == rid);
+            if (emp is not null) emp.LastAssignedAt = now;
+        }
+
+        // Pending follow-ups follow lead to new owner
+        var fus = await db.FollowUps.Where(f => f.LeadId == lead.Id && f.Status == FollowUpStatus.Pending).ToListAsync();
+        foreach (var f in fus)
+        {
+            f.AssignedToEmployeeId = receiverId;
+            f.ReminderSentAt = null;
+            f.DueNotifiedAt = null;
+        }
+
+        db.LeadAssignmentHistory.Add(new LeadAssignmentHistory
+        {
+            LeadId = lead.Id,
+            FromEmployeeId = senderId,
+            ToEmployeeId = receiverId,
+            Reason = "Transfer accepted by receiver",
+            ChangedBy = MyActorId,
+            CreatedAt = now,
+        });
+
+        await db.SaveChangesAsync();
+        return Ok(new ApiResult { Success = true, Message = "Transfer accepted. Lead added to your list." });
+    }
+
+    /// <summary>Reject an incoming lead transfer. The lead is immediately returned to the original sender.</summary>
+    [HttpPost("leads/{id:long}/transfer/reject")]
+    public async Task<IActionResult> RejectTransfer(long id, [FromBody] LeadTransferRejectRequest? r = null)
+    {
+        await leads.ExpirePendingTransfersAsync();
+        var lead = await FindLeadAsync(id);
+        if (lead is null) return NoLead();
+        if (lead.PendingTransferToEmployeeId == null)
+            return BadRequest(new ApiResult { Success = false, Message = "This lead does not have a pending transfer." });
+
+        if (!CanAll(PageOf(lead)) && lead.PendingTransferToEmployeeId != MyId)
+            return StatusCode(403, new ApiResult { Success = false, Message = "You are not the designated recipient for this transfer." });
+
+        var receiverId = lead.PendingTransferToEmployeeId;
+        var senderId = lead.PendingTransferFromEmployeeId;
+        var now = DateTime.UtcNow;
+
+        var names = await db.Employees.AsNoTracking().Where(e => e.Id == senderId || e.Id == receiverId).ToDictionaryAsync(e => e.Id, e => e.Name);
+        var senderName = senderId.HasValue ? names.GetValueOrDefault(senderId.Value) ?? "Original owner" : "Admin";
+
+        lead.AssignedToEmployeeId = senderId;
+        lead.AssignedAt = now;
+        lead.UpdatedAt = now;
+
+        lead.PendingTransferToEmployeeId = null;
+        lead.PendingTransferFromEmployeeId = null;
+        lead.PendingTransferRequestedAt = null;
+        lead.PendingTransferReason = null;
+
+        var fus = await db.FollowUps.Where(f => f.LeadId == lead.Id && f.Status == FollowUpStatus.Pending).ToListAsync();
+        foreach (var f in fus) f.AssignedToEmployeeId = senderId;
+
+        var rejectReason = !string.IsNullOrWhiteSpace(r?.Reason)
+            ? $"Transfer rejected by receiver: {r.Reason.Trim()}; returned to {senderName}"
+            : $"Transfer rejected by receiver; returned to {senderName}";
+
+        db.LeadAssignmentHistory.Add(new LeadAssignmentHistory
+        {
+            LeadId = lead.Id,
+            FromEmployeeId = receiverId,
+            ToEmployeeId = senderId,
+            Reason = rejectReason,
+            ChangedBy = MyActorId,
+            CreatedAt = now,
+        });
+
+        await db.SaveChangesAsync();
+        return Ok(new ApiResult { Success = true, Message = $"Transfer rejected. Returned to {senderName}." });
+    }
+
+    /// <summary>Bulk transfer multiple leads to a colleague. Places each selected lead into recipient's "Pending Transfers" queue.</summary>
+    [HttpPost("leads/bulk-transfer")]
+    public async Task<IActionResult> BulkTransferLeads([FromBody] LeadBulkTransferRequest r, [FromServices] FollowUpService followUps)
+    {
+        if (r.LeadIds == null || r.LeadIds.Count == 0)
+            return BadRequest(new ApiResult { Success = false, Message = "Please select at least one lead to transfer." });
+
+        if (r.EmployeeId <= 0)
+            return BadRequest(new ApiResult { Success = false, Message = "Please select an employee to transfer to." });
+
+        var target = await db.Employees.AsNoTracking().FirstOrDefaultAsync(e => e.Id == r.EmployeeId && e.IsActive);
+        if (target is null)
+            return BadRequest(new ApiResult { Success = false, Message = "That employee is not active." });
+
+        await leads.ExpirePendingTransfersAsync();
+        var now = DateTime.UtcNow;
+        var senderId = MyId;
+        var transferred = 0;
+        var skipped = 0;
+
+        var leadIds = r.LeadIds.Distinct().ToList();
+        var leadEntities = await db.Leads.Where(l => leadIds.Contains(l.Id)).ToListAsync();
+
+        foreach (var lead in leadEntities)
+        {
+            var page = PageOf(lead);
+            if (Level(page) < 1) { skipped++; continue; }
+            if (!CanAll(page) && lead.AssignedToEmployeeId != MyId) { skipped++; continue; }
+            if (!CanAll(page) && target.Role != EmployeeRole.Sales) { skipped++; continue; }
+            if (lead.AssignedToEmployeeId == r.EmployeeId && lead.PendingTransferToEmployeeId == null) { skipped++; continue; }
+
+            lead.PendingTransferToEmployeeId = r.EmployeeId;
+            lead.PendingTransferFromEmployeeId = senderId ?? lead.AssignedToEmployeeId;
+            lead.PendingTransferRequestedAt = now;
+            lead.PendingTransferReason = r.Reason;
+            lead.UpdatedAt = now;
+
+            db.LeadAssignmentHistory.Add(new LeadAssignmentHistory
+            {
+                LeadId = lead.Id,
+                FromEmployeeId = senderId ?? lead.AssignedToEmployeeId,
+                ToEmployeeId = r.EmployeeId,
+                Reason = string.IsNullOrWhiteSpace(r.Reason) ? $"Bulk transfer requested to {target.Name}" : $"Bulk transfer to {target.Name}: {r.Reason.Trim()}",
+                ChangedBy = MyActorId,
+                CreatedAt = now,
+            });
+            transferred++;
+        }
+
+        if (transferred > 0)
+        {
+            followUps.Notify(target.Id, "transfer", $"{transferred} lead(s) transferred to you", $"Transferred by {MyName}. Awaiting your acceptance in Pending Transfers.", "/admin/leads?view=transfers");
+            await db.SaveChangesAsync();
+        }
+
+        return Ok(new LeadBulkTransferResponse
+        {
+            Success = transferred > 0,
+            TransferredCount = transferred,
+            FailedCount = skipped,
+            Message = transferred > 0
+                ? $"{transferred} lead(s) transferred to {target.Name}. Waiting in Pending Transfers for acceptance."
+                : "No leads were transferred. (Check ownership or recipient)."
+        });
+    }
+
+    /// <summary>Accept multiple pending transfers in bulk.</summary>
+    [HttpPost("leads/transfers/bulk-accept")]
+    public async Task<IActionResult> BulkAcceptTransfers([FromBody] LeadBulkActionRequest r)
+    {
+        await leads.ExpirePendingTransfersAsync();
+        var now = DateTime.UtcNow;
+        var q = db.Leads.Where(l => l.PendingTransferToEmployeeId != null);
+        if (r.LeadIds != null && r.LeadIds.Count > 0)
+        {
+            var ids = r.LeadIds.Distinct().ToList();
+            q = q.Where(l => ids.Contains(l.Id));
+        }
+        if (!CanAll(LeadViews.Leads))
+        {
+            q = q.Where(l => l.PendingTransferToEmployeeId == MyId);
+        }
+
+        var transfers = await q.ToListAsync();
+        if (transfers.Count == 0)
+            return BadRequest(new ApiResult { Success = false, Message = "No pending transfers to accept." });
+
+        var accepted = 0;
+        foreach (var lead in transfers)
+        {
+            var receiverId = lead.PendingTransferToEmployeeId;
+            var senderId = lead.PendingTransferFromEmployeeId;
+
+            lead.AssignedToEmployeeId = receiverId;
+            lead.AssignedAt = now;
+            lead.UpdatedAt = now;
+
+            lead.PendingTransferToEmployeeId = null;
+            lead.PendingTransferFromEmployeeId = null;
+            lead.PendingTransferRequestedAt = null;
+            lead.PendingTransferReason = null;
+
+            if (receiverId is { } rid)
+            {
+                var emp = await db.Employees.FirstOrDefaultAsync(e => e.Id == rid);
+                if (emp is not null) emp.LastAssignedAt = now;
+            }
+
+            var fus = await db.FollowUps.Where(f => f.LeadId == lead.Id && f.Status == FollowUpStatus.Pending).ToListAsync();
+            foreach (var f in fus)
+            {
+                f.AssignedToEmployeeId = receiverId;
+                f.ReminderSentAt = null;
+                f.DueNotifiedAt = null;
+            }
+
+            db.LeadAssignmentHistory.Add(new LeadAssignmentHistory
+            {
+                LeadId = lead.Id,
+                FromEmployeeId = senderId,
+                ToEmployeeId = receiverId,
+                Reason = "Bulk transfer accepted by receiver",
+                ChangedBy = MyActorId,
+                CreatedAt = now,
+            });
+            accepted++;
+        }
+
+        await db.SaveChangesAsync();
+        return Ok(new ApiResult { Success = true, Message = $"{accepted} transfer(s) accepted and added to active leads." });
+    }
+
+    /// <summary>Reject multiple pending transfers in bulk.</summary>
+    [HttpPost("leads/transfers/bulk-reject")]
+    public async Task<IActionResult> BulkRejectTransfers([FromBody] LeadBulkActionRequest r)
+    {
+        await leads.ExpirePendingTransfersAsync();
+        var now = DateTime.UtcNow;
+        var q = db.Leads.Where(l => l.PendingTransferToEmployeeId != null);
+        if (r.LeadIds != null && r.LeadIds.Count > 0)
+        {
+            var ids = r.LeadIds.Distinct().ToList();
+            q = q.Where(l => ids.Contains(l.Id));
+        }
+        if (!CanAll(LeadViews.Leads))
+        {
+            q = q.Where(l => l.PendingTransferToEmployeeId == MyId);
+        }
+
+        var transfers = await q.ToListAsync();
+        if (transfers.Count == 0)
+            return BadRequest(new ApiResult { Success = false, Message = "No pending transfers to reject." });
+
+        var rejected = 0;
+        foreach (var lead in transfers)
+        {
+            var receiverId = lead.PendingTransferToEmployeeId;
+            var senderId = lead.PendingTransferFromEmployeeId;
+
+            lead.AssignedToEmployeeId = senderId;
+            lead.AssignedAt = now;
+            lead.UpdatedAt = now;
+
+            lead.PendingTransferToEmployeeId = null;
+            lead.PendingTransferFromEmployeeId = null;
+            lead.PendingTransferRequestedAt = null;
+            lead.PendingTransferReason = null;
+
+            var fus = await db.FollowUps.Where(f => f.LeadId == lead.Id && f.Status == FollowUpStatus.Pending).ToListAsync();
+            foreach (var f in fus) f.AssignedToEmployeeId = senderId;
+
+            var rejectReason = !string.IsNullOrWhiteSpace(r.Reason)
+                ? $"Bulk transfer rejected: {r.Reason.Trim()}"
+                : "Bulk transfer rejected by receiver";
+
+            db.LeadAssignmentHistory.Add(new LeadAssignmentHistory
+            {
+                LeadId = lead.Id,
+                FromEmployeeId = receiverId,
+                ToEmployeeId = senderId,
+                Reason = rejectReason,
+                ChangedBy = MyActorId,
+                CreatedAt = now,
+            });
+            rejected++;
+        }
+
+        await db.SaveChangesAsync();
+        return Ok(new ApiResult { Success = true, Message = $"{rejected} transfer(s) rejected and returned to sender." });
     }
 
     /// <summary>Reply to a lead on WhatsApp. Sales users can only reply to their own leads; consent and the 24h window are enforced here too.</summary>
@@ -483,6 +910,26 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         }
         if (ok) { await library.CountSentAsync(file.Id); log.LogInformation("[Lead] {Who} sent library file {File} to lead {Id} ({Mode})", MyName, file.Title, id, r.Mode); }
         return Ok(new ApiResult { Success = ok, Message = ok ? (r.Mode == "link" ? "Link sent" : "File sent") : whatsapp.LastError ?? "The file could not be sent. Check the WhatsApp credentials in the server configuration." });
+    }
+
+    /// <summary>Shares a Google Drive product video or catalog link via WhatsApp (restricted to roles with Drive access).</summary>
+    [HttpPost("leads/{id:long}/send-drive")]
+    public async Task<IActionResult> SendDrive(long id, DriveShareRequest r, [FromServices] GoogleDriveService drive, CancellationToken ct)
+    {
+        if (!IsAdmin && Level("drive_files") < PageCatalog.Limited)
+            return StatusCode(403, new ApiResult { Success = false, Message = "Only Sales Manager / Operations team can share Google Drive files." });
+        var lead = await FindLeadAsync(id);
+        if (lead is null) return NoLead();
+        if (await CannotSendFreeFormAsync(lead) is { } why) return BadRequest(new ApiResult { Success = false, Message = why });
+        var shared = await drive.EnsureShareLinkAsync(r.FileId, ct);
+        if (!shared.Success || string.IsNullOrWhiteSpace(shared.ShareUrl))
+            return BadRequest(new ApiResult { Success = false, Message = shared.Message ?? "Could not generate Google Drive link." });
+        var fileName = shared.File?.Name ?? r.FileName;
+        var caption = string.IsNullOrWhiteSpace(r.Caption) ? fileName : r.Caption.Trim()[..Math.Min(r.Caption.Trim().Length, 900)];
+        var text = string.IsNullOrWhiteSpace(caption) ? shared.ShareUrl : $"{caption}\n{shared.ShareUrl}";
+        var ok = await whatsapp.SendTextAsync(lead.Phone, text, sentBy: MyName);
+        if (ok) log.LogInformation("[Lead] {Who} shared Drive file {File} to lead {Id}", MyName, fileName ?? r.FileId, id);
+        return Ok(new ApiResult { Success = ok, Message = ok ? "Google Drive link sent on WhatsApp" : whatsapp.LastError ?? "The message could not be sent." });
     }
 
     /// <summary>

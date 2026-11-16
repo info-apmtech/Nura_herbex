@@ -23,24 +23,40 @@ public class CrmDashboardService(NuraDbContext db)
         return (int)Math.Round(minutes.Count % 2 == 1 ? minutes[mid] : (minutes[mid - 1] + minutes[mid]) / 2);
     }
 
-    public async Task<CrmDashboardResponse> BuildAsync(int days, long? onlyEmployee)
+    public async Task<CrmDashboardResponse> BuildAsync(int days, long? onlyEmployee, DateTime? customFrom = null, DateTime? customTo = null)
     {
         days = Math.Clamp(days, 1, 365);
         var now = DateTime.UtcNow;
         var todayStart = FollowUpService.TodayStartUtc();
-        var from = todayStart.AddDays(-(days - 1));
+        
+        DateTime from;
+        DateTime toExclusive;
+        if (customFrom.HasValue && customTo.HasValue)
+        {
+            var f = customFrom.Value.Date;
+            var t = customTo.Value.Date;
+            if (f > t) (f, t) = (t, f);
+            from = TimeZoneInfo.ConvertTimeToUtc(f, Ist);
+            toExclusive = TimeZoneInfo.ConvertTimeToUtc(t.AddDays(1), Ist);
+            days = Math.Max(1, (t - f).Days + 1);
+        }
+        else
+        {
+            from = todayStart.AddDays(-(days - 1));
+            toExclusive = now.AddMinutes(5);
+        }
 
         // ---- leads ----
         var leadQ = db.Leads.AsNoTracking().AsQueryable();
         if (onlyEmployee is { } me) leadQ = leadQ.Where(l => l.AssignedToEmployeeId == me);
 
-        var createdQ = leadQ.Where(l => l.CreatedAt >= from).Where(LeadService.IsNewEnquiry);
+        var createdQ = leadQ.Where(l => l.CreatedAt >= from && l.CreatedAt < toExclusive).Where(LeadService.IsNewEnquiry);
         var adLeads = await createdQ.CountAsync(l => db.LeadSourceEvents.Any(e => e.LeadId == l.Id && e.ReferralJson != null));
         var created = await createdQ.Select(l => new { l.Id, l.Source, l.Status, l.CreatedAt, l.Phone, l.AssignedToEmployeeId, l.ConvertedAt }).ToListAsync();
-        var convertedInPeriod = await leadQ.CountAsync(l => l.ConvertedAt != null && l.ConvertedAt >= from);
+        var convertedInPeriod = await leadQ.CountAsync(l => l.ConvertedAt != null && l.ConvertedAt >= from && l.ConvertedAt < toExclusive);
         var report = new CrmDashboardResponse
         {
-            Success = true, Days = days, From = from, Personal = onlyEmployee is not null,
+            Success = true, Days = days, From = from, To = toExclusive.AddSeconds(-1), Personal = onlyEmployee is not null,
             NewLeads = created.Count, AdLeads = adLeads,
             ConvertedLeads = convertedInPeriod,
             ConversionRate = created.Count == 0 ? 0 : (int)Math.Round(100.0 * created.Count(l => l.Status == LeadStatus.Converted) / created.Count),
@@ -54,7 +70,7 @@ public class CrmDashboardService(NuraDbContext db)
         var allLeads = await leadQ.Select(l => new { l.Id, l.Phone, l.Source, l.AssignedToEmployeeId }).ToListAsync();
         var byPhone = new Dictionary<string, (long Id, LeadSource Source, long? Owner)>();
         foreach (var l in allLeads) byPhone[Last10(l.Phone)] = (l.Id, l.Source, l.AssignedToEmployeeId);
-        var orders = (await db.Orders.AsNoTracking().Where(o => o.CreatedAt >= from)
+        var orders = (await db.Orders.AsNoTracking().Where(o => o.CreatedAt >= from && o.CreatedAt < toExclusive)
                 .Select(o => new { o.CustomerPhone, o.TotalAmount, o.PaymentStatus, o.FulfillmentStatus, o.CreatedAt }).ToListAsync())
             .Where(o => Counts(o.PaymentStatus, o.FulfillmentStatus) && byPhone.ContainsKey(Last10(o.CustomerPhone))).ToList();
         report.Orders = orders.Count;
@@ -63,7 +79,7 @@ public class CrmDashboardService(NuraDbContext db)
 
         // ---- first reply by a person ----
         var firstMsgs = await db.WhatsAppMessages.AsNoTracking()
-            .Where(m => m.LeadId != null && m.CreatedAt >= from.AddDays(-1))
+            .Where(m => m.LeadId != null && m.CreatedAt >= from.AddDays(-1) && m.CreatedAt < toExclusive)
             .Select(m => new { LeadId = m.LeadId!.Value, m.Direction, m.CreatedAt, m.SentBy }).ToListAsync();
         var inScope = allLeads.Select(l => l.Id).ToHashSet();
         var replyMinutes = new Dictionary<long, double>();
@@ -71,7 +87,7 @@ public class CrmDashboardService(NuraDbContext db)
         foreach (var g in firstMsgs.Where(m => inScope.Contains(m.LeadId)).GroupBy(m => m.LeadId))
         {
             var inbound = g.Where(m => m.Direction == "inbound").OrderBy(m => m.CreatedAt).FirstOrDefault();
-            if (inbound is null || inbound.CreatedAt < from) continue;
+            if (inbound is null || inbound.CreatedAt < from || inbound.CreatedAt >= toExclusive) continue;
             var reply = g.Where(m => m.Direction == "outbound" && m.CreatedAt >= inbound.CreatedAt && m.SentBy is not (null or "system" or "auto")).OrderBy(m => m.CreatedAt).FirstOrDefault();
             if (reply is null) { if (now - inbound.CreatedAt > TimeSpan.FromHours(1)) awaiting++; }
             else replyMinutes[g.Key] = (reply.CreatedAt - inbound.CreatedAt).TotalMinutes;
@@ -108,7 +124,7 @@ public class CrmDashboardService(NuraDbContext db)
         var overdue = await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Pending && f.DueAt < todayStart && f.AssignedToEmployeeId != null)
             .GroupBy(f => f.AssignedToEmployeeId!.Value).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N);
         var leadOwner = allLeads.ToDictionary(l => l.Id, l => l.AssignedToEmployeeId);
-        var wonByOwner = (await leadQ.Where(l => l.ConvertedAt != null && l.ConvertedAt >= from).Select(l => l.AssignedToEmployeeId).ToListAsync()).GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count());
+        var wonByOwner = (await leadQ.Where(l => l.ConvertedAt != null && l.ConvertedAt >= from && l.ConvertedAt < toExclusive).Select(l => l.AssignedToEmployeeId).ToListAsync()).GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count());
         foreach (var id in names.Keys.Where(k => onlyEmployee is null || k == onlyEmployee))
         {
             var mine = replyMinutes.Where(kv => leadOwner.GetValueOrDefault(kv.Key) == id).Select(kv => kv.Value).ToList();

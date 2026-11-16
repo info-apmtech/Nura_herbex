@@ -10,6 +10,7 @@ public enum LeadStatus
     FollowUp = 3,
     Converted = 4,
     NotInterested = 5,
+    NoAnswer = 6,
 }
 
 public static class LeadStatuses
@@ -19,7 +20,8 @@ public static class LeadStatuses
     public const string FollowUp = "follow-up";
     public const string Converted = "converted";
     public const string NotInterested = "not-interested";
-    public static readonly string[] All = [New, Interested, FollowUp, Converted, NotInterested];
+    public const string NoAnswer = "no-answer";
+    public static readonly string[] All = [New, Interested, FollowUp, Converted, NotInterested, NoAnswer];
 
     public static string ToCode(this LeadStatus status) => status switch
     {
@@ -28,6 +30,7 @@ public static class LeadStatuses
         LeadStatus.FollowUp => FollowUp,
         LeadStatus.Converted => Converted,
         LeadStatus.NotInterested => NotInterested,
+        LeadStatus.NoAnswer => NoAnswer,
         _ => New,
     };
 
@@ -40,9 +43,50 @@ public static class LeadStatuses
             case FollowUp: status = LeadStatus.FollowUp; return true;
             case Converted: status = LeadStatus.Converted; return true;
             case NotInterested: status = LeadStatus.NotInterested; return true;
+            case NoAnswer: status = LeadStatus.NoAnswer; return true;
             default: status = default; return false;
         }
     }
+}
+
+public enum LeadPriority
+{
+    Normal = 1,
+    High = 2,
+}
+
+public static class LeadPriorities
+{
+    public const string Normal = "normal";
+    public const string High = "high";
+    public static readonly string[] All = [Normal, High];
+
+    public static string ToCode(this LeadPriority priority) => priority switch
+    {
+        LeadPriority.High => High,
+        _ => Normal,
+    };
+
+    public static bool TryParse(string? value, out LeadPriority priority)
+    {
+        switch (value?.Trim().ToLowerInvariant())
+        {
+            case Normal: priority = LeadPriority.Normal; return true;
+            case High: priority = LeadPriority.High; return true;
+            default: priority = default; return false;
+        }
+    }
+}
+
+public static class LeadAssessmentOptions
+{
+    public static readonly string[] Genders = ["Male", "Female", "Other"];
+    public static readonly string[] MaritalStatuses = ["Single", "Married"];
+    public static readonly string[] WorkTypes = ["Seated", "Business", "Driving"];
+    public static readonly string[] PreviousSupplementOptions = ["Yes", "No"];
+    public static readonly string[] PrimaryConcerns = ["Erection", "Premature Ejaculation", "Blood flow", "Others"];
+    public static readonly string[] HealthConditions = ["Sugar", "Diabetic", "Others"];
+    public static readonly string[] HealthConcerns = ["Erection", "Premature Ejaculation", "Blood flow", "Sugar", "Diabetic", "Others"];
 }
 
 public enum LeadSource
@@ -130,6 +174,39 @@ public class LeadDto
     public int OrderCount { get; set; }
     public decimal LifetimeValue { get; set; }
     public DateTime? LastOrderAt { get; set; }
+
+    // Priority & 7-day No Answer attempt tracking
+    public string Priority { get; set; } = LeadPriorities.Normal;
+    public int NoAnswerAttempts { get; set; }
+    public int MaxNoAnswerAttempts { get; set; } = 7;
+    public DateTime? NoAnswerStartedAt { get; set; }
+    public DateTime? LastNoAnswerAt { get; set; }
+
+    // Assessment Form (clinical/lifestyle intake)
+    public int? Age { get; set; }
+    public string? Gender { get; set; }
+    public string? MaritalStatus { get; set; }
+    public string? WorkType { get; set; }
+    public string? ProblemDuration { get; set; }
+    public string? PreviousSupplements { get; set; }
+    public string? AssessmentNotes { get; set; }
+    public bool IsSmoking { get; set; }
+    public bool IsDrinking { get; set; }
+    public List<string> HealthConcerns { get; set; } = new();
+    public List<string> PrimaryConcerns { get; set; } = new();
+    public List<string> HealthConditions { get; set; } = new();
+    public string? OtherHealthConcern { get; set; }
+    public bool HasAssessment { get; set; }
+    public DateTime? AssessmentUpdatedAt { get; set; }
+
+    // Pending Transfers
+    public long? PendingTransferToEmployeeId { get; set; }
+    public string? PendingTransferToName { get; set; }
+    public long? PendingTransferFromEmployeeId { get; set; }
+    public string? PendingTransferFromName { get; set; }
+    public DateTime? PendingTransferRequestedAt { get; set; }
+    public string? PendingTransferReason { get; set; }
+    public bool IsPendingTransfer => PendingTransferToEmployeeId is not null;
 }
 
 public class LeadStatusHistoryDto
@@ -147,10 +224,14 @@ public class LeadListResponse : ApiResult
     public int Total { get; set; }
     /// <summary>Leads nobody owns yet (admin view).</summary>
     public int UnassignedCount { get; set; }
+    /// <summary>Incoming pending transfers waiting for action.</summary>
+    public int PendingTransfersCount { get; set; }
     /// <summary>Lead count per status (ignores the status filter, honours search/source).</summary>
     public Dictionary<string, int> StatusCounts { get; set; } = new();
     /// <summary>People in each panel the caller may open: leads, interested, care (ignores search and filters).</summary>
     public Dictionary<string, int> ViewCounts { get; set; } = new();
+    /// <summary>Unread customer messages in each panel the caller may open.</summary>
+    public Dictionary<string, int> ViewUnread { get; set; } = new();
     /// <summary>Unread customer messages in this panel.</summary>
     public int UnreadTotal { get; set; }
 }
@@ -194,8 +275,8 @@ public class HandoverPreviewResponse : ApiResult
 /// <summary>The three panels over the same people: new and follow-up leads, interested leads, and paid customers.</summary>
 public static class LeadViews
 {
-    public const string Leads = "leads", Interested = "interested", Care = "care";
-    public static readonly string[] All = [Leads, Interested, Care];
+    public const string Leads = "leads", Transfers = "transfers", Interested = "interested", Care = "care";
+    public static readonly string[] All = [Leads, Transfers, Interested, Care];
 }
 
 public class LeadDetailResponse : ApiResult
@@ -228,6 +309,38 @@ public class LeadNotesRequest
     public string? Notes { get; set; }
 }
 
+public class LeadDetailsUpdateRequest
+{
+    public string Name { get; set; } = "";
+    public string? Email { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class LeadPriorityRequest
+{
+    /// <summary>normal | high</summary>
+    public string Priority { get; set; } = LeadPriorities.Normal;
+    public string? Note { get; set; }
+}
+
+public class LeadAssessmentRequest
+{
+    public string? Name { get; set; }
+    public int? Age { get; set; }
+    public string Gender { get; set; } = "";
+    public string MaritalStatus { get; set; } = "";
+    public string WorkType { get; set; } = "";
+    public string? ProblemDuration { get; set; }
+    public string? PreviousSupplements { get; set; }
+    public string? AssessmentNotes { get; set; }
+    public bool IsSmoking { get; set; }
+    public bool IsDrinking { get; set; }
+    public List<string> HealthConcerns { get; set; } = new();
+    public List<string> PrimaryConcerns { get; set; } = new();
+    public List<string> HealthConditions { get; set; } = new();
+    public string? OtherHealthConcern { get; set; }
+}
+
 public class LeadAssignmentDto
 {
     public string? FromName { get; set; }
@@ -253,6 +366,37 @@ public class LeadAssignRequest
 {
     /// <summary>Employee to own the lead; null unassigns it (admin only).</summary>
     public long? EmployeeId { get; set; }
+    public string? Reason { get; set; }
+    public bool AsTransfer { get; set; }
+}
+
+public class LeadTransferRequest
+{
+    public long EmployeeId { get; set; }
+    public string? Reason { get; set; }
+}
+
+public class LeadBulkTransferRequest
+{
+    public List<long> LeadIds { get; set; } = new();
+    public long EmployeeId { get; set; }
+    public string? Reason { get; set; }
+}
+
+public class LeadBulkTransferResponse : ApiResult
+{
+    public int TransferredCount { get; set; }
+    public int FailedCount { get; set; }
+}
+
+public class LeadBulkActionRequest
+{
+    public List<long> LeadIds { get; set; } = new();
+    public string? Reason { get; set; }
+}
+
+public class LeadTransferRejectRequest
+{
     public string? Reason { get; set; }
 }
 
@@ -376,7 +520,7 @@ public static class MessageStages
     /// <summary>The stage that fits a lead (a paid customer always counts as a customer).</summary>
     public static string Of(string leadStatus, bool isCustomer) => isCustomer ? Customer : leadStatus switch
     {
-        LeadStatuses.Interested => Interested, LeadStatuses.FollowUp => FollowUp, LeadStatuses.NotInterested => NotInterested, _ => New,
+        LeadStatuses.Interested => Interested, LeadStatuses.FollowUp => FollowUp, LeadStatuses.NoAnswer => FollowUp, LeadStatuses.NotInterested => NotInterested, _ => New,
     };
 }
 

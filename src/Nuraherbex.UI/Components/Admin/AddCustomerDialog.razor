@@ -1,39 +1,149 @@
 @inject ApiClient Api
 
-@* Step 1–2: Add a customer manually from the Customers tab (Full Name + Phone required; Email + Shipping Address optional). *@
-<div class="fu-modal-backdrop" @onclick="OnClose">
-    <div class="fu-modal lo" role="dialog" aria-modal="true" aria-label="Add customer" @onclick:stopPropagation="true">
-        <header>
-            <h3>Add customer</h3>
-            <button type="button" class="em-x" aria-label="Close" @onclick="OnClose"><Icon Name="X" Size="16" /></button>
-        </header>
+@* Add customer dialog matching exact layout and fields of Create Test Order *@
+<div @onclick="OnClose"
+     class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in text-left">
+    <div @onclick:stopPropagation
+         class="relative w-full max-w-lg bg-white border border-zinc-200 rounded-xl p-6 shadow-2xl space-y-4">
+        <button type="button" @onclick="OnClose"
+                class="absolute top-4 right-4 w-7 h-7 rounded-md bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-800 cursor-pointer transition-colors"
+                aria-label="Close">
+            <Icon Name="X" Size="15" />
+        </button>
 
-        <form @onsubmit="SaveAsync" @onsubmit:preventDefault novalidate style="display:flex;flex-direction:column;min-height:0;overflow:hidden;flex:1">
-            <div class="fu-form">
-                <div class="fu-step"><span>1</span> Customer details</div>
-                <div class="lo-grid">
-                    @Field("name", "Full name", "(required)", "text", 200, "Customer full name", _name, v => _name = v)
-                    @Field("phone", "Phone number", "(required)", "tel", 20, "10-digit mobile number", _phone, v => _phone = v)
-                    @Field("email", "Email", "(optional)", "email", 256, "name@example.com", _email, v => _email = v, wide: true)
+        <div class="space-y-1">
+            <h3 class="text-base font-semibold text-zinc-900">
+                Create Test Order
+            </h3>
+            <p class="text-xs text-zinc-500">
+                Simulate an order to verify database records &amp; courier tracking.
+            </p>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_addError))
+        {
+            <div class="p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-600 flex items-center gap-2">
+                <Icon Name="AlertCircle" Size="14" Class="shrink-0 text-red-500" />
+                <span>@_addError</span>
+            </div>
+        }
+
+        <form @onsubmit="CreateOrderAsync" @onsubmit:preventDefault class="space-y-3 text-xs">
+            <div class="space-y-1">
+                <label class="text-zinc-700 font-medium block">Customer Full Name</label>
+                <input type="text" required placeholder="e.g. Siddharth Rao"
+                       @bind="_new.CustomerName" @bind:event="oninput"
+                       class="w-full px-3 py-2 rounded-md bg-white border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-500 placeholder-zinc-400" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div class="space-y-1">
+                    <label class="text-zinc-700 font-medium block">Mobile Number</label>
+                    <input type="tel" required placeholder="+91 98765 43210"
+                           @bind="_new.CustomerPhone" @bind:event="oninput"
+                           class="w-full px-3 py-2 rounded-md bg-white border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-500 placeholder-zinc-400" />
                 </div>
-
-                <div class="fu-step"><span>2</span> Default delivery address (optional)</div>
-                <p class="fu-hint"><Icon Name="Info" Size="12" /> Leave all address fields blank if unknown, or fill in the complete address.</p>
-                <div class="lo-grid">
-                    @Field("address", "Address line 1", null, "text", 500, "House / street", _a.AddressLine1, v => _a.AddressLine1 = v, wide: true)
-                    @Field("area", "Area / Landmark", "(optional)", "text", 500, null, _a.AddressLine2 ?? "", v => _a.AddressLine2 = v, wide: true)
-                    @Field("city", "City", null, "text", 100, null, _a.City, v => _a.City = v)
-                    @Field("state", "State", null, "text", 100, null, _a.State, v => _a.State = v)
-                    @Field("pincode", "Pincode", "(6 digits)", "text", 6, null, _a.Pincode, v => _a.Pincode = v)
+                <div class="space-y-1">
+                    <label class="text-zinc-700 font-medium block">Email</label>
+                    <input type="email" required placeholder="siddharth@example.com"
+                           @bind="_new.CustomerEmail" @bind:event="oninput"
+                           class="w-full px-3 py-2 rounded-md bg-white border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-500 placeholder-zinc-400" />
                 </div>
             </div>
 
-            @if (!string.IsNullOrEmpty(_error)) { <div class="fu-flash bad lo-error" role="alert"><Icon Name="AlertCircle" Size="14" /> @_error</div> }
+            <div class="space-y-1">
+                <label class="text-zinc-700 font-medium block">Delivery Address</label>
+                <input type="text" required placeholder="Street, locality, landmark"
+                       @bind="_new.Address.AddressLine1" @bind:event="oninput"
+                       class="w-full px-3 py-2 rounded-md bg-white border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-500 placeholder-zinc-400" />
+            </div>
 
-            <footer>
-                <button type="button" class="ld-btn" disabled="@_busy" @onclick="OnClose">Cancel</button>
-                <button type="submit" class="ld-btn primary" disabled="@_busy">@(_busy ? "Saving…" : "Create customer")</button>
-            </footer>
+            <div class="grid grid-cols-3 gap-2">
+                <input type="text" placeholder="City"
+                       @bind="_new.Address.City" @bind:event="oninput"
+                       class="px-3 py-2 rounded-md bg-white border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-500 placeholder-zinc-400" />
+                <input type="text" placeholder="State"
+                       @bind="_new.Address.State" @bind:event="oninput"
+                       class="px-3 py-2 rounded-md bg-white border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-500 placeholder-zinc-400" />
+                <input type="text" placeholder="Pincode"
+                       @bind="_new.Address.Pincode" @bind:event="oninput"
+                       class="px-3 py-2 rounded-md bg-white border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-500 placeholder-zinc-400" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 pt-1">
+                <div class="space-y-1">
+                    <label class="text-zinc-700 font-medium block">Product</label>
+                    <select @bind="_new.ProductId"
+                            class="w-full px-3 py-2 rounded-md bg-white border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-500">
+                        @foreach (var product in _catalog.Where(p => p.Status == "active" && p.StockQuantity > 0))
+                        {
+                            <option value="@product.Id">@product.Name (₹@AdminFmt.Inr(product.Price))</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-zinc-700 font-medium block">Quantity</label>
+                    <input type="number" min="1" max="10"
+                           @bind="_new.Quantity" @bind:event="oninput"
+                           class="w-full px-3 py-2 rounded-md bg-white border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-500" />
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div class="space-y-1">
+                    <label class="text-zinc-700 font-medium block">Shipping mode</label>
+                    <select @bind="_new.ShippingMode"
+                            class="w-full px-3 py-2 rounded-md bg-white border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-500">
+                        <option value="@ShippingMode.Online">Online Shipping (Courier)</option>
+                        <option value="@ShippingMode.Offline">Offline Shipping (Local / Chennai)</option>
+                    </select>
+                </div>
+                <div class="space-y-1">
+                    <label class="text-zinc-700 font-medium block">Coupon code (optional)</label>
+                    <input type="text" maxlength="64" placeholder="e.g. WELCOME10"
+                           @bind="_new.CouponCode" @bind:event="oninput"
+                           class="w-full px-3 py-2 rounded-md bg-white border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-500 placeholder-zinc-400" />
+                </div>
+            </div>
+
+            <div class="space-y-1">
+                <label class="text-zinc-700 font-medium block">Payment method</label>
+                <select @bind="_new.PaymentMethod"
+                        class="w-full px-3 py-2 rounded-md bg-white border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-500">
+                    <option value="COD">Cash on delivery</option>
+                    <option value="ONLINE">Online / manual payment</option>
+                </select>
+            </div>
+
+            @if (_new.ShippingMode == ShippingMode.Offline)
+            {
+                <div class="space-y-1">
+                    <label class="text-zinc-700 font-medium block">Offline dispatch note</label>
+                    <input type="text" maxlength="500" placeholder="e.g. Chennai local runner / hand delivery"
+                           @bind="_new.OfflineDispatchNote" @bind:event="oninput"
+                           class="w-full px-3 py-2 rounded-md bg-white border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-500 placeholder-zinc-400" />
+                </div>
+            }
+
+            @if (_new.PaymentMethod == "ONLINE")
+            {
+                <label class="flex items-center gap-2 text-zinc-700 cursor-pointer pt-1">
+                    <input type="checkbox" @bind="_new.MarkPaid" class="rounded border-zinc-300" />
+                    <span>Payment already collected</span>
+                </label>
+            }
+
+            <div class="pt-2 flex gap-2.5">
+                <button type="submit" disabled="@(_creating || string.IsNullOrEmpty(_new.ProductId))"
+                        class="flex-1 py-2 px-3 rounded-md bg-white hover:bg-zinc-100 border border-zinc-300 text-zinc-900 font-medium text-xs tracking-tight shadow-sm cursor-pointer transition-colors disabled:opacity-60">
+                    @(_creating ? "Creating..." : "Create order")
+                </button>
+                <button type="button" @onclick="OnClose"
+                        class="px-4 py-2 rounded-md bg-white hover:bg-zinc-100 border border-zinc-300 text-zinc-700 font-medium text-xs cursor-pointer transition-colors">
+                    Cancel
+                </button>
+            </div>
         </form>
     </div>
 </div>
@@ -42,106 +152,91 @@
     [Parameter] public EventCallback<CustomerResponse?> OnCreated { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
-    private readonly Dictionary<string, string> _errors = new();
-    private readonly AddressDto _a = new();
-    private string _name = "", _phone = "", _email = "";
-    private string? _error;
-    private bool _busy;
-
-    private static string Digits(string? s) => new((s ?? "").Where(char.IsDigit).ToArray());
-
-    private RenderFragment Field(string key, string label, string? hint, string type, int max, string? placeholder, string value, Action<string> set, bool wide = false) => b =>
+    private AdminCreateOrderRequest _new = new()
     {
-        var err = _errors.GetValueOrDefault(key);
-        b.OpenElement(0, "label"); b.AddAttribute(1, "class", $"fu-field{(wide ? " wide" : "")}{(err is null ? "" : " has-error")}");
-        b.OpenElement(2, "span"); b.AddAttribute(3, "class", "lo-lbl"); b.AddContent(4, label);
-        if (hint is not null) { b.OpenElement(5, "small"); b.AddContent(6, hint); b.CloseElement(); }
-        b.CloseElement();
-        b.OpenElement(7, "input"); b.AddAttribute(8, "type", type); b.AddAttribute(9, "maxlength", max);
-        if (placeholder is not null) b.AddAttribute(10, "placeholder", placeholder);
-        if (key == "pincode") b.AddAttribute(11, "inputmode", "numeric");
-        else if (key == "phone") b.AddAttribute(11, "inputmode", "tel");
-        b.AddAttribute(12, "aria-invalid", err is null ? "false" : "true");
-        b.AddAttribute(13, "value", value);
-        b.AddAttribute(14, "oninput", EventCallback.Factory.Create<ChangeEventArgs>(this, e => { set(e.Value?.ToString() ?? ""); ClearFieldError(key); }));
-        b.CloseElement();
-        if (err is not null) { b.OpenElement(15, "em"); b.AddAttribute(16, "class", "lo-err"); b.AddContent(17, err); b.CloseElement(); }
-        b.CloseElement();
+        Quantity = 1,
+        ShippingMode = ShippingMode.Online,
+        PaymentMethod = "COD",
+        Address = new AddressDto { Country = "India" }
     };
+    private List<ProductDto> _catalog = new();
+    private string? _addError;
+    private bool _creating;
 
-    private void ClearFieldError(string key)
+    protected override async Task OnInitializedAsync()
     {
-        _errors.Remove(key);
-        if (key is "address" or "area" or "city" or "state" or "pincode" && !AnyAddressText())
+        try
         {
-            _errors.Remove("address");
-            _errors.Remove("city");
-            _errors.Remove("state");
-            _errors.Remove("pincode");
-        }
-    }
-
-    private bool AnyAddressText() =>
-        !string.IsNullOrWhiteSpace(_a.AddressLine1)
-        || !string.IsNullOrWhiteSpace(_a.AddressLine2)
-        || !string.IsNullOrWhiteSpace(_a.City)
-        || !string.IsNullOrWhiteSpace(_a.State)
-        || !string.IsNullOrWhiteSpace(_a.Pincode);
-
-    private bool Validate()
-    {
-        _errors.Clear();
-        if (string.IsNullOrWhiteSpace(_name))
-            _errors["name"] = "Enter the customer's name.";
-        else if (_name.Trim().Length > 200)
-            _errors["name"] = "Name must be 200 characters or fewer.";
-
-        var digits = Digits(_phone);
-        if (digits.Length is < 10 or > 15)
-            _errors["phone"] = "Enter a valid phone number (10–15 digits).";
-
-        if (!string.IsNullOrWhiteSpace(_email) && !System.Text.RegularExpressions.Regex.IsMatch(_email.Trim(), @"^[^\s@]+@[^\s@]+\.[^\s@]+$"))
-            _errors["email"] = "Enter a valid email, like name@example.com.";
-
-        if (AnyAddressText())
-        {
-            if (string.IsNullOrWhiteSpace(_a.AddressLine1)) _errors["address"] = "Enter the house / street address.";
-            if (string.IsNullOrWhiteSpace(_a.City)) _errors["city"] = "Enter the city.";
-            if (string.IsNullOrWhiteSpace(_a.State)) _errors["state"] = "Enter the state.";
-            if (!System.Text.RegularExpressions.Regex.IsMatch((_a.Pincode ?? "").Trim(), @"^[1-9][0-9]{5}$"))
-                _errors["pincode"] = "Enter a valid 6-digit pincode.";
-        }
-
-        _error = _errors.Count > 0 ? "Please fix the highlighted fields." : null;
-        return _errors.Count == 0;
-    }
-
-    private async Task SaveAsync()
-    {
-        if (_busy || !Validate()) return;
-        _error = null;
-        _busy = true;
-        var hasAddress = AnyAddressText();
-        var res = await Api.AdminCreateCustomerAsync(new AdminCreateCustomerRequest
-        {
-            FullName = _name.Trim(),
-            Phone = _phone.Trim(),
-            Email = string.IsNullOrWhiteSpace(_email) ? null : _email.Trim(),
-            ShippingAddress = hasAddress
-                ? new AddressDto
+            var res = await Api.AdminProductsAsync();
+            if (res.Success && res.Products is not null)
+            {
+                _catalog = res.Products;
+                var first = _catalog.FirstOrDefault(p => p.Status == "active" && p.StockQuantity > 0) ?? _catalog.FirstOrDefault();
+                if (first is not null)
                 {
-                    AddressLine1 = _a.AddressLine1.Trim(),
-                    AddressLine2 = string.IsNullOrWhiteSpace(_a.AddressLine2) ? "" : _a.AddressLine2.Trim(),
-                    City = _a.City.Trim(),
-                    State = _a.State.Trim(),
-                    Pincode = _a.Pincode.Trim(),
-                    Country = "India",
+                    _new.ProductId = first.Id;
                 }
-                : null,
+            }
+        }
+        catch
+        {
+            // fallback
+        }
+    }
+
+    private async Task CreateOrderAsync()
+    {
+        _addError = null;
+
+        if (string.IsNullOrWhiteSpace(_new.CustomerName))
+        {
+            _addError = "Customer name is required.";
+            return;
+        }
+
+        var digits = new string((_new.CustomerPhone ?? "").Where(char.IsDigit).ToArray());
+        if (digits.Length is < 10 or > 15)
+        {
+            _addError = "Please enter a valid 10-15 digit mobile number.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_new.CustomerEmail) || !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(_new.CustomerEmail.Trim()))
+        {
+            _addError = "Please enter a valid email address.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_new.Address.AddressLine1))
+        {
+            _addError = "Delivery address is required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_new.ProductId))
+        {
+            _addError = "Please select a product.";
+            return;
+        }
+
+        _creating = true;
+        _new.Address.Country = "India";
+        _new.Quantity = Math.Clamp(_new.Quantity, 1, 10);
+
+        var res = await Api.AdminCreateOrderAsync(_new);
+        _creating = false;
+
+        if (!res.Success)
+        {
+            _addError = res.Message ?? "Could not create order.";
+            return;
+        }
+
+        await OnCreated.InvokeAsync(new CustomerResponse
+        {
+            Success = true,
+            Message = $"Customer {_new.CustomerName} and order #{res.Order?.Id} created successfully."
         });
-        _busy = false;
-        if (res.Success) await OnCreated.InvokeAsync(res);
-        else _error = res.Message ?? "Could not add the customer.";
+        await OnClose.InvokeAsync();
     }
 }
-

@@ -20,4 +20,15 @@ public class InvoiceController(OrderService orders, InvoiceService invoices) : C
         Response.Headers["X-Content-Type-Options"] = "nosniff";
         return Content(invoices.RenderHtml(order), "text/html; charset=utf-8");
     }
+
+    [HttpGet("{orderId}/download")]
+    public async Task<IActionResult> Download(string orderId, [FromQuery] long exp, [FromQuery] string? sig)
+    {
+        if (!invoices.IsValid(orderId, exp, sig)) return StatusCode(403);
+        var order = await orders.GetAsync(orderId);
+        if (order is null) return NotFound();
+        Response.Headers["Cache-Control"] = "no-store";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return File(invoices.RenderPdf(order), "application/pdf", $"Invoice-{order.Id}.pdf");
+    }
 }

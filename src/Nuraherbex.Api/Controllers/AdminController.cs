@@ -109,17 +109,39 @@ public class AdminController(
         try
         {
             if (string.IsNullOrWhiteSpace(r.CustomerEmail) || !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(r.CustomerEmail)) return BadRequest(new ApiResult { Message = "A valid customer email is required." });
+
+            // Ensure customer exists in db.Customers so they appear in Customers tab and lifetime records
+            var rawPhone = new string((r.CustomerPhone ?? "").Where(char.IsDigit).ToArray());
+            var canonicalPhone = CustomerAuthService.CanonicalPhone(rawPhone);
+            var forms = CustomerAuthService.PhoneForms(canonicalPhone);
+            var mail = r.CustomerEmail.Trim().ToLowerInvariant();
+            var customer = await db.Customers.FirstOrDefaultAsync(c => forms.Contains(c.Phone) || (c.Email != null && c.Email == mail));
+            if (customer is null)
+            {
+                var (newCust, _, _) = await customers.CreateByAdminAsync(new AdminCreateCustomerRequest
+                {
+                    FullName = r.CustomerName.Trim(),
+                    Phone = canonicalPhone,
+                    Email = mail,
+                    ShippingAddress = r.Address
+                });
+                if (newCust is not null) customer = await db.Customers.FirstOrDefaultAsync(c => c.Id == newCust.Id);
+            }
+
             var order = await orders.CreateAsync(new CreateOrderRequest
             {
                 Customer = new CheckoutCustomerDto
                 {
+                    Id = customer?.Id,
                     FullName = r.CustomerName, Phone = r.CustomerPhone,
                     Email = r.CustomerEmail.Trim(),
                 },
                 Shipping = r.Address,
                 Items = [new CartLineDto { Id = r.ProductId, Quantity = Math.Max(1, r.Quantity) }],
                 PaymentMethod = r.PaymentMethod, CouponCode = r.CouponCode,
-            }, null);
+                ShippingMode = r.ShippingMode,
+                OfflineDispatchNote = r.OfflineDispatchNote,
+            }, customer?.Id);
 
             if (r.PaymentMethod != OrderPaymentMethods.Cod && r.MarkPaid)
                 order = await orders.MarkPaidAsync(order.Id, $"ADMIN-{DateTime.UtcNow:yyyyMMddHHmmss}", null, "{\"source\":\"admin-manual\"}");
@@ -250,6 +272,30 @@ public class AdminController(
         return order is null
             ? NotFound(new ApiResult { Success = false, Message = "Order not found" })
             : Ok(new ApiResult<string> { Success = true, Data = invoices.Url(order.Id) });
+    }
+
+    /// <summary>Signed direct PDF download link for the GST invoice.</summary>
+    [HttpGet("orders/{id}/invoice-download"), Authorize(Roles = "admin,sales")]
+    public async Task<IActionResult> OrderInvoiceDownload(string id, [FromServices] InvoiceService invoices)
+    {
+        var order = await orders.GetAsync(id);
+        return order is null
+            ? NotFound(new ApiResult { Success = false, Message = "Order not found" })
+            : Ok(new ApiResult<string> { Success = true, Data = invoices.DownloadUrl(order.Id) });
+    }
+
+    /// <summary>Manually update COD / offline / payment collection status on an order.</summary>
+    [HttpPost("orders/{id}/payment-status"), Authorize(Roles = "admin,sales")]
+    public async Task<IActionResult> UpdateOrderPayment(string id, UpdateOrderPaymentRequest r)
+    {
+        var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "admin";
+        try
+        {
+            var order = await orders.UpdatePaymentStatusAsync(id, r, actor);
+            return Ok(new OrderResponse { Success = true, Message = $"Payment status updated to {order.PaymentStatus.ToCode()}.", Order = order.ToDto() });
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new ApiResult { Success = false, Message = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new ApiResult { Success = false, Message = ex.Message }); }
     }
 
     [HttpPost("orders/{id}/deliver"), Authorize(Roles = "admin,sales")]
@@ -463,6 +509,8 @@ public class AdminController(
                 Items = r.Items.GroupBy(i => i.ProductId).Select(g => new CartLineDto { Id = g.Key, Quantity = g.Sum(x => x.Quantity) }).ToList(),
                 CouponCode = string.IsNullOrWhiteSpace(r.CouponCode) ? null : r.CouponCode.Trim(),
                 PaymentMethod = r.AlreadyPaid ? OrderPaymentMethods.Online : OrderPaymentMethods.Cod,
+                ShippingMode = r.ShippingMode,
+                OfflineDispatchNote = r.OfflineDispatchNote,
             }, customer.Id, emailOptional: true);
 
             if (r.AlreadyPaid)

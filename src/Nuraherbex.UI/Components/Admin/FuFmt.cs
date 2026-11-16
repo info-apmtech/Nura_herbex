@@ -42,6 +42,9 @@ public static class FuFmt
         return l.ToString("ddd d MMM", CultureInfo.InvariantCulture) + ", " + Clock(l);
     }
 
+    public static string FullSchedule(DateTime utc) =>
+        Local(utc).ToString("ddd, d MMM yyyy · h:mm tt", CultureInfo.InvariantCulture);
+
     public static string DayHeading(DateTime utc)
     {
         var l = Local(utc).Date;
@@ -77,7 +80,7 @@ public static class FuFmt
             FollowUpOutcomes.NotInterested => "Not interested",
             FollowUpOutcomes.Converted => "Ordered",
             FollowUpOutcomes.NoAnswer => "No answer",
-            FollowUpOutcomes.Callback => "Call back later",
+            FollowUpOutcomes.Callback => "No Answer Follow-up",
             "skipped" => "Skipped",
             _ => outcome,
         };

@@ -148,6 +148,8 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     /// <summary>Full URL of a signed, short-lived GST invoice link, or null with the failure in <c>Message</c>.</summary>
     public async Task<ApiResult<string>> CustomerInvoiceUrlAsync(string orderId) => Absolute(await Call<ApiResult<string>>(HttpMethod.Get, $"api/auth/my-orders/{Uri.EscapeDataString(orderId)}/invoice", null, Who.Customer));
     public async Task<ApiResult<string>> AdminInvoiceUrlAsync(string orderId) => Absolute(await Call<ApiResult<string>>(HttpMethod.Get, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/invoice", null, Who.Admin));
+    public async Task<ApiResult<string>> AdminInvoiceDownloadUrlAsync(string orderId) => Absolute(await Call<ApiResult<string>>(HttpMethod.Get, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/invoice-download", null, Who.Admin));
+    public Task<OrderResponse> AdminUpdateOrderPaymentAsync(string orderId, UpdateOrderPaymentRequest r) => Call<OrderResponse>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/payment-status", r, Who.Admin);
     private ApiResult<string> Absolute(ApiResult<string> r) { if (r.Success && !string.IsNullOrEmpty(r.Data)) r.Data = Url(r.Data); return r; }
     public Task<OrderResponse> AdminMarkDeliveredAsync(string orderId) => Call<OrderResponse>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/deliver", null, Who.Admin);
     public Task<ApiResult> AdminSendEmailAsync(string orderId, string type) => Call<ApiResult>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/send-email", new AdminEmailRequest { Type = type }, Who.Admin);
@@ -178,6 +180,12 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<LeadListResponse> AdminLeadsAsync(string? status = null, string? source = null, string? q = null, string? assignee = null, int take = 100, string view = "leads") =>
         Call<LeadListResponse>(HttpMethod.Get, $"api/admin/leads?take={take}&status={Uri.EscapeDataString(status ?? "")}&source={Uri.EscapeDataString(source ?? "")}&q={Uri.EscapeDataString(q ?? "")}&assignee={Uri.EscapeDataString(assignee ?? "")}&view={Uri.EscapeDataString(view)}", null, Who.Admin);
     public Task<ApiResult> AdminLeadAssignAsync(long id, LeadAssignRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/assign", r, Who.Admin);
+    public Task<ApiResult> AdminLeadTransferAsync(long id, LeadTransferRequest r) => Call<ApiResult>(HttpMethod.Post, $"api/admin/leads/{id}/transfer", r, Who.Admin);
+    public Task<ApiResult> AdminLeadAcceptTransferAsync(long id) => Call<ApiResult>(HttpMethod.Post, $"api/admin/leads/{id}/transfer/accept", null, Who.Admin);
+    public Task<ApiResult> AdminLeadRejectTransferAsync(long id, LeadTransferRejectRequest? r = null) => Call<ApiResult>(HttpMethod.Post, $"api/admin/leads/{id}/transfer/reject", r, Who.Admin);
+    public Task<LeadBulkTransferResponse> AdminBulkTransferLeadsAsync(LeadBulkTransferRequest r) => Call<LeadBulkTransferResponse>(HttpMethod.Post, "api/admin/leads/bulk-transfer", r, Who.Admin);
+    public Task<ApiResult> AdminBulkAcceptTransfersAsync(LeadBulkActionRequest r) => Call<ApiResult>(HttpMethod.Post, "api/admin/leads/transfers/bulk-accept", r, Who.Admin);
+    public Task<ApiResult> AdminBulkRejectTransfersAsync(LeadBulkActionRequest r) => Call<ApiResult>(HttpMethod.Post, "api/admin/leads/transfers/bulk-reject", r, Who.Admin);
     public Task<ApiResult> AdminLeadReplyAsync(long id, string text) => Call<ApiResult>(HttpMethod.Post, $"api/admin/leads/{id}/reply", new LeadReplyRequest { Text = text }, Who.Admin);
     public Task<EmployeeListResponse> AdminTeamAsync(string? forPage = null) => Call<EmployeeListResponse>(HttpMethod.Get, forPage is null ? "api/admin/team" : $"api/admin/team?for={forPage}", null, Who.Admin);
     public Task<DepartmentListResponse> AdminTeamDepartmentsAsync() => Call<DepartmentListResponse>(HttpMethod.Get, "api/admin/team/departments", null, Who.Admin);
@@ -244,14 +252,20 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
         }
     }
     public Task<LeadOrderResponse> AdminLeadOrderAsync(long id, LeadOrderRequest r) => Call<LeadOrderResponse>(HttpMethod.Post, $"api/admin/leads/{id}/order", r, Who.Admin);
-    public Task<CrmDashboardResponse> AdminCrmDashboardAsync(int days) => Call<CrmDashboardResponse>(HttpMethod.Get, $"api/admin/crm/dashboard?days={days}", null, Who.Admin);
+    public Task<CrmDashboardResponse> AdminCrmDashboardAsync(int days = 30, string? from = null, string? to = null)
+    {
+        var q = !string.IsNullOrEmpty(from) && !string.IsNullOrEmpty(to)
+            ? $"from={Uri.EscapeDataString(from)}&to={Uri.EscapeDataString(to)}"
+            : $"days={days}";
+        return Call<CrmDashboardResponse>(HttpMethod.Get, $"api/admin/crm/dashboard?{q}", null, Who.Admin);
+    }
     public Task<ReplySuggestionResponse> AdminSuggestReplyAsync(long id, ReplySuggestRequest r) => Call<ReplySuggestionResponse>(HttpMethod.Post, $"api/admin/leads/{id}/suggest-reply", r, Who.Admin);
     public Task<ReplyAssistantSettingsDto> AdminReplySettingsAsync() => Call<ReplyAssistantSettingsDto>(HttpMethod.Get, "api/admin/ai/reply-settings", null, Who.Admin);
     public Task<ApiResult> AdminSaveReplySettingsAsync(ReplyAssistantSettingsRequest r) => Call<ApiResult>(HttpMethod.Put, "api/admin/ai/reply-settings", r, Who.Admin);
     public Task<ApiResult> AdminLeadConsentAsync(long id, string status) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/consent", new LeadConsentRequest { Status = status }, Who.Admin);
 
-    public Task<FollowUpListResponse> AdminFollowUpsAsync(string? scope = null, string? assignee = null, string? type = null, long? leadId = null) =>
-        Call<FollowUpListResponse>(HttpMethod.Get, $"api/admin/followups?scope={Uri.EscapeDataString(scope ?? "")}&assignee={Uri.EscapeDataString(assignee ?? "")}&type={Uri.EscapeDataString(type ?? "")}{(leadId is { } l ? $"&leadId={l}" : "")}", null, Who.Admin);
+    public Task<FollowUpListResponse> AdminFollowUpsAsync(string? scope = null, string? assignee = null, string? type = null, long? leadId = null, string? priority = null) =>
+        Call<FollowUpListResponse>(HttpMethod.Get, $"api/admin/followups?scope={Uri.EscapeDataString(scope ?? "")}&assignee={Uri.EscapeDataString(assignee ?? "")}&type={Uri.EscapeDataString(type ?? "")}{(leadId is { } l ? $"&leadId={l}" : "")}{(!string.IsNullOrWhiteSpace(priority) ? $"&priority={Uri.EscapeDataString(priority)}" : "")}", null, Who.Admin);
     public Task<ApiResult> AdminCreateFollowUpAsync(FollowUpCreateRequest r) => Call<ApiResult>(HttpMethod.Post, "api/admin/followups", r, Who.Admin);
     public Task<ApiResult> AdminCompleteFollowUpAsync(long id, FollowUpCompleteRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/followups/{id}/complete", r, Who.Admin);
     public Task<ApiResult> AdminRescheduleFollowUpAsync(long id, FollowUpRescheduleRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/followups/{id}/reschedule", r, Who.Admin);
@@ -265,12 +279,20 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<WhatsAppLimitDto> AdminSaveWhatsAppLimitAsync(WhatsAppLimitRequest r) => Call<WhatsAppLimitDto>(HttpMethod.Put, "api/admin/whatsapp/limit", r, Who.Admin);
     public Task<FollowUpSettingsDto> AdminFollowUpSettingsAsync() => Call<FollowUpSettingsDto>(HttpMethod.Get, "api/admin/followups/settings", null, Who.Admin);
     public Task<ApiResult> AdminSaveFollowUpSettingsAsync(FollowUpSettingsRequest r) => Call<ApiResult>(HttpMethod.Put, "api/admin/followups/settings", r, Who.Admin);
-    public Task<FollowUpReportResponse> AdminFollowUpReportAsync(int days) => Call<FollowUpReportResponse>(HttpMethod.Get, $"api/admin/followups/report?days={days}", null, Who.Admin);
+    public Task<FollowUpReportResponse> AdminFollowUpReportAsync(int days = 30, string? from = null, string? to = null)
+    {
+        var q = !string.IsNullOrEmpty(from) && !string.IsNullOrEmpty(to)
+            ? $"from={Uri.EscapeDataString(from)}&to={Uri.EscapeDataString(to)}"
+            : $"days={days}";
+        return Call<FollowUpReportResponse>(HttpMethod.Get, $"api/admin/followups/report?{q}", null, Who.Admin);
+    }
     public Task<ApiResult> AdminGoOfflineAsync() => Call<ApiResult>(HttpMethod.Post, "api/admin/presence/offline", null, Who.Admin);
     public Task<WhatsAppActiveResponse> AdminGetWhatsAppActiveAsync() => Call<WhatsAppActiveResponse>(HttpMethod.Get, "api/admin/presence/whatsapp", null, Who.Admin);
     public Task<WhatsAppActiveResponse> AdminSetWhatsAppActiveAsync(bool active) => Call<WhatsAppActiveResponse>(HttpMethod.Put, "api/admin/presence/whatsapp", new WhatsAppActiveRequest { Active = active }, Who.Admin);
-    public Task<NotificationListResponse> AdminNotificationsAsync() => Call<NotificationListResponse>(HttpMethod.Get, "api/admin/notifications", null, Who.Admin);
-    public Task<ApiResult> AdminReadAllNotificationsAsync() => Call<ApiResult>(HttpMethod.Put, "api/admin/notifications/read-all", new { }, Who.Admin);
+    public Task<NotificationListResponse> AdminNotificationsAsync(string? category = null) =>
+        Call<NotificationListResponse>(HttpMethod.Get, string.IsNullOrEmpty(category) ? "api/admin/notifications" : $"api/admin/notifications?category={Uri.EscapeDataString(category)}", null, Who.Admin);
+    public Task<ApiResult> AdminReadAllNotificationsAsync(string? category = null) =>
+        Call<ApiResult>(HttpMethod.Put, string.IsNullOrEmpty(category) ? "api/admin/notifications/read-all" : $"api/admin/notifications/read-all?category={Uri.EscapeDataString(category)}", new { }, Who.Admin);
     public Task<ApiResult> AdminReadNotificationAsync(long id) => Call<ApiResult>(HttpMethod.Put, $"api/admin/notifications/{id}/read", new { }, Who.Admin);
     public Task<LeadDetailResponse> AdminLeadDetailAsync(long id) => Call<LeadDetailResponse>(HttpMethod.Get, $"api/admin/leads/{id}", null, Who.Admin);
     // Ad campaigns report (Facebook / Instagram ads) and its Meta sync
@@ -285,6 +307,20 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<ApiResult> AdminLeadStatusAsync(long id, LeadStatusRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/status", r, Who.Admin);
     public Task<ApiResult> AdminLeadNoAnswerAsync(long id, LeadNoAnswerRequest r) => Call<ApiResult>(HttpMethod.Post, $"api/admin/leads/{id}/no-answer", r, Who.Admin);
     public Task<ApiResult> AdminLeadNotesAsync(long id, LeadNotesRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/notes", r, Who.Admin);
+    public Task<ApiResult> AdminLeadDetailsAsync(long id, LeadDetailsUpdateRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/details", r, Who.Admin);
+    public Task<ApiResult> AdminLeadPriorityAsync(long id, LeadPriorityRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/priority", r, Who.Admin);
+    public Task<ApiResult> AdminLeadAssessmentAsync(long id, LeadAssessmentRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/assessment", r, Who.Admin);
+    public Task<ApiResult> AdminLeadSendDriveAsync(long id, DriveShareRequest r) => Call<ApiResult>(HttpMethod.Post, $"api/admin/leads/{id}/send-drive", r, Who.Admin);
+
+    // Bulk messaging & Google Drive
+    public Task<BulkPreviewResponse> AdminBulkPreviewAsync(string category) => Call<BulkPreviewResponse>(HttpMethod.Get, $"api/admin/bulk-messages/preview?category={Uri.EscapeDataString(category)}", null, Who.Admin);
+    public Task<BulkCampaignListResponse> AdminBulkCampaignsAsync() => Call<BulkCampaignListResponse>(HttpMethod.Get, "api/admin/bulk-messages/campaigns", null, Who.Admin);
+    public Task<BulkCampaignDetailResponse> AdminBulkCampaignDetailAsync(long id) => Call<BulkCampaignDetailResponse>(HttpMethod.Get, $"api/admin/bulk-messages/campaigns/{id}", null, Who.Admin);
+    public Task<ApiResult<BulkCampaignDto>> AdminBulkSendAsync(BulkSendRequest r) => Call<ApiResult<BulkCampaignDto>>(HttpMethod.Post, "api/admin/bulk-messages/send", r, Who.Admin);
+    public Task<DriveListResponse> AdminDriveFilesAsync(string? q = null, string? kind = null) => Call<DriveListResponse>(HttpMethod.Get, $"api/admin/drive/files?q={Uri.EscapeDataString(q ?? "")}&kind={Uri.EscapeDataString(kind ?? "")}", null, Who.Admin);
+    public Task<DriveSettingsDto> AdminDriveSettingsAsync() => Call<DriveSettingsDto>(HttpMethod.Get, "api/admin/drive/settings", null, Who.Admin);
+    public Task<ApiResult> AdminSaveDriveSettingsAsync(DriveSettingsSaveRequest r) => Call<ApiResult>(HttpMethod.Put, "api/admin/drive/settings", r, Who.Admin);
+    public Task<DriveShareResponse> AdminDriveShareAsync(DriveShareRequest r) => Call<DriveShareResponse>(HttpMethod.Post, "api/admin/drive/share", r, Who.Admin);
     public Task<AdminProductListResponse> AdminCatalogAsync() => Call<AdminProductListResponse>(HttpMethod.Get, "api/admin/catalog/products", null, Who.Admin);
     public Task<AdminProductResponse> AdminSaveProductAsync(AdminProductDto p, bool create) => Call<AdminProductResponse>(create ? HttpMethod.Post : HttpMethod.Put, "api/admin/catalog/products" + (create ? "" : "/" + Uri.EscapeDataString(p.Id)), p, Who.Admin);
     public Task<ApiResult> AdminArchiveProductAsync(string id) => Call<ApiResult>(HttpMethod.Delete, "api/admin/catalog/products/" + Uri.EscapeDataString(id), null, Who.Admin);

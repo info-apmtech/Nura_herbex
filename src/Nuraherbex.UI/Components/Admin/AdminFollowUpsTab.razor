@@ -35,7 +35,10 @@
     else
     {
         @* Status chips double as the filter *@
-        <WhatsAppUsageBar @ref="_usageBar" />
+        @if (AdminAuth.IsAdmin)
+        {
+            <WhatsAppUsageBar @ref="_usageBar" />
+        }
 
         <div class="fu-chips six">
             <button type="button" class="@ChipClass("overdue", "late")" @onclick='() => SetScopeAsync("overdue")' title="Due on an earlier day and still not done"><b>@_counts.Overdue</b><span>Overdue</span></button>
@@ -58,20 +61,37 @@
             </div>
         }
 
-        @if (AdminAuth.CanAll("followups"))
-        {
+        <div class="fu-filters-wrap">
             <div class="fu-filters">
-                <select aria-label="Filter by owner" value="@_assignee" @onchange="e => OnFilter(e, v => _assignee = v)">
-                    <option value="">Everyone</option>
-                    <option value="unassigned">Unassigned</option>
-                    @foreach (var t in _team) { <option value="@t.Id">@t.Name</option> }
-                </select>
+                @if (AdminAuth.CanAll("followups"))
+                {
+                    <select aria-label="Filter by owner" value="@_assignee" @onchange="e => OnFilter(e, v => _assignee = v)">
+                        <option value="">Everyone</option>
+                        <option value="unassigned">Unassigned</option>
+                        @foreach (var t in _team) { <option value="@t.Id">@t.Name</option> }
+                    </select>
+                }
                 <select aria-label="Filter by type" value="@_type" @onchange="e => OnFilter(e, v => _type = v)">
                     <option value="">All types</option>
                     @foreach (var t in FollowUpTypes.All) { <option value="@t">@FuFmt.TypeLabel(t)</option> }
                 </select>
             </div>
-        }
+
+            <div class="fu-prio-pills" role="radiogroup" aria-label="Filter by priority">
+                <span class="fu-prio-pills-lbl">Priority:</span>
+                <button type="button" class="@($"fu-prio-pill {(string.IsNullOrEmpty(_priority) ? "is-active" : "")}")" @onclick='() => SetPriorityFilterAsync("")'>All</button>
+                <button type="button" class="@($"fu-prio-pill high {(_priority == "high" ? "is-active" : "")}")" @onclick='() => SetPriorityFilterAsync("high")'>🔥 High</button>
+                <button type="button" class="@($"fu-prio-pill normal {(_priority == "normal" ? "is-active" : "")}")" @onclick='() => SetPriorityFilterAsync("normal")'>Normal</button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_priority) || !string.IsNullOrEmpty(_type) || !string.IsNullOrEmpty(_assignee))
+            {
+                <button type="button" class="fu-filter-clear" @onclick="ClearFiltersAsync" title="Clear all filters">
+                    <Icon Name="X" Size="12" />
+                    <span>Clear filters</span>
+                </button>
+            }
+        </div>
 
         @if (!string.IsNullOrEmpty(_error))
         {
@@ -122,6 +142,7 @@
     private string _scope = "";
     private string _assignee = "";
     private string _type = "";
+    private string _priority = "";
     private string? _toast;
     private string? _error;
     private bool _loading = true;
@@ -178,7 +199,7 @@
     private async Task LoadAsync(bool initial)
     {
         if (_view != "tasks" && !initial) return;
-        var res = await Api.AdminFollowUpsAsync(string.IsNullOrEmpty(_scope) ? "today" : _scope, _assignee, _type);
+        var res = await Api.AdminFollowUpsAsync(string.IsNullOrEmpty(_scope) ? "today" : _scope, _assignee, _type, priority: _priority);
         if (_cts.IsCancellationRequested) return;
         if (res.Success)
         {
@@ -188,7 +209,7 @@
                 // Open on the most useful list: what is late, else what is due today.
                 var best = res.Counts.Overdue > 0 ? "overdue" : "today";
                 _scope = best;
-                if (best != "today") res = await Api.AdminFollowUpsAsync(best, _assignee, _type);
+                if (best != "today") res = await Api.AdminFollowUpsAsync(best, _assignee, _type, priority: _priority);
             }
             _items = res.Items; _error = null;
         }
@@ -211,6 +232,25 @@
     private async Task SetScopeAsync(string scope) { _scope = scope; _page = 1; _loading = true; await LoadAsync(false); }
 
     private async Task OnFilter(ChangeEventArgs e, Action<string> set) { set(e.Value?.ToString() ?? ""); _page = 1; _loading = true; await LoadAsync(false); }
+
+    private async Task SetPriorityFilterAsync(string priority)
+    {
+        if (_priority == priority) return;
+        _priority = priority;
+        _page = 1;
+        _loading = true;
+        await LoadAsync(false);
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _assignee = "";
+        _type = "";
+        _priority = "";
+        _page = 1;
+        _loading = true;
+        await LoadAsync(false);
+    }
 
     private async Task OnChanged(string? message) { _toast = message; await LoadAsync(false); if (_usageBar is not null) await _usageBar.RefreshAsync(); }
 

@@ -19,6 +19,8 @@ public class LeadOrderDto
     public DateTime? DeliveredAt { get; set; }
     /// <summary>"Stamix x 2, Stamix Pro x 1".</summary>
     public string Items { get; set; } = "";
+    public ShippingMode ShippingMode { get; set; } = ShippingMode.Online;
+    public string? OfflineDispatchNote { get; set; }
 }
 
 public class LeadOrderLineRequest
@@ -41,6 +43,9 @@ public class LeadOrderRequest
     /// <summary>False = cash on delivery. True = the customer already paid (UPI / bank transfer).</summary>
     public bool AlreadyPaid { get; set; }
     public string? PaymentReference { get; set; }
+    /// <summary>ONLINE (Shiprocket/Shadowfax courier) | OFFLINE (local Chennai / direct hand delivery).</summary>
+    public ShippingMode ShippingMode { get; set; } = ShippingMode.Online;
+    public string? OfflineDispatchNote { get; set; }
 }
 
 public class LeadOrderResponse : ApiResult
@@ -55,6 +60,7 @@ public class CrmDashboardResponse : ApiResult
 {
     public int Days { get; set; }
     public DateTime From { get; set; }
+    public DateTime? To { get; set; }
     /// <summary>True when the numbers cover only the signed-in employee's own leads.</summary>
     public bool Personal { get; set; }
 

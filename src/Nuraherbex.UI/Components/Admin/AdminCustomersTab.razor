@@ -1,4 +1,6 @@
 @inject AdminSession AdminAuth
+@inject ApiClient Api
+@inject BrowserInterop Browser
 
 <div class="space-y-4">
 
@@ -243,6 +245,21 @@
                                 @* Actions *@
                                 <td class="px-4 py-3 text-right whitespace-nowrap">
                                     <div class="inline-flex items-center justify-end gap-1.5">
+                                        @if (orderCount > 0)
+                                        {
+                                            var targetOrderId = cust.Orders.FirstOrDefault()?.Id ?? cust.LastOrderId;
+                                            if (!string.IsNullOrEmpty(targetOrderId))
+                                            {
+                                                <button type="button"
+                                                        disabled="@(_downloadingOrderId == targetOrderId)"
+                                                        @onclick="() => DownloadInvoiceAsync(targetOrderId)"
+                                                        class="px-2.5 py-1 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                                                        title="Download GST invoice PDF@(orderCount > 1 ? $" (latest order: {targetOrderId})" : "")">
+                                                    <Icon Name="Download" Size="12" />
+                                                    <span>@(_downloadingOrderId == targetOrderId ? "Downloading…" : "Invoice")</span>
+                                                </button>
+                                            }
+                                        }
                                         @if (CanCreateOrder)
                                         {
                                             <button type="button"
@@ -378,6 +395,7 @@
                                     <th class="p-2.5 text-left font-medium">Payment</th>
                                     <th class="p-2.5 text-left font-medium">Status</th>
                                     <th class="p-2.5 text-right font-medium">Amount</th>
+                                    <th class="p-2.5 text-right font-medium">Invoice</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-zinc-800/60 tabular-nums text-zinc-300">
@@ -407,6 +425,16 @@
                                         </td>
                                         <td class="p-2.5 text-right font-semibold text-zinc-100">
                                             ₹@AdminFmt.Inr(ord.TotalAmount)
+                                        </td>
+                                        <td class="p-2.5 text-right whitespace-nowrap">
+                                            <button type="button"
+                                                    disabled="@(_downloadingOrderId == ord.Id)"
+                                                    @onclick="() => DownloadInvoiceAsync(ord.Id)"
+                                                    class="px-2 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[11px] font-medium transition-colors cursor-pointer inline-flex items-center gap-1"
+                                                    title="Download GST invoice PDF for @ord.Id">
+                                                <Icon Name="Download" Size="11" />
+                                                <span>@(_downloadingOrderId == ord.Id ? "Downloading…" : "Invoice PDF")</span>
+                                            </button>
                                         </td>
                                     </tr>
                                 }
@@ -471,6 +499,7 @@
 
     private string _search = "";
     private string? _notice;
+    private string? _downloadingOrderId;
     private bool _addCustomer;
     private AdminCustomerDto? _selected;
     private AdminCustomerDto? _orderCustomer;
@@ -506,6 +535,23 @@
             await OnOrderCreated.InvokeAsync();
         else
             await OnReload.InvokeAsync();
+    }
+
+    private async Task DownloadInvoiceAsync(string orderId)
+    {
+        if (string.IsNullOrWhiteSpace(orderId)) return;
+        _downloadingOrderId = orderId;
+        _notice = null;
+        var res = await Api.AdminInvoiceDownloadUrlAsync(orderId);
+        _downloadingOrderId = null;
+        if (res.Success && !string.IsNullOrEmpty(res.Data))
+        {
+            await Browser.OpenUrlAsync(res.Data);
+        }
+        else
+        {
+            _notice = res.Message ?? "Could not download the invoice PDF.";
+        }
     }
 
     private static int OrderCount(AdminCustomerDto c) => c.OrdersCount > 0 ? c.OrdersCount : c.Orders.Count;

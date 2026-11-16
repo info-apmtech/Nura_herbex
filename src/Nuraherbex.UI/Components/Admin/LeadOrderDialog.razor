@@ -62,7 +62,18 @@
                 @Field("pincode", "Pincode", "(6 digits)", "text", 6, null, _a.Pincode, v => _a.Pincode = v)
             </div>
 
-            <div class="fu-step"><span>3</span> How is it paid?</div>
+            <div class="fu-step"><span>3</span> Delivery mode</div>
+            <div class="fu-types two">
+                <button type="button" class="@($"fu-type {(_shippingMode == ShippingMode.Online ? "is-picked" : "")}")" @onclick="() => _shippingMode = ShippingMode.Online">Online Shipping (Courier)</button>
+                <button type="button" class="@($"fu-type {(_shippingMode == ShippingMode.Offline ? "is-picked" : "")}")" @onclick="() => _shippingMode = ShippingMode.Offline">Offline Shipping (Local / Chennai)</button>
+            </div>
+            @if (_shippingMode == ShippingMode.Offline)
+            {
+                <input type="text" class="fu-input" maxlength="500" placeholder="Offline dispatch note (e.g. Local rider / Chennai direct delivery)" @bind="_offlineNote" @bind:event="oninput" />
+                <p class="fu-hint"><Icon Name="Info" Size="12" /> Offline order skips courier booking. You can download a manual GST invoice PDF and mark COD collected manually.</p>
+            }
+
+            <div class="fu-step"><span>4</span> How is it paid?</div>
             <div class="fu-types two">
                 <button type="button" class="@($"fu-type {(!_paid ? "is-picked" : "")}")" @onclick="() => _paid = false">Cash on delivery</button>
                 <button type="button" class="@($"fu-type {(_paid ? "is-picked" : "")}")" @onclick="() => _paid = true">Already paid (UPI / bank)</button>
@@ -71,11 +82,11 @@
             {
                 <input type="text" class="fu-input" maxlength="80" placeholder="Payment reference, e.g. UPI transaction id" aria-invalid="@(_errors.ContainsKey("ref") ? "true" : "false")" @bind="_ref" @bind:event="oninput" @bind:after="ClearRefError" />
                 @if (_errors.TryGetValue("ref", out var refErr)) { <em class="lo-err">@refErr</em> }
-                <p class="fu-hint"><Icon Name="Info" Size="12" /> Only choose this once the money is in your account. The order is marked paid and goes straight to shipping.</p>
+                <p class="fu-hint"><Icon Name="Info" Size="12" /> Only choose this once the money is in your account. The order is marked paid.</p>
             }
             else
             {
-                <p class="fu-hint"><Icon Name="Info" Size="12" /> The customer pays the courier on delivery.</p>
+                <p class="fu-hint"><Icon Name="Info" Size="12" /> @(_shippingMode == ShippingMode.Offline ? "The customer pays cash on local delivery (update COD status in Orders once collected)." : "The customer pays the courier on delivery.")</p>
             }
 
         </div>
@@ -144,9 +155,10 @@
     private readonly Dictionary<string, int> _lines = new();
     private OrderTotalsDto? _totals;
     private readonly AddressDto _a = new();
-    private string _name = "", _email = "", _phone = "", _coupon = "", _ref = "";
+    private string _name = "", _email = "", _phone = "", _coupon = "", _ref = "", _offlineNote = "";
     private string? _error, _priceError;
     private bool _paid, _busy, _needsPhone;
+    private ShippingMode _shippingMode = ShippingMode.Online;
 
     protected override async Task OnInitializedAsync()
     {
@@ -202,6 +214,8 @@
             Address = _a,
             AlreadyPaid = _paid,
             PaymentReference = _paid ? _ref : null,
+            ShippingMode = _shippingMode,
+            OfflineDispatchNote = _shippingMode == ShippingMode.Offline && !string.IsNullOrWhiteSpace(_offlineNote) ? _offlineNote.Trim() : null,
         };
         LeadOrderResponse res;
         if (IsCustomerMode)
