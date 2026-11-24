@@ -403,6 +403,8 @@ public class OrderDto
     public decimal ShippingFee { get; set; }
     public decimal TaxAmount { get; set; }
     public decimal TotalAmount { get; set; }
+    public decimal AdvanceAmount { get; set; }
+    public decimal CodBalance => Math.Max(0, TotalAmount - AdvanceAmount);
     public string? CouponCode { get; set; }
 
     /// <summary>COD | ONLINE</summary>
@@ -455,6 +457,7 @@ public class CreateOrderRequest
     /// <summary>ONLINE | OFFLINE</summary>
     public ShippingMode ShippingMode { get; set; } = ShippingMode.Online;
     public string? OfflineDispatchNote { get; set; }
+    public decimal AdvanceAmount { get; set; }
 }
 
 public class CreateOrderResponse : ApiResult
@@ -532,6 +535,8 @@ public class CustomerDto
 
 public class AdminCustomerDto : CustomerDto
 {
+    public string? SalespersonName { get; set; }
+    public long? SalespersonId { get; set; }
     public int OrdersCount { get; set; }
     public decimal TotalSpent { get; set; }
     public DateTime? LastOrderDate { get; set; }
@@ -666,6 +671,7 @@ public class AdminCreateOrderRequest
     public AddressDto Address { get; set; } = new();
     public string ProductId { get; set; } = "stamix-single";
     public string? CouponCode { get; set; }
+    public decimal AdvanceAmount { get; set; }
     public int Quantity { get; set; } = 1;
     /// <summary>COD | ONLINE</summary>
     public string PaymentMethod { get; set; } = "ONLINE";

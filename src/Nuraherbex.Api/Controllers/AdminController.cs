@@ -509,6 +509,7 @@ public class AdminController(
                 Items = r.Items.GroupBy(i => i.ProductId).Select(g => new CartLineDto { Id = g.Key, Quantity = g.Sum(x => x.Quantity) }).ToList(),
                 CouponCode = string.IsNullOrWhiteSpace(r.CouponCode) ? null : r.CouponCode.Trim(),
                 PaymentMethod = r.AlreadyPaid ? OrderPaymentMethods.Online : OrderPaymentMethods.Cod,
+                AdvanceAmount = r.AdvanceAmount,
                 ShippingMode = r.ShippingMode,
                 OfflineDispatchNote = r.OfflineDispatchNote,
             }, customer.Id, emailOptional: true);
@@ -579,6 +580,27 @@ public class AdminController(
         customer.FullName = r.FullName.Trim(); customer.Phone = phone; customer.ShippingAddress = address; customer.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return Ok(new CustomerResponse { Success = true, Customer = customer.ToDto(), Message = "Customer profile updated. A changed email is applied to their existing orders; order addresses are unchanged." });
+    }
+
+    [HttpDelete("customers/{id}"), Authorize(Roles = "admin")]
+    public async Task<IActionResult> DeleteCustomer(string id)
+    {
+        if (!User.IsInRole("admin"))
+            return StatusCode(403, new ApiResult { Success = false, Message = "Only administrators can delete customer records." });
+
+        var customer = await db.Customers.FirstOrDefaultAsync(c => c.Id == id);
+        if (customer is null) return NotFound(new ApiResult { Success = false, Message = "Customer not found." });
+
+        // Disassociate customer ID from their orders so store sales/order history is retained
+        var custOrders = await db.Orders.Where(o => o.CustomerId == id).ToListAsync();
+        foreach (var o in custOrders)
+        {
+            o.CustomerId = null;
+        }
+
+        db.Customers.Remove(customer);
+        await db.SaveChangesAsync();
+        return Ok(new ApiResult { Success = true, Message = $"Customer {customer.FullName} deleted successfully." });
     }
     // ---- WhatsApp --------------------------------------------------------------------
 

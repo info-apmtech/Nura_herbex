@@ -323,10 +323,17 @@ public class CustomerAuthService(NuraDbContext db, TokenService tokens, EmailSer
     {
         var customers = await db.Customers.AsNoTracking().OrderByDescending(c => c.CreatedAt).ToListAsync();
         var all = await orders.ListAllAsync();
+        var leads = await db.Leads.AsNoTracking().Select(l => new { l.Phone, l.AssignedToEmployeeId, l.ConvertedByEmployeeId }).ToListAsync();
+        var employees = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
+
         return customers.Select(c =>
         {
             var cEmail = (c.Email ?? "").Trim().ToLowerInvariant();
             var cPhone = Last10(c.Phone);
+            var lead = leads.FirstOrDefault(l => Last10(l.Phone) == cPhone);
+            var empId = lead?.ConvertedByEmployeeId ?? lead?.AssignedToEmployeeId;
+            var salesperson = empId != null ? employees.GetValueOrDefault(empId.Value) : null;
+
             var mine = all.Where(o =>
             {
                 if (!string.IsNullOrEmpty(o.CustomerId))
@@ -343,6 +350,8 @@ public class CustomerAuthService(NuraDbContext db, TokenService tokens, EmailSer
                 OrdersCount = mine.Count, TotalSpent = mine.Sum(o => o.TotalAmount),
                 LastOrderDate = mine.FirstOrDefault()?.CreatedAt, LastOrderId = mine.FirstOrDefault()?.Id,
                 Orders = mine.Select(o => o.ToDto()).ToList(),
+                SalespersonId = empId,
+                SalespersonName = salesperson,
             };
         }).ToList();
     }

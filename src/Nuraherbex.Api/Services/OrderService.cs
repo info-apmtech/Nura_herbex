@@ -56,6 +56,7 @@ public partial class OrderService(
             },
             Items = t.Items, Subtotal = t.Subtotal, DiscountAmount = t.DiscountAmount, CouponCode = t.CouponCode,
             ShippingFee = t.ShippingFee, TaxAmount = t.TaxAmount, TotalAmount = t.FinalTotal,
+            AdvanceAmount = Math.Max(0, req.AdvanceAmount),
             PaymentMethod = isCod ? OrderPaymentMethod.Cod : OrderPaymentMethod.Online, PaymentStatus = isCod ? OrderPaymentStatus.CodPending : OrderPaymentStatus.Pending,
             FulfillmentStatus = "PENDING",
             ShippingMode = req.ShippingMode,

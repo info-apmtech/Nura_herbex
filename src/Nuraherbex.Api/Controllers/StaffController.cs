@@ -72,7 +72,16 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     /// <param name="view">leads (new and follow-up), transfers (pending transfers), interested (hot leads) or care (paid customers).</param>
     /// <param name="assignee">managers only: "unassigned", "me" or an employee id. Everyone else always gets just their own people.</param>
     [HttpGet("leads")]
-    public async Task<LeadListResponse> Leads([FromQuery] string? status, [FromQuery] string? source, [FromQuery] string? q, [FromQuery] string? assignee, [FromQuery] int take = 100, [FromQuery] string? view = null)
+    public async Task<LeadListResponse> Leads(
+        [FromQuery] string? status,
+        [FromQuery] string? source,
+        [FromQuery] string? q,
+        [FromQuery] string? assignee,
+        [FromQuery] int take = 100,
+        [FromQuery] string? view = null,
+        [FromQuery] string? from = null,
+        [FromQuery] string? to = null,
+        [FromQuery] string? datePreset = null)
     {
         try
         {
@@ -133,9 +142,47 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
                 baseQuery = baseQuery.Where(l => l.Name.Contains(term) || (digits.Length > 0 && l.Phone.Contains(digits)) || (l.Email != null && l.Email.Contains(term)));
             }
 
+            // Date-wise filtering (Today, Yesterday, 7D, or Custom IST Range)
+            DateTime? filterFromUtc = null;
+            DateTime? filterToUtc = null;
+            var todayStart = FollowUpService.TodayStartUtc();
+            var tomorrow = todayStart.AddDays(1);
+
+            if (!string.IsNullOrWhiteSpace(datePreset))
+            {
+                var p = datePreset.Trim().ToLowerInvariant();
+                if (p == "today")
+                {
+                    filterFromUtc = todayStart;
+                    filterToUtc = tomorrow;
+                }
+                else if (p == "yesterday")
+                {
+                    filterFromUtc = todayStart.AddDays(-1);
+                    filterToUtc = todayStart;
+                }
+                else if (p is "7d" or "week")
+                {
+                    filterFromUtc = todayStart.AddDays(-6);
+                    filterToUtc = tomorrow;
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(from) && DateTime.TryParse(from, out var parsedFrom))
+            {
+                var fDate = parsedFrom.Date;
+                var tDate = (!string.IsNullOrWhiteSpace(to) && DateTime.TryParse(to, out var parsedTo)) ? parsedTo.Date : fDate;
+                if (fDate > tDate) (fDate, tDate) = (tDate, fDate);
+                filterFromUtc = FollowUpService.ToUtc(fDate);
+                filterToUtc = FollowUpService.ToUtc(tDate.AddDays(1));
+            }
+
+            if (filterFromUtc.HasValue && filterToUtc.HasValue)
+            {
+                baseQuery = baseQuery.Where(l => l.CreatedAt >= filterFromUtc.Value && l.CreatedAt < filterToUtc.Value);
+            }
+
             // The Leads panel is split into tabs by what needs doing (new today / older and still unopened / follow-up / no answer / not interested);
             // the other panels keep one count per status.
-            var todayStart = FollowUpService.TodayStartUtc();
             var newFrom = todayStart.AddDays(-1); // "New" = arrived today or yesterday (Indian days); anything earlier and still unopened is "Older, not opened"
             var bucketed = view == LeadViews.Leads;
             Dictionary<string, int> statusCounts;
@@ -243,6 +290,158 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
         _ => q.Where(_ => false),
     };
 
+    /// <summary>
+    /// Creates a lead manually (e.g. from an incoming phone call, direct WhatsApp, or walk-in).
+    /// Optionally pushes an introduction WhatsApp message to the customer to start the conversation flow.
+    /// </summary>
+    [HttpPost("leads")]
+    public async Task<IActionResult> CreateLead([FromBody] LeadCreateRequest r)
+    {
+        if (Level(LeadViews.Leads) < 1)
+            return StatusCode(403, new ApiResult { Success = false, Message = "Your designation does not allow creating leads." });
+
+        if (string.IsNullOrWhiteSpace(r.FullName))
+            return BadRequest(new ApiResult { Success = false, Message = "Customer full name is required." });
+
+        if (string.IsNullOrWhiteSpace(r.Phone))
+            return BadRequest(new ApiResult { Success = false, Message = "Phone / WhatsApp number is required." });
+
+        var normPhone = leads.NormalizePhone(r.Phone);
+        if (normPhone.Length < 10)
+            return BadRequest(new ApiResult { Success = false, Message = "Enter a valid 10-digit mobile number." });
+
+        var existing = await db.Leads.FirstOrDefaultAsync(l => l.Phone == normPhone);
+        if (existing is not null)
+        {
+            return Conflict(new ApiResult
+            {
+                Success = false,
+                Message = $"A lead already exists for {r.Phone} ({existing.Name}). You can search and open this lead directly.",
+            });
+        }
+
+        long? assigneeId = null;
+        if (r.AutoAssign)
+        {
+            var leadPeople = await rightsService.EmployeesWithPageAsync("leads");
+            var candidate = await db.Employees.Where(e => e.IsActive && e.Role == EmployeeRole.Sales && leadPeople.Contains(e.Id))
+                .OrderBy(e => e.LastAssignedAt ?? DateTime.MinValue)
+                .FirstOrDefaultAsync();
+            assigneeId = candidate?.Id ?? MyId;
+            if (candidate is not null) candidate.LastAssignedAt = DateTime.UtcNow;
+        }
+        else if (r.AssignedToEmployeeId.HasValue && r.AssignedToEmployeeId > 0)
+        {
+            assigneeId = r.AssignedToEmployeeId.Value;
+        }
+        else
+        {
+            assigneeId = MyId;
+        }
+
+        var now = DateTime.UtcNow;
+        var leadSource = LeadSources.TryParse(r.Source, out var srcEnum) ? srcEnum : LeadSource.Manual;
+
+        var lead = new Lead
+        {
+            Phone = normPhone,
+            Name = r.FullName.Trim(),
+            Email = string.IsNullOrWhiteSpace(r.Email) ? null : r.Email.Trim().ToLowerInvariant(),
+            Source = leadSource,
+            SourceDetail = !string.IsNullOrWhiteSpace(r.ProductInterest) ? r.ProductInterest.Trim() : (!string.IsNullOrWhiteSpace(r.SourceDetail) ? r.SourceDetail.Trim() : "Manual Entry"),
+            Notes = string.IsNullOrWhiteSpace(r.Notes) ? null : r.Notes.Trim(),
+            Status = Nuraherbex.Shared.Models.LeadStatus.New,
+            AssignedToEmployeeId = assigneeId,
+            CreatedAt = now,
+            UpdatedAt = now,
+            LastContactAt = now,
+        };
+
+        db.Leads.Add(lead);
+        await db.SaveChangesAsync();
+
+        var convo = new Conversation
+        {
+            LeadId = lead.Id,
+        };
+        db.Conversations.Add(convo);
+
+        db.LeadStatusHistory.Add(new LeadStatusHistory
+        {
+            LeadId = lead.Id,
+            FromStatus = null,
+            ToStatus = Nuraherbex.Shared.Models.LeadStatus.New,
+            Note = $"Lead manually created by {MyName}. Source: {r.Source ?? "Manual"}",
+            ChangedBy = MyName,
+            CreatedAt = now,
+        });
+
+        if (assigneeId.HasValue)
+        {
+            db.LeadAssignmentHistory.Add(new LeadAssignmentHistory
+            {
+                LeadId = lead.Id,
+                FromEmployeeId = null,
+                ToEmployeeId = assigneeId.Value,
+                Reason = "Assigned upon manual lead creation",
+                ChangedBy = MyName,
+                CreatedAt = now,
+            });
+        }
+
+        await db.SaveChangesAsync();
+
+        bool waSent = false;
+        string? waError = null;
+
+        if (r.SendWhatsAppPush)
+        {
+            try
+            {
+                string msgBody;
+                if (!string.IsNullOrWhiteSpace(r.CustomWhatsAppMessage))
+                {
+                    msgBody = r.CustomWhatsAppMessage.Trim();
+                }
+                else
+                {
+                    var prodName = !string.IsNullOrWhiteSpace(r.ProductInterest) ? r.ProductInterest.Trim() : "our herbal wellness products";
+                    msgBody = $"Hello {lead.Name}! 🌿 Thank you for reaching out to Nura Herbex regarding {prodName}.\n\nOur wellness advisor is here to help you with product information, dosages, and exclusive offers. How can we assist you today?";
+                }
+
+                waSent = await whatsapp.SendTextAsync(normPhone, msgBody, null, MyName);
+                if (waSent)
+                {
+                    convo.LastOutboundAt = DateTime.UtcNow;
+                    await db.SaveChangesAsync();
+                }
+                else
+                {
+                    waError = "WhatsApp message could not be sent (check WhatsApp API configuration).";
+                }
+            }
+            catch (Exception ex)
+            {
+                log.LogError(ex, "[StaffController.CreateLead] WhatsApp push failed for {Phone}: {Message}", normPhone, ex.Message);
+                waError = ex.Message;
+            }
+        }
+
+        var dto = lead.ToDto(convo);
+        dto.AssignedToName = assigneeId.HasValue ? await db.Employees.Where(e => e.Id == assigneeId.Value).Select(e => e.Name).FirstOrDefaultAsync() : null;
+
+        return Ok(new LeadCreateResponse
+        {
+            Success = true,
+            Lead = dto,
+            WhatsAppSent = waSent,
+            WhatsAppError = waError,
+            Message = waSent
+                ? $"Lead {lead.Name} added and WhatsApp introduction message sent! 🌿"
+                : $"Lead {lead.Name} added successfully." + (waError != null ? $" ({waError})" : ""),
+        });
+    }
+
     // ---- Customer view: orders matched to the lead by phone ------------------------------------
 
     private static string Last10(string phone) { var d = new string((phone ?? "").Where(char.IsDigit).ToArray()); return d.Length > 10 ? d[^10..] : d; }
@@ -325,6 +524,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
                 Items = r.Items.GroupBy(i => i.ProductId).Select(g => new CartLineDto { Id = g.Key, Quantity = g.Sum(x => x.Quantity) }).ToList(),
                 CouponCode = string.IsNullOrWhiteSpace(r.CouponCode) ? null : r.CouponCode.Trim(),
                 PaymentMethod = r.AlreadyPaid ? "ONLINE" : "COD",
+                AdvanceAmount = r.AdvanceAmount,
                 ShippingMode = r.ShippingMode,
                 OfflineDispatchNote = r.OfflineDispatchNote,
             }, resolvedCustomerId, emailOptional: true);

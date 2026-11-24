@@ -99,7 +99,7 @@ public class ShiprocketService(HttpClient http, IOptions<ShiprocketOptions> opti
             shipping_is_billing = true,
             order_items = order.Items.Select(i => new { name = i.Name, sku = i.Sku, units = i.Quantity, selling_price = i.Price, discount = 0, tax = 0, hsn = long.TryParse(i.Hsn, out var h) ? h : 21069099 }),
             payment_method = isCod ? "COD" : "Prepaid",
-            sub_total = order.TotalAmount,
+            sub_total = isCod ? Math.Max(0, order.TotalAmount - order.AdvanceAmount) : order.TotalAmount,
             length = parcel.LengthCm, breadth = parcel.BreadthCm, height = parcel.HeightCm, weight = parcel.WeightKg,
         };
 

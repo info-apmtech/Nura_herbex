@@ -34,6 +34,7 @@ public class LeadOrderRequest
 {
     public List<LeadOrderLineRequest> Items { get; set; } = new();
     public string? CouponCode { get; set; }
+    public decimal AdvanceAmount { get; set; }
     public string? CustomerName { get; set; }
     /// <summary>Optional. Used for the order confirmation e-mail and backfilled onto blank customer records.</summary>
     public string Email { get; set; } = "";

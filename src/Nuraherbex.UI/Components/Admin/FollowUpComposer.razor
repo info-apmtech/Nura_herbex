@@ -4,7 +4,7 @@
 <div class="fu-modal-backdrop" @onclick="OnClose">
     <div class="fu-modal" role="dialog" aria-modal="true" aria-label="Schedule a follow-up" @onclick:stopPropagation="true">
         <header>
-            <h3>Schedule a follow-up</h3>
+            <h3>Schedule @(string.Equals(_lead?.Status ?? LeadStatus, LeadStatuses.Interested, StringComparison.OrdinalIgnoreCase) ? "Hot Leads Follow-up" : string.Equals(_lead?.Status ?? LeadStatus, LeadStatuses.NoAnswer, StringComparison.OrdinalIgnoreCase) ? "No Answer Follow-up" : "a follow-up")</h3>
             <button type="button" class="em-x" aria-label="Close" @onclick="OnClose"><Icon Name="X" Size="16" /></button>
         </header>
 
@@ -133,9 +133,14 @@
     {
         if (_lead is null) return;
         _busy = true; _error = null;
+        var defaultTitle = string.Equals(_lead?.Status ?? LeadStatus, LeadStatuses.Interested, StringComparison.OrdinalIgnoreCase)
+            ? "Hot Leads Follow-up"
+            : string.Equals(_lead?.Status ?? LeadStatus, LeadStatuses.NoAnswer, StringComparison.OrdinalIgnoreCase)
+                ? "No Answer Follow-up"
+                : null;
         var res = await Api.AdminCreateFollowUpAsync(new FollowUpCreateRequest
         {
-            LeadId = _lead.Id, Type = _type, Title = string.IsNullOrWhiteSpace(_title) ? null : _title.Trim(),
+            LeadId = _lead.Id, Type = _type, Title = string.IsNullOrWhiteSpace(_title) ? defaultTitle : _title.Trim(),
             Notes = string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim(), DueAt = FuFmt.ToUtc(_due),
             AssignedToEmployeeId = long.TryParse(_owner, out var o) ? o : null,
         });

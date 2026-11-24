@@ -85,6 +85,19 @@ public class AdsReportService(NuraDbContext db)
         var first = events.GroupBy(e => e.LeadId).Select(g => g.OrderBy(x => x.CreatedAt).First())
             .Where(e => e.CreatedAt >= fromUtc && e.CreatedAt < toUtc).ToList();
 
+        var existingLeadIds = first.Select(x => x.LeadId).ToHashSet();
+        var otherAdLeads = await db.Leads.AsNoTracking()
+            .Where(l => l.CreatedAt >= fromUtc && l.CreatedAt < toUtc && !existingLeadIds.Contains(l.Id) &&
+                (l.Source == LeadSource.Facebook || l.Source == LeadSource.Instagram || (!string.IsNullOrEmpty(l.SourceDetail) && (l.SourceDetail.Contains("Ad") || l.SourceDetail.Contains("Campaign") || l.SourceDetail.Contains("Meta")))))
+            .Select(l => new { l.Id, l.CreatedAt, l.SourceDetail })
+            .ToListAsync();
+
+        foreach (var ol in otherAdLeads)
+        {
+            var fallbackRefJson = $"{{\"source_type\":\"ad\",\"headline\":{JsonSerializer.Serialize(ol.SourceDetail ?? "Meta Ad")}}}";
+            first.Add(new { LeadId = ol.Id, CreatedAt = ol.CreatedAt, ReferralJson = (string?)fallbackRefJson });
+        }
+
         var leads = new Dictionary<long, Lead>();
         foreach (var chunk in first.Select(x => x.LeadId).Distinct().Chunk(800))
         {

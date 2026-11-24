@@ -304,6 +304,28 @@ public class LeadNoAnswerRequest
     public DateTime? NextDueAt { get; set; }
 }
 
+public class LeadCreateRequest
+{
+    public string FullName { get; set; } = "";
+    public string Phone { get; set; } = "";
+    public string? Email { get; set; }
+    public string? ProductInterest { get; set; }
+    public string? Source { get; set; } = LeadSources.Manual;
+    public string? SourceDetail { get; set; }
+    public string? Notes { get; set; }
+    public long? AssignedToEmployeeId { get; set; }
+    public bool AutoAssign { get; set; }
+    public bool SendWhatsAppPush { get; set; } = true;
+    public string? CustomWhatsAppMessage { get; set; }
+}
+
+public class LeadCreateResponse : ApiResult
+{
+    public LeadDto? Lead { get; set; }
+    public bool WhatsAppSent { get; set; }
+    public string? WhatsAppError { get; set; }
+}
+
 public class LeadNotesRequest
 {
     public string? Notes { get; set; }

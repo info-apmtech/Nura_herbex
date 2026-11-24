@@ -51,7 +51,7 @@ public class AdsController(AdsReportService report, MetaAdsService meta, RightsS
     {
         if (!Scope().Allowed) return StatusCode(403, new ApiResult { Success = false, Message = "You do not have access to the Ad campaigns report." });
         var s = await meta.StatusAsync();
-        s.CanSync = CanAll("campaigns");
+        s.CanSync = CanAll("campaigns") || IsAdmin;
         s.CanConnect = IsAdmin;
         if (!s.CanConnect) { s.AdAccountId = null; } // only administrators see which ad account is connected
         return Ok(s);
@@ -61,7 +61,7 @@ public class AdsController(AdsReportService report, MetaAdsService meta, RightsS
     [HttpPost("sync")]
     public async Task<IActionResult> Sync(CancellationToken ct)
     {
-        if (!CanAll("campaigns")) return StatusCode(403, new ApiResult { Success = false, Message = "Only people who see everyone's ad records can sync with Meta." });
+        if (!CanAll("campaigns") && !IsAdmin) return StatusCode(403, new ApiResult { Success = false, Message = "Only people who see everyone's ad records can sync with Meta." });
         var r = await meta.SyncAsync(ct);
         return r.Ok ? Ok(new ApiResult { Success = true, Message = r.Message }) : BadRequest(new ApiResult { Success = false, Message = r.Message });
     }

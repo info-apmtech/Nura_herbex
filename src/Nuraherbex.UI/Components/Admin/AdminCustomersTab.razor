@@ -104,6 +104,7 @@
                 <thead class="bg-zinc-950/70 text-zinc-400 tabular-nums text-[11px] border-b border-zinc-800">
                     <tr><th class="px-3 py-3 text-left font-medium w-12">S.No</th>
                         <th class="px-4 py-3 text-left font-medium">Customer</th>
+                        <th class="px-4 py-3 text-left font-medium">Salesperson</th>
                         <th class="px-4 py-3 text-left font-medium">Contact</th>
                         <th class="px-4 py-3 text-left font-medium">Registered Date</th>
                         <th class="px-4 py-3 text-left font-medium">Default Destination</th>
@@ -116,7 +117,7 @@
                     @if (Loading)
                     {
                         <tr>
-                            <td colspan="8" class="px-4 py-12 text-center text-zinc-500">
+                            <td colspan="9" class="px-4 py-12 text-center text-zinc-500">
                                 <div class="flex flex-col items-center justify-center gap-2">
                                     <Icon Name="RefreshCw" Size="18" Class="animate-spin text-zinc-400" />
                                     <span class="text-xs">Fetching registered users strictly from database...</span>
@@ -127,7 +128,7 @@
                     else if (FilteredCustomers.Count == 0)
                     {
                         <tr>
-                            <td colspan="8" class="px-4 py-12 text-center text-zinc-500">
+                            <td colspan="9" class="px-4 py-12 text-center text-zinc-500">
                                 <div class="flex flex-col items-center justify-center gap-2">
                                     <Icon Name="Users" Size="24" Class="text-zinc-600" />
                                     <div class="font-medium text-zinc-300">
@@ -171,6 +172,21 @@
                                             <div class="tabular-nums text-[10px] text-zinc-500">@cust.Id</div>
                                         </div>
                                     </div>
+                                </td>
+
+                                @* Salesperson *@
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    @if (!string.IsNullOrEmpty(cust.SalespersonName))
+                                    {
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                                            <Icon Name="UserCheck" Size="11" />
+                                            <span>@cust.SalespersonName</span>
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-zinc-600 italic text-[11px]">Direct / Store</span>
+                                    }
                                 </td>
 
                                 @* Contact Details *@
@@ -276,6 +292,16 @@
                                             <Icon Name="Eye" Size="12" />
                                             <span>View Profile</span>
                                         </button>
+                                        @if (AdminAuth.IsAdmin)
+                                        {
+                                            <button type="button"
+                                                    @onclick="() => PromptDeleteCustomer(cust)"
+                                                    class="px-2.5 py-1 rounded-md bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 text-rose-300 text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                                                    title="Permanently delete this customer record (Admin only)">
+                                                <Icon Name="Trash2" Size="12" />
+                                                <span>Delete</span>
+                                            </button>
+                                        }
                                     </div>
                                 </td>
                             </tr>
@@ -299,7 +325,7 @@
     <div @onclick="@(() => _selected = null)"
          class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in text-left">
         <div @onclick:stopPropagation
-             class="relative w-full max-w-2xl bg-[#121215] border border-zinc-800 rounded-xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+             class="relative w-full max-w-3xl bg-[#121215] border border-zinc-800 rounded-xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto overflow-x-auto">
             <button @onclick="@(() => _selected = null)"
                     class="absolute top-4 right-4 w-7 h-7 rounded-md bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/60 flex items-center justify-center text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors">
                 <Icon Name="X" Size="15" />
@@ -386,8 +412,8 @@
 
                 @if (sc.Orders.Count > 0)
                 {
-                    <div class="rounded-lg border border-zinc-800 overflow-hidden bg-zinc-950/50">
-                        <table class="w-full text-xs">
+                    <div class="rounded-lg border border-zinc-800 overflow-x-auto bg-zinc-950/50">
+                        <table class="w-full text-xs min-w-[500px]">
                             <thead class="bg-zinc-900 text-zinc-400 tabular-nums text-[10px] border-b border-zinc-800">
                                 <tr>
                                     <th class="p-2.5 text-left font-medium">Order ID</th>
@@ -487,6 +513,38 @@
                      OnCreated="OnCustomerOrderCreatedAsync" />
 }
 
+@if (_customerToDelete is { } delCust)
+{
+    <div class="fu-modal-backdrop" @onclick="() => { if (!_deletingCustomer) _customerToDelete = null; }" style="position:fixed;inset:0;background:rgba(15,23,42,0.65);backdrop-filter:blur(4px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;">
+        <div class="fu-modal" role="dialog" aria-modal="true" @onclick:stopPropagation="true" style="max-width:440px;width:100%;background:#fff;border-radius:20px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);overflow:hidden;text-align:center;padding:28px 24px;border:1px solid #f1f5f9;">
+            <div style="width:56px;height:56px;margin:0 auto 16px;border-radius:50%;background:#fee2e2;color:#dc2626;display:flex;align-items:center;justify-content:center;">
+                <Icon Name="Trash2" Size="26" />
+            </div>
+            <h3 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0f172a;">Delete Customer?</h3>
+            <p style="margin:0 0 20px;font-size:14px;color:#64748b;line-height:1.5;">
+                Are you sure you want to permanently delete <strong style="color:#0f172a;">@(string.IsNullOrWhiteSpace(delCust.FullName) ? delCust.Phone : delCust.FullName)</strong> (@delCust.Phone)? This will remove this customer profile.
+            </p>
+            <div style="display:flex;gap:12px;justify-content:center;">
+                <button type="button" class="admin-btn" style="flex:1;padding:10px 16px;border-radius:10px;font-weight:600;justify-content:center;" @onclick="() => _customerToDelete = null" disabled="@_deletingCustomer">
+                    Cancel
+                </button>
+                <button type="button" class="admin-btn" style="flex:1;padding:10px 16px;border-radius:10px;font-weight:600;background:#dc2626 !important;color:#ffffff !important;border-color:#dc2626 !important;justify-content:center;gap:6px;cursor:pointer;" @onclick="ConfirmDeleteCustomerAsync" disabled="@_deletingCustomer">
+                    @if (_deletingCustomer)
+                    {
+                        <Icon Name="RefreshCw" Size="16" Class="animate-spin" />
+                        <span style="color:#ffffff !important;">Deleting…</span>
+                    }
+                    else
+                    {
+                        <Icon Name="Trash2" Size="16" />
+                        <span style="color:#ffffff !important;">Yes, Delete</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private int _page = 1, _size = 10;
     private IEnumerable<IReadOnlyList<string>> ExportRows() => FilteredCustomers.Select(c => (IReadOnlyList<string>)new[] { c.Id, c.FullName, c.Email, c.Phone, c.ShippingAddress?.City ?? "", c.ShippingAddress?.State ?? "", OrderCount(c).ToString(), c.TotalSpent.ToString("0.##"), c.LastOrderDate?.ToLocalTime().ToString("yyyy-MM-dd") ?? "", c.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd") });
@@ -551,6 +609,44 @@
         else
         {
             _notice = res.Message ?? "Could not download the invoice PDF.";
+        }
+    }
+
+    private AdminCustomerDto? _customerToDelete;
+    private bool _deletingCustomer;
+
+    private void PromptDeleteCustomer(AdminCustomerDto c)
+    {
+        if (!AdminAuth.IsAdmin) return;
+        _customerToDelete = c;
+    }
+
+    private async Task ConfirmDeleteCustomerAsync()
+    {
+        if (_customerToDelete is null || !AdminAuth.IsAdmin || _deletingCustomer) return;
+        var id = _customerToDelete.Id;
+        _deletingCustomer = true;
+        StateHasChanged();
+        try
+        {
+            var res = await Api.AdminDeleteCustomerAsync(id);
+            if (res.Success)
+            {
+                if (_selected?.Id == id) _selected = null;
+                _notice = res.Message ?? "Customer deleted.";
+                _customerToDelete = null;
+                await OnReload.InvokeAsync();
+            }
+            else
+            {
+                _notice = res.Message ?? "Failed to delete customer.";
+                _customerToDelete = null;
+            }
+        }
+        finally
+        {
+            _deletingCustomer = false;
+            StateHasChanged();
         }
     }
 

@@ -80,6 +80,11 @@
                         </div>
                         <div><dt>Destination</dt><dd>@o.ShippingAddress?.City, @o.ShippingAddress?.State @o.ShippingAddress?.Pincode</dd></div>
                         <div><dt>Order total</dt><dd>₹@o.TotalAmount.ToString("N0")</dd></div>
+                        @if (o.AdvanceAmount > 0)
+                        {
+                            <div><dt>Advance collected</dt><dd style="color:#059669;font-weight:600;">₹@o.AdvanceAmount.ToString("N0")</dd></div>
+                            <div><dt>Balance COD to collect</dt><dd style="color:#dc2626;font-weight:700;">₹@o.CodBalance.ToString("N0")</dd></div>
+                        }
                     </dl>
 
                     <section class="ot-timeline-box">
@@ -439,7 +444,16 @@
             new() { Header = "Subtotal (Rs)", Text = o => o.Subtotal.ToString("0.##"), SortKey = o => o.Subtotal, Align = "right", Hidden = true },
             new() { Header = "Discount (Rs)", Text = o => o.DiscountAmount.ToString("0.##"), SortKey = o => o.DiscountAmount, Align = "right", Hidden = true },
             new() { Header = "Shipping (Rs)", Text = o => o.ShippingFee.ToString("0.##"), SortKey = o => o.ShippingFee, Align = "right", Hidden = true },
-            new() { Header = "Total (Rs)", Text = o => o.TotalAmount.ToString("0.##"), SortKey = o => o.TotalAmount, Align = "right", Cell = o => b => b.AddContent(0, "₹" + AdminFmt.Inr(o.TotalAmount)) },
+            new() { Header = "Total (Rs)", Text = o => o.TotalAmount.ToString("0.##"), SortKey = o => o.TotalAmount, Align = "right", Cell = o => b => {
+                b.AddContent(0, "₹" + AdminFmt.Inr(o.TotalAmount));
+                if (o.AdvanceAmount > 0)
+                {
+                    b.OpenElement(1, "small");
+                    b.AddAttribute(2, "style", "display:block;font-size:11px;color:#be123c;font-weight:600;");
+                    b.AddContent(3, $"COD: ₹{AdminFmt.Inr(o.CodBalance)} (Adv ₹{AdminFmt.Inr(o.AdvanceAmount)})");
+                    b.CloseElement();
+                }
+            } },
             new() { Header = "Payment", Text = PaymentLabel, Tone = o => o.PaymentStatus is "PAID" or "COD_COLLECTED" ? "good" : o.PaymentStatus == "FAILED" ? "bad" : o.PaymentMethod == "COD" ? "muted" : "warn" },
             new() { Header = "Courier", Text = Courier },
             new() { Header = "AWB", Text = o => o.ShippingMode == ShippingMode.Offline ? "Offline" : (o.ShiprocketAwb ?? ""), Cell = o => b =>

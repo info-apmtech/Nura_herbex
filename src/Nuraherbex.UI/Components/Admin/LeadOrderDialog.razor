@@ -86,7 +86,23 @@
             }
             else
             {
-                <p class="fu-hint"><Icon Name="Info" Size="12" /> @(_shippingMode == ShippingMode.Offline ? "The customer pays cash on local delivery (update COD status in Orders once collected)." : "The customer pays the courier on delivery.")</p>
+                <div style="margin-top:12px;background:#fdf2f8;border:1px solid #fbcfe8;border-radius:8px;padding:12px 14px;">
+                    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:#9d174d;">
+                        <span>Advance Collected (₹) <small style="font-weight:normal;color:#be185d;">(Enter partial advance paid by customer, e.g. ₹100)</small></span>
+                        <input type="number" min="0" max="@(_totals?.FinalTotal ?? 99999)" step="1" class="fu-input" style="background:#fff;border:1px solid #f472b6;"
+                               placeholder="0" value="@(_advanceAmount > 0 ? _advanceAmount.ToString("0") : "")"
+                               @oninput="OnAdvanceInput" />
+                    </label>
+                    @if (_advanceAmount > 0 && _totals is not null)
+                    {
+                        <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #f472b6;font-size:12px;display:flex;justify-content:space-between;color:#831843;">
+                            <span>Balance Cash on Delivery (COD):</span>
+                            <strong style="font-size:14px;color:#be123c;">₹@AdminFmt.Inr(Math.Max(0, _totals.FinalTotal - _advanceAmount))</strong>
+                        </div>
+                        <small style="color:#9d174d;display:block;margin-top:2px;">Final bill will generate for the full original price: ₹@AdminFmt.Inr(_totals.FinalTotal)</small>
+                    }
+                </div>
+                <p class="fu-hint"><Icon Name="Info" Size="12" /> @(_shippingMode == ShippingMode.Offline ? "The customer pays cash on local delivery (update COD status in Orders once collected)." : "The customer pays the remaining COD balance to the courier on delivery.")</p>
             }
 
         </div>
@@ -95,7 +111,7 @@
 
         <footer>
             <button type="button" class="ld-btn" @onclick="OnClose">Cancel</button>
-            <button type="button" class="ld-btn primary" disabled="@(_busy || _lines.Count == 0)" @onclick="SaveAsync">@(_busy ? "Creating…" : _totals is null ? "Create order" : $"Create order · ₹{AdminFmt.Inr(_totals.FinalTotal)}")</button>
+            <button type="button" class="ld-btn primary" disabled="@(_busy || _lines.Count == 0)" @onclick="SaveAsync">@(_busy ? "Creating…" : _totals is null ? "Create order" : (!_paid && _advanceAmount > 0 ? $"Create order · COD ₹{AdminFmt.Inr(Math.Max(0, _totals.FinalTotal - _advanceAmount))} (Adv ₹{_advanceAmount:0})" : $"Create order · ₹{AdminFmt.Inr(_totals.FinalTotal)}"))</button>
         </footer>
     </div>
 </div>
@@ -178,6 +194,13 @@
         _products = await Api.GetProductsAsync();
     }
 
+    private decimal _advanceAmount;
+    private void OnAdvanceInput(ChangeEventArgs e)
+    {
+        if (decimal.TryParse(e.Value?.ToString(), out var v)) _advanceAmount = Math.Max(0, v);
+        else _advanceAmount = 0m;
+    }
+
     private int Qty(string id) => _lines.GetValueOrDefault(id);
 
     private async Task Change(string id, int delta)
@@ -208,6 +231,7 @@
         {
             Items = _lines.Select(kv => new LeadOrderLineRequest { ProductId = kv.Key, Quantity = kv.Value }).ToList(),
             CouponCode = string.IsNullOrWhiteSpace(_coupon) ? null : _coupon.Trim(),
+            AdvanceAmount = !_paid ? _advanceAmount : 0m,
             CustomerName = _name,
             Email = _email,
             Phone = IsCustomerMode && !string.IsNullOrWhiteSpace(_phone) ? _phone : null,

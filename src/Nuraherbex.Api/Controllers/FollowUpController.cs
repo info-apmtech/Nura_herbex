@@ -224,10 +224,10 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
             var cat = category.Trim().ToLowerInvariant();
             query = cat switch
             {
-                NotificationCategories.FollowUps => query.Where(n => n.Kind == "overdue" || n.Kind == "due" || n.Kind == "reminder"),
-                NotificationCategories.Leads => query.Where(n => n.Kind == "lead" || n.Kind == "transfer"),
-                NotificationCategories.Orders => query.Where(n => n.Kind == "order"),
-                NotificationCategories.Tasks => query.Where(n => n.Kind != "overdue" && n.Kind != "due" && n.Kind != "reminder" && n.Kind != "lead" && n.Kind != "transfer" && n.Kind != "order"),
+                NotificationCategories.FollowUps or "followup" => query.Where(n => n.Kind.ToLower() == "overdue" || n.Kind.ToLower() == "due" || n.Kind.ToLower() == "reminder"),
+                NotificationCategories.Leads or "lead" => query.Where(n => n.Kind.ToLower() == "lead" || n.Kind.ToLower() == "transfer"),
+                NotificationCategories.Orders or "order" => query.Where(n => n.Kind.ToLower() == "order"),
+                NotificationCategories.Tasks or "task" => query.Where(n => n.Kind.ToLower() != "overdue" && n.Kind.ToLower() != "due" && n.Kind.ToLower() != "reminder" && n.Kind.ToLower() != "lead" && n.Kind.ToLower() != "transfer" && n.Kind.ToLower() != "order"),
                 _ => query
             };
         }
@@ -293,10 +293,10 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
         {
             q = category.ToLowerInvariant() switch
             {
-                NotificationCategories.FollowUps => q.Where(n => n.Kind == "overdue" || n.Kind == "due" || n.Kind == "reminder"),
-                NotificationCategories.Leads => q.Where(n => n.Kind == "lead" || n.Kind == "transfer"),
-                NotificationCategories.Orders => q.Where(n => n.Kind == "order"),
-                NotificationCategories.Tasks => q.Where(n => n.Kind != "overdue" && n.Kind != "due" && n.Kind != "reminder" && n.Kind != "lead" && n.Kind != "transfer" && n.Kind != "order"),
+                NotificationCategories.FollowUps or "followup" => q.Where(n => n.Kind.ToLower() == "overdue" || n.Kind.ToLower() == "due" || n.Kind.ToLower() == "reminder"),
+                NotificationCategories.Leads or "lead" => q.Where(n => n.Kind.ToLower() == "lead" || n.Kind.ToLower() == "transfer"),
+                NotificationCategories.Orders or "order" => q.Where(n => n.Kind.ToLower() == "order"),
+                NotificationCategories.Tasks or "task" => q.Where(n => n.Kind.ToLower() != "overdue" && n.Kind.ToLower() != "due" && n.Kind.ToLower() != "reminder" && n.Kind.ToLower() != "lead" && n.Kind.ToLower() != "transfer" && n.Kind.ToLower() != "order"),
                 _ => q
             };
         }

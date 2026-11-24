@@ -1,5 +1,6 @@
 @inject ApiClient Api
 @inject BrowserInterop Browser
+@inject AdminSession AdminAuth
 
 @if (_editor is not null)
 {
@@ -49,9 +50,41 @@ else
         <div class="admin-table-scroll"><table class="admin-table"><thead><tr><th class="admin-sno">S.No</th><th>Product</th><th>Status</th><th>Inventory</th><th>Price</th><th>Category</th><th><span class="admin-sr-only">Actions</span></th></tr></thead><tbody>
         @if (_loading) { <tr><td colspan="7" class="admin-empty">Loading your catalog…</td></tr> }
         else if (!Filtered.Any()) { <tr><td colspan="7" class="admin-empty"><Icon Name="Package" Size="32" /><h3>No products found</h3><p>Add your first product or adjust the filters.</p></td></tr> }
-        else { @foreach (var (p, i) in Filtered.Skip((_page - 1) * _size).Take(_size).Select((x, n) => (x, n + 1 + (_page - 1) * _size))) { <tr @key="p.Id"><td class="admin-sno">@i</td><td><button class="admin-product-cell" @onclick="() => Edit(p)"><div class="admin-thumbnail">@if (!string.IsNullOrWhiteSpace(p.ImageUrl)) { <img src="@p.ImageUrl" alt="" loading="lazy" /> } else { <Icon Name="Package" Size="22" /> }</div><span><strong>@p.Name</strong><small>@p.Sku</small></span></button></td><td><span class="admin-badge @p.Status">@p.Status</span></td><td><strong class="@(p.StockQuantity <= 10 ? "admin-warning-text" : "")">@p.StockQuantity</strong><small class="admin-cell-note">in stock</small></td><td>₹@AdminFmt.Inr(p.Price)</td><td>@(string.IsNullOrWhiteSpace(p.Category) ? "—" : p.Category)</td><td><div class="admin-actions"><button class="admin-btn admin-btn-small" @onclick="() => Edit(p)">Edit</button><button class="admin-btn admin-btn-small" disabled="@_saving" @onclick="() => Duplicate(p)">Duplicate</button>@if (p.Status != "archived") { <button class="admin-link-danger" disabled="@_saving" @onclick="() => ArchiveAsync(p)">Archive</button> }</div></td></tr> } }
+        else { @foreach (var (p, i) in Filtered.Skip((_page - 1) * _size).Take(_size).Select((x, n) => (x, n + 1 + (_page - 1) * _size))) { <tr @key="p.Id"><td class="admin-sno">@i</td><td><button class="admin-product-cell" @onclick="() => Edit(p)"><div class="admin-thumbnail">@if (!string.IsNullOrWhiteSpace(p.ImageUrl)) { <img src="@p.ImageUrl" alt="" loading="lazy" /> } else { <Icon Name="Package" Size="22" /> }</div><span><strong>@p.Name</strong><small>@p.Sku</small></span></button></td><td><span class="admin-badge @p.Status">@p.Status</span></td><td><strong class="@(p.StockQuantity <= 10 ? "admin-warning-text" : "")">@p.StockQuantity</strong><small class="admin-cell-note">in stock</small></td><td>₹@AdminFmt.Inr(p.Price)</td><td>@(string.IsNullOrWhiteSpace(p.Category) ? "—" : p.Category)</td><td><div class="admin-actions"><button class="admin-btn admin-btn-small" @onclick="() => Edit(p)">Edit</button><button class="admin-btn admin-btn-small" disabled="@_saving" @onclick="() => Duplicate(p)">Duplicate</button>@if (p.Status != "archived") { <button class="admin-link-danger" disabled="@_saving" @onclick="() => ArchiveAsync(p)">Archive</button> }@if (AdminAuth.IsAdmin) { <button class="admin-link-danger" style="color:#e11d48;font-weight:600;" disabled="@_saving" @onclick="() => PromptDelete(p)">Delete</button> }</div></td></tr> } }
         </tbody></table></div><Pager Total="@Filtered.Count()" @bind-Page="_page" @bind-PageSize="_size" Label="products" />
     </section>
+}
+
+@if (_productToDelete is { } delProd)
+{
+    <div class="fu-modal-backdrop" @onclick="() => { if (!_saving) _productToDelete = null; }" style="position:fixed;inset:0;background:rgba(15,23,42,0.65);backdrop-filter:blur(4px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;">
+        <div class="fu-modal" role="dialog" aria-modal="true" @onclick:stopPropagation="true" style="max-width:440px;width:100%;background:#fff;border-radius:20px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);overflow:hidden;text-align:center;padding:28px 24px;border:1px solid #f1f5f9;">
+            <div style="width:56px;height:56px;margin:0 auto 16px;border-radius:50%;background:#fee2e2;color:#dc2626;display:flex;align-items:center;justify-content:center;">
+                <Icon Name="Trash2" Size="26" />
+            </div>
+            <h3 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0f172a;">Delete Product?</h3>
+            <p style="margin:0 0 20px;font-size:14px;color:#64748b;line-height:1.5;">
+                Are you sure you want to permanently delete <strong style="color:#0f172a;">@delProd.Name</strong> (SKU: @delProd.Sku)? This action cannot be undone.
+            </p>
+            <div style="display:flex;gap:12px;justify-content:center;">
+                <button type="button" class="admin-btn" style="flex:1;padding:10px 16px;border-radius:10px;font-weight:600;justify-content:center;" @onclick="() => _productToDelete = null" disabled="@_saving">
+                    Cancel
+                </button>
+                <button type="button" class="admin-btn" style="flex:1;padding:10px 16px;border-radius:10px;font-weight:600;background:#dc2626 !important;color:#ffffff !important;border-color:#dc2626 !important;justify-content:center;gap:6px;cursor:pointer;" @onclick="ConfirmDeleteProductAsync" disabled="@_saving">
+                    @if (_saving)
+                    {
+                        <Icon Name="RefreshCw" Size="16" Class="animate-spin" />
+                        <span style="color:#ffffff !important;">Deleting…</span>
+                    }
+                    else
+                    {
+                        <Icon Name="Trash2" Size="16" />
+                        <span style="color:#ffffff !important;">Yes, Delete</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
 }
 @code {
     private List<AdminProductDto> _products = new();
@@ -111,6 +144,23 @@ else
     private async Task CloseAsync() { if (await Browser.ConfirmAsync("Discard changes and return to products?")) { _editor = null; _error = null; _duplicating = false; } }
     private async Task SaveAsync() { if (_editor is null || _saving) return; _saving = true; _error = null; var r = await Api.AdminSaveProductAsync(_editor, _creating); _saving = false; if (!r.Success) { _error = r.Message; return; } _editor = null; _message = _duplicating ? "Duplicate product saved successfully." : "Product saved successfully."; _duplicating = false; await LoadAsync(); await Browser.ScrollToTopAsync(); }
     private async Task ArchiveAsync(AdminProductDto p) { if (!await Browser.ConfirmAsync($"Archive {p.Name}? It will be removed from the shop. Existing orders stay unchanged.")) return; _saving = true; var r = await Api.AdminArchiveProductAsync(p.Id); _saving = false; if (!r.Success) { _error = r.Message; return; } _message = r.Message; await LoadAsync(); await Browser.ScrollToTopAsync(); }
+    private AdminProductDto? _productToDelete;
+    private void PromptDelete(AdminProductDto p) { if (AdminAuth.IsAdmin) _productToDelete = p; }
+
+    private async Task ConfirmDeleteProductAsync()
+    {
+        if (_productToDelete is null || !AdminAuth.IsAdmin || _saving) return;
+        var p = _productToDelete;
+        _saving = true;
+        _error = null;
+        var r = await Api.AdminDeleteProductAsync(p.Id, hard: true);
+        _saving = false;
+        _productToDelete = null;
+        if (!r.Success) { _error = r.Message; return; }
+        _message = r.Message;
+        await LoadAsync();
+        await Browser.ScrollToTopAsync();
+    }
 }
 
 

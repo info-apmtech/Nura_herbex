@@ -45,6 +45,17 @@ public class AdminCatalogController(NuraDbContext db) : ControllerBase
     public Task<IActionResult> CreateProduct(AdminProductDto request) => SaveProduct(null, request);
     [HttpPut("products/{id}")]
     public Task<IActionResult> UpdateProduct(string id, AdminProductDto request) => SaveProduct(id, request);
+    [HttpPatch("products/{id}/stock")]
+    public async Task<IActionResult> UpdateStock(string id, [FromBody] UpdateStockRequest request)
+    {
+        var p = await db.Products.FindAsync(id);
+        if (p is null) return NotFound(new ApiResult { Message = "Product not found." });
+        if (request.Quantity < 0) return BadRequest(new ApiResult { Message = "Stock quantity cannot be negative." });
+        p.StockQuantity = request.Quantity;
+        p.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return Ok(new AdminProductResponse { Success = true, Product = ProductDto(p), Message = $"Stock updated to {p.StockQuantity}." });
+    }
     private async Task<IActionResult> SaveProduct(string? id, AdminProductDto r)
     {
         var error = ValidateProduct(r);
@@ -68,10 +79,18 @@ public class AdminCatalogController(NuraDbContext db) : ControllerBase
         return StatusCode(id is null ? 201 : 200, new AdminProductResponse { Success = true, Product = ProductDto(p), Message = "Product saved." });
     }
     [HttpDelete("products/{id}")]
-    public async Task<IActionResult> ArchiveProduct(string id)
+    public async Task<IActionResult> ArchiveProduct(string id, [FromQuery] bool hard = false)
     {
         var product = await db.Products.FindAsync(id);
         if (product is null) return NotFound(new ApiResult { Message = "Product not found." });
+
+        if (hard)
+        {
+            db.Products.Remove(product);
+            await db.SaveChangesAsync();
+            return Ok(new ApiResult { Success = true, Message = "Product permanently deleted." });
+        }
+
         product.Status = ProductStatus.Archived; product.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         return Ok(new ApiResult { Success = true, Message = "Product archived. Previous orders are preserved." });

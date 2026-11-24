@@ -260,6 +260,9 @@ static async Task EnsureCrmSchemaAsync(NuraDbContext db, ILogger log)
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('orders') AND name = 'ShippingMode')
                 ALTER TABLE [orders] ADD [ShippingMode] int NOT NULL DEFAULT 1;
 
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('orders') AND name = 'AdvanceAmount')
+                ALTER TABLE [orders] ADD [AdvanceAmount] decimal(18,2) NOT NULL DEFAULT 0;
+
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'Age')
                 ALTER TABLE [leads] ADD [Age] int NULL;
 

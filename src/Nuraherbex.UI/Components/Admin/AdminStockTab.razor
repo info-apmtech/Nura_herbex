@@ -1,0 +1,287 @@
+@inject ApiClient Api
+@inject BrowserInterop Browser
+
+<div class="admin-section-heading">
+    <div>
+        <span class="admin-eyebrow">INVENTORY CONTROL</span>
+        <h2>Stock &amp; Inventory <span class="admin-count">@_products.Count</span></h2>
+        <p>Monitor physical stock levels, restock items, and manage low or out-of-stock products.</p>
+    </div>
+    <div class="admin-actions">
+        <button class="admin-btn" disabled="@_loading" @onclick="LoadAsync"><Icon Name="RefreshCw" Size="16" /> Refresh</button>
+        <ExportButton Title="Stock Inventory" FileName="nura-stock-inventory" Columns="@(new[] { "Product", "SKU", "Category", "Status", "Current Stock", "Price (Rs)", "Cost (Rs)", "Stock Value (Rs)", "Updated" })" Rows="ExportRows" Disabled="@(!Filtered.Any())" />
+    </div>
+</div>
+
+<div class="admin-stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+    <div class="admin-stat">
+        <span>In Stock</span>
+        <strong style="color:#16a34a;">@_products.Count(p => p.Status == "active" && p.StockQuantity > 10)</strong>
+        <small>Healthy inventory (&gt; 10 units)</small>
+    </div>
+    <div class="admin-stat">
+        <span>Low Stock Alert</span>
+        <strong style="color:#d97706;">@_products.Count(p => p.Status == "active" && p.StockQuantity is > 0 and <= 10)</strong>
+        <small>Needs restock (1 to 10 units)</small>
+    </div>
+    <div class="admin-stat">
+        <span>Out of Stock</span>
+        <strong style="color:#dc2626;">@_products.Count(p => p.Status == "active" && p.StockQuantity == 0)</strong>
+        <small>Unavailable for sale (0 units)</small>
+    </div>
+    <div class="admin-stat">
+        <span>Total Units</span>
+        <strong>@_products.Where(p => p.Status == "active").Sum(p => p.StockQuantity).ToString("N0")</strong>
+        <small>Across @_products.Count(p => p.Status == "active") active products</small>
+    </div>
+    <div class="admin-stat">
+        <span>Inventory Value</span>
+        <strong>₹@AdminFmt.Inr(_products.Where(p => p.Status != "archived").Sum(p => p.CostPrice * p.StockQuantity))</strong>
+        <small>Valuation at cost price</small>
+    </div>
+</div>
+
+@if (_message is not null)
+{
+    <div role="status" class="admin-notice">@_message</div>
+}
+@if (_error is not null)
+{
+    <div role="alert" class="admin-error">@_error <button class="admin-btn" @onclick="LoadAsync">Retry</button></div>
+}
+
+<section class="admin-card admin-table-card">
+    <div class="admin-toolbar">
+        <label class="admin-search">
+            <Icon Name="Search" Size="18" />
+            <input aria-label="Search stock" placeholder="Search by product name, SKU or category…" @bind="_search" @bind:event="oninput" @bind:after="ResetPage" />
+        </label>
+        <select aria-label="Filter stock level" @bind="_stockFilter" @bind:after="ResetPage">
+            <option value="all">All stock levels</option>
+            <option value="in_stock">In Stock (&gt; 10)</option>
+            <option value="low">Low stock (1 - 10)</option>
+            <option value="out">Out of stock (0)</option>
+        </select>
+        <select aria-label="Filter product status" @bind="_statusFilter" @bind:after="ResetPage">
+            <option value="all">All product statuses</option>
+            <option value="active">Active products</option>
+            <option value="draft">Drafts</option>
+            <option value="archived">Archived</option>
+        </select>
+    </div>
+
+    <div class="admin-table-scroll">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th class="admin-sno">S.No</th>
+                    <th>Product &amp; SKU</th>
+                    <th>Category</th>
+                    <th>Price / Cost</th>
+                    <th>Status</th>
+                    <th style="min-width: 240px;">Adjust Stock Level</th>
+                    <th>Last Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_loading)
+                {
+                    <tr><td colspan="7" class="admin-empty">Loading inventory catalog…</td></tr>
+                }
+                else if (!Filtered.Any())
+                {
+                    <tr>
+                        <td colspan="7" class="admin-empty">
+                            <Icon Name="Layers" Size="32" />
+                            <h3>No matching items found</h3>
+                            <p>Adjust your search query or filters.</p>
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var (p, i) in Filtered.Skip((_page - 1) * _size).Take(_size).Select((x, n) => (x, n + 1 + (_page - 1) * _size)))
+                    {
+                        var prod = p;
+                        var currentStock = prod.StockQuantity;
+                        var inputStock = _stockInputs.GetValueOrDefault(prod.Id, currentStock);
+                        var isDirty = inputStock != currentStock;
+                        var isSaving = _savingIds.Contains(prod.Id);
+
+                        <tr @key="prod.Id">
+                            <td class="admin-sno">@i</td>
+                            <td>
+                                <div class="admin-product-cell">
+                                    <div class="admin-thumbnail">
+                                        @if (!string.IsNullOrWhiteSpace(prod.ImageUrl))
+                                        {
+                                            <img src="@prod.ImageUrl" alt="" loading="lazy" />
+                                        }
+                                        else
+                                        {
+                                            <Icon Name="Package" Size="22" />
+                                        }
+                                    </div>
+                                    <span>
+                                        <strong>@prod.Name</strong>
+                                        <small style="font-family:monospace;font-size:11px;color:#64748b;">@prod.Sku</small>
+                                    </span>
+                                </div>
+                            </td>
+                            <td>@(string.IsNullOrWhiteSpace(prod.Category) ? "—" : prod.Category)</td>
+                            <td>
+                                <div><strong>₹@AdminFmt.Inr(prod.Price)</strong></div>
+                                <small style="color:#64748b;">Cost: ₹@AdminFmt.Inr(prod.CostPrice)</small>
+                            </td>
+                            <td>
+                                @if (prod.Status == "archived")
+                                {
+                                    <span class="admin-badge archived">Archived</span>
+                                }
+                                else if (currentStock <= 0)
+                                {
+                                    <span class="admin-badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;font-weight:600;">Out of Stock</span>
+                                }
+                                else if (currentStock <= 10)
+                                {
+                                    <span class="admin-badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-weight:600;">Low (@currentStock)</span>
+                                }
+                                else
+                                {
+                                    <span class="admin-badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;font-weight:600;">In Stock (@currentStock)</span>
+                                }
+                            </td>
+                            <td>
+                                <div style="display:flex;align-items:center;gap:6px;">
+                                    <button type="button" class="admin-btn admin-btn-small" style="padding:4px 8px;" disabled="@(inputStock <= 0 || isSaving)" @onclick="() => Adjust(prod.Id, -1)" title="Decrease by 1">−</button>
+                                    <input type="number" min="0" max="1000000" style="width:75px;text-align:center;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;font-weight:600;" value="@inputStock" @oninput="e => OnStockInput(prod.Id, e.Value?.ToString())" />
+                                    <button type="button" class="admin-btn admin-btn-small" style="padding:4px 8px;" disabled="@isSaving" @onclick="() => Adjust(prod.Id, 1)" title="Increase by 1">+</button>
+                                    <button type="button" class="admin-btn admin-btn-small" style="padding:4px 8px;font-size:11px;" disabled="@isSaving" @onclick="() => Adjust(prod.Id, 10)" title="Quick restock +10">+10</button>
+                                    <button type="button" class="admin-btn admin-btn-small @(isDirty ? "admin-btn-primary" : "")" style="padding:4px 10px;font-weight:600;" disabled="@(!isDirty || isSaving)" @onclick="() => SaveStockAsync(prod.Id)">
+                                        @(isSaving ? "Saving…" : "Save")
+                                    </button>
+                                </div>
+                            </td>
+                            <td>
+                                <small style="color:#64748b;">@prod.UpdatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</small>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    <Pager Total="@Filtered.Count()" @bind-Page="_page" @bind-PageSize="_size" Label="items" />
+</section>
+
+@code {
+    private List<AdminProductDto> _products = new();
+    private readonly Dictionary<string, int> _stockInputs = new();
+    private readonly HashSet<string> _savingIds = new();
+    private bool _loading = true;
+    private string? _error, _message;
+    private string _search = "";
+    private string _stockFilter = "all";
+    private string _statusFilter = "all";
+    private int _page = 1;
+    private int _size = 15;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        var r = await Api.AdminCatalogAsync();
+        if (r.Success)
+        {
+            _products = r.Products;
+            _stockInputs.Clear();
+            foreach (var p in _products)
+            {
+                _stockInputs[p.Id] = p.StockQuantity;
+            }
+        }
+        else
+        {
+            _error = r.Message;
+        }
+        _page = Math.Min(_page, Pages);
+        _loading = false;
+    }
+
+    private void ResetPage() => _page = 1;
+
+    private IEnumerable<AdminProductDto> Filtered => _products.Where(p =>
+    {
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var match = AdminFmt.Has(p.Name, _search) || AdminFmt.Has(p.Sku, _search) || AdminFmt.Has(p.Category, _search);
+            if (!match) return false;
+        }
+        if (_statusFilter != "all" && p.Status != _statusFilter) return false;
+
+        return _stockFilter switch
+        {
+            "in_stock" => p.StockQuantity > 10,
+            "low" => p.StockQuantity is > 0 and <= 10,
+            "out" => p.StockQuantity == 0,
+            _ => true
+        };
+    });
+
+    private int Pages => Math.Max(1, (int)Math.Ceiling(Filtered.Count() / (double)_size));
+
+    private void OnStockInput(string id, string? val)
+    {
+        if (int.TryParse(val, out var n) && n >= 0)
+        {
+            _stockInputs[id] = n;
+        }
+    }
+
+    private void Adjust(string id, int delta)
+    {
+        var current = _stockInputs.GetValueOrDefault(id, 0);
+        var next = Math.Max(0, current + delta);
+        _stockInputs[id] = next;
+    }
+
+    private async Task SaveStockAsync(string id)
+    {
+        var qty = _stockInputs.GetValueOrDefault(id, 0);
+        _savingIds.Add(id);
+        _error = null;
+        _message = null;
+
+        var r = await Api.AdminUpdateStockAsync(id, qty);
+        _savingIds.Remove(id);
+
+        if (!r.Success)
+        {
+            _error = r.Message;
+            return;
+        }
+
+        var prod = _products.FirstOrDefault(p => p.Id == id);
+        if (prod is not null)
+        {
+            prod.StockQuantity = qty;
+            prod.UpdatedAt = DateTime.UtcNow;
+            _message = $"Updated stock for '{prod.Name}' to {qty}.";
+        }
+    }
+
+    private IEnumerable<IReadOnlyList<string>> ExportRows() => Filtered.Select(p => (IReadOnlyList<string>)new[]
+    {
+        p.Name,
+        p.Sku,
+        p.Category ?? "",
+        p.Status,
+        p.StockQuantity.ToString(),
+        p.Price.ToString("0.##"),
+        p.CostPrice.ToString("0.##"),
+        (p.CostPrice * p.StockQuantity).ToString("0.##"),
+        p.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+    });
+}

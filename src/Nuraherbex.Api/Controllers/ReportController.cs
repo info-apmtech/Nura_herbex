@@ -27,6 +27,30 @@ public class ReportController(ReportService reports, RightsService rights) : Sta
     [HttpGet]
     public ReportListResponse List() => new() { Success = true, Reports = ReportService.Catalog.Where(r => Access(r.Key).Allowed).ToList() };
 
+    /// <summary>Employee performance report: Leads converted, Follow-ups done, No-answer follow-ups, date-wise.</summary>
+    [HttpGet("employee-performance")]
+    public async Task<IActionResult> EmployeePerformance([FromQuery] string? from, [FromQuery] string? to, [FromQuery] long? employeeId)
+    {
+        if (!IsAdmin && !CanAll("reports") && !CanAll("leads") && !CanAll("followups"))
+        {
+            if (MyId is null) return StatusCode(403, new ApiResult { Success = false, Message = "Access denied." });
+            employeeId = MyId;
+        }
+
+        var today = FollowUpService.IstNow.Date;
+        var start = Parse(from) ?? today.AddDays(-29);
+        var end = Parse(to) ?? today;
+        if (end < start) (start, end) = (end, start);
+        if ((end - start).TotalDays > 800) return BadRequest(new ApiResult { Success = false, Message = "Choose a period of up to about two years." });
+
+        var fromUtc = FollowUpService.ToUtc(start);
+        var toUtc = FollowUpService.ToUtc(end.AddDays(1));
+        var label = start == end ? start.ToString("d MMM yyyy", CultureInfo.InvariantCulture) : $"{start:d MMM yyyy} to {end:d MMM yyyy}";
+
+        var result = await reports.EmployeePerformanceAsync(fromUtc, toUtc, label, employeeId);
+        return Ok(result);
+    }
+
     /// <param name="from">First day, yyyy-MM-dd (default: 29 days ago).</param>
     /// <param name="to">Last day included, yyyy-MM-dd (default: today).</param>
     [HttpGet("{key}")]

@@ -155,6 +155,7 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<ApiResult> AdminSendEmailAsync(string orderId, string type) => Call<ApiResult>(HttpMethod.Post, $"api/admin/orders/{Uri.EscapeDataString(orderId)}/send-email", new AdminEmailRequest { Type = type }, Who.Admin);
     public Task<PaymentAttemptListResponse> AdminPaymentsAsync() => Call<PaymentAttemptListResponse>(HttpMethod.Get, "api/admin/payments", null, Who.Admin);
     public Task<AdminCustomerListResponse> AdminCustomersAsync() => Call<AdminCustomerListResponse>(HttpMethod.Get, "api/admin/customers", null, Who.Admin);
+    public Task<ApiResult> AdminDeleteCustomerAsync(string id) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/customers/{Uri.EscapeDataString(id)}", null, Who.Admin);
     public Task<ReviewListResponse> AdminReviewsAsync() => Call<ReviewListResponse>(HttpMethod.Get, "api/admin/reviews", null, Who.Admin);
     public Task<ApiResult> AdminModerateReviewAsync(string id, bool approved) => Call<ApiResult>(HttpMethod.Put, $"api/admin/reviews/{Uri.EscapeDataString(id)}", new ReviewModerationRequest { Approved = approved }, Who.Admin);
 
@@ -177,8 +178,15 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<WhatsAppMessageListResponse> AdminWhatsAppMessagesAsync(int take = 100) => Call<WhatsAppMessageListResponse>(HttpMethod.Get, $"api/admin/whatsapp/messages?take={take}", null, Who.Admin);
     public Task<ApiResult> AdminWhatsAppSendAsync(WhatsAppSendRequest r) => Call<ApiResult>(HttpMethod.Post, "api/admin/whatsapp/send", r, Who.Admin);
 
-    public Task<LeadListResponse> AdminLeadsAsync(string? status = null, string? source = null, string? q = null, string? assignee = null, int take = 100, string view = "leads") =>
-        Call<LeadListResponse>(HttpMethod.Get, $"api/admin/leads?take={take}&status={Uri.EscapeDataString(status ?? "")}&source={Uri.EscapeDataString(source ?? "")}&q={Uri.EscapeDataString(q ?? "")}&assignee={Uri.EscapeDataString(assignee ?? "")}&view={Uri.EscapeDataString(view)}", null, Who.Admin);
+    public Task<LeadListResponse> AdminLeadsAsync(string? status = null, string? source = null, string? q = null, string? assignee = null, int take = 100, string view = "leads", string? from = null, string? to = null, string? datePreset = null)
+    {
+        var url = $"api/admin/leads?take={take}&status={Uri.EscapeDataString(status ?? "")}&source={Uri.EscapeDataString(source ?? "")}&q={Uri.EscapeDataString(q ?? "")}&assignee={Uri.EscapeDataString(assignee ?? "")}&view={Uri.EscapeDataString(view)}";
+        if (!string.IsNullOrEmpty(from)) url += $"&from={Uri.EscapeDataString(from)}";
+        if (!string.IsNullOrEmpty(to)) url += $"&to={Uri.EscapeDataString(to)}";
+        if (!string.IsNullOrEmpty(datePreset)) url += $"&datePreset={Uri.EscapeDataString(datePreset)}";
+        return Call<LeadListResponse>(HttpMethod.Get, url, null, Who.Admin);
+    }
+    public Task<LeadCreateResponse> AdminCreateLeadAsync(LeadCreateRequest r) => Call<LeadCreateResponse>(HttpMethod.Post, "api/admin/leads", r, Who.Admin);
     public Task<ApiResult> AdminLeadAssignAsync(long id, LeadAssignRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/assign", r, Who.Admin);
     public Task<ApiResult> AdminLeadTransferAsync(long id, LeadTransferRequest r) => Call<ApiResult>(HttpMethod.Post, $"api/admin/leads/{id}/transfer", r, Who.Admin);
     public Task<ApiResult> AdminLeadAcceptTransferAsync(long id) => Call<ApiResult>(HttpMethod.Post, $"api/admin/leads/{id}/transfer/accept", null, Who.Admin);
@@ -275,6 +283,15 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<WhatsAppLimitDto> AdminFollowUpWhatsAppUsageAsync() => Call<WhatsAppLimitDto>(HttpMethod.Get, "api/admin/followups/whatsapp-usage", null, Who.Admin);
     public Task<ReportListResponse> AdminReportsAsync() => Call<ReportListResponse>(HttpMethod.Get, "api/admin/reports", null, Who.Admin);
     public Task<ReportResponse> AdminReportAsync(string key, string from, string to) => Call<ReportResponse>(HttpMethod.Get, $"api/admin/reports/{Uri.EscapeDataString(key)}?from={Uri.EscapeDataString(from)}&to={Uri.EscapeDataString(to)}", null, Who.Admin);
+    public Task<EmployeePerformanceReportResponse> AdminEmployeePerformanceReportAsync(string? from = null, string? to = null, long? employeeId = null)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrEmpty(from)) query.Add($"from={Uri.EscapeDataString(from)}");
+        if (!string.IsNullOrEmpty(to)) query.Add($"to={Uri.EscapeDataString(to)}");
+        if (employeeId is { } eid) query.Add($"employeeId={eid}");
+        var qs = query.Count > 0 ? "?" + string.Join("&", query) : "";
+        return Call<EmployeePerformanceReportResponse>(HttpMethod.Get, $"api/admin/reports/employee-performance{qs}", null, Who.Admin);
+    }
     public Task<WhatsAppLimitDto> AdminWhatsAppLimitAsync() => Call<WhatsAppLimitDto>(HttpMethod.Get, "api/admin/whatsapp/limit", null, Who.Admin);
     public Task<WhatsAppLimitDto> AdminSaveWhatsAppLimitAsync(WhatsAppLimitRequest r) => Call<WhatsAppLimitDto>(HttpMethod.Put, "api/admin/whatsapp/limit", r, Who.Admin);
     public Task<FollowUpSettingsDto> AdminFollowUpSettingsAsync() => Call<FollowUpSettingsDto>(HttpMethod.Get, "api/admin/followups/settings", null, Who.Admin);
@@ -323,7 +340,9 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<DriveShareResponse> AdminDriveShareAsync(DriveShareRequest r) => Call<DriveShareResponse>(HttpMethod.Post, "api/admin/drive/share", r, Who.Admin);
     public Task<AdminProductListResponse> AdminCatalogAsync() => Call<AdminProductListResponse>(HttpMethod.Get, "api/admin/catalog/products", null, Who.Admin);
     public Task<AdminProductResponse> AdminSaveProductAsync(AdminProductDto p, bool create) => Call<AdminProductResponse>(create ? HttpMethod.Post : HttpMethod.Put, "api/admin/catalog/products" + (create ? "" : "/" + Uri.EscapeDataString(p.Id)), p, Who.Admin);
+    public Task<AdminProductResponse> AdminUpdateStockAsync(string id, int quantity) => Call<AdminProductResponse>(HttpMethod.Patch, $"api/admin/catalog/products/{Uri.EscapeDataString(id)}/stock", new UpdateStockRequest { Quantity = quantity }, Who.Admin);
     public Task<ApiResult> AdminArchiveProductAsync(string id) => Call<ApiResult>(HttpMethod.Delete, "api/admin/catalog/products/" + Uri.EscapeDataString(id), null, Who.Admin);
+    public Task<ApiResult> AdminDeleteProductAsync(string id, bool hard = false) => Call<ApiResult>(HttpMethod.Delete, $"api/admin/catalog/products/{Uri.EscapeDataString(id)}{(hard ? "?hard=true" : "")}", null, Who.Admin);
     public Task<AdminCouponListResponse> AdminCouponsAsync() => Call<AdminCouponListResponse>(HttpMethod.Get, "api/admin/catalog/coupons", null, Who.Admin);
     public Task<AdminCouponResponse> AdminSaveCouponAsync(CouponDto c, bool create) => Call<AdminCouponResponse>(create ? HttpMethod.Post : HttpMethod.Put, "api/admin/catalog/coupons" + (create ? "" : "/" + Uri.EscapeDataString(c.Code)), c, Who.Admin);
     public Task<ApiResult> AdminDisableCouponAsync(string code) => Call<ApiResult>(HttpMethod.Delete, "api/admin/catalog/coupons/" + Uri.EscapeDataString(code), null, Who.Admin);

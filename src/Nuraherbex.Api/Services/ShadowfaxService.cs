@@ -67,7 +67,7 @@ public class ShadowfaxService(HttpClient http, IOptions<ShadowfaxOptions> option
                 volumetric_weight = volumetricWeightKg,
                 product_value = productValue,
                 payment_mode = isCod ? "cod" : "prepaid",
-                cod_amount = isCod ? order.TotalAmount : 0m,
+                cod_amount = isCod ? Math.Max(0, order.TotalAmount - order.AdvanceAmount) : 0m,
                 total_amount = order.TotalAmount,
                 order_service = orderService,
             },

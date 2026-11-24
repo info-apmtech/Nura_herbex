@@ -277,4 +277,153 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
         ];
         return res;
     }
+
+    // ---- Employee Performance (Leads won, Follow-ups done, No-answer count, Date-wise) --------
+
+    public async Task<EmployeePerformanceReportResponse> EmployeePerformanceAsync(DateTime fromUtc, DateTime toUtc, string periodLabel, long? employeeId = null)
+    {
+        var empsQuery = db.Employees.AsNoTracking().Where(e => e.IsActive || db.Leads.Any(l => l.AssignedToEmployeeId == e.Id));
+        if (employeeId is { } eid)
+        {
+            empsQuery = empsQuery.Where(e => e.Id == eid);
+        }
+        var employees = await empsQuery.OrderBy(e => e.Name).ToListAsync();
+        var empIds = employees.Select(e => e.Id).ToList();
+
+        // 1. Leads assigned to each employee
+        var totalLeadsMap = await db.Leads.AsNoTracking()
+            .Where(l => l.AssignedToEmployeeId != null && empIds.Contains(l.AssignedToEmployeeId.Value))
+            .GroupBy(l => l.AssignedToEmployeeId!.Value)
+            .Select(g => new { EmployeeId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.EmployeeId, x => x.Count);
+
+        // 2. Leads converted within period (Leads ethana mudichirukanga)
+        var convertedLeads = await db.Leads.AsNoTracking()
+            .Where(l => l.ConvertedAt >= fromUtc && l.ConvertedAt < toUtc && l.AssignedToEmployeeId != null && empIds.Contains(l.AssignedToEmployeeId.Value))
+            .Select(l => new { l.Id, EmployeeId = l.AssignedToEmployeeId!.Value, l.ConvertedAt })
+            .ToListAsync();
+
+        var convertedByEmp = convertedLeads
+            .GroupBy(l => l.EmployeeId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // 3. Follow-ups completed within period (Follow-up ethana mudichirukanga)
+        var doneFollowUps = await db.FollowUps.AsNoTracking()
+            .Where(f => f.Status == FollowUpStatus.Done && f.CompletedAt >= fromUtc && f.CompletedAt < toUtc && f.AssignedToEmployeeId != null && empIds.Contains(f.AssignedToEmployeeId.Value))
+            .Select(f => new { f.Id, EmployeeId = f.AssignedToEmployeeId!.Value, f.Outcome, f.CompletedAt })
+            .ToListAsync();
+
+        var doneByEmp = doneFollowUps
+            .GroupBy(f => f.EmployeeId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // 4. No Answer follow-ups within period
+        static bool IsNoAnswer(string? outcome)
+        {
+            if (string.IsNullOrWhiteSpace(outcome)) return false;
+            var o = outcome.Trim();
+            return o.StartsWith(FollowUpOutcomes.NoAnswer, StringComparison.OrdinalIgnoreCase)
+                || o.StartsWith(FollowUpOutcomes.Callback, StringComparison.OrdinalIgnoreCase)
+                || o.StartsWith("No answer", StringComparison.OrdinalIgnoreCase)
+                || o.StartsWith("Call back", StringComparison.OrdinalIgnoreCase);
+        }
+
+        var noAnswerByEmp = doneFollowUps
+            .Where(f => IsNoAnswer(f.Outcome))
+            .GroupBy(f => f.EmployeeId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // 5. Pending and Overdue follow-ups
+        var now = FollowUpService.Clock();
+        var openFollowUps = await db.FollowUps.AsNoTracking()
+            .Where(f => f.Status == FollowUpStatus.Pending && f.AssignedToEmployeeId != null && empIds.Contains(f.AssignedToEmployeeId.Value))
+            .Select(f => new { EmployeeId = f.AssignedToEmployeeId!.Value, IsOverdue = f.DueAt < now })
+            .ToListAsync();
+
+        var pendingByEmp = openFollowUps
+            .GroupBy(f => f.EmployeeId)
+            .ToDictionary(g => g.Key, g => g.Count(x => !x.IsOverdue));
+
+        var overdueByEmp = openFollowUps
+            .GroupBy(f => f.EmployeeId)
+            .ToDictionary(g => g.Key, g => g.Count(x => x.IsOverdue));
+
+        var byEmployee = new List<EmployeePerformanceDto>();
+        foreach (var emp in employees)
+        {
+            var assigned = totalLeadsMap.GetValueOrDefault(emp.Id, 0);
+            var won = convertedByEmp.GetValueOrDefault(emp.Id, 0);
+            var fuDone = doneByEmp.GetValueOrDefault(emp.Id, 0);
+            var naCount = noAnswerByEmp.GetValueOrDefault(emp.Id, 0);
+            var pend = pendingByEmp.GetValueOrDefault(emp.Id, 0);
+            var over = overdueByEmp.GetValueOrDefault(emp.Id, 0);
+            var winRate = assigned > 0 ? Math.Round((decimal)won * 100m / assigned, 1) : 0m;
+
+            byEmployee.Add(new EmployeePerformanceDto
+            {
+                EmployeeId = emp.Id,
+                Name = emp.Name,
+                Role = emp.Role.ToString(),
+                Designation = emp.Role == EmployeeRole.Sales ? "Sales Executive" : emp.Role.ToString(),
+                TotalLeads = assigned,
+                LeadsConverted = won,
+                FollowUpsDone = fuDone,
+                NoAnswerCount = naCount,
+                PendingFollowUps = pend,
+                OverdueFollowUps = over,
+                WinRatePercent = winRate,
+            });
+        }
+
+        // 6. Daily Breakdown (Date-wise)
+        var empNames = employees.ToDictionary(e => e.Id, e => e.Name);
+        var dailyList = new List<EmployeeDailyPerformanceDto>();
+
+        var convByDateEmp = convertedLeads
+            .GroupBy(l => (Date: FollowUpService.ToIst(l.ConvertedAt!.Value).ToString("yyyy-MM-dd"), l.EmployeeId))
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var doneByDateEmp = doneFollowUps
+            .Where(f => f.CompletedAt != null)
+            .GroupBy(f => (Date: FollowUpService.ToIst(f.CompletedAt!.Value).ToString("yyyy-MM-dd"), f.EmployeeId))
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var naByDateEmp = doneFollowUps
+            .Where(f => f.CompletedAt != null && IsNoAnswer(f.Outcome))
+            .GroupBy(f => (Date: FollowUpService.ToIst(f.CompletedAt!.Value).ToString("yyyy-MM-dd"), f.EmployeeId))
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var allDateEmpKeys = convByDateEmp.Keys
+            .Union(doneByDateEmp.Keys)
+            .Union(naByDateEmp.Keys)
+            .OrderByDescending(k => k.Date)
+            .ThenBy(k => empNames.GetValueOrDefault(k.EmployeeId, ""))
+            .ToList();
+
+        foreach (var k in allDateEmpKeys)
+        {
+            dailyList.Add(new EmployeeDailyPerformanceDto
+            {
+                Date = k.Date,
+                EmployeeId = k.EmployeeId,
+                EmployeeName = empNames.GetValueOrDefault(k.EmployeeId, $"Employee #{k.EmployeeId}"),
+                LeadsConverted = convByDateEmp.GetValueOrDefault(k, 0),
+                FollowUpsDone = doneByDateEmp.GetValueOrDefault(k, 0),
+                NoAnswerCount = naByDateEmp.GetValueOrDefault(k, 0)
+            });
+        }
+
+        return new EmployeePerformanceReportResponse
+        {
+            Success = true,
+            Period = periodLabel,
+            FromUtc = fromUtc,
+            ToUtc = toUtc,
+            TotalLeadsConverted = convertedLeads.Count,
+            TotalFollowUpsDone = doneFollowUps.Count,
+            TotalNoAnswerCount = doneFollowUps.Count(f => IsNoAnswer(f.Outcome)),
+            ByEmployee = byEmployee.OrderByDescending(e => e.LeadsConverted).ThenByDescending(e => e.FollowUpsDone).ToList(),
+            DailyBreakdown = dailyList
+        };
+    }
 }

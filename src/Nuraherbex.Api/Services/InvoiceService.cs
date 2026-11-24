@@ -145,7 +145,14 @@ public class InvoiceService(IOptions<JwtOptions> jwt, IOptionsMonitor<StoreOptio
             sb.Append(Row($"Discount{(string.IsNullOrEmpty(o.CouponCode) ? "" : " (" + H(o.CouponCode) + ")")} - already deducted", o.DiscountAmount));
         sb.Append(Row("Total taxable value", taxable));
         sb.Append(gstRows);
-        sb.Append($"<tr class=\"grand\"><td>Invoice Total</td><td class=\"r\">{M(total)}</td></tr></tbody></table></div>");
+        sb.Append($"<tr class=\"grand\"><td>Invoice Total</td><td class=\"r\">{M(total)}</td></tr>");
+        if (o.AdvanceAmount > 0)
+        {
+            var codDue = Math.Max(0, total - o.AdvanceAmount);
+            sb.Append(Row("Advance Collected", -o.AdvanceAmount));
+            sb.Append($"<tr class=\"grand\" style=\"background:#fff7ed;color:#c2410c;border-top:1px dashed #ea580c\"><td>Balance COD to Collect</td><td class=\"r\">{M(codDue)}</td></tr>");
+        }
+        sb.Append("</tbody></table></div>");
 
         // Footer
         sb.Append("<div class=\"sign\"><div class=\"small\"><b>Declaration</b><br>We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.</div></div>");
@@ -282,6 +289,14 @@ public class InvoiceService(IOptions<JwtOptions> jwt, IOptionsMonitor<StoreOptio
         Text(330, y, "F1", 9, $"GST ({Pct(rate)}%): {PdfMoney(gst)}");
         y -= 16;
         Text(330, y, "F2", 11, $"Invoice Total: {PdfMoney(total)}", "0.294 0.180 0.514");
+        if (o.AdvanceAmount > 0)
+        {
+            y -= 14;
+            Text(330, y, "F1", 9, $"Advance Collected: -{PdfMoney(o.AdvanceAmount)}", "0.09 0.50 0.24");
+            y -= 14;
+            var codBal = Math.Max(0, total - o.AdvanceAmount);
+            Text(330, y, "F2", 10, $"Balance COD to Collect: {PdfMoney(codBal)}", "0.75 0.25 0.05");
+        }
         Text(40, y + 14, "F2", 9, $"Amount in words: {Words((long)Math.Round(total, 0, MidpointRounding.AwayFromZero))} Only");
 
         Text(40, 68, "F1", 8, "Declaration: We declare that this invoice shows the actual price of the goods described and that all particulars are true.", "0.35 0.38 0.45");

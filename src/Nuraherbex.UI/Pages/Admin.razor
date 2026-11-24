@@ -22,7 +22,7 @@ else
             <a class="admin-brand" href="/admin"><img class="admin-brand-logo" src="/_content/Nuraherbex.UI/images/logo-mark.png" alt="" /><span>Nura Herbex<small>STORE ADMINISTRATION</small></span></a>
             <div class="admin-store-label"><span class="admin-store-dot"></span> Your store workspace</div>
             <nav>@foreach (var group in Navigation.GroupBy(n => n.Group)) { <span class="admin-nav-label">@group.Key</span> @foreach (var item in group) { <button class="admin-nav-item @(_activeTab == item.Id ? "is-active" : "")" aria-current="@(_activeTab == item.Id ? "page" : null)" @onclick="() => Navigate(item.Id)"><Icon Name="@item.Icon" Size="19" /><span>@item.Label</span>@if (BadgeFor(item.Id) is { Count: > 0 } badge) { <small class="@(badge.Urgent ? "is-urgent" : "")" title="@badge.Tip">@(badge.Count > 99 ? "99+" : badge.Count.ToString())</small> }</button> } }</nav>
-            <div class="admin-sidebar-bottom"><a class="admin-nav-item" href="/shop"><Icon Name="ExternalLink" Size="18" /> View storefront</a><div class="admin-user"><span class="admin-avatar">@(string.IsNullOrEmpty(AdminAuth.Name) ? "A" : AdminAuth.Name[..1].ToUpperInvariant())</span><span><strong>@(string.IsNullOrEmpty(AdminAuth.Name) ? "Administrator" : AdminAuth.Name)</strong><small>@(AdminAuth.Designation ?? AdminAuth.Email)</small></span><button class="admin-icon-btn" title="Sign out" aria-label="Sign out" @onclick="LogoutAsync"><Icon Name="LogOut" Size="18" /></button></div></div>
+            <div class="admin-sidebar-bottom"><a class="admin-nav-item" href="/shop"><Icon Name="ExternalLink" Size="18" /> View storefront</a><div class="admin-user"><span class="admin-avatar">@(string.IsNullOrEmpty(AdminAuth.Name) ? "A" : AdminAuth.Name[..1].ToUpperInvariant())</span><span><strong>@(string.IsNullOrEmpty(AdminAuth.Name) ? "Administrator" : AdminAuth.Name)</strong><small>@(AdminAuth.Designation ?? AdminAuth.Email)</small></span><button class="admin-icon-btn" title="Sign out" aria-label="Sign out" @onclick="() => _showLogoutConfirm = true"><Icon Name="LogOut" Size="18" /></button></div></div>
         </aside>
         @if (_mobileMenu) { <button class="admin-mobile-backdrop" aria-label="Close navigation" @onclick="() => _mobileMenu = false"></button> }
         <div class="admin-main"><header class="admin-topbar"><div class="admin-actions"><button class="admin-icon-btn admin-menu-toggle" aria-label="@(_collapsed ? "Show navigation menu" : "Hide navigation menu")" title="@(_collapsed ? "Show the menu" : "Hide the menu to give the page more room")" aria-expanded="@(!_collapsed)" @onclick="ToggleNavAsync"><Icon Name="Menu" Size="22" /></button><span class="admin-breadcrumb">Workspace <span>/</span> <strong>@PageName</strong></span></div><div class="admin-actions">@if (AdminAuth.IsAuthenticated) { <AdminWhatsAppToggle /><AdminBell /> }<span class="admin-today">@DateTime.Now.ToString("ddd, dd MMM yyyy")</span><a class="admin-btn admin-btn-small" href="/shop"><Icon Name="ExternalLink" Size="15" /> Open store</a></div></header>
@@ -30,12 +30,13 @@ else
         @if (_loadErrors.Count > 0) { <div role="alert" class="admin-error">@string.Join(" · ", _loadErrors.Select(e => e.Key + ": " + e.Value)) <button class="admin-btn admin-btn-small" @onclick="RefreshAsync">Retry</button></div> }
         @if (!AdminAuth.HasAnyPage) { <div class="admin-error" role="status"><strong>No pages assigned yet.</strong> Ask an administrator to give your account a designation.</div> }
         else if (_activeTab == "products") { <AdminProductsTab /> }
+        else if (_activeTab == "stock") { <AdminStockTab /> }
         else if (_activeTab == "coupons") { <AdminCouponsTab /> }
         else if (_activeTab == "reviews") { <AdminReviewsTab /> }
         else if (_activeTab == "overview") { <AdminDashboard Orders="_orders" Customers="_customers" Loading="@(_ordersLoading || _customersLoading)" OnNavigate="Navigate" /> }
         else
         {
-            @if (_activeTab is not ("team" or "tasks" or "reports" or "crm" or "whatsapp")) {<div class="admin-section-heading"><div><span class="admin-eyebrow">STORE OPERATIONS</span><h2>@PageName</h2><p>Manage your @PageName.ToLowerInvariant() in one place.</p></div></div>}
+            @if (_activeTab is not ("team" or "tasks" or "reports" or "crm" or "whatsapp" or "employee_report")) {<div class="admin-section-heading"><div><span class="admin-eyebrow">STORE OPERATIONS</span><h2>@PageName</h2><p>Manage your @PageName.ToLowerInvariant() in one place.</p></div></div>}
             <div class="admin-legacy">
             @if (_activeTab == "orders") { <AdminOrdersTab Orders="_orders" Loading="_ordersLoading" OnReload="LoadOrdersAsync" /> }
             else if (_activeTab == "shipping") { <AdminShippingTab /> }
@@ -58,11 +59,44 @@ else
             else if (_activeTab == "team") { <AdminOrganisation /> }
             else if (_activeTab == "tasks") { <AdminTasksTab /> }
             else if (_activeTab == "reports") { <AdminReportsTab /> }
+            else if (_activeTab == "employee_report") { <AdminEmployeeReportTab /> }
             </div>
         }
         <footer class="admin-footer"><span>Nura Herbex · Store administration</span><span>Made for your everyday operations</span></footer>
         </main></div>
     </div>
+
+    @if (_showLogoutConfirm)
+    {
+        <div class="fu-modal-backdrop" @onclick="() => _showLogoutConfirm = false" style="position:fixed;inset:0;background:rgba(15,23,42,0.65);backdrop-filter:blur(4px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;">
+            <div class="fu-modal" role="dialog" aria-modal="true" aria-labelledby="logout-dialog-title" @onclick:stopPropagation="true" style="max-width:420px;width:100%;background:#fff;border-radius:20px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);overflow:hidden;text-align:center;padding:28px 24px;border:1px solid #f1f5f9;">
+                <div style="width:56px;height:56px;margin:0 auto 16px;border-radius:50%;background:#fee2e2;color:#dc2626;display:flex;align-items:center;justify-content:center;">
+                    <Icon Name="LogOut" Size="26" />
+                </div>
+                <h3 id="logout-dialog-title" style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0f172a;">Sign Out of Workspace?</h3>
+                <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.5;">
+                    Are you sure you want to log out from <strong style="color:#0f172a;">@(string.IsNullOrEmpty(AdminAuth.Name) ? "Administrator" : AdminAuth.Name)</strong>? You will need to sign in again to access the workspace.
+                </p>
+                <div style="display:flex;gap:12px;justify-content:center;">
+                    <button type="button" class="admin-btn" style="flex:1;padding:10px 16px;border-radius:10px;font-weight:600;justify-content:center;" @onclick="() => _showLogoutConfirm = false" disabled="@_isLoggingOut">
+                        Cancel
+                    </button>
+                    <button type="button" class="admin-btn" style="flex:1;padding:10px 16px;border-radius:10px;font-weight:600;background:#dc2626 !important;color:#ffffff !important;border-color:#dc2626 !important;justify-content:center;gap:6px;cursor:pointer;" @onclick="ConfirmLogoutAsync" disabled="@_isLoggingOut">
+                        @if (_isLoggingOut)
+                        {
+                            <Icon Name="RefreshCw" Size="16" Class="animate-spin" />
+                            <span style="color:#ffffff !important;">Signing out…</span>
+                        }
+                        else
+                        {
+                            <Icon Name="LogOut" Size="16" />
+                            <span style="color:#ffffff !important;">Yes, Log Out</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
 }
 @code {
     [Parameter] public string? Section { get; set; }
@@ -81,23 +115,26 @@ else
     private static readonly NavItem[] AllPages =
     {
         new("overview", "Overview", "TrendingUp", "MANAGE"), new("orders", "Orders", "ShoppingBag", "MANAGE"), new("payments", "Payments", "CreditCard", "MANAGE"), new("shipping", "Shipping setup", "Truck", "MANAGE"), new("customers", "Customers", "Users", "MANAGE"),
-        new("products", "Products", "Package", "MANAGE"), new("coupons", "Coupons", "Tag", "MANAGE"), new("reviews", "Reviews", "MessageSquare", "MANAGE"),
-        new("crm", "Sales dashboard", "BarChart3", "SALES & WORK"), new("leads", "Leads", "Phone", "SALES & WORK"), new("transfers", "Pending Transfers", "ArrowRightLeft", "SALES & WORK"), new("no_answer", "No Answer Follow-up", "PhoneMissed", "SALES & WORK"), new("interested", "Hot leads", "Flame", "SALES & WORK"), new("care", "Customer care", "HeartPulse", "SALES & WORK"), new("campaigns", "Ad campaigns", "TrendingUp", "SALES & WORK"), new("followups", "Follow-ups", "Clock", "SALES & WORK"), new("bulk_messages", "Bulk messaging", "Send", "SALES & WORK"), new("tasks", "Tasks", "CheckCircle2", "SALES & WORK"),
+        new("stock", "Stock / Inventory", "Layers", "MANAGE"), new("products", "Products", "Package", "MANAGE"), new("coupons", "Coupons", "Tag", "MANAGE"), new("reviews", "Reviews", "MessageSquare", "MANAGE"),
+        new("crm", "Sales dashboard", "BarChart3", "SALES & WORK"), new("leads", "Leads", "Phone", "SALES & WORK"), new("transfers", "Pending Transfers", "ArrowRightLeft", "SALES & WORK"), new("no_answer", "No Answer Follow-up", "PhoneMissed", "SALES & WORK"), new("interested", "Hot Leads Follow-up", "Flame", "SALES & WORK"), new("care", "Customer care", "HeartPulse", "SALES & WORK"), new("campaigns", "Ad campaigns", "TrendingUp", "SALES & WORK"), new("followups", "Follow-ups", "Clock", "SALES & WORK"), new("bulk_messages", "Bulk messaging", "Send", "SALES & WORK"), new("tasks", "Tasks", "CheckCircle2", "SALES & WORK"), new("employee_report", "Employee report", "UserCheck", "SALES & WORK"),
         new("reports", "Reports", "BarChart3", "ADMIN"), new("whatsapp", "WhatsApp log", "MessageCircle", "ADMIN"), new("drive_files", "Google Drive", "Layers", "ADMIN"), new("team", "Team & organisation", "KeyRound", "ADMIN"),
         new("batches", "Batch reports", "ShieldCheck", "STOREFRONT & SUPPORT"), new("formulation", "Formulation", "FlaskConical", "STOREFRONT & SUPPORT"), new("content", "Store content", "FileText", "STOREFRONT & SUPPORT"),
     };
     /// <summary>Only the pages this person's designation allows. People who only see their own records get "My" wording.</summary>
-    private NavItem[] Navigation => AllPages.Where(p => AdminAuth.Can(p.Id) || (p.Id is "no_answer" or "transfers" && (AdminAuth.Can("no_answer") || AdminAuth.Can("leads"))) || (p.Id == "reports" && (AdminAuth.Can("leads") || AdminAuth.Can("followups") || AdminAuth.Can("tasks")))).Select(p => p.Id switch
+    private NavItem[] Navigation => AllPages.Where(p => AdminAuth.Can(p.Id) || (p.Id is "no_answer" or "transfers" or "interested" && (AdminAuth.Can("no_answer") || AdminAuth.Can("leads") || AdminAuth.Can("interested"))) || (p.Id == "stock" && (AdminAuth.Can("stock") || AdminAuth.Can("products") || AdminAuth.IsAdmin)) || (p.Id == "employee_report" && (AdminAuth.Can("employee_report") || AdminAuth.Can("reports") || AdminAuth.Can("leads") || AdminAuth.Can("followups"))) || (p.Id == "reports" && (AdminAuth.Can("leads") || AdminAuth.Can("followups") || AdminAuth.Can("tasks")))).Select(p => p.Id switch
     {
         "crm" when !AdminAuth.CanAll("crm") => p with { Label = "My dashboard" },
         "leads" when !AdminAuth.CanAll("leads") => p with { Label = "My leads" },
         "transfers" => p with { Label = "Pending Transfers" },
         "no_answer" => p with { Label = "No Answer Follow-up" },
-        "interested" when !AdminAuth.CanAll("interested") => p with { Label = "My hot leads" },
+        "interested" when !AdminAuth.CanAll("interested") => p with { Label = "My hot leads follow-up" },
+        "interested" => p with { Label = "Hot Leads Follow-up" },
+        "stock" => p with { Label = "Stock / Inventory" },
         "care" when !AdminAuth.CanAll("care") => p with { Label = "My customers" },
         "campaigns" when !AdminAuth.CanAll("campaigns") => p with { Label = "My ad leads" },
         "followups" when !AdminAuth.CanAll("followups") => p with { Label = "My follow-ups" },
         "tasks" when !AdminAuth.CanAll("tasks") => p with { Label = "My tasks" },
+        "employee_report" when !AdminAuth.CanAll("reports") && !AdminAuth.CanAll("leads") => p with { Label = "My report" },
         "reports" when !AdminAuth.CanAll("reports") => p with { Label = "My reports" },
         _ => p,
     }).ToArray();
@@ -226,12 +263,20 @@ else
         await LoadAllAsync();
     }
 
-    private async Task LogoutAsync()
+    private bool _showLogoutConfirm;
+    private bool _isLoggingOut;
+
+    private async Task ConfirmLogoutAsync()
     {
-        await AdminAuth.SignOutAsync();
+        if (_isLoggingOut) return;
+        _isLoggingOut = true;
+        StateHasChanged();
+        try { await AdminAuth.SignOutAsync(); } catch { }
+        _showLogoutConfirm = false;
         _dataLoaded = false;
         _orders = new(); _customers = new(); _batches = new(); _payments = new();
         _ordersLoading = _customersLoading = _batchesLoading = _paymentsLoading = true;
+        Nav.NavigateTo("/admin", forceLoad: true);
     }
 
     private async Task LoadAllAsync()

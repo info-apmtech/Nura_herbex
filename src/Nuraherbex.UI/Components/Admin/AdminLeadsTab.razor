@@ -118,8 +118,35 @@
                         </select>
                     }
                     <button type="button" class="@($"ld-chip2 {(_quick == "unread" ? "is-on" : "")}")" aria-pressed="@(_quick == "unread")" @onclick='() => _quick = _quick == "unread" ? "" : "unread"'><Icon Name="MessageCircle" Size="13" /> Unread <b>@_unreadTotal</b></button>
+
+                    @* Date presets *@
+                    <div class="ld-date-presets" style="display:inline-flex;align-items:center;gap:3px;background:#f1f5f9;padding:2px;border-radius:8px;">
+                        <button type="button" style="@(_datePreset == "" ? "background:#fff;font-weight:600;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,0.06);" : "background:transparent;color:#64748b;") padding:4px 8px;border-radius:6px;border:none;font-size:11px;cursor:pointer;" @onclick='() => SelectDatePresetAsync("")'>All</button>
+                        <button type="button" style="@(_datePreset == "today" ? "background:#fff;font-weight:600;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,0.06);" : "background:transparent;color:#64748b;") padding:4px 8px;border-radius:6px;border:none;font-size:11px;cursor:pointer;" @onclick='() => SelectDatePresetAsync("today")'>Today</button>
+                        <button type="button" style="@(_datePreset == "yesterday" ? "background:#fff;font-weight:600;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,0.06);" : "background:transparent;color:#64748b;") padding:4px 8px;border-radius:6px;border:none;font-size:11px;cursor:pointer;" @onclick='() => SelectDatePresetAsync("yesterday")'>Yesterday</button>
+                        <button type="button" style="@(_datePreset == "7d" ? "background:#fff;font-weight:600;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,0.06);" : "background:transparent;color:#64748b;") padding:4px 8px;border-radius:6px;border:none;font-size:11px;cursor:pointer;" @onclick='() => SelectDatePresetAsync("7d")'>7D</button>
+                    </div>
+
+                    @* Date input range picker *@
+                    <input type="date" value="@_dateFrom" @onchange="OnFromDateChanged" style="padding:4px 6px;font-size:11px;border:1px solid #cbd5e1;border-radius:6px;color:#334155;background:#fff;max-width:115px;" title="Filter leads from date" />
+                    <input type="date" value="@_dateTo" @onchange="OnToDateChanged" style="padding:4px 6px;font-size:11px;border:1px solid #cbd5e1;border-radius:6px;color:#334155;background:#fff;max-width:115px;" title="Filter leads to date" />
+                    @if (!string.IsNullOrEmpty(_datePreset) || !string.IsNullOrEmpty(_dateFrom))
+                    {
+                        <button type="button" title="Clear date filter" @onclick="ClearDateFilterAsync" style="border:none;background:#fee2e2;color:#991b1b;border-radius:6px;padding:4px 7px;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:3px;">
+                            <Icon Name="X" Size="11" />
+                        </button>
+                    }
+
                     <span class="ld-board-total"><strong>@Total</strong> @(Mode == LeadViews.Care ? "customers" : Mode == LeadViews.Interested ? "hot leads" : Mode == "no_answer" ? "no-answer leads" : "leads")</span>
                     <button type="button" class="ld-refresh" title="Refresh" aria-label="Refresh" @onclick="() => LoadAsync(true)"><Icon Name="RefreshCw" Size="14" Class="@(_loading ? "animate-spin" : "")" /></button>
+
+                    @* Add Lead button *@
+                    @if (Mode == LeadViews.Leads)
+                    {
+                        <button type="button" style="background:#235b40;color:#fff;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;border:none;box-shadow:0 1px 2px rgba(35,91,64,0.2);" @onclick="OpenNewLeadModal">
+                            <Icon Name="Plus" Size="14" /> Add lead
+                        </button>
+                    }
                 </div>
 
                 @if (_loading && _leads.Count == 0) { <div class="ld-empty">Loading…</div> }
@@ -216,6 +243,29 @@
                     <button type="button" class="ld-refresh" title="Refresh" aria-label="Refresh leads" @onclick="() => LoadAsync(true)">
                         <Icon Name="RefreshCw" Size="14" Class="@(_loading ? "animate-spin" : "")" />
                     </button>
+                </div>
+                @if (Mode == LeadViews.Leads)
+                {
+                    <button type="button" style="background:#235b40;color:#fff;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;border:none;margin-right:8px;box-shadow:0 1px 2px rgba(35,91,64,0.2);" @onclick="OpenNewLeadModal">
+                        <Icon Name="Plus" Size="14" /> Add lead
+                    </button>
+                }
+                <div class="ld-date-presets" style="display:inline-flex;align-items:center;gap:3px;background:#f1f5f9;padding:2px;border-radius:8px;margin-right:6px;">
+                    <button type="button" style="@(_datePreset == "" ? "background:#fff;font-weight:600;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,0.06);" : "background:transparent;color:#64748b;") padding:4px 8px;border-radius:6px;border:none;font-size:11px;cursor:pointer;" @onclick='() => SelectDatePresetAsync("")'>All</button>
+                    <button type="button" style="@(_datePreset == "today" ? "background:#fff;font-weight:600;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,0.06);" : "background:transparent;color:#64748b;") padding:4px 8px;border-radius:6px;border:none;font-size:11px;cursor:pointer;" @onclick='() => SelectDatePresetAsync("today")'>Today</button>
+                    <button type="button" style="@(_datePreset == "yesterday" ? "background:#fff;font-weight:600;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,0.06);" : "background:transparent;color:#64748b;") padding:4px 8px;border-radius:6px;border:none;font-size:11px;cursor:pointer;" @onclick='() => SelectDatePresetAsync("yesterday")'>Yesterday</button>
+                    <button type="button" style="@(_datePreset == "7d" ? "background:#fff;font-weight:600;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,0.06);" : "background:transparent;color:#64748b;") padding:4px 8px;border-radius:6px;border:none;font-size:11px;cursor:pointer;" @onclick='() => SelectDatePresetAsync("7d")'>7D</button>
+                </div>
+                <div style="display:inline-flex;align-items:center;gap:4px;margin-right:8px;">
+                    <input type="date" value="@_dateFrom" @onchange="OnFromDateChanged" style="padding:4px 6px;font-size:11px;border:1px solid #cbd5e1;border-radius:6px;color:#334155;background:#fff;max-width:115px;" title="From date" />
+                    <span style="font-size:11px;color:#94a3b8;">-</span>
+                    <input type="date" value="@_dateTo" @onchange="OnToDateChanged" style="padding:4px 6px;font-size:11px;border:1px solid #cbd5e1;border-radius:6px;color:#334155;background:#fff;max-width:115px;" title="To date" />
+                    @if (!string.IsNullOrEmpty(_datePreset) || !string.IsNullOrEmpty(_dateFrom))
+                    {
+                        <button type="button" title="Clear date filter" @onclick="ClearDateFilterAsync" style="border:none;background:#fee2e2;color:#991b1b;border-radius:6px;padding:4px 7px;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:3px;">
+                            <Icon Name="X" Size="11" />
+                        </button>
+                    }
                 </div>
                 @if (Everyone)
                 {
@@ -497,13 +547,21 @@
                     <span class="ld-owner-gap"></span>
                     @if (lead.NextFollowUpAt is { } nfu) { <span class="@($"ld-pill ld-fu {(nfu < DateTime.UtcNow ? "late" : "")}")"><Icon Name="Clock" Size="11" />Next: @FuFmt.Due(nfu)</span> }
                     <button type="button" class="ld-btn" @onclick="() => _orderDialog = true"><Icon Name="Package" Size="13" /> Order</button>
-                    @if (lead.Status != LeadStatuses.New)
+                    @if (lead.Status == LeadStatuses.Interested)
                     {
-                        <button type="button" class="ld-btn" @onclick="() => _composer = true"><Icon Name="Plus" Size="13" /> No Answer Follow-up</button>
+                        <button type="button" class="ld-btn" style="background:#fef3c7;border-color:#f59e0b;color:#b45309;font-weight:600;" @onclick="() => _composer = true"><Icon Name="Flame" Size="13" /> Hot Leads Follow-up</button>
+                    }
+                    else if (lead.Status == LeadStatuses.NoAnswer)
+                    {
+                        <button type="button" class="ld-btn" style="background:#fee2e2;border-color:#f87171;color:#b91c1c;font-weight:600;" @onclick="() => _composer = true"><Icon Name="PhoneMissed" Size="13" /> No Answer Follow-up</button>
+                    }
+                    else if (lead.Status != LeadStatuses.New)
+                    {
+                        <button type="button" class="ld-btn" @onclick="() => _composer = true"><Icon Name="Clock" Size="13" /> Schedule Follow-up</button>
                     }
                     else
                     {
-                        <button type="button" class="ld-btn" disabled title="Mark this New lead as Interested first before scheduling a follow-up"><Icon Name="Plus" Size="13" /> No Answer Follow-up</button>
+                        <button type="button" class="ld-btn" disabled title="Mark this New lead as Interested first before scheduling a follow-up"><Icon Name="Clock" Size="13" /> Follow-up</button>
                     }
                     @if (AdminAuth.Can("tasks")) { <button type="button" class="ld-btn" title="Create a task about this lead" @onclick="() => NewTaskFor(lead.Id)"><Icon Name="Check" Size="13" /> Task</button> }
                 </div>
@@ -708,13 +766,13 @@
                             }
 
                             <form class="ld-composer" @onsubmit="ReplyAsync" @onsubmit:preventDefault>
-                                <textarea rows="@ReplyRows" aria-label="Type a message" disabled="@(_busy || !CanReply(lead))" maxlength="1500"
-                                          placeholder="@(lead.ConsentStatus == "opted_out" ? "Customer opted out" : WindowOpen(lead) ? "Type a message, or use the tools below" : "24-hour window closed")"
+                                <textarea rows="@ReplyRows" aria-label="Type a message" disabled="@(_busy || lead.ConsentStatus == "opted_out")" maxlength="1500"
+                                          placeholder="@(lead.ConsentStatus == "opted_out" ? "Customer opted out" : WindowOpen(lead) ? "Type a message, or use the tools below" : "24-hour window closed · Send template or type a message")"
                                           @bind="_reply" @bind:event="oninput" @onkeydown="OnReplyKey"></textarea>
-                                <button type="submit" class="ld-send" aria-label="Send message" title="Send (Ctrl+Enter)" disabled="@(_busy || _drafting || !CanReply(lead) || string.IsNullOrWhiteSpace(_reply))"><Icon Name="Send" Size="18" /></button>
+                                <button type="submit" class="ld-send" aria-label="Send message" title="Send (Ctrl+Enter)" disabled="@(_busy || _drafting || lead.ConsentStatus == "opted_out" || string.IsNullOrWhiteSpace(_reply))"><Icon Name="Send" Size="18" /></button>
                             </form>
 
-                            @if (CanReply(lead))
+                            @if (lead.ConsentStatus != "opted_out")
                             {
                                 <div class="cmp-bar">
                                     @if (_assistantOn)
@@ -989,6 +1047,124 @@
     <FollowUpComposer LeadId="cl.Id" LeadName="@cl.Name" LeadPhone="@cl.Phone" LeadStatus="@cl.Status" IsAdmin="Everyone" Team="_team" OnClose="() => _composer = false" OnCreated="OnFollowUpCreated" />
 }
 
+@if (_showNewLeadModal)
+{
+    <div class="ld-modal-overlay" @onclick="CloseNewLeadModal" style="position:fixed;inset:0;background:rgba(15,23,42,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);">
+        <div class="ld-modal-card" @onclick:stopPropagation="true" style="background:#fff;border-radius:16px;max-width:540px;width:100%;box-shadow:0 20px 25px -5px rgba(0,0,0,0.1),0 8px 10px -6px rgba(0,0,0,0.1);overflow:hidden;display:flex;flex-direction:column;max-height:90vh;">
+            
+            <div style="padding:18px 24px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;background:#f8fafc;">
+                <div>
+                    <h3 style="margin:0;font-size:17px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:8px;">
+                        <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#dcfce7;color:#166534;"><Icon Name="Plus" Size="16" /></span>
+                        Create Manual Lead
+                    </h3>
+                    <p style="margin:4px 0 0;font-size:12px;color:#64748b;">For organic calls, walk-ins, or direct WhatsApp enquiries.</p>
+                </div>
+                <button type="button" @onclick="CloseNewLeadModal" style="border:none;background:transparent;cursor:pointer;color:#94a3b8;padding:4px;border-radius:6px;" aria-label="Close">
+                    <Icon Name="X" Size="18" />
+                </button>
+            </div>
+
+            <form @onsubmit="SaveNewLeadAsync" @onsubmit:preventDefault style="padding:20px 24px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;">
+                @if (!string.IsNullOrEmpty(_newLeadError))
+                {
+                    <div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:10px 14px;border-radius:8px;font-size:13px;display:flex;align-items:center;gap:8px;">
+                        <Icon Name="AlertCircle" Size="16" />
+                        <span>@_newLeadError</span>
+                    </div>
+                }
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div>
+                        <label style="display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:5px;">Full Name *</label>
+                        <input type="text" required placeholder="e.g. Ramesh Kumar" @bind="_newLeadForm.FullName" @bind:event="oninput"
+                               style="width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:5px;">Mobile / WhatsApp *</label>
+                        <input type="tel" required placeholder="e.g. 9876543210" @bind="_newLeadForm.Phone" @bind:event="oninput"
+                               style="width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;box-sizing:border-box;" />
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div>
+                        <label style="display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:5px;">Enquiry Source</label>
+                        <select @bind="_newLeadForm.Source" style="width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;box-sizing:border-box;background:#fff;">
+                            <option value="manual">Direct Phone Call</option>
+                            <option value="whatsapp">Direct WhatsApp</option>
+                            <option value="website">Referral / Organic</option>
+                            <option value="instagram">Instagram Direct</option>
+                            <option value="facebook">Facebook Direct</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:5px;">Product Interest</label>
+                        <input type="text" placeholder="e.g. STAMIX Vitality Mix" @bind="_newLeadForm.ProductInterest" @bind:event="oninput"
+                               style="width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;box-sizing:border-box;" />
+                    </div>
+                </div>
+
+                @if (Everyone)
+                {
+                    <div>
+                        <label style="display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:5px;">Assign Lead To</label>
+                        <select @bind="_newLeadForm.AssignedToEmployeeId" style="width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;box-sizing:border-box;background:#fff;">
+                            <option value="@((long?)null)">Assign to Me (@(string.IsNullOrWhiteSpace(AdminAuth.Name) ? "Current User" : AdminAuth.Name))</option>
+                            @foreach (var t in _team)
+                            {
+                                <option value="@t.Id">@t.Name (@t.Role)</option>
+                            }
+                        </select>
+                    </div>
+                }
+
+                <div>
+                    <label style="display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:5px;">Initial Notes / Customer Query</label>
+                    <textarea rows="2" placeholder="e.g. Called asking about dosage, pricing and delivery time..." @bind="_newLeadForm.Notes" @bind:event="oninput"
+                              style="width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;box-sizing:border-box;resize:vertical;"></textarea>
+                </div>
+
+                <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0 0 6px;font-size:13px;font-weight:600;color:#166534;">
+                        <input type="checkbox" @bind="_newLeadForm.SendWhatsAppPush" style="accent-color:#16a34a;width:16px;height:16px;cursor:pointer;" />
+                        <span>Send WhatsApp Introduction Message Immediately 🌿</span>
+                    </label>
+                    <p style="margin:0 0 6px 24px;font-size:11px;color:#15803d;">
+                        Pushes a welcome greeting to the customer's WhatsApp so they enter your WhatsApp flow and can chat directly with your team.
+                    </p>
+                    @if (_newLeadForm.SendWhatsAppPush)
+                    {
+                        <div style="margin-left:24px;background:#fff;border:1px solid #86efac;border-radius:8px;padding:8px 12px;font-size:12px;color:#14532d;line-height:1.4;">
+                            <em>"Hello @(string.IsNullOrWhiteSpace(_newLeadForm.FullName) ? "{CustomerName}" : _newLeadForm.FullName.Trim())! 🌿 Thank you for reaching out to Nura Herbex regarding @(string.IsNullOrWhiteSpace(_newLeadForm.ProductInterest) ? "our herbal wellness products" : _newLeadForm.ProductInterest.Trim()). Our wellness advisor is here to help you. How can we assist you today?"</em>
+                        </div>
+                    }
+                </div>
+
+                <div style="display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:4px;padding-top:12px;border-top:1px solid #e2e8f0;">
+                    <button type="button" @onclick="CloseNewLeadModal" disabled="@_newLeadSaving"
+                            style="padding:8px 16px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#475569;font-size:13px;font-weight:600;cursor:pointer;">
+                        Cancel
+                    </button>
+                    <button type="submit" disabled="@_newLeadSaving"
+                            style="padding:8px 20px;border-radius:8px;border:none;background:#235b40;color:#fff;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 4px rgba(35,91,64,0.2);">
+                        @if (_newLeadSaving)
+                        {
+                            <Icon Name="RefreshCw" Size="14" Class="animate-spin" />
+                            <span>Creating lead…</span>
+                        }
+                        else
+                        {
+                            <Icon Name="Check" Size="14" />
+                            <span>Save & Push Lead</span>
+                        }
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+}
+
 @code {
     private void NewTaskFor(long leadId) => Nav.NavigateTo("/admin/tasks?lead=" + leadId);
     /// <summary>Which panel this is: leads (new and follow-up), interested (hot leads) or care (paid customers).</summary>
@@ -1032,6 +1208,15 @@
     private long _bulkTargetEmployeeId;
     private string _bulkTransferReason = "";
     private bool _bulkBusy;
+
+    private string _datePreset = ""; // "", "today", "yesterday", "7d", "custom"
+    private string? _dateFrom;
+    private string? _dateTo;
+
+    private bool _showNewLeadModal;
+    private bool _newLeadSaving;
+    private string? _newLeadError;
+    private LeadCreateRequest _newLeadForm = new();
 
     private bool IsAllSelected => VisibleLeads.Count > 0 && VisibleLeads.All(l => _selectedLeadIds.Contains(l.Id));
 
@@ -1434,7 +1619,7 @@
     {
         if (spinner) { _loading = true; StateHasChanged(); }
         var apiView = Mode == "no_answer" ? LeadViews.Leads : Mode;
-        var res = await Api.AdminLeadsAsync(_statusFilter, null, _query, _assignee, 100, apiView);
+        var res = await Api.AdminLeadsAsync(_statusFilter, null, _query, _assignee, 100, apiView, _dateFrom, _dateTo, _datePreset);
         if (_cts.IsCancellationRequested) return;
         if (res.Success && keepOrder && _leads.Count > 0 && !FollowUpHeads) // the due-date lists are re-ordered by the server each time
         {
@@ -1446,6 +1631,92 @@
         else _error = res.Message ?? "Could not load leads.";
         _loading = false;
         StateHasChanged();
+    }
+
+    private void OpenNewLeadModal()
+    {
+        _newLeadForm = new LeadCreateRequest
+        {
+            Source = LeadSources.Manual,
+            AssignedToEmployeeId = AdminAuth.EmployeeId,
+            SendWhatsAppPush = true,
+        };
+        _newLeadError = null;
+        _showNewLeadModal = true;
+    }
+
+    private void CloseNewLeadModal()
+    {
+        _showNewLeadModal = false;
+        _newLeadError = null;
+    }
+
+    private async Task SaveNewLeadAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newLeadForm.FullName)) { _newLeadError = "Full name is required."; return; }
+        if (string.IsNullOrWhiteSpace(_newLeadForm.Phone)) { _newLeadError = "Phone / WhatsApp number is required."; return; }
+
+        _newLeadSaving = true;
+        _newLeadError = null;
+        var res = await Api.AdminCreateLeadAsync(_newLeadForm);
+        _newLeadSaving = false;
+
+        if (res.Success)
+        {
+            _showNewLeadModal = false;
+            _notice = res.Message;
+            await LoadAsync(true);
+            if (res.Lead is not null)
+            {
+                await OpenAsync(res.Lead.Id);
+            }
+        }
+        else
+        {
+            _newLeadError = res.Message ?? "Failed to create lead.";
+        }
+    }
+
+    private async Task SelectDatePresetAsync(string preset)
+    {
+        if (_datePreset == preset && preset != "custom")
+        {
+            _datePreset = "";
+            _dateFrom = null;
+            _dateTo = null;
+        }
+        else
+        {
+            _datePreset = preset;
+            if (preset != "custom")
+            {
+                _dateFrom = null;
+                _dateTo = null;
+            }
+        }
+        await LoadAsync(true);
+    }
+
+    private async Task OnFromDateChanged(ChangeEventArgs e)
+    {
+        _dateFrom = e.Value?.ToString();
+        _datePreset = "custom";
+        await LoadAsync(true);
+    }
+
+    private async Task OnToDateChanged(ChangeEventArgs e)
+    {
+        _dateTo = e.Value?.ToString();
+        _datePreset = "custom";
+        await LoadAsync(true);
+    }
+
+    private async Task ClearDateFilterAsync()
+    {
+        _datePreset = "";
+        _dateFrom = null;
+        _dateTo = null;
+        await LoadAsync(true);
     }
 
     private async Task LoadTeamAsync()
@@ -1562,11 +1833,9 @@
         var inHome = home == Mode || (Mode == "no_answer" && home == LeadViews.Leads && res.Lead.Status != LeadStatuses.Interested && !res.Lead.IsCustomer);
         if (!inHome)
         {
-            if (!sameLead && AdminAuth.Can(home)) { Nav.NavigateTo($"/admin/{home}?open={id}"); return; } // opened from a link: follow them
-            // Stay in the full-screen lead workspace when updating status/scheduling a follow-up in-place (no page reload or jarring kick-out).
             _notice = AdminAuth.Can(home)
-                ? $"{res.Lead.Name} moved to {PanelName(home)}."
-                : $"{res.Lead.Name} moved to {PanelName(home)}, which your designation cannot open.";
+                ? $"{res.Lead.Name} belongs to {PanelName(home)}."
+                : $"{res.Lead.Name} belongs to {PanelName(home)}, which your designation cannot open.";
         }
         var prevNotes = _notes;
         _selected = res;

@@ -66,13 +66,41 @@ public class CrmDashboardService(NuraDbContext db)
 
         report.Funnel = LeadStatuses.All.Select(s => new CrmFunnelRow { Status = s, Count = created.Count(l => l.Status.ToCode() == s) }).ToList();
 
-        // ---- orders matched to leads by phone ----
-        var allLeads = await leadQ.Select(l => new { l.Id, l.Phone, l.Source, l.AssignedToEmployeeId }).ToListAsync();
+        // ---- orders matched to leads by phone or notes ----
+        var allLeads = await db.Leads.AsNoTracking().Select(l => new { l.Id, l.Phone, l.Source, l.AssignedToEmployeeId, l.ConvertedByEmployeeId }).ToListAsync();
         var byPhone = new Dictionary<string, (long Id, LeadSource Source, long? Owner)>();
-        foreach (var l in allLeads) byPhone[Last10(l.Phone)] = (l.Id, l.Source, l.AssignedToEmployeeId);
-        var orders = (await db.Orders.AsNoTracking().Where(o => o.CreatedAt >= from && o.CreatedAt < toExclusive)
-                .Select(o => new { o.CustomerPhone, o.TotalAmount, o.PaymentStatus, o.FulfillmentStatus, o.CreatedAt }).ToListAsync())
-            .Where(o => Counts(o.PaymentStatus, o.FulfillmentStatus) && byPhone.ContainsKey(Last10(o.CustomerPhone))).ToList();
+        foreach (var l in allLeads)
+        {
+            var p = Last10(l.Phone);
+            if (!string.IsNullOrEmpty(p))
+                byPhone[p] = (l.Id, l.Source, l.ConvertedByEmployeeId ?? l.AssignedToEmployeeId);
+        }
+
+        var names = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
+        var nameToId = names.ToDictionary(kv => kv.Value.Trim().ToLowerInvariant(), kv => kv.Key);
+
+        var rawOrders = await db.Orders.AsNoTracking()
+            .Where(o => o.CreatedAt >= from && o.CreatedAt < toExclusive)
+            .Select(o => new { o.Id, o.CustomerPhone, o.TotalAmount, o.PaymentStatus, o.FulfillmentStatus, o.CreatedAt, o.Notes })
+            .ToListAsync();
+
+        var qualifyingOrders = rawOrders.Where(o => Counts(o.PaymentStatus, o.FulfillmentStatus)).ToList();
+        
+        long? ResolveOrderOwner(string phone, string? notes)
+        {
+            var p = Last10(phone);
+            if (byPhone.TryGetValue(p, out var match) && match.Owner != null) return match.Owner;
+            if (!string.IsNullOrWhiteSpace(notes))
+            {
+                foreach (var (staffName, staffId) in nameToId)
+                {
+                    if (notes.ToLowerInvariant().Contains(staffName)) return staffId;
+                }
+            }
+            return null;
+        }
+
+        var orders = qualifyingOrders.Where(o => onlyEmployee == null || ResolveOrderOwner(o.CustomerPhone, o.Notes) == onlyEmployee).ToList();
         report.Orders = orders.Count;
         report.Revenue = orders.Sum(o => o.TotalAmount);
         report.AverageOrderValue = orders.Count == 0 ? 0 : Math.Round(report.Revenue / orders.Count, 0);
@@ -110,15 +138,14 @@ public class CrmDashboardService(NuraDbContext db)
             report.BySource.Add(new CrmSourceRow
             {
                 Source = g.Key.ToCode(), Leads = g.Count(), Converted = converted, ConversionPercent = (int)Math.Round(100.0 * converted / g.Count()),
-                Revenue = orders.Where(o => byPhone[Last10(o.CustomerPhone)].Source == g.Key).Sum(o => o.TotalAmount),
+                Revenue = orders.Where(o => byPhone.TryGetValue(Last10(o.CustomerPhone), out var bp) && bp.Source == g.Key).Sum(o => o.TotalAmount),
             });
         }
         // Revenue can also come from sources with no new lead in the period (older leads who reordered).
-        foreach (var src in orders.GroupBy(o => byPhone[Last10(o.CustomerPhone)].Source).Where(g => report.BySource.All(r => r.Source != g.Key.ToCode())))
+        foreach (var src in orders.Where(o => byPhone.ContainsKey(Last10(o.CustomerPhone))).GroupBy(o => byPhone[Last10(o.CustomerPhone)].Source).Where(g => report.BySource.All(r => r.Source != g.Key.ToCode())))
             report.BySource.Add(new CrmSourceRow { Source = src.Key.ToCode(), Revenue = src.Sum(o => o.TotalAmount) });
 
         // ---- by employee ----
-        var names = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
         var open = await db.Leads.AsNoTracking().Where(l => l.AssignedToEmployeeId != null && l.Status != LeadStatus.Converted && l.Status != LeadStatus.NotInterested)
             .GroupBy(l => l.AssignedToEmployeeId!.Value).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N);
         var overdue = await db.FollowUps.AsNoTracking().Where(f => f.Status == FollowUpStatus.Pending && f.DueAt < todayStart && f.AssignedToEmployeeId != null)
@@ -133,7 +160,7 @@ public class CrmDashboardService(NuraDbContext db)
                 EmployeeId = id, Name = names[id],
                 Leads = created.Count(l => l.AssignedToEmployeeId == id),
                 Converted = wonByOwner.GetValueOrDefault(id),
-                Revenue = orders.Where(o => byPhone[Last10(o.CustomerPhone)].Owner == id).Sum(o => o.TotalAmount),
+                Revenue = orders.Where(o => ResolveOrderOwner(o.CustomerPhone, o.Notes) == id).Sum(o => o.TotalAmount),
                 MedianFirstReplyMinutes = Median(mine), OpenLeads = open.GetValueOrDefault(id), OverdueFollowUps = overdue.GetValueOrDefault(id),
             });
         }

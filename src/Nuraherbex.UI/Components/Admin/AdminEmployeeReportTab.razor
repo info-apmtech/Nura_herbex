@@ -1,0 +1,337 @@
+@inject ApiClient Api
+@inject AdminSession AdminAuth
+
+<div class="fr">
+    <div class="fr-bar">
+        <div>
+            <span class="rp-eyebrow">STAFF ANALYTICS</span>
+            <h3 style="margin:4px 0 2px;font-size:20px;font-weight:700;color:#1e1b4b;">@(IsManager ? "Employee Performance Report" : "My Performance Report")</h3>
+            <p style="margin:0;font-size:12px;color:#6b7280;">Leads completed, follow-ups done, and no-answer follow-ups tracked date-wise.</p>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            @if (IsManager && _employees.Count > 0)
+            {
+                <select class="ld-select" style="padding:6px 12px;border-radius:8px;border:1px solid #e2e8f0;font-size:12px;background:#fff;outline:none;"
+                        value="@(_selectedEmployeeId?.ToString() ?? "")"
+                        @onchange="OnEmployeeChangedAsync">
+                    <option value="">All employees</option>
+                    @foreach (var emp in _employees)
+                    {
+                        <option value="@emp.Id">@emp.Name (@emp.Role)</option>
+                    }
+                </select>
+            }
+
+            <DateRangeFilter
+                SelectedDays="@_days"
+                IsCustom="@_isCustom"
+                FromDate="@_from"
+                ToDate="@_to"
+                RangeText="@RangeSummary"
+                OnPresetSelected="OnPresetSelectedAsync"
+                OnRangeSelected="OnRangeSelectedAsync" />
+
+            <ExportButton Title="@($"Employee report ({RangeSummary})")"
+                          FileName="@($"nura-employee-report-{_from}-{_to}")"
+                          Columns="@ExportColumns"
+                          Rows="ExportRows"
+                          Disabled="@(_data is null || (_viewMode == "summary" ? _data.ByEmployee.Count == 0 : _data.DailyBreakdown.Count == 0))" />
+        </div>
+    </div>
+
+    @if (_loading && _data is null)
+    {
+        <div class="ld-card ld-empty" style="text-align:center;padding:48px 24px;">
+            <Icon Name="Loader2" Size="24" Class="animate-spin" />
+            <p style="margin-top:10px;font-size:13px;color:#64748b;">Loading employee performance report…</p>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="em-note bad" role="alert">
+            <Icon Name="AlertCircle" Size="16" />
+            <span>@_error</span>
+        </div>
+    }
+    else if (_data is { } r)
+    {
+        <!-- Summary KPI Cards -->
+        <div class="fr-kpis" style="margin-bottom:20px;">
+            <div class="fr-kpi" style="border-left:4px solid #10b981;">
+                <span style="color:#059669;font-weight:600;"><Icon Name="Award" Size="14" /> Leads Won (முடித்தவை)</span>
+                <strong style="color:#065f46;">@r.TotalLeadsConverted</strong>
+                <small>Customers placed order in this period</small>
+            </div>
+
+            <div class="fr-kpi" style="border-left:4px solid #8b5cf6;">
+                <span style="color:#7c3aed;font-weight:600;"><Icon Name="CheckCircle2" Size="14" /> Follow-ups Done (முடித்தவை)</span>
+                <strong style="color:#5b21b6;">@r.TotalFollowUpsDone</strong>
+                <small>Completed call / message tasks</small>
+            </div>
+
+            <div class="fr-kpi" style="border-left:4px solid #f59e0b;">
+                <span style="color:#d97706;font-weight:600;"><Icon Name="PhoneMissed" Size="14" /> No Answer Follow-up</span>
+                <strong style="color:#92400e;">@r.TotalNoAnswerCount</strong>
+                <small>Calls or messages that got no answer</small>
+            </div>
+
+            <div class="fr-kpi" style="border-left:4px solid #3b82f6;">
+                <span style="color:#2563eb;font-weight:600;"><Icon Name="Users" Size="14" /> Active Staff</span>
+                <strong style="color:#1e40af;">@r.ByEmployee.Count</strong>
+                <small>Employees in this report period</small>
+            </div>
+        </div>
+
+        <!-- View Switcher Tabs -->
+        <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e2e8f0;margin-bottom:16px;">
+            <div style="display:flex;gap:4px;">
+                <button type="button"
+                        class="@($"px-4 py-2 font-medium text-xs rounded-t-lg transition-colors cursor-pointer {(_viewMode == "summary" ? "bg-white border-t-2 border-purple-600 text-purple-700 font-semibold shadow-sm" : "text-gray-500 hover:text-gray-700")}")"
+                        @onclick="@(() => _viewMode = "summary")">
+                    <Icon Name="Users" Size="13" /> By Employee Summary
+                </button>
+                <button type="button"
+                        class="@($"px-4 py-2 font-medium text-xs rounded-t-lg transition-colors cursor-pointer {(_viewMode == "daily" ? "bg-white border-t-2 border-purple-600 text-purple-700 font-semibold shadow-sm" : "text-gray-500 hover:text-gray-700")}")"
+                        @onclick="@(() => _viewMode = "daily")">
+                    <Icon Name="Calendar" Size="13" /> Date-wise Daily Breakdown
+                </button>
+            </div>
+            <span style="font-size:11px;color:#64748b;padding-right:8px;">Period: <strong>@r.Period</strong></span>
+        </div>
+
+        @if (_viewMode == "summary")
+        {
+            <!-- Employee Summary Table -->
+            <div class="ld-card em-table-card" style="margin-bottom:24px;">
+                <div class="em-scroll">
+                    <table class="em-table">
+                        <thead>
+                            <tr>
+                                <th class="sn">S.No</th>
+                                <th>Employee</th>
+                                <th>Designation</th>
+                                <th class="num">Total Leads</th>
+                                <th class="num" style="color:#059669;">Leads Won (முடித்தவை)</th>
+                                <th class="num" style="color:#7c3aed;">Follow-ups Done</th>
+                                <th class="num" style="color:#d97706;">No Answer Follow-up</th>
+                                <th class="num">Pending</th>
+                                <th class="num" style="color:#dc2626;">Overdue</th>
+                                <th class="num">Win Rate %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{ var sn = 0; }
+                            @foreach (var emp in r.ByEmployee)
+                            {
+                                <tr>
+                                    <td class="sn">@(++sn)</td>
+                                    <td>
+                                        <div style="display:flex;align-items:center;gap:8px;">
+                                            <span class="admin-avatar" style="width:28px;height:28px;font-size:11px;">@(string.IsNullOrEmpty(emp.Name) ? "E" : emp.Name[..1].ToUpperInvariant())</span>
+                                            <strong>@emp.Name</strong>
+                                        </div>
+                                    </td>
+                                    <td><span style="font-size:11px;padding:2px 8px;border-radius:12px;background:#f1f5f9;color:#475569;">@emp.Designation</span></td>
+                                    <td class="num">@emp.TotalLeads</td>
+                                    <td class="num font-bold" style="color:#059669;font-weight:700;">@emp.LeadsConverted</td>
+                                    <td class="num font-bold" style="color:#7c3aed;font-weight:700;">@emp.FollowUpsDone</td>
+                                    <td class="num font-bold" style="color:#d97706;font-weight:600;">@emp.NoAnswerCount</td>
+                                    <td class="num">@emp.PendingFollowUps</td>
+                                    <td class="num @(emp.OverdueFollowUps > 0 ? "ld-bad" : "")">@emp.OverdueFollowUps</td>
+                                    <td class="num">
+                                        <span style="font-weight:600;color:@(emp.WinRatePercent >= 20 ? "#059669" : emp.WinRatePercent > 0 ? "#4338ca" : "#64748b");">
+                                            @emp.WinRatePercent%
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                            @if (r.ByEmployee.Count == 0)
+                            {
+                                <tr><td colspan="10" class="em-empty">No employee performance data recorded for this period.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- Date-wise Daily Breakdown Table -->
+            <div class="ld-card em-table-card" style="margin-bottom:24px;">
+                <div class="em-scroll">
+                    <table class="em-table">
+                        <thead>
+                            <tr>
+                                <th class="sn">S.No</th>
+                                <th>Date (தேதி)</th>
+                                <th>Employee</th>
+                                <th class="num" style="color:#059669;">Leads Won (முடித்தவை)</th>
+                                <th class="num" style="color:#7c3aed;">Follow-ups Done (முடித்தவை)</th>
+                                <th class="num" style="color:#d97706;">No Answer Follow-up</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{ var dsn = 0; }
+                            @foreach (var day in r.DailyBreakdown)
+                            {
+                                <tr>
+                                    <td class="sn">@(++dsn)</td>
+                                    <td><strong>@day.Date</strong></td>
+                                    <td>@day.EmployeeName</td>
+                                    <td class="num font-bold" style="color:#059669;font-weight:700;">@day.LeadsConverted</td>
+                                    <td class="num font-bold" style="color:#7c3aed;font-weight:700;">@day.FollowUpsDone</td>
+                                    <td class="num font-bold" style="color:#d97706;font-weight:600;">@day.NoAnswerCount</td>
+                                </tr>
+                            }
+                            @if (r.DailyBreakdown.Count == 0)
+                            {
+                                <tr><td colspan="6" class="em-empty">No daily activity recorded for this period.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private bool IsManager => AdminAuth.CanAll("reports") || AdminAuth.CanAll("leads") || AdminAuth.CanAll("followups");
+
+    private EmployeePerformanceReportResponse? _data;
+    private List<EmployeeOption> _employees = new();
+    private long? _selectedEmployeeId;
+    private string _viewMode = "summary"; // "summary" | "daily"
+    private bool _loading = true;
+    private string? _error;
+
+    private int _days = 30;
+    private bool _isCustom;
+    private string _from = "";
+    private string _to = "";
+
+    private sealed record EmployeeOption(long Id, string Name, string Role);
+
+    private string RangeSummary => _isCustom
+        ? $"{_from} to {_to}"
+        : $"{_days} Days ({_from} to {_to})";
+
+    protected override async Task OnInitializedAsync()
+    {
+        SetPresetDates(_days);
+        if (IsManager)
+        {
+            await LoadEmployeesAsync();
+        }
+        await LoadReportAsync();
+    }
+
+    private void SetPresetDates(int days)
+    {
+        _days = days;
+        _isCustom = false;
+        var now = DateTime.UtcNow.AddHours(5.5); // IST
+        _to = now.ToString("yyyy-MM-dd");
+        _from = now.AddDays(-(days - 1)).ToString("yyyy-MM-dd");
+    }
+
+    private async Task LoadEmployeesAsync()
+    {
+        try
+        {
+            var res = await Api.AdminEmployeesAsync();
+            if (res.Success && res.Employees is not null)
+            {
+                _employees = res.Employees.Select(e => new EmployeeOption(e.Id, e.Name, e.Role ?? "")).ToList();
+            }
+        }
+        catch
+        {
+            // fallback
+        }
+    }
+
+    private async Task OnEmployeeChangedAsync(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString();
+        _selectedEmployeeId = long.TryParse(val, out var id) && id > 0 ? id : null;
+        await LoadReportAsync();
+    }
+
+    private async Task OnPresetSelectedAsync(int days)
+    {
+        SetPresetDates(days);
+        await LoadReportAsync();
+    }
+
+    private async Task OnRangeSelectedAsync((string From, string To) range)
+    {
+        _isCustom = true;
+        _from = range.From;
+        _to = range.To;
+        await LoadReportAsync();
+    }
+
+    private async Task LoadReportAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var res = await Api.AdminEmployeePerformanceReportAsync(from: _from, to: _to, employeeId: _selectedEmployeeId);
+            if (res.Success)
+            {
+                _data = res;
+            }
+            else
+            {
+                _error = res.Message ?? "Failed to load employee performance report.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string[] ExportColumns => _viewMode == "summary"
+        ? new[] { "Employee", "Designation", "Total Leads", "Leads Won", "Follow-ups Done", "No Answer Follow-up", "Pending", "Overdue", "Win Rate %" }
+        : new[] { "Date", "Employee", "Leads Won", "Follow-ups Done", "No Answer Follow-up" };
+
+    private IEnumerable<IReadOnlyList<string>> ExportRows()
+    {
+        if (_data is null) return Array.Empty<IReadOnlyList<string>>();
+
+        if (_viewMode == "summary")
+        {
+            return _data.ByEmployee.Select(e => (IReadOnlyList<string>)new[]
+            {
+                e.Name,
+                e.Designation,
+                e.TotalLeads.ToString(),
+                e.LeadsConverted.ToString(),
+                e.FollowUpsDone.ToString(),
+                e.NoAnswerCount.ToString(),
+                e.PendingFollowUps.ToString(),
+                e.OverdueFollowUps.ToString(),
+                $"{e.WinRatePercent}%"
+            });
+        }
+        else
+        {
+            return _data.DailyBreakdown.Select(d => (IReadOnlyList<string>)new[]
+            {
+                d.Date,
+                d.EmployeeName,
+                d.LeadsConverted.ToString(),
+                d.FollowUpsDone.ToString(),
+                d.NoAnswerCount.ToString()
+            });
+        }
+    }
+}

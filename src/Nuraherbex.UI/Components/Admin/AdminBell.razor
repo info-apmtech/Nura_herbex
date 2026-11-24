@@ -178,11 +178,14 @@
     {
         get
         {
-            if (_categoryItems.TryGetValue(_activeCategory, out var itemsForCat))
+            if (_activeCategory == NotificationCategories.All) return _items;
+            if (_categoryItems.TryGetValue(_activeCategory, out var itemsForCat) && itemsForCat.Count > 0)
                 return itemsForCat;
-            return _activeCategory == NotificationCategories.All
-                ? _items
-                : _items.Where(i => NotificationCategories.MatchesCategory(i.Kind, _activeCategory)).ToList();
+
+            var fromAll = _items.Where(i => NotificationCategories.MatchesCategory(i.Kind, _activeCategory)).ToList();
+            if (fromAll.Count > 0) return fromAll;
+
+            return itemsForCat ?? fromAll;
         }
     }
 

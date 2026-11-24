@@ -399,3 +399,41 @@ public class ReportDetailLine
     /// <summary>activity | comment</summary>
     public string Kind { get; set; } = "activity";
 }
+
+public class EmployeePerformanceDto
+{
+    public long EmployeeId { get; set; }
+    public string Name { get; set; } = "";
+    public string Role { get; set; } = "";
+    public string Designation { get; set; } = "";
+    public int TotalLeads { get; set; }
+    public int LeadsConverted { get; set; } // Leads completed / won
+    public int FollowUpsDone { get; set; }  // Follow-ups completed
+    public int NoAnswerCount { get; set; }  // No answer follow-up
+    public int PendingFollowUps { get; set; }
+    public int OverdueFollowUps { get; set; }
+    public decimal WinRatePercent { get; set; }
+}
+
+public class EmployeeDailyPerformanceDto
+{
+    public string Date { get; set; } = ""; // yyyy-MM-dd
+    public long? EmployeeId { get; set; }
+    public string EmployeeName { get; set; } = "";
+    public int LeadsConverted { get; set; }
+    public int FollowUpsDone { get; set; }
+    public int NoAnswerCount { get; set; }
+}
+
+public class EmployeePerformanceReportResponse : ApiResult
+{
+    public string Period { get; set; } = "";
+    public DateTime FromUtc { get; set; }
+    public DateTime ToUtc { get; set; }
+    public int TotalLeadsConverted { get; set; }
+    public int TotalFollowUpsDone { get; set; }
+    public int TotalNoAnswerCount { get; set; }
+    public List<EmployeePerformanceDto> ByEmployee { get; set; } = new();
+    public List<EmployeeDailyPerformanceDto> DailyBreakdown { get; set; } = new();
+}
+

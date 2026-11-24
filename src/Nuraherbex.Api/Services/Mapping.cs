@@ -19,7 +19,7 @@ public static class Mapping
         Id = o.Id, CreatedAt = o.CreatedAt, UpdatedAt = o.UpdatedAt,
         CustomerName = o.CustomerName, CustomerEmail = o.CustomerEmail, CustomerPhone = o.CustomerPhone, CustomerId = o.CustomerId,
         ShippingAddress = o.ShippingAddress, Items = o.Items,
-        Subtotal = o.Subtotal, DiscountAmount = o.DiscountAmount, ShippingFee = o.ShippingFee, TaxAmount = o.TaxAmount, TotalAmount = o.TotalAmount,
+        Subtotal = o.Subtotal, DiscountAmount = o.DiscountAmount, ShippingFee = o.ShippingFee, TaxAmount = o.TaxAmount, TotalAmount = o.TotalAmount, AdvanceAmount = o.AdvanceAmount,
         CouponCode = o.CouponCode, PaymentMethod = o.PaymentMethod.ToCode(), PaymentStatus = o.PaymentStatus.ToCode(), PaymentRef = o.PaymentRef, PayuTxnId = o.PayuTxnId,
         ParcelWeightKg = o.ParcelWeightKg, ParcelLengthCm = o.ParcelLengthCm, ParcelBreadthCm = o.ParcelBreadthCm, ParcelHeightCm = o.ParcelHeightCm,
         FulfillmentReadyAt = o.FulfillmentReadyAt, ShipmentBookedAt = o.ShipmentBookedAt, PickedUpAt = o.PickedUpAt, DeliveredAt = o.DeliveredAt,

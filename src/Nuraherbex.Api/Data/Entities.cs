@@ -90,6 +90,7 @@ public class Order
     public decimal ShippingFee { get; set; }
     public decimal TaxAmount { get; set; }
     public decimal TotalAmount { get; set; }
+    public decimal AdvanceAmount { get; set; }
     public string? CouponCode { get; set; }
     /// <summary>Cod = 1 | Online = 2</summary>
     public OrderPaymentMethod PaymentMethod { get; set; } = OrderPaymentMethod.Cod;
