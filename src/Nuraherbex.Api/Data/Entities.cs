@@ -287,6 +287,49 @@ public class Lead
     public string? OtherHealthConcern { get; set; }
     public bool HasAssessment { get; set; }
     public DateTime? AssessmentUpdatedAt { get; set; }
+
+    // MidFit Fitness & Clinical Assessment
+    public decimal? HeightCm { get; set; }
+    public decimal? WeightKg { get; set; }
+    public decimal? TargetWeightKg { get; set; }
+    public List<string> FitnessGoals { get; set; } = new();
+    public string? DietPreference { get; set; }
+    public string? ActivityLevel { get; set; }
+
+    // MidFit Consultation Tracking
+    public long? ActiveConsultationId { get; set; }
+    public string? ConsultationStatus { get; set; }
+    public DateTime? ConsultationScheduledAt { get; set; }
+}
+
+public class DoctorConsultation
+{
+    public long Id { get; set; }
+    public long LeadId { get; set; }
+    public long? DoctorEmployeeId { get; set; }
+    public long BookedByEmployeeId { get; set; }
+
+    public ConsultationType Type { get; set; } = ConsultationType.FreeInitial;
+    public ConsultationStatus Status { get; set; } = ConsultationStatus.Booked;
+
+    public DateTime ScheduledAtUtc { get; set; }
+    public int DurationMinutes { get; set; } = 20;
+
+    public string? MeetingUrl { get; set; }
+    public string? DoctorNotes { get; set; }
+    public string? RecommendationsJson { get; set; }
+    public DateTime? CompletedAtUtc { get; set; }
+    public long? CompletedByDoctorId { get; set; }
+
+    // Post-Consultation Sales Follow-up
+    public bool SalesFollowUpDone { get; set; }
+    public string? SalesFollowUpOutcome { get; set; } // "converted", "not_interested", "join_later"
+    public string? SalesFollowUpReason { get; set; }
+    public DateTime? SalesFollowUpAtUtc { get; set; }
+    public long? SalesFollowUpByEmployeeId { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
 /// <summary>Chat state for a lead: unread count and the 24h WhatsApp customer-service window.</summary>

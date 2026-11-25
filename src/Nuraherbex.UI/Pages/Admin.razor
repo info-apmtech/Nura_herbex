@@ -6,10 +6,11 @@
 @inject ApiClient Api
 @inject NavigationManager Nav
 @inject BrowserInterop Browser
+@inject ProjectState Project
 
 @if (!_initDone)
 {
-    <div class="admin-loading" role="status"><span class="admin-brand-symbol">N</span><p>Opening your workspace…</p></div>
+    <div class="admin-loading" role="status"><span class="admin-brand-symbol">@(Project.IsMidFit ? "M" : "N")</span><p>Opening your workspace…</p></div>
 }
 else if (!AdminAuth.IsAuthenticated)
 {
@@ -19,8 +20,18 @@ else
 {
     <div class="@($"admin-shell {(_collapsed ? "nav-collapsed" : "")}")">
         <aside class="admin-sidebar @(_mobileMenu ? "is-open" : "")" aria-label="Admin navigation">
-            <a class="admin-brand" href="/admin"><img class="admin-brand-logo" src="/_content/Nuraherbex.UI/images/logo-mark.png" alt="" /><span>Nura Herbex<small>STORE ADMINISTRATION</small></span></a>
-            <div class="admin-store-label"><span class="admin-store-dot"></span> Your store workspace</div>
+            <a class="admin-brand" href="/admin">
+                @if (Project.IsMidFit)
+                {
+                    <span class="admin-brand-symbol">M</span>
+                }
+                else
+                {
+                    <img class="admin-brand-logo" src="/_content/Nuraherbex.UI/images/logo-mark.png" alt="" />
+                }
+                <span>@Project.BrandName<small>@Project.BrandSubtitle</small></span>
+            </a>
+            <div class="admin-store-label"><span class="admin-store-dot"></span> @(Project.IsMidFit ? "Your fitness workspace" : "Your store workspace")</div>
             <nav>@foreach (var group in Navigation.GroupBy(n => n.Group)) { <span class="admin-nav-label">@group.Key</span> @foreach (var item in group) { <button class="admin-nav-item @(_activeTab == item.Id ? "is-active" : "")" aria-current="@(_activeTab == item.Id ? "page" : null)" @onclick="() => Navigate(item.Id)"><Icon Name="@item.Icon" Size="19" /><span>@item.Label</span>@if (BadgeFor(item.Id) is { Count: > 0 } badge) { <small class="@(badge.Urgent ? "is-urgent" : "")" title="@badge.Tip">@(badge.Count > 99 ? "99+" : badge.Count.ToString())</small> }</button> } }</nav>
             <div class="admin-sidebar-bottom"><a class="admin-nav-item" href="/shop"><Icon Name="ExternalLink" Size="18" /> View storefront</a><div class="admin-user"><span class="admin-avatar">@(string.IsNullOrEmpty(AdminAuth.Name) ? "A" : AdminAuth.Name[..1].ToUpperInvariant())</span><span><strong>@(string.IsNullOrEmpty(AdminAuth.Name) ? "Administrator" : AdminAuth.Name)</strong><small>@(AdminAuth.Designation ?? AdminAuth.Email)</small></span><button class="admin-icon-btn" title="Sign out" aria-label="Sign out" @onclick="() => _showLogoutConfirm = true"><Icon Name="LogOut" Size="18" /></button></div></div>
         </aside>
@@ -36,7 +47,7 @@ else
         else if (_activeTab == "overview") { <AdminDashboard Orders="_orders" Customers="_customers" Loading="@(_ordersLoading || _customersLoading)" OnNavigate="Navigate" /> }
         else
         {
-            @if (_activeTab is not ("team" or "tasks" or "reports" or "crm" or "whatsapp" or "employee_report")) {<div class="admin-section-heading"><div><span class="admin-eyebrow">STORE OPERATIONS</span><h2>@PageName</h2><p>Manage your @PageName.ToLowerInvariant() in one place.</p></div></div>}
+            @if (_activeTab is not ("team" or "tasks" or "reports" or "crm" or "whatsapp" or "employee_report" or "doctor_portal" or "doctor_completed")) {<div class="admin-section-heading"><div><span class="admin-eyebrow">STORE OPERATIONS</span><h2>@PageName</h2><p>Manage your @PageName.ToLowerInvariant() in one place.</p></div></div>}
             <div class="admin-legacy">
             @if (_activeTab == "orders") { <AdminOrdersTab Orders="_orders" Loading="_ordersLoading" OnReload="LoadOrdersAsync" /> }
             else if (_activeTab == "shipping") { <AdminShippingTab /> }
@@ -60,6 +71,8 @@ else
             else if (_activeTab == "tasks") { <AdminTasksTab /> }
             else if (_activeTab == "reports") { <AdminReportsTab /> }
             else if (_activeTab == "employee_report") { <AdminEmployeeReportTab /> }
+            else if (_activeTab == "doctor_portal") { <AdminDoctorPortalTab /> }
+            else if (_activeTab == "doctor_completed") { <AdminDoctorCompletedTab /> }
             </div>
         }
         <footer class="admin-footer"><span>Nura Herbex · Store administration</span><span>Made for your everyday operations</span></footer>
@@ -112,16 +125,27 @@ else
         try { await Browser.SetLocalAsync(NavKey, _collapsed ? "1" : "0"); } catch { }
     }
     private record NavItem(string Id, string Label, string Icon, string Group);
+    private static readonly HashSet<string> NeuraHerbexOnlyPages =
+        new() { "products", "stock", "batches", "formulation", "shipping", "coupons", "reviews", "customers" };
+
+    private static readonly HashSet<string> MidFitOnlyPages =
+        new() { "doctor_portal", "doctor_completed" };
+
     private static readonly NavItem[] AllPages =
     {
         new("overview", "Overview", "TrendingUp", "MANAGE"), new("orders", "Orders", "ShoppingBag", "MANAGE"), new("payments", "Payments", "CreditCard", "MANAGE"), new("shipping", "Shipping setup", "Truck", "MANAGE"), new("customers", "Customers", "Users", "MANAGE"),
         new("stock", "Stock / Inventory", "Layers", "MANAGE"), new("products", "Products", "Package", "MANAGE"), new("coupons", "Coupons", "Tag", "MANAGE"), new("reviews", "Reviews", "MessageSquare", "MANAGE"),
-        new("crm", "Sales dashboard", "BarChart3", "SALES & WORK"), new("leads", "Leads", "Phone", "SALES & WORK"), new("transfers", "Pending Transfers", "ArrowRightLeft", "SALES & WORK"), new("no_answer", "No Answer Follow-up", "PhoneMissed", "SALES & WORK"), new("interested", "Hot Leads Follow-up", "Flame", "SALES & WORK"), new("care", "Customer care", "HeartPulse", "SALES & WORK"), new("campaigns", "Ad campaigns", "TrendingUp", "SALES & WORK"), new("followups", "Follow-ups", "Clock", "SALES & WORK"), new("bulk_messages", "Bulk messaging", "Send", "SALES & WORK"), new("tasks", "Tasks", "CheckCircle2", "SALES & WORK"), new("employee_report", "Employee report", "UserCheck", "SALES & WORK"),
+        new("crm", "Sales dashboard", "BarChart3", "SALES & WORK"), new("leads", "Leads", "Phone", "SALES & WORK"), new("transfers", "Pending Transfers", "ArrowRightLeft", "SALES & WORK"), new("no_answer", "No Answer Follow-up", "PhoneMissed", "SALES & WORK"), new("interested", "Hot Leads Follow-up", "Flame", "SALES & WORK"),
+        new("doctor_completed", "Completed from Doctor", "UserCheck", "SALES & WORK"),
+        new("doctor_portal", "Doctor Consultation", "HeartPulse", "CLINICAL"),
+        new("care", "Customer care", "HeartPulse", "SALES & WORK"), new("campaigns", "Ad campaigns", "TrendingUp", "SALES & WORK"), new("followups", "Follow-ups", "Clock", "SALES & WORK"), new("bulk_messages", "Bulk messaging", "Send", "SALES & WORK"), new("tasks", "Tasks", "CheckCircle2", "SALES & WORK"), new("employee_report", "Employee report", "UserCheck", "SALES & WORK"),
         new("reports", "Reports", "BarChart3", "ADMIN"), new("whatsapp", "WhatsApp log", "MessageCircle", "ADMIN"), new("drive_files", "Google Drive", "Layers", "ADMIN"), new("team", "Team & organisation", "KeyRound", "ADMIN"),
         new("batches", "Batch reports", "ShieldCheck", "STOREFRONT & SUPPORT"), new("formulation", "Formulation", "FlaskConical", "STOREFRONT & SUPPORT"), new("content", "Store content", "FileText", "STOREFRONT & SUPPORT"),
     };
     /// <summary>Only the pages this person's designation allows. People who only see their own records get "My" wording.</summary>
-    private NavItem[] Navigation => AllPages.Where(p => AdminAuth.Can(p.Id) || (p.Id is "no_answer" or "transfers" or "interested" && (AdminAuth.Can("no_answer") || AdminAuth.Can("leads") || AdminAuth.Can("interested"))) || (p.Id == "stock" && (AdminAuth.Can("stock") || AdminAuth.Can("products") || AdminAuth.IsAdmin)) || (p.Id == "employee_report" && (AdminAuth.Can("employee_report") || AdminAuth.Can("reports") || AdminAuth.Can("leads") || AdminAuth.Can("followups"))) || (p.Id == "reports" && (AdminAuth.Can("leads") || AdminAuth.Can("followups") || AdminAuth.Can("tasks")))).Select(p => p.Id switch
+    private NavItem[] Navigation => AllPages
+        .Where(p => Project.IsMidFit ? !NeuraHerbexOnlyPages.Contains(p.Id) : !MidFitOnlyPages.Contains(p.Id))
+        .Where(p => AdminAuth.Can(p.Id) || (Project.IsMidFit && p.Id is "doctor_portal" or "doctor_completed") || (p.Id is "no_answer" or "transfers" or "interested" && (AdminAuth.Can("no_answer") || AdminAuth.Can("leads") || AdminAuth.Can("interested"))) || (p.Id == "stock" && (AdminAuth.Can("stock") || AdminAuth.Can("products") || AdminAuth.IsAdmin)) || (p.Id == "employee_report" && (AdminAuth.Can("employee_report") || AdminAuth.Can("reports") || AdminAuth.Can("leads") || AdminAuth.Can("followups"))) || (p.Id == "reports" && (AdminAuth.Can("leads") || AdminAuth.Can("followups") || AdminAuth.Can("tasks")))).Select(p => p.Id switch
     {
         "crm" when !AdminAuth.CanAll("crm") => p with { Label = "My dashboard" },
         "leads" when !AdminAuth.CanAll("leads") => p with { Label = "My leads" },
@@ -129,6 +153,8 @@ else
         "no_answer" => p with { Label = "No Answer Follow-up" },
         "interested" when !AdminAuth.CanAll("interested") => p with { Label = "My hot leads follow-up" },
         "interested" => p with { Label = "Hot Leads Follow-up" },
+        "doctor_portal" => p with { Label = "Doctor Consultation" },
+        "doctor_completed" => p with { Label = "Completed from Doctor" },
         "stock" => p with { Label = "Stock / Inventory" },
         "care" when !AdminAuth.CanAll("care") => p with { Label = "My customers" },
         "campaigns" when !AdminAuth.CanAll("campaigns") => p with { Label = "My ad leads" },

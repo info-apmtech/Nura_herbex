@@ -349,4 +349,23 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<CustomerResponse> AdminCreateCustomerAsync(AdminCreateCustomerRequest r) => Call<CustomerResponse>(HttpMethod.Post, "api/admin/customers", r, Who.Admin);
     public Task<LeadOrderResponse> AdminCustomerOrderAsync(string id, LeadOrderRequest r) => Call<LeadOrderResponse>(HttpMethod.Post, $"api/admin/customers/{Uri.EscapeDataString(id)}/order", r, Who.Admin);
     public Task<CustomerResponse> AdminUpdateCustomerAsync(string id, UpdateProfileRequest r) => Call<CustomerResponse>(HttpMethod.Put, "api/admin/customers/" + Uri.EscapeDataString(id), r, Who.Admin);
+
+    // MidFit Doctor Consultations & Appointments
+    public Task<ConsultationSlotsResponse> AdminConsultationSlotsAsync(string? date, long? doctorId = null) =>
+        Call<ConsultationSlotsResponse>(HttpMethod.Get, $"api/admin/consultations/slots?date={Uri.EscapeDataString(date ?? "")}{(doctorId.HasValue ? $"&doctorId={doctorId}" : "")}", null, Who.Admin);
+
+    public Task<ApiResult> AdminBookConsultationAsync(BookConsultationRequest r) =>
+        Call<ApiResult>(HttpMethod.Post, "api/admin/consultations/book", r, Who.Admin);
+
+    public Task<ConsultationListResponse> AdminDoctorConsultationsAsync(string? date = null, string? status = null) =>
+        Call<ConsultationListResponse>(HttpMethod.Get, $"api/admin/consultations/doctor?date={Uri.EscapeDataString(date ?? "")}&status={Uri.EscapeDataString(status ?? "")}", null, Who.Admin);
+
+    public Task<ApiResult> AdminCompleteConsultationAsync(long id, CompleteConsultationRequest r) =>
+        Call<ApiResult>(HttpMethod.Put, $"api/admin/consultations/{id}/complete", r, Who.Admin);
+
+    public Task<ConsultationListResponse> AdminCompletedFromDoctorAsync(string? q = null) =>
+        Call<ConsultationListResponse>(HttpMethod.Get, $"api/admin/consultations/completed-from-doctor?q={Uri.EscapeDataString(q ?? "")}", null, Who.Admin);
+
+    public Task<ApiResult> AdminSalesFollowUpAsync(long id, SalesFollowUpRequest r) =>
+        Call<ApiResult>(HttpMethod.Post, $"api/admin/consultations/{id}/sales-followup", r, Who.Admin);
 }

@@ -1,0 +1,289 @@
+@inject ApiClient Api
+@inject AdminSession AdminAuth
+
+<div class="admin-section-heading">
+    <div>
+        <span class="admin-eyebrow">CLINICAL & WELLNESS</span>
+        <h2>Doctor Consultation Portal</h2>
+        <p>Review booked 20-min patient consultations, attach clinical notes, and mark consultations as completed.</p>
+    </div>
+    <div class="admin-actions">
+        <button type="button" class="admin-btn admin-btn-small" @onclick="LoadConsultationsAsync">
+            <Icon Name="RefreshCw" Size="14" Class="@(_loading ? "animate-spin" : "")" /> Refresh
+        </button>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(_notice))
+{
+    <div class="admin-notice" style="background:#ecfdf5;border-color:#a7f3d0;color:#065f46;margin-bottom:16px;">
+        @_notice
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="admin-error" style="margin-bottom:16px;">
+        @_error
+    </div>
+}
+
+<div class="admin-toolbar" style="background:#fff;border:1px solid var(--admin-line);border-radius:12px;margin-bottom:20px;padding:14px 20px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+    <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:12px;font-weight:600;color:#64748b;">Filter Status:</span>
+        <select @bind="_statusFilter" @bind:after="LoadConsultationsAsync" style="padding:6px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;">
+            <option value="">All Bookings</option>
+            <option value="Booked">Booked (Upcoming)</option>
+            <option value="Completed">Completed</option>
+        </select>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
+        <span style="font-size:12px;font-weight:600;color:#64748b;">Date:</span>
+        <input type="date" value="@_dateFilter?.ToString("yyyy-MM-dd")" @onchange="OnDateFilterChanged" style="padding:6px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;" />
+        @if (_dateFilter.HasValue)
+        {
+            <button type="button" class="admin-btn admin-btn-small" @onclick="ClearDateFilter">All Dates</button>
+        }
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div style="padding:60px;text-align:center;color:#64748b;">
+        <Icon Name="RefreshCw" Size="24" Class="animate-spin" />
+        <p style="margin-top:12px;font-size:13px;">Loading doctor consultations…</p>
+    </div>
+}
+else if (_consultations.Count == 0)
+{
+    <div class="admin-card" style="padding:60px 20px;text-align:center;">
+        <Icon Name="Calendar" Size="36" style="color:#cbd5e1;margin:0 auto 12px;" />
+        <h3 style="font-size:16px;color:#334155;margin:0 0 6px;">No Consultations Found</h3>
+        <p style="font-size:13px;color:#64748b;margin:0;">There are no booked consultations matching your active filter.</p>
+    </div>
+}
+else
+{
+    <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(360px, 1fr));gap:18px;">
+        @foreach (var c in _consultations)
+        {
+            var isUpcoming = c.Status == ConsultationStatus.Booked;
+            <div class="admin-card" style="display:flex;flex-direction:column;justify-content:space-between;border-top:4px solid @(isUpcoming ? "#ea580c" : "#10b981");">
+                <div>
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
+                        <div>
+                            <span style="font-size:11px;font-weight:700;color:@(isUpcoming ? "#ea580c" : "#10b981");text-transform:uppercase;letter-spacing:0.5px;">
+                                @(isUpcoming ? "Upcoming Consultation" : "Completed")
+                            </span>
+                            <h3 style="margin:4px 0 2px;font-size:16px;font-weight:700;color:#0f172a;">@c.LeadName</h3>
+                            <span style="font-size:12px;color:#64748b;">📞 @c.LeadPhone</span>
+                        </div>
+                        <div style="text-align:right;">
+                            <span style="display:inline-block;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600;background:#f8fafc;border:1px solid #e2e8f0;color:#334155;">
+                                ⏱️ 20 mins
+                            </span>
+                        </div>
+                    </div>
+
+                    <div style="background:#f8fafc;border:1px solid #f1f5f9;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                            <span style="color:#64748b;">Scheduled Time (IST):</span>
+                            <strong style="color:#0f172a;">@c.ScheduledAtUtc.ToLocalTime().ToString("ddd, dd MMM yyyy, hh:mm tt")</strong>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;">
+                            <span style="color:#64748b;">Assigned Doctor:</span>
+                            <strong style="color:#0f172a;">@(string.IsNullOrWhiteSpace(c.DoctorName) ? "Unassigned" : c.DoctorName)</strong>
+                        </div>
+                    </div>
+
+                    @if (c.Assessment is { } asm)
+                    {
+                        <div style="margin-bottom:14px;padding:10px 12px;background:#fff7ed;border:1px solid #ffedd5;border-radius:10px;font-size:12px;">
+                            <strong style="display:block;margin-bottom:6px;color:#9a3412;">MidFit Patient Profile:</strong>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;color:#431407;">
+                                <span>Age: <b>@(asm.Age?.ToString() ?? "—")</b></span>
+                                <span>Gender: <b>@(asm.Gender ?? "—")</b></span>
+                                <span>Height: <b>@(asm.HeightCm.HasValue ? $"{asm.HeightCm} cm" : "—")</b></span>
+                                <span>Weight: <b>@(asm.WeightKg.HasValue ? $"{asm.WeightKg} kg" : "—")</b></span>
+                            </div>
+                            @if (asm.Goals.Count > 0)
+                            {
+                                <div style="margin-top:6px;color:#9a3412;">
+                                    <span>Goals: <b>@string.Join(", ", asm.Goals)</b></span>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(c.DoctorNotes))
+                    {
+                        <div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#166534;">
+                            <strong>Doctor Consultation Notes:</strong>
+                            <p style="margin:4px 0 0;line-height:1.4;">@c.DoctorNotes</p>
+                        </div>
+                    }
+                </div>
+
+                <div style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;gap:8px;">
+                    @if (isUpcoming)
+                    {
+                        <button type="button" class="admin-btn admin-btn-small" style="flex:1;background:#ea580c !important;color:#fff !important;border-color:#ea580c !important;justify-content:center;" @onclick="() => OpenNotesModal(c)">
+                            <Icon Name="FileText" Size="14" />
+                            <span>Add Notes & Mark Done</span>
+                        </button>
+                    }
+                    else
+                    {
+                        <span style="font-size:12px;color:#059669;font-weight:600;display:flex;align-items:center;gap:6px;">
+                            <Icon Name="CheckCircle2" Size="14" /> Consultation Completed
+                        </span>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@if (_activeConsultation is not null)
+{
+    <div class="fu-modal-backdrop" @onclick="() => _activeConsultation = null" style="position:fixed;inset:0;background:rgba(15,23,42,0.65);backdrop-filter:blur(4px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;">
+        <div class="fu-modal" role="dialog" aria-modal="true" @onclick:stopPropagation="true" style="max-width:540px;width:100%;background:#fff;border-radius:20px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);overflow:hidden;padding:24px;border:1px solid #f1f5f9;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                <div style="width:40px;height:40px;border-radius:10px;background:#ecfdf5;color:#10b981;display:flex;align-items:center;justify-content:center;">
+                    <Icon Name="CheckCircle2" Size="22" />
+                </div>
+                <div>
+                    <h3 style="margin:0;font-size:17px;font-weight:700;color:#0f172a;">Mark Consultation as Completed</h3>
+                    <p style="margin:2px 0 0;font-size:12px;color:#64748b;">Patient: <strong>@_activeConsultation.LeadName</strong></p>
+                </div>
+            </div>
+
+            <div style="margin-bottom:18px;">
+                <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:#334155;">
+                    <span>Clinical Consultation Notes (Diagnosis, Advice, Program Recommendation) *</span>
+                    <textarea @bind="_doctorNotes" rows="5" placeholder="Enter findings, recommended diet or workout plan, precautions..." style="padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;resize:vertical;min-height:100px;"></textarea>
+                </label>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;gap:10px;">
+                <button type="button" class="admin-btn" @onclick="() => _activeConsultation = null" disabled="@_saving">Cancel</button>
+                <button type="button" class="admin-btn" style="background:#10b981 !important;color:#fff !important;border-color:#10b981 !important;" @onclick="SaveConsultationNotesAsync" disabled="@(_saving || string.IsNullOrWhiteSpace(_doctorNotes))">
+                    @if (_saving)
+                    {
+                        <Icon Name="RefreshCw" Size="14" Class="animate-spin" />
+                        <span>Saving…</span>
+                    }
+                    else
+                    {
+                        <Icon Name="Check" Size="14" />
+                        <span>Mark as Consultation Done</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<DoctorConsultationDto> _consultations = new();
+    private bool _loading = true;
+    private bool _saving;
+    private string? _notice;
+    private string? _error;
+    private string _statusFilter = "";
+    private DateTime? _dateFilter;
+
+    private DoctorConsultationDto? _activeConsultation;
+    private string _doctorNotes = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConsultationsAsync();
+    }
+
+    private async Task OnDateFilterChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var dt))
+        {
+            _dateFilter = dt.Date;
+            await LoadConsultationsAsync();
+        }
+    }
+
+    private async Task ClearDateFilter()
+    {
+        _dateFilter = null;
+        await LoadConsultationsAsync();
+    }
+
+    private async Task LoadConsultationsAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+        try
+        {
+            var res = await Api.AdminDoctorConsultationsAsync(_dateFilter?.ToString("yyyy-MM-dd"), _statusFilter);
+            if (res.Success)
+            {
+                _consultations = res.Consultations;
+            }
+            else
+            {
+                _error = res.Message ?? "Failed to load consultations.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OpenNotesModal(DoctorConsultationDto c)
+    {
+        _activeConsultation = c;
+        _doctorNotes = c.DoctorNotes ?? "";
+    }
+
+    private async Task SaveConsultationNotesAsync()
+    {
+        if (_activeConsultation is null || string.IsNullOrWhiteSpace(_doctorNotes) || _saving) return;
+        _saving = true;
+        _error = null;
+        _notice = null;
+        StateHasChanged();
+        try
+        {
+            var req = new CompleteConsultationRequest
+            {
+                DoctorNotes = _doctorNotes
+            };
+            var res = await Api.AdminCompleteConsultationAsync(_activeConsultation.Id, req);
+            if (res.Success)
+            {
+                _notice = res.Message ?? "Consultation completed successfully!";
+                _activeConsultation = null;
+                await LoadConsultationsAsync();
+            }
+            else
+            {
+                _error = res.Message ?? "Failed to complete consultation.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+            StateHasChanged();
+        }
+    }
+}

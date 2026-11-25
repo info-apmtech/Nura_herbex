@@ -32,7 +32,8 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
     /// <param name="ownerOnly">When set, leads, follow-ups and tasks are limited to this employee's own records.</param>
     public async Task<ReportResponse?> BuildAsync(string key, DateTime fromUtc, DateTime toUtc, string periodLabel, long? ownerOnly = null)
     {
-        var r = key switch
+        var normKey = key.Trim().ToLowerInvariant();
+        var r = normKey switch
         {
             "orders" => await OrdersAsync(fromUtc, toUtc),
             "leads" => await LeadsAsync(fromUtc, toUtc, ownerOnly),
@@ -41,13 +42,43 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
             "tasks" => await TasksAsync(fromUtc, toUtc, ownerOnly),
             "customers" => await CustomersAsync(fromUtc, toUtc),
             "payments" => await PaymentsAsync(fromUtc, toUtc),
+            "employee-performance" or "employee_performance" or "employee_report" or "employee-report" => await BuildEmployeePerformanceReportAsync(fromUtc, toUtc, periodLabel, ownerOnly),
             _ => null,
         };
         if (r is null) return null;
-        var info = Catalog.First(c => c.Key == key);
-        r.Success = true; r.Key = key; r.Title = info.Title; r.Description = info.Description; r.Period = periodLabel;
+        var info = Catalog.FirstOrDefault(c => c.Key == normKey) ?? new ReportInfo { Key = normKey, Title = "Employee Performance Report", Description = "Leads completed, follow-ups done, and no-answer follow-ups tracked date-wise." };
+        r.Success = true; r.Key = normKey; r.Title = info.Title; r.Description = info.Description; r.Period = periodLabel;
         r.Truncated = r.Rows.Count >= MaxRows;
         return r;
+    }
+
+    private async Task<ReportResponse> BuildEmployeePerformanceReportAsync(DateTime from, DateTime to, string periodLabel, long? employeeId)
+    {
+        var perf = await EmployeePerformanceAsync(from, to, periodLabel, employeeId);
+        return new ReportResponse
+        {
+            Columns = ["Employee", "Role", "Designation", "Total Leads", "Leads Won", "Follow-ups Done", "No Answer Follow-up", "Pending", "Overdue", "Win Rate %"],
+            Rows = perf.ByEmployee.Select(e => new List<string>
+            {
+                e.Name,
+                e.Role,
+                e.Designation,
+                e.TotalLeads.ToString(Inv),
+                e.LeadsConverted.ToString(Inv),
+                e.FollowUpsDone.ToString(Inv),
+                e.NoAnswerCount.ToString(Inv),
+                e.PendingFollowUps.ToString(Inv),
+                e.OverdueFollowUps.ToString(Inv),
+                $"{e.WinRatePercent}%"
+            }).ToList(),
+            Summary =
+            [
+                S("Leads Won", perf.TotalLeadsConverted, "Customers placed order in this period", "good"),
+                S("Follow-ups Done", perf.TotalFollowUpsDone, "Completed call / message tasks", "good"),
+                S("No Answer", perf.TotalNoAnswerCount, "Calls or messages with no answer", "warn"),
+                S("Active Staff", perf.ByEmployee.Count, "Employees in this report period", "neutral")
+            ]
+        };
     }
 
     // ---- Orders ---------------------------------------------------------------------------------

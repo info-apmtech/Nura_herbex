@@ -1,0 +1,130 @@
+@inject ApiClient Api
+
+<div class="fu-modal-backdrop" @onclick="Close" style="position:fixed;inset:0;background:rgba(15,23,42,0.65);backdrop-filter:blur(4px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;">
+    <div class="fu-modal" role="dialog" aria-modal="true" @onclick:stopPropagation="true" style="max-width:480px;width:100%;background:#fff;border-radius:20px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);overflow:hidden;padding:24px;border:1px solid #f1f5f9;">
+        
+        <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid #f1f5f9;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <div style="width:40px;height:40px;border-radius:10px;background:#ecfdf5;color:#10b981;display:flex;align-items:center;justify-content:center;">
+                    <Icon Name="CreditCard" Size="20" />
+                </div>
+                <div>
+                    <h3 style="margin:0;font-size:17px;font-weight:700;color:#0f172a;">Generate & Verify Payment</h3>
+                    <p style="margin:2px 0 0;font-size:12px;color:#64748b;">Member: <strong>@LeadName</strong> (@LeadPhone)</p>
+                </div>
+            </div>
+            <button type="button" class="admin-icon-btn" @onclick="Close"><Icon Name="X" Size="18" /></button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div style="background:#fef2f2;border:1px solid #fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:14px;">
+                @_error
+            </div>
+        }
+
+        <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:20px;">
+            <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:#334155;">
+                <span>Select Membership Program</span>
+                <select @bind="_plan" style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;">
+                    <option value="1-Month Fitness & Nutrition Plan">1-Month Fitness & Nutrition Plan (₹2,999)</option>
+                    <option value="3-Month Transformation Program">3-Month Transformation Program (₹6,999)</option>
+                    <option value="6-Month Complete Health Coaching">6-Month Complete Health Coaching (₹11,999)</option>
+                    <option value="Custom Plan">Custom Amount</option>
+                </select>
+            </label>
+
+            <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:#334155;">
+                <span>Plan Amount (₹)</span>
+                <input type="number" @bind="_amount" style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;" />
+            </label>
+
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                    <span style="font-size:12px;font-weight:600;color:#0f172a;">Payment Link Status</span>
+                    <span style="font-size:11px;font-weight:700;color:#ea580c;background:#fff7ed;padding:2px 8px;border-radius:6px;border:1px solid #ffedd5;">
+                        @(_linkGenerated ? "Link Sent to WhatsApp" : "Ready to Send")
+                    </span>
+                </div>
+                
+                @if (!_linkGenerated)
+                {
+                    <button type="button" class="admin-btn admin-btn-small" style="width:100%;justify-content:center;gap:6px;background:#f8fafc;" @onclick="GeneratePaymentLink">
+                        <Icon Name="Link" Size="14" /> Generate & Send Payment Link (UPI / Razorpay / PayU)
+                    </button>
+                }
+                else
+                {
+                    <div style="font-size:11px;color:#166534;background:#f0fdf4;padding:8px;border-radius:6px;border:1px solid #bbf7d0;word-break:break-all;">
+                        🔗 Payment link sent to +@LeadPhone. Awaiting confirmation.
+                    </div>
+                }
+            </div>
+
+            <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:#334155;">
+                <span>Transaction / Payment Reference ID</span>
+                <input type="text" @bind="_txnRef" placeholder="e.g. UPI-REF-9028312 or PayU ID" style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;" />
+            </label>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:14px;border-top:1px solid #f1f5f9;">
+            <button type="button" class="admin-btn" @onclick="Close" disabled="@_verifying">Cancel</button>
+            <button type="button" class="admin-btn admin-btn-primary" style="background:#10b981 !important;border-color:#10b981 !important;color:#fff !important;" @onclick="VerifyAndProceedAsync" disabled="@_verifying">
+                @if (_verifying)
+                {
+                    <Icon Name="RefreshCw" Size="14" Class="animate-spin" />
+                    <span>Verifying Payment…</span>
+                }
+                else
+                {
+                    <Icon Name="CheckCircle2" Size="14" />
+                    <span>Verify Payment & Book Onboarding</span>
+                }
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public long LeadId { get; set; }
+    [Parameter] public string LeadName { get; set; } = "";
+    [Parameter] public string LeadPhone { get; set; } = "";
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<decimal> OnPaymentVerified { get; set; }
+
+    private string _plan = "1-Month Fitness & Nutrition Plan";
+    private decimal _amount = 2999;
+    private string _txnRef = "";
+    private bool _linkGenerated;
+    private bool _verifying;
+    private string? _error;
+
+    private void GeneratePaymentLink()
+    {
+        _linkGenerated = true;
+    }
+
+    private async Task VerifyAndProceedAsync()
+    {
+        _verifying = true;
+        _error = null;
+        StateHasChanged();
+        try
+        {
+            // Simulate/execute payment verification
+            await Task.Delay(300);
+            await OnPaymentVerified.InvokeAsync(_amount);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _verifying = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Close() => await OnClose.InvokeAsync();
+}

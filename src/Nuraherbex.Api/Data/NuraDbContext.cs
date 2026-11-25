@@ -36,6 +36,7 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
     public DbSet<LeadAssignmentHistory> LeadAssignmentHistory => Set<LeadAssignmentHistory>();
     public DbSet<BulkCampaign> BulkCampaigns => Set<BulkCampaign>();
     public DbSet<BulkCampaignRecipient> BulkCampaignRecipients => Set<BulkCampaignRecipient>();
+    public DbSet<DoctorConsultation> DoctorConsultations => Set<DoctorConsultation>();
 
     private static JsonSerializerOptions J => NuraJson.Options;
 
@@ -232,11 +233,35 @@ public class NuraDbContext(DbContextOptions<NuraDbContext> options) : DbContext(
             AsJson(e.Property(x => x.HealthConcerns));
             AsJson(e.Property(x => x.PrimaryConcerns));
             AsJson(e.Property(x => x.HealthConditions));
+            AsJson(e.Property(x => x.FitnessGoals));
+            e.Property(x => x.DietPreference).HasMaxLength(64);
+            e.Property(x => x.ActivityLevel).HasMaxLength(64);
+            e.Property(x => x.ConsultationStatus).HasMaxLength(50);
+            e.Property(x => x.HeightCm).HasPrecision(6, 2);
+            e.Property(x => x.WeightKg).HasPrecision(6, 2);
+            e.Property(x => x.TargetWeightKg).HasPrecision(6, 2);
             e.HasIndex(x => x.Phone).IsUnique();
             e.HasIndex(x => new { x.Status, x.LastContactAt });
             e.HasIndex(x => x.AssignedToEmployeeId);
             e.HasIndex(x => x.PendingTransferToEmployeeId);
             e.HasIndex(x => x.PendingTransferRequestedAt);
+        });
+
+        b.Entity<DoctorConsultation>(e =>
+        {
+            e.ToTable("doctor_consultations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Type).HasConversion<int>();
+            e.Property(x => x.Status).HasConversion<int>();
+            e.Property(x => x.MeetingUrl).HasMaxLength(500);
+            e.Property(x => x.DoctorNotes).HasMaxLength(4000);
+            e.Property(x => x.RecommendationsJson).HasMaxLength(4000);
+            e.Property(x => x.SalesFollowUpOutcome).HasMaxLength(50);
+            e.Property(x => x.SalesFollowUpReason).HasMaxLength(500);
+            e.HasIndex(x => x.LeadId);
+            e.HasIndex(x => x.DoctorEmployeeId);
+            e.HasIndex(x => x.ScheduledAtUtc);
+            e.HasIndex(x => x.Status);
         });
 
         b.Entity<Conversation>(e =>

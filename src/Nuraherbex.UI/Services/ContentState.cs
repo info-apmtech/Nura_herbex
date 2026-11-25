@@ -71,11 +71,12 @@ public class ModalState
 public static class ServiceRegistration
 {
     /// <summary>Registers all UI services. <paramref name="apiBaseUrl"/> is the Nuraherbex.Api address.</summary>
-    public static IServiceCollection AddNuraherbexUI(this IServiceCollection services, string apiBaseUrl)
+    public static IServiceCollection AddNuraherbexUI(this IServiceCollection services, string apiBaseUrl, string? projectName = null)
     {
         if (!apiBaseUrl.EndsWith('/')) apiBaseUrl += "/";
         // Scoped (not singleton): in MAUI Blazor Hybrid IJSRuntime is scoped, and scoped == app-lifetime in WebAssembly/Hybrid anyway.
         services.AddSingleton(new ApiOptions { BaseUrl = apiBaseUrl });
+        services.AddSingleton(new ProjectState { ProjectName = projectName ?? ProjectConfig.NeuraHerbex });
         services.AddSingleton<HttpClient>(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl), Timeout = TimeSpan.FromSeconds(60) });
         services.AddScoped<SessionTokens>();
         services.AddScoped<BrowserInterop>();

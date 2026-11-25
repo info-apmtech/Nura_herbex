@@ -814,3 +814,65 @@ body:has(.admin-theme)::-webkit-scrollbar,
 .drf-act-btn.primary:hover {
   background: #4d1885;
 }
+
+/* MidFit Multi-Project Dynamic Theme: Black, White & Orange */
+.admin-theme.theme-midfit {
+  --admin-ink: #09090b;
+  --admin-muted: #71717a;
+  --admin-line: #e4e4e7;
+  --admin-green: #ea580c;
+  --admin-bg: #f8fafc;
+}
+
+.theme-midfit .admin-brand-symbol {
+  background: #ea580c !important;
+  color: #ffffff !important;
+  border-radius: 8px !important;
+  font-family: Inter, system-ui, sans-serif !important;
+  font-weight: 800 !important;
+  font-style: normal !important;
+}
+
+.theme-midfit .admin-btn-primary,
+.theme-midfit .drf-act-btn.primary {
+  background: #ea580c !important;
+  border-color: #ea580c !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 4px rgba(234, 88, 12, 0.2) !important;
+}
+
+.theme-midfit .admin-btn-primary:hover,
+.theme-midfit .drf-act-btn.primary:hover {
+  background: #c2410c !important;
+  border-color: #c2410c !important;
+}
+
+.theme-midfit .admin-nav-item:hover {
+  background: #fff7ed !important;
+  color: #ea580c !important;
+}
+
+.theme-midfit .admin-nav-item.is-active {
+  background: #ffedd5 !important;
+  color: #c2410c !important;
+  font-weight: 700 !important;
+}
+
+.theme-midfit .admin-nav-item.is-active svg {
+  color: #ea580c !important;
+}
+
+.theme-midfit .admin-store-dot {
+  background: #ea580c !important;
+}
+
+.theme-midfit .admin-badge.active {
+  background: #ffedd5 !important;
+  color: #c2410c !important;
+  border-color: #fed7aa !important;
+}
+
+.theme-midfit .al-eye:hover {
+  color: #ea580c;
+}
+

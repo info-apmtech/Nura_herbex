@@ -1,0 +1,391 @@
+@inject ApiClient Api
+@inject AdminSession AdminAuth
+
+<div class="admin-section-heading">
+    <div>
+        <span class="admin-eyebrow">SALES & CONVERSIONS</span>
+        <h2>Completed from Doctor</h2>
+        <p>Leads whose doctor consultation is completed. Call the lead to close the membership or schedule next steps.</p>
+    </div>
+    <div class="admin-actions">
+        <button type="button" class="admin-btn admin-btn-small" @onclick="LoadDataAsync">
+            <Icon Name="RefreshCw" Size="14" Class="@(_loading ? "animate-spin" : "")" /> Refresh
+        </button>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(_notice))
+{
+    <div class="admin-notice" style="background:#ecfdf5;border-color:#a7f3d0;color:#065f46;margin-bottom:16px;">
+        @_notice
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="admin-error" style="margin-bottom:16px;">
+        @_error
+    </div>
+}
+
+<div class="admin-toolbar" style="background:#fff;border:1px solid var(--admin-line);border-radius:12px;margin-bottom:20px;padding:14px 20px;display:flex;gap:12px;">
+    <div class="admin-search" style="flex:1;">
+        <Icon Name="Search" Size="16" />
+        <input type="search" placeholder="Search by lead name or phone…" @bind="_search" @bind:event="oninput" @bind:after="FilterData" />
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div style="padding:60px;text-align:center;color:#64748b;">
+        <Icon Name="RefreshCw" Size="24" Class="animate-spin" />
+        <p style="margin-top:12px;font-size:13px;">Loading completed doctor consultations…</p>
+    </div>
+}
+else if (_filtered.Count == 0)
+{
+    <div class="admin-card" style="padding:60px 20px;text-align:center;">
+        <Icon Name="UserCheck" Size="36" style="color:#cbd5e1;margin:0 auto 12px;" />
+        <h3 style="font-size:16px;color:#334155;margin:0 0 6px;">No Pending Post-Consultation Follow-ups</h3>
+        <p style="font-size:13px;color:#64748b;margin:0;">All completed doctor consultations have been followed up.</p>
+    </div>
+}
+else
+{
+    <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(380px, 1fr));gap:18px;">
+        @foreach (var c in _filtered)
+        {
+            <div class="admin-card" style="display:flex;flex-direction:column;justify-content:space-between;border-top:4px solid #ea580c;">
+                <div>
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;">
+                        <div>
+                            <h3 style="margin:0 0 2px;font-size:16px;font-weight:700;color:#0f172a;">@c.LeadName</h3>
+                            <span style="font-size:12px;color:#64748b;">📞 @c.LeadPhone</span>
+                        </div>
+                        <span style="display:inline-block;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600;background:#ffedd5;color:#c2410c;border:1px solid #fed7aa;">
+                            Ready for Close
+                        </span>
+                    </div>
+
+                    <div style="background:#f8fafc;border:1px solid #f1f5f9;border-radius:10px;padding:12px;margin-bottom:12px;font-size:12px;">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                            <span style="color:#64748b;">Doctor:</span>
+                            <strong style="color:#0f172a;">@(c.DoctorName ?? "Assigned Doctor")</strong>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;">
+                            <span style="color:#64748b;">Completed At:</span>
+                            <strong style="color:#0f172a;">@(c.CompletedAtUtc?.ToLocalTime().ToString("ddd, dd MMM, hh:mm tt") ?? "Recently")</strong>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(c.DoctorNotes))
+                    {
+                        <div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#166534;">
+                            <strong style="display:flex;align-items:center;gap:6px;">
+                                <Icon Name="FileText" Size="13" /> Doctor's Consultation Notes:
+                            </strong>
+                            <p style="margin:6px 0 0;line-height:1.45;color:#14532d;">@c.DoctorNotes</p>
+                        </div>
+                    }
+                </div>
+
+                <div style="padding-top:14px;border-top:1px solid #f1f5f9;display:flex;gap:8px;">
+                    <button type="button" class="admin-btn admin-btn-small" style="flex:1;background:#10b981 !important;color:#fff !important;border-color:#10b981 !important;justify-content:center;font-weight:600;" @onclick="() => PromptConvert(c)">
+                        <Icon Name="Check" Size="13" /> Convert (Paid)
+                    </button>
+                    <button type="button" class="admin-btn admin-btn-small" style="flex:1;background:#3b82f6 !important;color:#fff !important;border-color:#3b82f6 !important;justify-content:center;font-weight:600;" @onclick="() => PromptJoinLater(c)">
+                        <Icon Name="Clock" Size="13" /> Join Later
+                    </button>
+                    <button type="button" class="admin-btn admin-btn-small" style="background:#f43f5e !important;color:#fff !important;border-color:#f43f5e !important;justify-content:center;" title="Not Interested" @onclick="() => PromptNotInterested(c)">
+                        <Icon Name="X" Size="13" />
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@if (_paymentConsultation is { } pc)
+{
+    <PaymentLinkDialog LeadId="pc.LeadId"
+                       LeadName="@pc.LeadName"
+                       LeadPhone="@pc.LeadPhone"
+                       OnClose="() => _paymentConsultation = null"
+                       OnPaymentVerified="OnPaymentVerifiedAsync" />
+}
+
+@if (_onboardingConsultation is { } oc)
+{
+    <ConsultationSlotDialog LeadId="oc.LeadId"
+                            LeadName="@oc.LeadName"
+                            LeadPhone="@oc.LeadPhone"
+                            Type="ConsultationType.PaidOnboarding"
+                            OnClose="() => _onboardingConsultation = null"
+                            OnBooked="OnOnboardingBookedAsync" />
+}
+
+@if (_activeActionConsultation is not null)
+{
+    <div class="fu-modal-backdrop" @onclick="CloseActionModal" style="position:fixed;inset:0;background:rgba(15,23,42,0.65);backdrop-filter:blur(4px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;">
+        <div class="fu-modal" role="dialog" aria-modal="true" @onclick:stopPropagation="true" style="max-width:480px;width:100%;background:#fff;border-radius:20px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);overflow:hidden;padding:24px;border:1px solid #f1f5f9;">
+            
+            @if (_currentAction == "converted")
+            {
+                <div style="text-align:center;margin-bottom:16px;">
+                    <div style="width:48px;height:48px;border-radius:50%;background:#ecfdf5;color:#10b981;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
+                        <Icon Name="CreditCard" Size="24" />
+                    </div>
+                    <h3 style="margin:0 0 4px;font-size:18px;font-weight:700;color:#0f172a;">Convert to Paid Member</h3>
+                    <p style="margin:0;font-size:13px;color:#64748b;">Lead: <strong>@_activeActionConsultation.LeadName</strong></p>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">
+                    <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:#334155;">
+                        <span>Membership Amount (₹)</span>
+                        <input type="number" @bind="_membershipAmount" style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;" />
+                    </label>
+                    <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:#334155;">
+                        <span>Payment Notes (Txn ID / Plan Details)</span>
+                        <input type="text" @bind="_actionNotes" placeholder="e.g. 3-Month Transformation Plan" style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;" />
+                    </label>
+                </div>
+            }
+            else if (_currentAction == "join_later")
+            {
+                <div style="text-align:center;margin-bottom:16px;">
+                    <div style="width:48px;height:48px;border-radius:50%;background:#eff6ff;color:#3b82f6;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
+                        <Icon Name="Clock" Size="24" />
+                    </div>
+                    <h3 style="margin:0 0 4px;font-size:18px;font-weight:700;color:#0f172a;">Schedule Join Later Follow-up</h3>
+                    <p style="margin:0;font-size:13px;color:#64748b;">Lead: <strong>@_activeActionConsultation.LeadName</strong></p>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">
+                    <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:#334155;">
+                        <span>Next Follow-up Date (IST)</span>
+                        <input type="date" value="@_nextFollowUpDate.ToString("yyyy-MM-dd")" @onchange="OnNextDateChanged" style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;" />
+                    </label>
+                    <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:#334155;">
+                        <span>Reason / Notes for Postponement</span>
+                        <input type="text" @bind="_actionNotes" placeholder="e.g. Traveling until next week, requested call on Monday" style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;" />
+                    </label>
+                </div>
+            }
+            else if (_currentAction == "not_interested")
+            {
+                <div style="text-align:center;margin-bottom:16px;">
+                    <div style="width:48px;height:48px;border-radius:50%;background:#fff1f2;color:#f43f5e;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
+                        <Icon Name="AlertCircle" Size="24" />
+                    </div>
+                    <h3 style="margin:0 0 4px;font-size:18px;font-weight:700;color:#0f172a;">Mark as Not Interested</h3>
+                    <p style="margin:0;font-size:13px;color:#64748b;">Lead: <strong>@_activeActionConsultation.LeadName</strong></p>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">
+                    <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:#334155;">
+                        <span>Reason for Dropping *</span>
+                        <select @bind="_actionReason" style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;">
+                            <option value="Price / Budget Issue">Price / Budget Issue</option>
+                            <option value="Not convinced with Diet/Workout">Not convinced with Diet/Workout</option>
+                            <option value="Medical Contraindication">Medical Contraindication</option>
+                            <option value="Joined competitor">Joined competitor</option>
+                            <option value="No response / Disconnected">No response / Disconnected</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </label>
+                    <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:#334155;">
+                        <span>Additional Comments</span>
+                        <input type="text" @bind="_actionNotes" placeholder="Optional details..." style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;" />
+                    </label>
+                </div>
+            }
+
+            <div style="display:flex;justify-content:flex-end;gap:10px;">
+                <button type="button" class="admin-btn" @onclick="CloseActionModal" disabled="@_saving">Cancel</button>
+                <button type="button" class="admin-btn" style="background:#ea580c !important;color:#fff !important;border-color:#ea580c !important;" @onclick="SubmitFollowUpAsync" disabled="@_saving">
+                    @if (_saving)
+                    {
+                        <Icon Name="RefreshCw" Size="14" Class="animate-spin" />
+                        <span>Processing…</span>
+                    }
+                    else
+                    {
+                        <span>Confirm & Update</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<DoctorConsultationDto> _all = new();
+    private List<DoctorConsultationDto> _filtered = new();
+    private bool _loading = true;
+    private bool _saving;
+    private string? _notice;
+    private string? _error;
+    private string _search = "";
+
+    // Action dialog state
+    private DoctorConsultationDto? _activeActionConsultation;
+    private string _currentAction = "";
+    private decimal _membershipAmount = 2999;
+    private DateTime _nextFollowUpDate = DateTime.Now.Date.AddDays(7);
+    private string _actionReason = "Price / Budget Issue";
+    private string _actionNotes = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+        try
+        {
+            var res = await Api.AdminCompletedFromDoctorAsync();
+            if (res.Success)
+            {
+                _all = res.Consultations;
+                FilterData();
+            }
+            else
+            {
+                _error = res.Message ?? "Failed to load data.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void FilterData()
+    {
+        if (string.IsNullOrWhiteSpace(_search))
+        {
+            _filtered = _all.ToList();
+        }
+        else
+        {
+            _filtered = _all.Where(c =>
+                c.LeadName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                c.LeadPhone.Contains(_search)).ToList();
+        }
+    }
+
+    private DoctorConsultationDto? _paymentConsultation;
+    private DoctorConsultationDto? _onboardingConsultation;
+
+    private void PromptConvert(DoctorConsultationDto c)
+    {
+        _paymentConsultation = c;
+    }
+
+    private async Task OnPaymentVerifiedAsync(decimal amount)
+    {
+        if (_paymentConsultation is null) return;
+        var c = _paymentConsultation;
+        _paymentConsultation = null;
+        try
+        {
+            var req = new SalesFollowUpRequest
+            {
+                Outcome = "converted",
+                MembershipAmount = amount
+            };
+            await Api.AdminSalesFollowUpAsync(c.Id, req);
+            _onboardingConsultation = c;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task OnOnboardingBookedAsync()
+    {
+        _onboardingConsultation = null;
+        _notice = "Payment verified and Onboarding Doctor Consultation booked successfully!";
+        await LoadDataAsync();
+    }
+
+    private void PromptJoinLater(DoctorConsultationDto c)
+    {
+        _activeActionConsultation = c;
+        _currentAction = "join_later";
+        _actionNotes = "";
+        _nextFollowUpDate = DateTime.Now.Date.AddDays(7);
+    }
+
+    private void PromptNotInterested(DoctorConsultationDto c)
+    {
+        _activeActionConsultation = c;
+        _currentAction = "not_interested";
+        _actionReason = "Price / Budget Issue";
+        _actionNotes = "";
+    }
+
+    private void OnNextDateChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var dt))
+            _nextFollowUpDate = dt.Date;
+    }
+
+    private void CloseActionModal()
+    {
+        _activeActionConsultation = null;
+        _currentAction = "";
+    }
+
+    private async Task SubmitFollowUpAsync()
+    {
+        if (_activeActionConsultation is null || _saving) return;
+        _saving = true;
+        _error = null;
+        _notice = null;
+        StateHasChanged();
+        try
+        {
+            var req = new SalesFollowUpRequest
+            {
+                Outcome = _currentAction,
+                Reason = _currentAction == "not_interested" ? _actionReason : null,
+                NextFollowUpAtUtc = _currentAction == "join_later" ? _nextFollowUpDate.ToUniversalTime() : null,
+                Notes = _actionNotes,
+                MembershipAmount = _currentAction == "converted" ? _membershipAmount : null
+            };
+
+            var res = await Api.AdminSalesFollowUpAsync(_activeActionConsultation.Id, req);
+            if (res.Success)
+            {
+                _notice = res.Message ?? "Follow-up recorded successfully!";
+                CloseActionModal();
+                await LoadDataAsync();
+            }
+            else
+            {
+                _error = res.Message ?? "Failed to save sales follow-up.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+            StateHasChanged();
+        }
+    }
+}

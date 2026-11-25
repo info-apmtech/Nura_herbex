@@ -34,20 +34,26 @@ builder.Services.Configure<ShippingOptions>(cfg.GetSection(ShippingOptions.Secti
 builder.Services.Configure<EmailOptions>(cfg.GetSection(EmailOptions.Section));
 builder.Services.Configure<WhatsAppOptions>(cfg.GetSection(WhatsAppOptions.Section));
 
-// ---- Database --------------------------------------------------------------------------
-// Database:Provider = SqlServer (default) | InMemory (local demo without a database)
+// ---- Database & Multi-Project Configuration --------------------------------------------
+var projectName = cfg["ProjectName"] ?? ProjectConfig.NeuraHerbex;
 var provider = cfg["Database:Provider"] ?? "SqlServer";
+var connectionString = cfg.GetConnectionString(projectName)
+                       ?? cfg.GetConnectionString("Default")
+                       ?? throw new InvalidOperationException($"ConnectionStrings:{projectName} or Default is not configured.");
+
 builder.Services.AddDbContext<NuraDbContext>(o =>
 {
-    if (provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase)) o.UseInMemoryDatabase("nuraherbex");
-    else o.UseSqlServer(cfg.GetConnectionString("Default") ?? throw new InvalidOperationException("ConnectionStrings:Default is not configured."),
-        sql => sql.EnableRetryOnFailure(3));
+    if (provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase))
+        o.UseInMemoryDatabase(projectName.ToLowerInvariant());
+    else
+        o.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure(3));
 });
 
 // ---- Services --------------------------------------------------------------------------
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ProductService>();
 builder.Services.AddScoped<OrderService>();
+builder.Services.AddScoped<ConsultationService>();
 builder.Services.AddScoped<OrderOperationLock>();
 builder.Services.AddScoped<ShadowfaxTrackingProcessor>();
 builder.Services.AddHostedService<ShadowfaxReconciliationWorker>();
@@ -371,6 +377,64 @@ static async Task EnsureCrmSchemaAsync(NuraDbContext db, ILogger log)
                     CONSTRAINT [PK_bulk_campaign_recipients] PRIMARY KEY ([Id])
                 );
                 CREATE INDEX [IX_bulk_campaign_recipients_CampaignId_Status] ON [bulk_campaign_recipients] ([CampaignId], [Status]);
+            END
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'HeightCm')
+                ALTER TABLE [leads] ADD [HeightCm] decimal(6,2) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'WeightKg')
+                ALTER TABLE [leads] ADD [WeightKg] decimal(6,2) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'TargetWeightKg')
+                ALTER TABLE [leads] ADD [TargetWeightKg] decimal(6,2) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'FitnessGoals')
+                ALTER TABLE [leads] ADD [FitnessGoals] nvarchar(max) NOT NULL DEFAULT '[]';
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'DietPreference')
+                ALTER TABLE [leads] ADD [DietPreference] nvarchar(64) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'ActivityLevel')
+                ALTER TABLE [leads] ADD [ActivityLevel] nvarchar(64) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'ActiveConsultationId')
+                ALTER TABLE [leads] ADD [ActiveConsultationId] bigint NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'ConsultationStatus')
+                ALTER TABLE [leads] ADD [ConsultationStatus] nvarchar(50) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('leads') AND name = 'ConsultationScheduledAt')
+                ALTER TABLE [leads] ADD [ConsultationScheduledAt] datetime2 NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'doctor_consultations')
+            BEGIN
+                CREATE TABLE [doctor_consultations] (
+                    [Id] bigint NOT NULL IDENTITY,
+                    [LeadId] bigint NOT NULL,
+                    [DoctorEmployeeId] bigint NULL,
+                    [BookedByEmployeeId] bigint NOT NULL,
+                    [Type] int NOT NULL DEFAULT 1,
+                    [Status] int NOT NULL DEFAULT 1,
+                    [ScheduledAtUtc] datetime2 NOT NULL,
+                    [DurationMinutes] int NOT NULL DEFAULT 20,
+                    [MeetingUrl] nvarchar(500) NULL,
+                    [DoctorNotes] nvarchar(4000) NULL,
+                    [RecommendationsJson] nvarchar(4000) NULL,
+                    [CompletedAtUtc] datetime2 NULL,
+                    [CompletedByDoctorId] bigint NULL,
+                    [SalesFollowUpDone] bit NOT NULL DEFAULT 0,
+                    [SalesFollowUpOutcome] nvarchar(50) NULL,
+                    [SalesFollowUpReason] nvarchar(500) NULL,
+                    [SalesFollowUpAtUtc] datetime2 NULL,
+                    [SalesFollowUpByEmployeeId] bigint NULL,
+                    [CreatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                    [UpdatedAt] datetime2 NOT NULL DEFAULT GETUTCDATE(),
+                    CONSTRAINT [PK_doctor_consultations] PRIMARY KEY ([Id])
+                );
+                CREATE INDEX [IX_doctor_consultations_LeadId] ON [doctor_consultations] ([LeadId]);
+                CREATE INDEX [IX_doctor_consultations_DoctorEmployeeId] ON [doctor_consultations] ([DoctorEmployeeId]);
+                CREATE INDEX [IX_doctor_consultations_ScheduledAtUtc] ON [doctor_consultations] ([ScheduledAtUtc]);
+                CREATE INDEX [IX_doctor_consultations_Status] ON [doctor_consultations] ([Status]);
             END
         ");
         log.LogInformation("[Startup] CRM schema verification completed successfully.");

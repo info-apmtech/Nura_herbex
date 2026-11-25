@@ -3,6 +3,7 @@
 @inject AdminSession AdminAuth
 @inject NavigationManager Nav
 @inject BrowserInterop Browser
+@inject ProjectState Project
 
 <div class="@($"ld ld-mode-{Mode} {(_v2 ? "ld-v2" : "")}")">
 
@@ -546,9 +547,17 @@
                     }
                     <span class="ld-owner-gap"></span>
                     @if (lead.NextFollowUpAt is { } nfu) { <span class="@($"ld-pill ld-fu {(nfu < DateTime.UtcNow ? "late" : "")}")"><Icon Name="Clock" Size="11" />Next: @FuFmt.Due(nfu)</span> }
-                    <button type="button" class="ld-btn" @onclick="() => _orderDialog = true"><Icon Name="Package" Size="13" /> Order</button>
+                    @if (!Project.IsMidFit)
+                    {
+                        <button type="button" class="ld-btn" @onclick="() => _orderDialog = true"><Icon Name="Package" Size="13" /> Order</button>
+                    }
                     @if (lead.Status == LeadStatuses.Interested)
                     {
+                        @if (Project.IsMidFit)
+                        {
+                            <button type="button" class="ld-btn" style="background:#dcfce7;border-color:#86efac;color:#166534;font-weight:600;" @onclick="() => _showPaymentDialog = true"><Icon Name="CreditCard" Size="13" /> Convert (Paid)</button>
+                            <button type="button" class="ld-btn" style="background:#ffedd5;border-color:#ea580c;color:#c2410c;font-weight:600;" @onclick="() => _showConsultationDialog = true"><Icon Name="Calendar" Size="13" /> Book Free Doctor Consultation</button>
+                        }
                         <button type="button" class="ld-btn" style="background:#fef3c7;border-color:#f59e0b;color:#b45309;font-weight:600;" @onclick="() => _composer = true"><Icon Name="Flame" Size="13" /> Hot Leads Follow-up</button>
                     }
                     else if (lead.Status == LeadStatuses.NoAnswer)
@@ -1040,6 +1049,35 @@
 @if (_orderDialog && _selected?.Lead is { } ol)
 {
     <LeadOrderDialog LeadId="ol.Id" LeadName="@ol.Name" LeadEmail="@ol.Email" OnClose="() => _orderDialog = false" OnCreated="OnOrderCreated" />
+}
+
+@if (_showConsultationDialog && _selected?.Lead is { } bookLead)
+{
+    <ConsultationSlotDialog LeadId="bookLead.Id"
+                            LeadName="@bookLead.Name"
+                            LeadPhone="@bookLead.Phone"
+                            Type="ConsultationType.FreeInitial"
+                            OnClose="() => _showConsultationDialog = false"
+                            OnBooked="OnConsultationBookedAsync" />
+}
+
+@if (_showPaymentDialog && _selected?.Lead is { } payLead)
+{
+    <PaymentLinkDialog LeadId="payLead.Id"
+                       LeadName="@payLead.Name"
+                       LeadPhone="@payLead.Phone"
+                       OnClose="() => _showPaymentDialog = false"
+                       OnPaymentVerified="OnLeadPaymentVerifiedAsync" />
+}
+
+@if (_showOnboardingDialog && _selected?.Lead is { } onbLead)
+{
+    <ConsultationSlotDialog LeadId="onbLead.Id"
+                            LeadName="@onbLead.Name"
+                            LeadPhone="@onbLead.Phone"
+                            Type="ConsultationType.PaidOnboarding"
+                            OnClose="() => _showOnboardingDialog = false"
+                            OnBooked="OnOnboardingBookedAsync" />
 }
 
 @if (_composer && _selected?.Lead is { } cl)
@@ -1980,6 +2018,37 @@
         "PENDING" => "follow-up",
         _ => "new",
     };
+
+    private bool _showConsultationDialog;
+    private bool _showPaymentDialog;
+    private bool _showOnboardingDialog;
+
+    private async Task OnConsultationBookedAsync()
+    {
+        _showConsultationDialog = false;
+        _tab = "info";
+        if (_selected?.Lead is { } l) await RefreshDetailAsync(l.Id, keepNotes: true);
+        await LoadAsync(false);
+    }
+
+    private async Task OnLeadPaymentVerifiedAsync(decimal amount)
+    {
+        _showPaymentDialog = false;
+        if (_selected?.Lead is { } l)
+        {
+            await Api.AdminLeadStatusAsync(l.Id, new LeadStatusRequest { Status = LeadStatuses.Converted });
+            _showOnboardingDialog = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnOnboardingBookedAsync()
+    {
+        _showOnboardingDialog = false;
+        _tab = "info";
+        if (_selected?.Lead is { } l) await RefreshDetailAsync(l.Id, keepNotes: true);
+        await LoadAsync(false);
+    }
 
     private async Task OnOrderCreated(string? message)
     {

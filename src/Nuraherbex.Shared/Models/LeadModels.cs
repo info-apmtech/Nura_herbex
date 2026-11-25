@@ -199,6 +199,21 @@ public class LeadDto
     public bool HasAssessment { get; set; }
     public DateTime? AssessmentUpdatedAt { get; set; }
 
+    // MidFit Fitness & Clinical Assessment
+    public decimal? HeightCm { get; set; }
+    public decimal? WeightKg { get; set; }
+    public decimal? TargetWeightKg { get; set; }
+    public List<string> FitnessGoals { get; set; } = new();
+    public string? DietPreference { get; set; }
+    public string? ActivityLevel { get; set; }
+
+    // MidFit Doctor Consultation Tracking
+    public long? ActiveConsultationId { get; set; }
+    public string? ConsultationStatus { get; set; }
+    public DateTime? ConsultationScheduledAt { get; set; }
+    public string? ConsultationDoctorName { get; set; }
+    public string? ConsultationDoctorNotes { get; set; }
+
     // Pending Transfers
     public long? PendingTransferToEmployeeId { get; set; }
     public string? PendingTransferToName { get; set; }

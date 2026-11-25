@@ -17,10 +17,17 @@ public class ReportController(ReportService reports, RightsService rights) : Sta
     private (bool Allowed, long? OwnerOnly, string? Scope) Access(string key)
     {
         if (IsAdmin || CanAll("reports")) return (true, null, null);
-        var page = key switch { "leads" => "leads", "followups" => "followups", "tasks" => "tasks", _ => null };
+        var page = key switch
+        {
+            "leads" => "leads",
+            "followups" => "followups",
+            "tasks" => "tasks",
+            "employee-performance" or "employee_performance" or "employee_report" or "employee-report" => "reports",
+            _ => null
+        };
         if (page is null) return (false, null, null);
-        if (CanAll(page)) return (true, null, null);
-        if (Level(page) < 1 && Level("reports") < 1) return (false, null, null); // "Reports: own records" opens these three, limited to the person's own
+        if (CanAll(page) || CanAll("leads") || CanAll("followups")) return (true, null, null);
+        if (Level(page) < 1 && Level("reports") < 1 && Level("leads") < 1 && Level("followups") < 1) return (false, null, null); // "Reports: own records" opens these, limited to the person's own
         return MyId is { } me ? (true, me, "Showing your own records only.") : (false, null, null);
     }
 
@@ -28,7 +35,9 @@ public class ReportController(ReportService reports, RightsService rights) : Sta
     public ReportListResponse List() => new() { Success = true, Reports = ReportService.Catalog.Where(r => Access(r.Key).Allowed).ToList() };
 
     /// <summary>Employee performance report: Leads converted, Follow-ups done, No-answer follow-ups, date-wise.</summary>
-    [HttpGet("employee-performance")]
+    [HttpGet("employee-performance", Order = -1)]
+    [HttpGet("employee-report", Order = -1)]
+    [HttpGet("employee_report", Order = -1)]
     public async Task<IActionResult> EmployeePerformance([FromQuery] string? from, [FromQuery] string? to, [FromQuery] long? employeeId)
     {
         if (!IsAdmin && !CanAll("reports") && !CanAll("leads") && !CanAll("followups"))
@@ -53,10 +62,16 @@ public class ReportController(ReportService reports, RightsService rights) : Sta
 
     /// <param name="from">First day, yyyy-MM-dd (default: 29 days ago).</param>
     /// <param name="to">Last day included, yyyy-MM-dd (default: today).</param>
-    [HttpGet("{key}")]
-    public async Task<IActionResult> Get(string key, [FromQuery] string? from, [FromQuery] string? to)
+    [HttpGet("{key}", Order = 100)]
+    public async Task<IActionResult> Get(string key, [FromQuery] string? from, [FromQuery] string? to, [FromQuery] long? employeeId = null)
     {
-        var access = Access(key.ToLowerInvariant());
+        var normKey = key.Trim().ToLowerInvariant();
+        if (normKey is "employee-performance" or "employee_performance" or "employee_report" or "employee-report")
+        {
+            return await EmployeePerformance(from, to, employeeId);
+        }
+
+        var access = Access(normKey);
         if (!access.Allowed) return StatusCode(403, new ApiResult { Success = false, Message = "You do not have access to this report." });
         var today = FollowUpService.IstNow.Date;
         var start = Parse(from) ?? today.AddDays(-29);
@@ -65,7 +80,7 @@ public class ReportController(ReportService reports, RightsService rights) : Sta
         if ((end - start).TotalDays > 800) return BadRequest(new ApiResult { Success = false, Message = "Choose a period of up to about two years." });
 
         var label = start == end ? start.ToString("d MMM yyyy", CultureInfo.InvariantCulture) : $"{start:d MMM yyyy} to {end:d MMM yyyy}";
-        var result = await reports.BuildAsync(key.ToLowerInvariant(), FollowUpService.ToUtc(start), FollowUpService.ToUtc(end.AddDays(1)), label, access.OwnerOnly);
+        var result = await reports.BuildAsync(normKey, FollowUpService.ToUtc(start), FollowUpService.ToUtc(end.AddDays(1)), label, access.OwnerOnly);
         if (result is not null) result.ScopeNote = access.Scope;
         return result is null ? NotFound(new ApiResult { Success = false, Message = "Unknown report." }) : Ok(result);
     }

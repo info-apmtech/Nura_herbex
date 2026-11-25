@@ -7,8 +7,9 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-// API address comes from wwwroot/appsettings.json (and appsettings.{Environment}.json).
+// API address & Project Name come from wwwroot/appsettings.json (and appsettings.{Environment}.json).
 var apiBase = builder.Configuration["ApiBaseUrl"] ?? "https://nuraapi.apmiot.com/";
-builder.Services.AddNuraherbexUI(apiBase);
+var projectName = builder.Configuration["ProjectName"] ?? "NeuraHerbex";
+builder.Services.AddNuraherbexUI(apiBase, projectName);
 
 await builder.Build().RunAsync();
