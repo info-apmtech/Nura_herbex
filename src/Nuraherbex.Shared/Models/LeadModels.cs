@@ -89,6 +89,38 @@ public static class LeadAssessmentOptions
     public static readonly string[] HealthConcerns = ["Erection", "Premature Ejaculation", "Blood flow", "Sugar", "Diabetic", "Others"];
 }
 
+public static class MidFitAssessmentOptions
+{
+    public static readonly string[] Genders = ["Male", "Female", "Other"];
+    public static readonly string[] FitnessGoals =
+    [
+        "Weight Loss",
+        "Muscle Gain",
+        "Fat Loss & Toning",
+        "Stamina & Endurance",
+        "PCOS / PCOD Care",
+        "Thyroid Management",
+        "Diabetes / Blood Sugar Care",
+        "Post-Pregnancy Recovery",
+        "General Health & Vitality"
+    ];
+    public static readonly string[] DietPreferences =
+    [
+        "Vegetarian",
+        "Non-Vegetarian",
+        "Eggetarian",
+        "Vegan",
+        "Jain"
+    ];
+    public static readonly string[] ActivityLevels =
+    [
+        "Sedentary (Little or no exercise)",
+        "Lightly Active (Exercise 1-3 days/wk)",
+        "Moderately Active (Exercise 3-5 days/wk)",
+        "Very Active (Hard exercise 6-7 days/wk)"
+    ];
+}
+
 public enum LeadSource
 {
     WhatsApp = 1,
@@ -376,6 +408,15 @@ public class LeadAssessmentRequest
     public List<string> PrimaryConcerns { get; set; } = new();
     public List<string> HealthConditions { get; set; } = new();
     public string? OtherHealthConcern { get; set; }
+
+    // MidFit Fitness & Clinical Assessment
+    public decimal? HeightCm { get; set; }
+    public decimal? WeightKg { get; set; }
+    public decimal? TargetWeightKg { get; set; }
+    public List<string> FitnessGoals { get; set; } = new();
+    public string? DietPreference { get; set; }
+    public string? ActivityLevel { get; set; }
+    public bool IsMidFit { get; set; }
 }
 
 public class LeadAssignmentDto

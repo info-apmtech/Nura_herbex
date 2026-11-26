@@ -313,7 +313,7 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
 
     public async Task<EmployeePerformanceReportResponse> EmployeePerformanceAsync(DateTime fromUtc, DateTime toUtc, string periodLabel, long? employeeId = null)
     {
-        var empsQuery = db.Employees.AsNoTracking().Where(e => e.IsActive || db.Leads.Any(l => l.AssignedToEmployeeId == e.Id));
+        var empsQuery = db.Employees.AsNoTracking().Where(e => e.IsActive);
         if (employeeId is { } eid)
         {
             empsQuery = empsQuery.Where(e => e.Id == eid);
@@ -349,16 +349,6 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
             .ToDictionary(g => g.Key, g => g.Count());
 
         // 4. No Answer follow-ups within period
-        static bool IsNoAnswer(string? outcome)
-        {
-            if (string.IsNullOrWhiteSpace(outcome)) return false;
-            var o = outcome.Trim();
-            return o.StartsWith(FollowUpOutcomes.NoAnswer, StringComparison.OrdinalIgnoreCase)
-                || o.StartsWith(FollowUpOutcomes.Callback, StringComparison.OrdinalIgnoreCase)
-                || o.StartsWith("No answer", StringComparison.OrdinalIgnoreCase)
-                || o.StartsWith("Call back", StringComparison.OrdinalIgnoreCase);
-        }
-
         var noAnswerByEmp = doneFollowUps
             .Where(f => IsNoAnswer(f.Outcome))
             .GroupBy(f => f.EmployeeId)
@@ -455,6 +445,145 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
             TotalNoAnswerCount = doneFollowUps.Count(f => IsNoAnswer(f.Outcome)),
             ByEmployee = byEmployee.OrderByDescending(e => e.LeadsConverted).ThenByDescending(e => e.FollowUpsDone).ToList(),
             DailyBreakdown = dailyList
+        };
+    }
+
+    private static bool IsNoAnswer(string? outcome)
+    {
+        if (string.IsNullOrWhiteSpace(outcome)) return false;
+        var o = outcome.Trim();
+        return o.StartsWith(FollowUpOutcomes.NoAnswer, StringComparison.OrdinalIgnoreCase)
+            || o.StartsWith(FollowUpOutcomes.Callback, StringComparison.OrdinalIgnoreCase)
+            || o.StartsWith("No answer", StringComparison.OrdinalIgnoreCase)
+            || o.StartsWith("Call back", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public async Task<EmployeePerformanceDetailResponse> EmployeePerformanceDetailsAsync(
+        string type,
+        DateTime fromUtc,
+        DateTime toUtc,
+        string periodLabel,
+        long? employeeId = null,
+        string? date = null)
+    {
+        var normType = (type ?? "").Trim().ToLowerInvariant();
+        var emps = await db.Employees.AsNoTracking().ToDictionaryAsync(e => e.Id, e => e.Name);
+        var activeEmpIds = await db.Employees.AsNoTracking().Where(e => e.IsActive).Select(e => e.Id).ToListAsync();
+        var empName = employeeId is { } eid && emps.TryGetValue(eid, out var n) ? n : null;
+
+        // If a specific date (yyyy-MM-dd in IST) is requested
+        if (!string.IsNullOrWhiteSpace(date) && DateTime.TryParseExact(date.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var specificDate))
+        {
+            fromUtc = FollowUpService.ToUtc(specificDate.Date);
+            toUtc = FollowUpService.ToUtc(specificDate.Date.AddDays(1));
+            periodLabel = specificDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
+        }
+
+        var items = new List<EmployeePerformanceDetailItemDto>();
+        string title = normType switch
+        {
+            "leads_won" or "leads_converted" or "won" => "Leads Won (முடித்தவை)",
+            "followups_done" or "done" => "Follow-ups Done (முடித்தவை)",
+            "no_answer" or "noanswer" => "No Answer Follow-up",
+            _ => "Performance Details"
+        };
+
+        if (normType is "leads_won" or "leads_converted" or "won")
+        {
+            var query = db.Leads.AsNoTracking()
+                .Where(l => l.ConvertedAt >= fromUtc && l.ConvertedAt < toUtc);
+
+            if (employeeId.HasValue)
+                query = query.Where(l => l.AssignedToEmployeeId == employeeId.Value);
+            else
+                query = query.Where(l => l.AssignedToEmployeeId != null && activeEmpIds.Contains(l.AssignedToEmployeeId.Value));
+
+            var leads = await query.OrderByDescending(l => l.ConvertedAt).Take(2000).ToListAsync();
+            var phones = leads.Select(l => l.Phone).Where(p => !string.IsNullOrEmpty(p)).Distinct().ToList();
+            var orders = await db.Orders.AsNoTracking()
+                .Where(o => phones.Contains(o.CustomerPhone))
+                .Select(o => new { OrderId = o.Id, o.CustomerPhone, Total = o.TotalAmount, o.CreatedAt })
+                .OrderByDescending(o => o.CreatedAt)
+                .ToListAsync();
+            var orderMap = orders.GroupBy(o => o.CustomerPhone).ToDictionary(g => g.Key, g => g.First());
+
+            foreach (var l in leads)
+            {
+                var dt = l.ConvertedAt ?? l.UpdatedAt;
+                var ist = FollowUpService.ToIst(dt);
+                orderMap.TryGetValue(l.Phone, out var ord);
+
+                items.Add(new EmployeePerformanceDetailItemDto
+                {
+                    Id = l.Id,
+                    LeadId = l.Id,
+                    LeadName = string.IsNullOrWhiteSpace(l.Name) ? "Enquiry #" + l.Id : l.Name,
+                    LeadPhone = l.Phone,
+                    EmployeeName = l.AssignedToEmployeeId is { } eId && emps.TryGetValue(eId, out var ename) ? ename : "Unassigned",
+                    Date = ist.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    Time = ist.ToString("hh:mm tt", CultureInfo.InvariantCulture),
+                    Outcome = "Order Converted",
+                    Notes = l.Notes ?? "",
+                    Source = l.Source.ToString(),
+                    OrderId = ord?.OrderId,
+                    OrderTotal = ord?.Total
+                });
+            }
+        }
+        else if (normType is "followups_done" or "done" or "no_answer" or "noanswer")
+        {
+            var isNoAnswerOnly = normType is "no_answer" or "noanswer";
+            var query = db.FollowUps.AsNoTracking()
+                .Where(f => f.Status == FollowUpStatus.Done && f.CompletedAt >= fromUtc && f.CompletedAt < toUtc);
+
+            if (employeeId.HasValue)
+                query = query.Where(f => f.AssignedToEmployeeId == employeeId.Value);
+            else
+                query = query.Where(f => f.AssignedToEmployeeId != null && activeEmpIds.Contains(f.AssignedToEmployeeId.Value));
+
+            var list = await query.OrderByDescending(f => f.CompletedAt).Take(2000).ToListAsync();
+            if (isNoAnswerOnly)
+            {
+                list = list.Where(f => IsNoAnswer(f.Outcome)).ToList();
+            }
+
+            var leadIds = list.Select(f => f.LeadId).Distinct().ToList();
+            var leadMap = await db.Leads.AsNoTracking()
+                .Where(l => leadIds.Contains(l.Id))
+                .Select(l => new { l.Id, l.Name, l.Phone, l.Source })
+                .ToDictionaryAsync(l => l.Id, l => l);
+
+            foreach (var f in list)
+            {
+                leadMap.TryGetValue(f.LeadId, out var lead);
+                var dt = f.CompletedAt ?? f.DueAt;
+                var ist = FollowUpService.ToIst(dt);
+
+                items.Add(new EmployeePerformanceDetailItemDto
+                {
+                    Id = f.Id,
+                    LeadId = f.LeadId,
+                    LeadName = lead is not null && !string.IsNullOrWhiteSpace(lead.Name) ? lead.Name : "Lead #" + f.LeadId,
+                    LeadPhone = lead?.Phone ?? "",
+                    EmployeeName = f.AssignedToEmployeeId is { } eId && emps.TryGetValue(eId, out var ename) ? ename : "Staff",
+                    Date = ist.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    Time = ist.ToString("hh:mm tt", CultureInfo.InvariantCulture),
+                    Outcome = f.Outcome ?? "Done",
+                    Notes = f.Notes ?? "",
+                    Source = f.Type
+                });
+            }
+        }
+
+        return new EmployeePerformanceDetailResponse
+        {
+            Success = true,
+            Type = normType,
+            Title = title,
+            Period = periodLabel,
+            EmployeeName = empName,
+            TotalCount = items.Count,
+            Items = items
         };
     }
 }

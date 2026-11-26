@@ -292,6 +292,16 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
         var qs = query.Count > 0 ? "?" + string.Join("&", query) : "";
         return Call<EmployeePerformanceReportResponse>(HttpMethod.Get, $"api/admin/reports/employee-performance{qs}", null, Who.Admin);
     }
+    public Task<EmployeePerformanceDetailResponse> AdminEmployeePerformanceDetailsAsync(string type, string? from = null, string? to = null, long? employeeId = null, string? date = null)
+    {
+        var query = new List<string> { $"type={Uri.EscapeDataString(type)}" };
+        if (!string.IsNullOrEmpty(from)) query.Add($"from={Uri.EscapeDataString(from)}");
+        if (!string.IsNullOrEmpty(to)) query.Add($"to={Uri.EscapeDataString(to)}");
+        if (employeeId is { } eid) query.Add($"employeeId={eid}");
+        if (!string.IsNullOrEmpty(date)) query.Add($"date={Uri.EscapeDataString(date)}");
+        var qs = "?" + string.Join("&", query);
+        return Call<EmployeePerformanceDetailResponse>(HttpMethod.Get, $"api/admin/reports/employee-performance/details{qs}", null, Who.Admin);
+    }
     public Task<WhatsAppLimitDto> AdminWhatsAppLimitAsync() => Call<WhatsAppLimitDto>(HttpMethod.Get, "api/admin/whatsapp/limit", null, Who.Admin);
     public Task<WhatsAppLimitDto> AdminSaveWhatsAppLimitAsync(WhatsAppLimitRequest r) => Call<WhatsAppLimitDto>(HttpMethod.Put, "api/admin/whatsapp/limit", r, Who.Admin);
     public Task<FollowUpSettingsDto> AdminFollowUpSettingsAsync() => Call<FollowUpSettingsDto>(HttpMethod.Get, "api/admin/followups/settings", null, Who.Admin);

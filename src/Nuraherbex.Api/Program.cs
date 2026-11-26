@@ -191,7 +191,7 @@ if (genIdx >= 0)
         app.Logger.LogWarning("[Startup] Shadowfax ({Env}) is not fully configured - missing: {Missing}. Shipment booking and callbacks will fail until set (env vars such as Shadowfax__Token, or appsettings.Local.json).", sf.Env, string.Join(", ", missing));
 }
 
-    var csb = provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase) ? null : new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(cfg.GetConnectionString("Default"));
+    var csb = provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase) ? null : new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connectionString);
     var payuKey = cfg["PayU:MerchantKey"];
     app.Logger.LogInformation("[Startup] Environment={Env} | Database={Provider} {Server}/{Db} | PayU={Payu} ({PayuEnv}) | UserSecrets={Secrets}",
         app.Environment.EnvironmentName, provider, csb?.DataSource ?? "-", csb?.InitialCatalog ?? "-",

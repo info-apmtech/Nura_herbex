@@ -1,8 +1,9 @@
 @inject ApiClient Api
+@inject ProjectState Project
 
 <section class="ld-sec ld-assess">
     <h4>
-        <span>Assessment Form</span>
+        <span>@(Project.IsMidFit ? "MidFit Fitness & Health Assessment" : "Assessment Form")</span>
         @if (Lead.HasAssessment)
         {
             <span class="ld-pill ld-ok-pill">Completed</span>
@@ -15,51 +16,113 @@
 
     @if (!_editing && Lead.HasAssessment)
     {
-        <dl class="ld-dl ld-assess-view">
-            <dt>Name</dt><dd>@Lead.Name</dd>
-            <dt>Age / Gender</dt><dd>@(Lead.Age?.ToString() ?? "—") · @(Lead.Gender ?? "—") · @(Lead.MaritalStatus ?? "—")</dd>
-            <dt>Work type</dt><dd>@(Lead.WorkType ?? "—")</dd>
-            <dt>Duration</dt><dd>@(string.IsNullOrWhiteSpace(Lead.ProblemDuration) ? "—" : Lead.ProblemDuration)</dd>
-            <dt>Supplements</dt><dd>@(string.IsNullOrWhiteSpace(Lead.PreviousSupplements) ? "—" : Lead.PreviousSupplements)</dd>
-            <dt>Habits</dt>
-            <dd>
-                @if (!Lead.IsSmoking && !Lead.IsDrinking)
+        @if (Project.IsMidFit)
+        {
+            @* ---- MIDFIT READ-ONLY PROFILE VIEW ---- *@
+            <dl class="ld-dl ld-assess-view">
+                <dt>Name</dt><dd>@Lead.Name</dd>
+                <dt>Age / Gender</dt><dd>@(Lead.Age?.ToString() ?? "—") · @(Lead.Gender ?? "—")</dd>
+                <dt>Height / Weight</dt>
+                <dd>
+                    @(Lead.HeightCm.HasValue ? $"{Lead.HeightCm} cm" : "—") ·
+                    @(Lead.WeightKg.HasValue ? $"{Lead.WeightKg} kg" : "—")
+                    @if (Lead.TargetWeightKg.HasValue)
+                    {
+                        <span> (Target: <strong>@Lead.TargetWeightKg kg</strong>)</span>
+                    }
+                </dd>
+                @if (CalculateBmi(Lead.HeightCm, Lead.WeightKg) is { Length: > 0 } bmiStr)
                 {
-                    <span>None</span>
+                    <dt>BMI Score</dt>
+                    <dd>
+                        <span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:#ffedd5;color:#c2410c;border:1px solid #fed7aa;">
+                            BMI: @bmiStr
+                        </span>
+                    </dd>
                 }
-                else
+                <dt>Fitness Goals</dt>
+                <dd>
+                    @if (Lead.FitnessGoals is { Count: > 0 })
+                    {
+                        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px;">
+                            @foreach (var g in Lead.FitnessGoals)
+                            {
+                                <span style="font-size:11px;padding:2px 8px;border-radius:12px;background:#fff7ed;color:#ea580c;border:1px solid #ffedd5;font-weight:600;">@g</span>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <span>—</span>
+                    }
+                </dd>
+                <dt>Diet & Activity</dt>
+                <dd>
+                    @(string.IsNullOrWhiteSpace(Lead.DietPreference) ? "—" : Lead.DietPreference) ·
+                    @(string.IsNullOrWhiteSpace(Lead.ActivityLevel) ? "—" : Lead.ActivityLevel)
+                </dd>
+                @if (Lead.IsSmoking || Lead.IsDrinking)
                 {
-                    <span>@(string.Join(", ", new[] { Lead.IsSmoking ? "Smoking" : null, Lead.IsDrinking ? "Drinking" : null }.Where(x => x is not null)))</span>
+                    <dt>Habits</dt>
+                    <dd>@(string.Join(", ", new[] { Lead.IsSmoking ? "Smoking" : null, Lead.IsDrinking ? "Drinking" : null }.Where(x => x is not null)))</dd>
                 }
-            </dd>
-            <dt>Primary concern</dt>
-            <dd>
-                @{
-                    var pConcerns = Lead.PrimaryConcerns.Count > 0
-                        ? Lead.PrimaryConcerns
-                        : (Lead.HealthConcerns ?? new()).Where(c => !LeadAssessmentOptions.HealthConditions.Take(2).Contains(c, StringComparer.OrdinalIgnoreCase)).ToList();
-                }
-                @(pConcerns.Count > 0 ? string.Join(", ", pConcerns) : "—")
-                @if (!string.IsNullOrWhiteSpace(Lead.OtherHealthConcern))
+                @if (!string.IsNullOrWhiteSpace(Lead.AssessmentNotes))
                 {
-                    <span> (@Lead.OtherHealthConcern)</span>
+                    <dt>Clinical / Notes</dt>
+                    <dd class="ld-assess-notes-val">@Lead.AssessmentNotes</dd>
                 }
-            </dd>
-            <dt>Health conditions</dt>
-            <dd>
-                @{
-                    var hConditions = Lead.HealthConditions.Count > 0
-                        ? Lead.HealthConditions
-                        : (Lead.HealthConcerns ?? new()).Where(c => LeadAssessmentOptions.HealthConditions.Take(2).Contains(c, StringComparer.OrdinalIgnoreCase)).ToList();
+            </dl>
+        }
+        else
+        {
+            @* ---- NEURAHERBEX READ-ONLY VIEW ---- *@
+            <dl class="ld-dl ld-assess-view">
+                <dt>Name</dt><dd>@Lead.Name</dd>
+                <dt>Age / Gender</dt><dd>@(Lead.Age?.ToString() ?? "—") · @(Lead.Gender ?? "—") · @(Lead.MaritalStatus ?? "—")</dd>
+                <dt>Work type</dt><dd>@(Lead.WorkType ?? "—")</dd>
+                <dt>Duration</dt><dd>@(string.IsNullOrWhiteSpace(Lead.ProblemDuration) ? "—" : Lead.ProblemDuration)</dd>
+                <dt>Supplements</dt><dd>@(string.IsNullOrWhiteSpace(Lead.PreviousSupplements) ? "—" : Lead.PreviousSupplements)</dd>
+                <dt>Habits</dt>
+                <dd>
+                    @if (!Lead.IsSmoking && !Lead.IsDrinking)
+                    {
+                        <span>None</span>
+                    }
+                    else
+                    {
+                        <span>@(string.Join(", ", new[] { Lead.IsSmoking ? "Smoking" : null, Lead.IsDrinking ? "Drinking" : null }.Where(x => x is not null)))</span>
+                    }
+                </dd>
+                <dt>Primary concern</dt>
+                <dd>
+                    @{
+                        var pConcerns = Lead.PrimaryConcerns.Count > 0
+                            ? Lead.PrimaryConcerns
+                            : (Lead.HealthConcerns ?? new()).Where(c => !LeadAssessmentOptions.HealthConditions.Take(2).Contains(c, StringComparer.OrdinalIgnoreCase)).ToList();
+                    }
+                    @(pConcerns.Count > 0 ? string.Join(", ", pConcerns) : "—")
+                    @if (!string.IsNullOrWhiteSpace(Lead.OtherHealthConcern))
+                    {
+                        <span> (@Lead.OtherHealthConcern)</span>
+                    }
+                </dd>
+                <dt>Health conditions</dt>
+                <dd>
+                    @{
+                        var hConditions = Lead.HealthConditions.Count > 0
+                            ? Lead.HealthConditions
+                            : (Lead.HealthConcerns ?? new()).Where(c => LeadAssessmentOptions.HealthConditions.Take(2).Contains(c, StringComparer.OrdinalIgnoreCase)).ToList();
+                    }
+                    @(hConditions.Count > 0 ? string.Join(", ", hConditions) : "None reported")
+                </dd>
+                @if (!string.IsNullOrWhiteSpace(Lead.AssessmentNotes))
+                {
+                    <dt>Remarks</dt>
+                    <dd class="ld-assess-notes-val">@Lead.AssessmentNotes</dd>
                 }
-                @(hConditions.Count > 0 ? string.Join(", ", hConditions) : "None reported")
-            </dd>
-            @if (!string.IsNullOrWhiteSpace(Lead.AssessmentNotes))
-            {
-                <dt>Remarks</dt>
-                <dd class="ld-assess-notes-val">@Lead.AssessmentNotes</dd>
-            }
-        </dl>
+            </dl>
+        }
+
         <div class="ld-actions">
             @if (!string.IsNullOrEmpty(_msg)) { <small class="ld-ok">@_msg</small> }
             <button type="button" class="ld-btn" @onclick="StartEdit"><Icon Name="Edit3" Size="12" /> Edit</button>
@@ -67,84 +130,160 @@
     }
     else
     {
-        <div class="ld-assess-grid">
-            <label>Name
-                <input type="text" maxlength="200" @bind="_name" @bind:event="oninput" placeholder="Customer name" />
-            </label>
-            <label>Age
-                <input type="number" min="10" max="120" @bind="_age" @bind:event="oninput" placeholder="Age (e.g. 34)" />
-            </label>
-            <label>Gender
-                <select @bind="_gender">
-                    <option value="">Select gender</option>
-                    @foreach (var g in LeadAssessmentOptions.Genders) { <option value="@g">@g</option> }
-                </select>
-            </label>
-            <label>Marital status
-                <select @bind="_marital">
-                    <option value="">Select marital status</option>
-                    @foreach (var m in LeadAssessmentOptions.MaritalStatuses) { <option value="@m">@m</option> }
-                </select>
-            </label>
-            <label class="ld-assess-wide">Work type
-                <select @bind="_workType">
-                    <option value="">Select work type</option>
-                    @foreach (var w in LeadAssessmentOptions.WorkTypes) { <option value="@w">@w</option> }
-                </select>
-            </label>
-            <label>Problem duration
-                <input type="text" maxlength="100" @bind="_problemDuration" @bind:event="oninput" placeholder="e.g. 6 months, 1 year" />
-            </label>
-            <label>Previous supplement usage
-                <select @bind="_previousSupplements">
-                    <option value="">Select (Yes / No)</option>
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                </select>
-            </label>
-        </div>
+        @if (Project.IsMidFit)
+        {
+            @* ---- MIDFIT EDIT / INTAKE FORM ---- *@
+            <div class="ld-assess-grid">
+                <label>Name
+                    <input type="text" maxlength="200" @bind="_name" @bind:event="oninput" placeholder="Member name" />
+                </label>
+                <label>Age *
+                    <input type="number" min="10" max="120" @bind="_age" @bind:event="oninput" placeholder="Age (e.g. 28)" />
+                </label>
+                <label>Gender *
+                    <select @bind="_gender">
+                        <option value="">Select gender</option>
+                        @foreach (var g in MidFitAssessmentOptions.Genders) { <option value="@g">@g</option> }
+                    </select>
+                </label>
+                <label>Height (cm) *
+                    <input type="number" min="30" max="260" step="0.5" @bind="_heightCm" @bind:event="oninput" placeholder="e.g. 172" />
+                </label>
+                <label>Current Weight (kg) *
+                    <input type="number" min="20" max="300" step="0.5" @bind="_weightKg" @bind:event="oninput" placeholder="e.g. 84" />
+                </label>
+                <label>Target Weight (kg)
+                    <input type="number" min="20" max="300" step="0.5" @bind="_targetWeightKg" @bind:event="oninput" placeholder="e.g. 72" />
+                </label>
+            </div>
 
-        <div class="ld-assess-habits">
-            <label class="ld-check"><input type="checkbox" @bind="_smoking" /> <span>Smoking</span></label>
-            <label class="ld-check"><input type="checkbox" @bind="_drinking" /> <span>Drinking</span></label>
-        </div>
+            @if (CalculateBmi(_heightCm, _weightKg) is { Length: > 0 } liveBmi)
+            {
+                <div style="margin:8px 0 12px;padding:8px 12px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;display:inline-flex;align-items:center;gap:8px;">
+                    <Icon Name="Activity" Size="14" style="color:#ea580c;" />
+                    <span style="font-size:12px;color:#9a3412;font-weight:600;">Calculated BMI: <strong>@liveBmi</strong></span>
+                </div>
+            }
 
-        <div class="ld-assess-concerns">
-            <span class="ld-assess-lbl">Primary Concern</span>
-            <div class="ld-chips">
-                @foreach (var pc in LeadAssessmentOptions.PrimaryConcerns)
+            <div class="ld-assess-concerns" style="margin-top:12px;">
+                <span class="ld-assess-lbl">Fitness & Wellness Goals *</span>
+                <div class="ld-chips">
+                    @foreach (var goal in MidFitAssessmentOptions.FitnessGoals)
+                    {
+                        var item = goal;
+                        var picked = _fitnessGoals.Contains(item, StringComparer.OrdinalIgnoreCase);
+                        <button type="button" class="@($"ld-chip-opt {(picked ? "is-picked" : "")}")" @onclick="() => ToggleFitnessGoal(item)">@item</button>
+                    }
+                </div>
+            </div>
+
+            <div class="ld-assess-grid" style="margin-top:12px;">
+                <label>Diet Preference
+                    <select @bind="_dietPreference">
+                        <option value="">Select diet preference</option>
+                        @foreach (var d in MidFitAssessmentOptions.DietPreferences) { <option value="@d">@d</option> }
+                    </select>
+                </label>
+                <label class="ld-assess-wide">Activity Level
+                    <select @bind="_activityLevel">
+                        <option value="">Select activity level</option>
+                        @foreach (var a in MidFitAssessmentOptions.ActivityLevels) { <option value="@a">@a</option> }
+                    </select>
+                </label>
+            </div>
+
+            <div class="ld-assess-habits" style="margin-top:10px;">
+                <label class="ld-check"><input type="checkbox" @bind="_smoking" /> <span>Smoking</span></label>
+                <label class="ld-check"><input type="checkbox" @bind="_drinking" /> <span>Drinking</span></label>
+            </div>
+
+            <div class="ld-assess-notes-box" style="margin-top:12px;">
+                <span class="ld-assess-lbl">Medical Conditions / Doctor Observations / Notes</span>
+                <textarea rows="3" class="ld-assess-notes" maxlength="2000" placeholder="e.g. Previous knee injury, back pain, diabetes or BP history, dietary restrictions..." @bind="_assessmentNotes" @bind:event="oninput"></textarea>
+            </div>
+        }
+        else
+        {
+            @* ---- NEURAHERBEX EDIT FORM ---- *@
+            <div class="ld-assess-grid">
+                <label>Name
+                    <input type="text" maxlength="200" @bind="_name" @bind:event="oninput" placeholder="Customer name" />
+                </label>
+                <label>Age
+                    <input type="number" min="10" max="120" @bind="_age" @bind:event="oninput" placeholder="Age (e.g. 34)" />
+                </label>
+                <label>Gender
+                    <select @bind="_gender">
+                        <option value="">Select gender</option>
+                        @foreach (var g in LeadAssessmentOptions.Genders) { <option value="@g">@g</option> }
+                    </select>
+                </label>
+                <label>Marital status
+                    <select @bind="_marital">
+                        <option value="">Select marital status</option>
+                        @foreach (var m in LeadAssessmentOptions.MaritalStatuses) { <option value="@m">@m</option> }
+                    </select>
+                </label>
+                <label class="ld-assess-wide">Work type
+                    <select @bind="_workType">
+                        <option value="">Select work type</option>
+                        @foreach (var w in LeadAssessmentOptions.WorkTypes) { <option value="@w">@w</option> }
+                    </select>
+                </label>
+                <label>Problem duration
+                    <input type="text" maxlength="100" @bind="_problemDuration" @bind:event="oninput" placeholder="e.g. 6 months, 1 year" />
+                </label>
+                <label>Previous supplement usage
+                    <select @bind="_previousSupplements">
+                        <option value="">Select (Yes / No)</option>
+                        <option value="Yes">Yes</option>
+                        <option value="No">No</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="ld-assess-habits">
+                <label class="ld-check"><input type="checkbox" @bind="_smoking" /> <span>Smoking</span></label>
+                <label class="ld-check"><input type="checkbox" @bind="_drinking" /> <span>Drinking</span></label>
+            </div>
+
+            <div class="ld-assess-concerns">
+                <span class="ld-assess-lbl">Primary Concern</span>
+                <div class="ld-chips">
+                    @foreach (var pc in LeadAssessmentOptions.PrimaryConcerns)
+                    {
+                        var item = pc;
+                        var picked = _primaryConcerns.Contains(item, StringComparer.OrdinalIgnoreCase);
+                        <button type="button" class="@($"ld-chip-opt {(picked ? "is-picked" : "")}")" @onclick="() => TogglePrimaryConcern(item)">@item</button>
+                    }
+                </div>
+                @if (_primaryConcerns.Contains("Others", StringComparer.OrdinalIgnoreCase))
                 {
-                    var item = pc;
-                    var picked = _primaryConcerns.Contains(item, StringComparer.OrdinalIgnoreCase);
-                    <button type="button" class="@($"ld-chip-opt {(picked ? "is-picked" : "")}")" @onclick="() => TogglePrimaryConcern(item)">@item</button>
+                    <input type="text" maxlength="500" class="ld-assess-other" placeholder="Specify other primary concern…" @bind="_otherConcern" @bind:event="oninput" />
                 }
             </div>
-            @if (_primaryConcerns.Contains("Others", StringComparer.OrdinalIgnoreCase))
-            {
-                <input type="text" maxlength="500" class="ld-assess-other" placeholder="Specify other primary concern…" @bind="_otherConcern" @bind:event="oninput" />
-            }
-        </div>
 
-        <div class="ld-assess-concerns">
-            <span class="ld-assess-lbl">Health Conditions</span>
-            <div class="ld-chips">
-                @foreach (var hc in LeadAssessmentOptions.HealthConditions)
+            <div class="ld-assess-concerns">
+                <span class="ld-assess-lbl">Health Conditions</span>
+                <div class="ld-chips">
+                    @foreach (var hc in LeadAssessmentOptions.HealthConditions)
+                    {
+                        var item = hc;
+                        var picked = _healthConditions.Contains(item, StringComparer.OrdinalIgnoreCase);
+                        <button type="button" class="@($"ld-chip-opt {(picked ? "is-picked" : "")}")" @onclick="() => ToggleHealthCondition(item)">@item</button>
+                    }
+                </div>
+                @if (_healthConditions.Contains("Others", StringComparer.OrdinalIgnoreCase))
                 {
-                    var item = hc;
-                    var picked = _healthConditions.Contains(item, StringComparer.OrdinalIgnoreCase);
-                    <button type="button" class="@($"ld-chip-opt {(picked ? "is-picked" : "")}")" @onclick="() => ToggleHealthCondition(item)">@item</button>
+                    <input type="text" maxlength="500" class="ld-assess-other" placeholder="Specify other health condition (optional)…" @bind="_otherCondition" @bind:event="oninput" />
                 }
             </div>
-            @if (_healthConditions.Contains("Others", StringComparer.OrdinalIgnoreCase))
-            {
-                <input type="text" maxlength="500" class="ld-assess-other" placeholder="Specify other health condition (optional)…" @bind="_otherCondition" @bind:event="oninput" />
-            }
-        </div>
 
-        <div class="ld-assess-notes-box">
-            <span class="ld-assess-lbl">Remarks / Notes</span>
-            <textarea rows="3" class="ld-assess-notes" maxlength="2000" placeholder="General customer details, observations, extra notes…" @bind="_assessmentNotes" @bind:event="oninput"></textarea>
-        </div>
+            <div class="ld-assess-notes-box">
+                <span class="ld-assess-lbl">Remarks / Notes</span>
+                <textarea rows="3" class="ld-assess-notes" maxlength="2000" placeholder="General customer details, observations, extra notes…" @bind="_assessmentNotes" @bind:event="oninput"></textarea>
+            </div>
+        }
 
         @if (!string.IsNullOrEmpty(_err)) { <p class="ld-err-txt">@_err</p> }
         @if (!string.IsNullOrEmpty(_msg)) { <p class="ld-ok-txt">@_msg</p> }
@@ -173,6 +312,16 @@
     private string _name = "";
     private int? _age;
     private string _gender = "";
+
+    // MidFit Fields
+    private decimal? _heightCm;
+    private decimal? _weightKg;
+    private decimal? _targetWeightKg;
+    private HashSet<string> _fitnessGoals = new(StringComparer.OrdinalIgnoreCase);
+    private string _dietPreference = "";
+    private string _activityLevel = "";
+
+    // NeuraHerbex Fields
     private string _marital = "";
     private string _workType = "";
     private string _problemDuration = "";
@@ -195,11 +344,30 @@
         }
     }
 
+    private static string CalculateBmi(decimal? h, decimal? w)
+    {
+        if (!h.HasValue || !w.HasValue || h.Value <= 0 || w.Value <= 0) return "";
+        var m = h.Value / 100m;
+        var bmi = w.Value / (m * m);
+        var cat = bmi < 18.5m ? "Underweight" : bmi < 25m ? "Normal" : bmi < 30m ? "Overweight" : "Obese";
+        return $"{bmi:F1} ({cat})";
+    }
+
     private void SyncFromLead()
     {
         _name = Lead.Name == Lead.Phone ? "" : Lead.Name;
         _age = Lead.Age;
         _gender = Lead.Gender ?? "";
+
+        // MidFit Sync
+        _heightCm = Lead.HeightCm;
+        _weightKg = Lead.WeightKg;
+        _targetWeightKg = Lead.TargetWeightKg;
+        _fitnessGoals = new HashSet<string>(Lead.FitnessGoals ?? new(), StringComparer.OrdinalIgnoreCase);
+        _dietPreference = Lead.DietPreference ?? "";
+        _activityLevel = Lead.ActivityLevel ?? "";
+
+        // NeuraHerbex Sync
         _marital = Lead.MaritalStatus ?? "";
         _workType = Lead.WorkType ?? "";
         _problemDuration = Lead.ProblemDuration ?? "";
@@ -237,6 +405,11 @@
     private void StartEdit() { SyncFromLead(); _err = null; _msg = null; _editing = true; }
     private void CancelEdit() { SyncFromLead(); _err = null; _editing = false; }
 
+    private void ToggleFitnessGoal(string item)
+    {
+        if (!_fitnessGoals.Remove(item)) _fitnessGoals.Add(item);
+    }
+
     private void TogglePrimaryConcern(string item)
     {
         if (!_primaryConcerns.Remove(item)) _primaryConcerns.Add(item);
@@ -252,6 +425,41 @@
     private async Task SaveAsync()
     {
         _err = null; _msg = null;
+
+        if (Project.IsMidFit)
+        {
+            if (_age is null or < 10 or > 120) { _err = "Enter a valid age (10–120)."; return; }
+            if (string.IsNullOrWhiteSpace(_gender)) { _err = "Select Gender."; return; }
+            if (_heightCm is null or <= 30 or > 260) { _err = "Enter a valid height (30–260 cm)."; return; }
+            if (_weightKg is null or <= 20 or > 300) { _err = "Enter a valid current weight (20–300 kg)."; return; }
+            if (_fitnessGoals.Count == 0) { _err = "Select at least one Fitness Goal."; return; }
+
+            _busy = true;
+            var res = await Api.AdminLeadAssessmentAsync(Lead.Id, new LeadAssessmentRequest
+            {
+                IsMidFit = true,
+                Name = string.IsNullOrWhiteSpace(_name) ? null : _name.Trim(),
+                Age = _age.Value,
+                Gender = _gender,
+                HeightCm = _heightCm,
+                WeightKg = _weightKg,
+                TargetWeightKg = _targetWeightKg,
+                FitnessGoals = _fitnessGoals.ToList(),
+                DietPreference = string.IsNullOrWhiteSpace(_dietPreference) ? null : _dietPreference,
+                ActivityLevel = string.IsNullOrWhiteSpace(_activityLevel) ? null : _activityLevel,
+                AssessmentNotes = string.IsNullOrWhiteSpace(_assessmentNotes) ? null : _assessmentNotes.Trim(),
+                IsSmoking = _smoking,
+                IsDrinking = _drinking
+            });
+            _busy = false;
+            if (!res.Success) { _err = res.Message ?? "Could not save MidFit assessment."; return; }
+            _editing = false;
+            _msg = res.Message ?? "MidFit assessment saved.";
+            await OnSaved.InvokeAsync(res.Message);
+            return;
+        }
+
+        // NeuraHerbex Validation & Save
         if (_age is null or < 10 or > 120) { _err = "Enter a valid age (10–120)."; return; }
         if (string.IsNullOrWhiteSpace(_gender)) { _err = "Select Gender."; return; }
         if (string.IsNullOrWhiteSpace(_marital)) { _err = "Select Marital Status."; return; }
@@ -273,7 +481,7 @@
         }
 
         _busy = true;
-        var res = await Api.AdminLeadAssessmentAsync(Lead.Id, new LeadAssessmentRequest
+        var nuraRes = await Api.AdminLeadAssessmentAsync(Lead.Id, new LeadAssessmentRequest
         {
             Name = string.IsNullOrWhiteSpace(_name) ? null : _name.Trim(),
             Age = _age.Value,
@@ -291,9 +499,9 @@
             OtherHealthConcern = _primaryConcerns.Contains("Others", StringComparer.OrdinalIgnoreCase) ? _otherConcern.Trim() : null,
         });
         _busy = false;
-        if (!res.Success) { _err = res.Message ?? "Could not save assessment."; return; }
+        if (!nuraRes.Success) { _err = nuraRes.Message ?? "Could not save assessment."; return; }
         _editing = false;
-        _msg = res.Message ?? "Assessment saved.";
-        await OnSaved.InvokeAsync(res.Message);
+        _msg = nuraRes.Message ?? "Assessment saved.";
+        await OnSaved.InvokeAsync(nuraRes.Message);
     }
 }

@@ -1,12 +1,13 @@
 @inject ApiClient Api
 @inject AdminSession AdminAuth
+@inject ExportService Exporter
 
 <div class="fr">
     <div class="fr-bar">
         <div>
             <span class="rp-eyebrow">STAFF ANALYTICS</span>
             <h3 style="margin:4px 0 2px;font-size:20px;font-weight:700;color:#1e1b4b;">@(IsManager ? "Employee Performance Report" : "My Performance Report")</h3>
-            <p style="margin:0;font-size:12px;color:#6b7280;">Leads completed, follow-ups done, and no-answer follow-ups tracked date-wise.</p>
+            <p style="margin:0;font-size:12px;color:#6b7280;">Leads completed, follow-ups done, and no-answer follow-ups tracked date-wise. Click any number to see the full list.</p>
         </div>
 
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -56,24 +57,45 @@
     }
     else if (_data is { } r)
     {
-        <!-- Summary KPI Cards -->
+        <!-- Summary KPI Cards (Clickable to view detailed list) -->
         <div class="fr-kpis" style="margin-bottom:20px;">
-            <div class="fr-kpi" style="border-left:4px solid #10b981;">
-                <span style="color:#059669;font-weight:600;"><Icon Name="Award" Size="14" /> Leads Won (முடித்தவை)</span>
+            <div class="fr-kpi em-kpi-clickable" style="border-left:4px solid #10b981;cursor:pointer;"
+                 title="Click to view all Leads Won list"
+                 @onclick='() => OpenDrillDown("leads_won", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="color:#059669;font-weight:600;"><Icon Name="Award" Size="14" /> Leads Won (முடித்தவை)</span>
+                    <span style="font-size:10px;padding:2px 8px;border-radius:12px;background:#d1fae5;color:#065f46;font-weight:600;display:inline-flex;align-items:center;gap:3px;">
+                        List ↗
+                    </span>
+                </div>
                 <strong style="color:#065f46;">@r.TotalLeadsConverted</strong>
-                <small>Customers placed order in this period</small>
+                <small>Customers placed order in this period (click to view list)</small>
             </div>
 
-            <div class="fr-kpi" style="border-left:4px solid #8b5cf6;">
-                <span style="color:#7c3aed;font-weight:600;"><Icon Name="CheckCircle2" Size="14" /> Follow-ups Done (முடித்தவை)</span>
+            <div class="fr-kpi em-kpi-clickable" style="border-left:4px solid #8b5cf6;cursor:pointer;"
+                 title="Click to view all Follow-ups Done list"
+                 @onclick='() => OpenDrillDown("followups_done", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="color:#7c3aed;font-weight:600;"><Icon Name="CheckCircle2" Size="14" /> Follow-ups Done (முடித்தவை)</span>
+                    <span style="font-size:10px;padding:2px 8px;border-radius:12px;background:#ede9fe;color:#5b21b6;font-weight:600;display:inline-flex;align-items:center;gap:3px;">
+                        List ↗
+                    </span>
+                </div>
                 <strong style="color:#5b21b6;">@r.TotalFollowUpsDone</strong>
-                <small>Completed call / message tasks</small>
+                <small>Completed call / message tasks (click to view list)</small>
             </div>
 
-            <div class="fr-kpi" style="border-left:4px solid #f59e0b;">
-                <span style="color:#d97706;font-weight:600;"><Icon Name="PhoneMissed" Size="14" /> No Answer Follow-up</span>
+            <div class="fr-kpi em-kpi-clickable" style="border-left:4px solid #f59e0b;cursor:pointer;"
+                 title="Click to view all No Answer Follow-up list"
+                 @onclick='() => OpenDrillDown("no_answer", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="color:#d97706;font-weight:600;"><Icon Name="PhoneMissed" Size="14" /> No Answer Follow-up</span>
+                    <span style="font-size:10px;padding:2px 8px;border-radius:12px;background:#fef3c7;color:#92400e;font-weight:600;display:inline-flex;align-items:center;gap:3px;">
+                        List ↗
+                    </span>
+                </div>
                 <strong style="color:#92400e;">@r.TotalNoAnswerCount</strong>
-                <small>Calls or messages that got no answer</small>
+                <small>Calls or messages that got no answer (click to view list)</small>
             </div>
 
             <div class="fr-kpi" style="border-left:4px solid #3b82f6;">
@@ -134,9 +156,48 @@
                                     </td>
                                     <td><span style="font-size:11px;padding:2px 8px;border-radius:12px;background:#f1f5f9;color:#475569;">@emp.Designation</span></td>
                                     <td class="num">@emp.TotalLeads</td>
-                                    <td class="num font-bold" style="color:#059669;font-weight:700;">@emp.LeadsConverted</td>
-                                    <td class="num font-bold" style="color:#7c3aed;font-weight:700;">@emp.FollowUpsDone</td>
-                                    <td class="num font-bold" style="color:#d97706;font-weight:600;">@emp.NoAnswerCount</td>
+                                    <td class="num font-bold">
+                                        @if (emp.LeadsConverted > 0)
+                                        {
+                                            <span class="em-clickable-pill pill-won"
+                                                  title="Click to view @emp.Name's Won Leads"
+                                                  @onclick='() => OpenDrillDown("leads_won", emp.EmployeeId, emp.Name)'>
+                                                @emp.LeadsConverted
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:#94a3b8;">0</span>
+                                        }
+                                    </td>
+                                    <td class="num font-bold">
+                                        @if (emp.FollowUpsDone > 0)
+                                        {
+                                            <span class="em-clickable-pill pill-fu"
+                                                  title="Click to view @emp.Name's Follow-ups Done"
+                                                  @onclick='() => OpenDrillDown("followups_done", emp.EmployeeId, emp.Name)'>
+                                                @emp.FollowUpsDone
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:#94a3b8;">0</span>
+                                        }
+                                    </td>
+                                    <td class="num font-bold">
+                                        @if (emp.NoAnswerCount > 0)
+                                        {
+                                            <span class="em-clickable-pill pill-na"
+                                                  title="Click to view @emp.Name's No Answer Follow-ups"
+                                                  @onclick='() => OpenDrillDown("no_answer", emp.EmployeeId, emp.Name)'>
+                                                @emp.NoAnswerCount
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:#94a3b8;">0</span>
+                                        }
+                                    </td>
                                     <td class="num">@emp.PendingFollowUps</td>
                                     <td class="num @(emp.OverdueFollowUps > 0 ? "ld-bad" : "")">@emp.OverdueFollowUps</td>
                                     <td class="num">
@@ -151,6 +212,63 @@
                                 <tr><td colspan="10" class="em-empty">No employee performance data recorded for this period.</td></tr>
                             }
                         </tbody>
+                        @if (r.ByEmployee.Count > 0)
+                        {
+                            <tfoot>
+                                <tr style="background:#f8fafc;font-weight:700;border-top:2px solid #cbd5e1;border-bottom:2px solid #cbd5e1;">
+                                    <td class="sn" style="font-weight:700;color:#334155;">—</td>
+                                    <td style="font-weight:700;color:#1e293b;">
+                                        <div style="display:flex;align-items:center;gap:6px;">
+                                            <Icon Name="Calculator" Size="14" />
+                                            <span>TOTAL (மொத்தம்)</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span style="font-size:11px;padding:2px 8px;border-radius:12px;background:#e2e8f0;color:#334155;font-weight:600;">
+                                            @r.ByEmployee.Count Staff
+                                        </span>
+                                    </td>
+                                    <td class="num font-bold" style="font-size:13px;color:#1e293b;">
+                                        @r.ByEmployee.Sum(x => x.TotalLeads).ToString("N0")
+                                    </td>
+                                    <td class="num font-bold">
+                                        <span class="em-clickable-pill pill-won" style="font-size:13px;"
+                                              title="Click to view all Won Leads (@r.TotalLeadsConverted)"
+                                              @onclick='() => OpenDrillDown("leads_won", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                                            @r.TotalLeadsConverted.ToString("N0")
+                                        </span>
+                                    </td>
+                                    <td class="num font-bold">
+                                        <span class="em-clickable-pill pill-fu" style="font-size:13px;"
+                                              title="Click to view all Follow-ups Done (@r.TotalFollowUpsDone)"
+                                              @onclick='() => OpenDrillDown("followups_done", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                                            @r.TotalFollowUpsDone.ToString("N0")
+                                        </span>
+                                    </td>
+                                    <td class="num font-bold">
+                                        <span class="em-clickable-pill pill-na" style="font-size:13px;"
+                                              title="Click to view all No Answer Follow-ups (@r.TotalNoAnswerCount)"
+                                              @onclick='() => OpenDrillDown("no_answer", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                                            @r.TotalNoAnswerCount.ToString("N0")
+                                        </span>
+                                    </td>
+                                    <td class="num font-bold" style="font-size:13px;color:#475569;">
+                                        @r.ByEmployee.Sum(x => x.PendingFollowUps).ToString("N0")
+                                    </td>
+                                    <td class="num font-bold" style="font-size:13px;color:@(r.ByEmployee.Sum(x => x.OverdueFollowUps) > 0 ? "#dc2626" : "#475569");">
+                                        @r.ByEmployee.Sum(x => x.OverdueFollowUps).ToString("N0")
+                                    </td>
+                                    <td class="num font-bold" style="font-size:13px;color:#4338ca;">
+                                        @{
+                                            var totLeads = r.ByEmployee.Sum(x => x.TotalLeads);
+                                            var totWon = r.TotalLeadsConverted;
+                                            var overallRate = totLeads > 0 ? Math.Round((decimal)totWon * 100m / totLeads, 1) : 0m;
+                                        }
+                                        @overallRate%
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        }
                     </table>
                 </div>
             </div>
@@ -179,9 +297,48 @@
                                     <td class="sn">@(++dsn)</td>
                                     <td><strong>@day.Date</strong></td>
                                     <td>@day.EmployeeName</td>
-                                    <td class="num font-bold" style="color:#059669;font-weight:700;">@day.LeadsConverted</td>
-                                    <td class="num font-bold" style="color:#7c3aed;font-weight:700;">@day.FollowUpsDone</td>
-                                    <td class="num font-bold" style="color:#d97706;font-weight:600;">@day.NoAnswerCount</td>
+                                    <td class="num font-bold">
+                                        @if (day.LeadsConverted > 0)
+                                        {
+                                            <span class="em-clickable-pill pill-won"
+                                                  title="Click to view @day.EmployeeName's Won Leads on @day.Date"
+                                                  @onclick='() => OpenDrillDown("leads_won", day.EmployeeId, $"{day.EmployeeName} ({day.Date})", date: day.Date)'>
+                                                @day.LeadsConverted
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:#94a3b8;">0</span>
+                                        }
+                                    </td>
+                                    <td class="num font-bold">
+                                        @if (day.FollowUpsDone > 0)
+                                        {
+                                            <span class="em-clickable-pill pill-fu"
+                                                  title="Click to view @day.EmployeeName's Follow-ups Done on @day.Date"
+                                                  @onclick='() => OpenDrillDown("followups_done", day.EmployeeId, $"{day.EmployeeName} ({day.Date})", date: day.Date)'>
+                                                @day.FollowUpsDone
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:#94a3b8;">0</span>
+                                        }
+                                    </td>
+                                    <td class="num font-bold">
+                                        @if (day.NoAnswerCount > 0)
+                                        {
+                                            <span class="em-clickable-pill pill-na"
+                                                  title="Click to view @day.EmployeeName's No Answer Follow-ups on @day.Date"
+                                                  @onclick='() => OpenDrillDown("no_answer", day.EmployeeId, $"{day.EmployeeName} ({day.Date})", date: day.Date)'>
+                                                @day.NoAnswerCount
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:#94a3b8;">0</span>
+                                        }
+                                    </td>
                                 </tr>
                             }
                             @if (r.DailyBreakdown.Count == 0)
@@ -189,12 +346,277 @@
                                 <tr><td colspan="6" class="em-empty">No daily activity recorded for this period.</td></tr>
                             }
                         </tbody>
+                        @if (r.DailyBreakdown.Count > 0)
+                        {
+                            <tfoot>
+                                <tr style="background:#f8fafc;font-weight:700;border-top:2px solid #cbd5e1;border-bottom:2px solid #cbd5e1;">
+                                    <td class="sn" style="font-weight:700;color:#334155;">—</td>
+                                    <td style="font-weight:700;color:#1e293b;">TOTAL (மொத்தம்)</td>
+                                    <td>
+                                        <span style="font-size:11px;padding:2px 8px;border-radius:12px;background:#e2e8f0;color:#334155;font-weight:600;">
+                                            @r.DailyBreakdown.Select(x => x.Date).Distinct().Count() Days
+                                        </span>
+                                    </td>
+                                    <td class="num font-bold">
+                                        <span class="em-clickable-pill pill-won" style="font-size:13px;"
+                                              title="Click to view all Won Leads"
+                                              @onclick='() => OpenDrillDown("leads_won", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                                            @r.DailyBreakdown.Sum(x => x.LeadsConverted).ToString("N0")
+                                        </span>
+                                    </td>
+                                    <td class="num font-bold">
+                                        <span class="em-clickable-pill pill-fu" style="font-size:13px;"
+                                              title="Click to view all Follow-ups Done"
+                                              @onclick='() => OpenDrillDown("followups_done", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                                            @r.DailyBreakdown.Sum(x => x.FollowUpsDone).ToString("N0")
+                                        </span>
+                                    </td>
+                                    <td class="num font-bold">
+                                        <span class="em-clickable-pill pill-na" style="font-size:13px;"
+                                              title="Click to view all No Answer Follow-ups"
+                                              @onclick='() => OpenDrillDown("no_answer", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                                            @r.DailyBreakdown.Sum(x => x.NoAnswerCount).ToString("N0")
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        }
                     </table>
                 </div>
             </div>
         }
     }
 </div>
+
+@* ---- DRILL DOWN LIST MODAL POPUP ---- *@
+@if (_drillDownOpen)
+{
+    <div class="em-modal-backdrop" @onclick="CloseDrillDown">
+        <div class="em-modal-card" @onclick:stopPropagation>
+            <!-- Modal Header -->
+            <div style="border-bottom:1px solid #e2e8f0;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border-radius:12px 12px 0 0;">
+                <div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <span style="display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;@HeaderBadgeStyle(_drillDownType)">
+                            <Icon Name="@HeaderIconName(_drillDownType)" Size="14" />
+                            @_drillDownTitle
+                        </span>
+                        @if (!string.IsNullOrEmpty(_drillDownEmployeeName))
+                        {
+                            <span style="font-size:13px;font-weight:600;color:#334155;">· @_drillDownEmployeeName</span>
+                        }
+                    </div>
+                    <p style="margin:4px 0 0;font-size:11px;color:#64748b;">
+                        Period: <strong>@RangeSummary</strong>
+                        @if (!string.IsNullOrEmpty(_drillDownDate))
+                        {
+                            <span> (Date: <strong>@_drillDownDate</strong>)</span>
+                        }
+                    </p>
+                </div>
+                <button type="button" class="ld-btn-icon" style="background:none;border:none;cursor:pointer;color:#64748b;padding:6px;border-radius:6px;" @onclick="CloseDrillDown" title="Close">
+                    <Icon Name="X" Size="18" />
+                </button>
+            </div>
+
+            <!-- Toolbar: Search & Export -->
+            <div style="padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #f1f5f9;background:#fff;">
+                <div class="admin-search" style="position:relative;display:flex;align-items:center;flex:1;max-width:340px;margin:0;">
+                    <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;color:#94a3b8;pointer-events:none;z-index:2;">
+                        <Icon Name="Search" Size="15" />
+                    </span>
+                    <input type="text"
+                           placeholder="Search customer, phone, notes…"
+                           value="@_drillDownFilter"
+                           @oninput="e => _drillDownFilter = e.Value?.ToString() ?? string.Empty"
+                           style="padding-left:36px !important;padding-right:28px !important;font-size:12px;height:36px;border-radius:8px;width:100%;border:1px solid #cbd5e1;background:#fff;" />
+                    @if (!string.IsNullOrEmpty(_drillDownFilter))
+                    {
+                        <button type="button"
+                                style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;display:inline-flex;align-items:center;padding:4px;border-radius:4px;"
+                                @onclick="() => _drillDownFilter = string.Empty"
+                                title="Clear search">
+                            <Icon Name="X" Size="12" />
+                        </button>
+                    }
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="font-size:12px;color:#64748b;font-weight:500;">
+                        Showing <strong>@FilteredDrillDownItems.Count</strong> of @(_drillDownData?.Items.Count ?? 0)
+                    </span>
+                    <button type="button" class="ld-btn outline" style="padding:4px 12px;font-size:11px;height:32px;display:inline-flex;align-items:center;gap:5px;"
+                            @onclick="ExportDrillDownCsv" disabled="@(FilteredDrillDownItems.Count == 0)">
+                        <Icon Name="Download" Size="13" /> Export CSV
+                    </button>
+                </div>
+            </div>
+
+            <!-- Table Body -->
+            <div style="max-height:55vh;overflow-y:auto;padding:0 20px 20px;">
+                @if (_drillDownLoading)
+                {
+                    <div style="text-align:center;padding:48px 0;color:#64748b;">
+                        <Icon Name="Loader2" Size="26" Class="animate-spin" />
+                        <p style="margin-top:10px;font-size:13px;font-weight:500;">Loading list details…</p>
+                    </div>
+                }
+                else if (!string.IsNullOrEmpty(_drillDownError))
+                {
+                    <div class="em-note bad" style="margin:20px 0;" role="alert">
+                        <Icon Name="AlertCircle" Size="15" />
+                        <span>@_drillDownError</span>
+                    </div>
+                }
+                else if (FilteredDrillDownItems.Count == 0)
+                {
+                    <div style="text-align:center;padding:48px 0;color:#94a3b8;">
+                        <Icon Name="Inbox" Size="28" />
+                        <p style="margin-top:8px;font-size:13px;">No records match your criteria.</p>
+                    </div>
+                }
+                else
+                {
+                    <table class="em-table" style="font-size:12px;margin-top:12px;">
+                        <thead>
+                            <tr style="position:sticky;top:0;background:#fff;z-index:2;box-shadow:0 1px 0 #e2e8f0;">
+                                <th class="sn">S.No</th>
+                                <th>Customer / Lead</th>
+                                <th>Phone</th>
+                                <th>Date & Time</th>
+                                <th>Staff (Employee)</th>
+                                <th>Status / Outcome</th>
+                                @if (_drillDownType == "leads_won")
+                                {
+                                    <th class="num">Order Amount</th>
+                                }
+                                <th>Notes / Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{ var itemSn = 0; }
+                            @foreach (var it in FilteredDrillDownItems)
+                            {
+                                <tr>
+                                    <td class="sn">@(++itemSn)</td>
+                                    <td>
+                                        <strong>@it.LeadName</strong>
+                                        @if (!string.IsNullOrEmpty(it.Source))
+                                        {
+                                            <span style="font-size:10px;padding:1px 6px;border-radius:8px;background:#f1f5f9;color:#64748b;margin-left:4px;">@it.Source</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div style="display:flex;align-items:center;gap:6px;">
+                                            <a href="@($"https://wa.me/{it.LeadPhone}")" target="_blank" style="color:#059669;display:inline-flex;align-items:center;gap:3px;font-weight:600;text-decoration:none;" title="Open WhatsApp chat">
+                                                <Icon Name="MessageCircle" Size="12" />
+                                                <span>@it.LeadPhone</span>
+                                            </a>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div><strong>@it.Date</strong></div>
+                                        <div style="font-size:11px;color:#64748b;">@it.Time</div>
+                                    </td>
+                                    <td>
+                                        <span style="font-weight:600;color:#334155;">@it.EmployeeName</span>
+                                    </td>
+                                    <td>
+                                        <span style="display:inline-flex;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;@OutcomeBadgeStyle(_drillDownType, it.Outcome)">
+                                            @it.Outcome
+                                        </span>
+                                    </td>
+                                    @if (_drillDownType == "leads_won")
+                                    {
+                                        <td class="num font-bold" style="color:#059669;">
+                                            @(it.OrderTotal is { } amt ? "₹" + amt.ToString("N0") : (string.IsNullOrEmpty(it.OrderId) ? "—" : it.OrderId))
+                                        </td>
+                                    }
+                                    <td style="max-width:260px;font-size:11px;color:#475569;white-space:normal;word-break:break-word;">
+                                        @(string.IsNullOrWhiteSpace(it.Notes) ? "—" : it.Notes)
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+
+            <!-- Modal Footer -->
+            <div style="border-top:1px solid #e2e8f0;padding:12px 20px;display:flex;align-items:center;justify-content:flex-end;background:#f8fafc;border-radius:0 0 12px 12px;">
+                <button type="button" class="ld-btn primary" style="padding:6px 20px;font-size:12px;" @onclick="CloseDrillDown">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .em-kpi-clickable {
+        transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+        position: relative;
+    }
+    .em-kpi-clickable:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 14px rgba(0,0,0,0.08) !important;
+    }
+    .em-clickable-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        padding: 3px 8px;
+        border-radius: 6px;
+        transition: all 0.15s ease;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        cursor: pointer;
+        font-weight: 700;
+    }
+    .em-clickable-pill:hover {
+        transform: scale(1.08);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.12);
+        filter: brightness(0.95);
+    }
+    .pill-won {
+        background: #d1fae5;
+        color: #065f46;
+    }
+    .pill-fu {
+        background: #ede9fe;
+        color: #5b21b6;
+    }
+    .pill-na {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    .em-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.65);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        padding: 16px;
+    }
+    .em-modal-card {
+        background: #ffffff;
+        border-radius: 12px;
+        width: 100%;
+        max-width: 980px;
+        max-height: 85vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.08);
+        animation: emModalIn 0.15s ease-out;
+    }
+    @@keyframes emModalIn {
+        from { opacity: 0; transform: scale(0.97); }
+        to { opacity: 1; transform: scale(1); }
+    }
+</style>
 
 @code {
     private bool IsManager => AdminAuth.CanAll("reports") || AdminAuth.CanAll("leads") || AdminAuth.CanAll("followups");
@@ -211,11 +633,44 @@
     private string _from = "";
     private string _to = "";
 
+    // Drill-Down Modal State
+    private bool _drillDownOpen;
+    private bool _drillDownLoading;
+    private string? _drillDownError;
+    private string _drillDownType = ""; // "leads_won" | "followups_done" | "no_answer"
+    private string _drillDownTitle = "";
+    private string? _drillDownEmployeeName;
+    private string? _drillDownDate;
+    private string _drillDownFilter = "";
+    private EmployeePerformanceDetailResponse? _drillDownData;
+
     private sealed record EmployeeOption(long Id, string Name, string Role);
+
+    private string CurrentFilterEmployeeLabel => _selectedEmployeeId is { } eid
+        ? _employees.FirstOrDefault(e => e.Id == eid)?.Name ?? "Selected Employee"
+        : "All Employees";
 
     private string RangeSummary => _isCustom
         ? $"{_from} to {_to}"
         : $"{_days} Days ({_from} to {_to})";
+
+    private List<EmployeePerformanceDetailItemDto> FilteredDrillDownItems
+    {
+        get
+        {
+            if (_drillDownData is null || _drillDownData.Items.Count == 0) return new();
+            if (string.IsNullOrWhiteSpace(_drillDownFilter)) return _drillDownData.Items;
+            var term = _drillDownFilter.Trim().ToLowerInvariant();
+            return _drillDownData.Items.Where(it =>
+                it.LeadName.ToLowerInvariant().Contains(term) ||
+                it.LeadPhone.Contains(term) ||
+                it.EmployeeName.ToLowerInvariant().Contains(term) ||
+                it.Outcome.ToLowerInvariant().Contains(term) ||
+                it.Notes.ToLowerInvariant().Contains(term) ||
+                (it.OrderId != null && it.OrderId.ToLowerInvariant().Contains(term))
+            ).ToList();
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -243,7 +698,7 @@
             var res = await Api.AdminEmployeesAsync();
             if (res.Success && res.Employees is not null)
             {
-                _employees = res.Employees.Select(e => new EmployeeOption(e.Id, e.Name, e.Role ?? "")).ToList();
+                _employees = res.Employees.Where(e => e.IsActive).Select(e => new EmployeeOption(e.Id, e.Name, e.Role ?? "")).ToList();
             }
         }
         catch
@@ -297,6 +752,120 @@
         {
             _loading = false;
         }
+    }
+
+    private async Task OpenDrillDown(string type, long? employeeId, string? employeeName, string? date = null)
+    {
+        _drillDownOpen = true;
+        _drillDownLoading = true;
+        _drillDownError = null;
+        _drillDownFilter = "";
+        _drillDownType = type;
+        _drillDownEmployeeName = employeeName;
+        _drillDownDate = date;
+
+        _drillDownTitle = type switch
+        {
+            "leads_won" => "Leads Won (முடித்தவை)",
+            "followups_done" => "Follow-ups Done (முடித்தவை)",
+            "no_answer" => "No Answer Follow-up",
+            _ => "Details"
+        };
+
+        try
+        {
+            var res = await Api.AdminEmployeePerformanceDetailsAsync(type, from: _from, to: _to, employeeId: employeeId, date: date);
+            if (res.Success)
+            {
+                _drillDownData = res;
+            }
+            else
+            {
+                _drillDownError = res.Message ?? "Failed to load details.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _drillDownError = ex.Message;
+        }
+        finally
+        {
+            _drillDownLoading = false;
+        }
+    }
+
+    private void CloseDrillDown()
+    {
+        _drillDownOpen = false;
+        _drillDownData = null;
+    }
+
+    private async Task ExportDrillDownCsv()
+    {
+        if (_drillDownData is null || FilteredDrillDownItems.Count == 0) return;
+        var cols = _drillDownType == "leads_won"
+            ? new[] { "S.No", "Customer Name", "Phone", "Date", "Time", "Handled By", "Status", "Order Total (₹)", "Notes" }
+            : new[] { "S.No", "Customer Name", "Phone", "Date", "Time", "Handled By", "Outcome", "Source / Type", "Notes" };
+
+        var rows = FilteredDrillDownItems.Select((it, i) => (IReadOnlyList<string>)(_drillDownType == "leads_won"
+            ? new[]
+            {
+                (i + 1).ToString(),
+                it.LeadName,
+                it.LeadPhone,
+                it.Date,
+                it.Time,
+                it.EmployeeName,
+                it.Outcome,
+                it.OrderTotal?.ToString("N0") ?? it.OrderId ?? "",
+                it.Notes
+            }
+            : new[]
+            {
+                (i + 1).ToString(),
+                it.LeadName,
+                it.LeadPhone,
+                it.Date,
+                it.Time,
+                it.EmployeeName,
+                it.Outcome,
+                it.Source ?? "",
+                it.Notes
+            })).ToList();
+
+        var title = $"{_drillDownTitle} - {_drillDownEmployeeName ?? "All"}";
+        var fileName = $"nura-{_drillDownType}-{_from}-{_to}";
+        await Exporter.RunAsync("csv", fileName, title, cols, rows);
+    }
+
+    private static string HeaderBadgeStyle(string type) => type switch
+    {
+        "leads_won" => "background:#d1fae5;color:#065f46;",
+        "followups_done" => "background:#ede9fe;color:#5b21b6;",
+        "no_answer" => "background:#fef3c7;color:#92400e;",
+        _ => "background:#e2e8f0;color:#334155;"
+    };
+
+    private static string HeaderIconName(string type) => type switch
+    {
+        "leads_won" => "Award",
+        "followups_done" => "CheckCircle2",
+        "no_answer" => "PhoneMissed",
+        _ => "List"
+    };
+
+    private static string OutcomeBadgeStyle(string type, string outcome)
+    {
+        if (type == "leads_won") return "background:#d1fae5;color:#065f46;";
+        if (type == "no_answer") return "background:#fef3c7;color:#92400e;";
+        var norm = outcome.ToLowerInvariant();
+        if (norm.Contains("order") || norm.Contains("convert") || norm.Contains("interested"))
+            return "background:#d1fae5;color:#065f46;";
+        if (norm.Contains("no answer") || norm.Contains("callback") || norm.Contains("busy"))
+            return "background:#fef3c7;color:#92400e;";
+        if (norm.Contains("cancel") || norm.Contains("lost") || norm.Contains("not interested"))
+            return "background:#fee2e2;color:#991b1b;";
+        return "background:#ede9fe;color:#5b21b6;";
     }
 
     private string[] ExportColumns => _viewMode == "summary"

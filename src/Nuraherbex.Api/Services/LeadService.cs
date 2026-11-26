@@ -747,6 +747,45 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
     {
         var lead = await db.Leads.FirstOrDefaultAsync(l => l.Id == id);
         if (lead is null) return (false, "Lead not found");
+        var now = DateTime.UtcNow;
+
+        var isMidFitAssessment = r.IsMidFit || r.HeightCm.HasValue || r.WeightKg.HasValue || (r.FitnessGoals is { Count: > 0 });
+
+        if (isMidFitAssessment)
+        {
+            if (r.Age is < 10 or > 120) return (false, "Enter a valid age between 10 and 120.");
+            if (string.IsNullOrWhiteSpace(r.Gender)) return (false, "Select Gender.");
+            if (r.HeightCm is <= 30 or > 260) return (false, "Enter a valid height between 30 and 260 cm.");
+            if (r.WeightKg is <= 20 or > 300) return (false, "Enter a valid weight between 20 and 300 kg.");
+            if ((r.FitnessGoals == null || r.FitnessGoals.Count == 0) && (r.PrimaryConcerns == null || r.PrimaryConcerns.Count == 0))
+                return (false, "Select at least one fitness goal.");
+
+            if (!string.IsNullOrWhiteSpace(r.Name))
+                lead.Name = Truncate(r.Name.Trim(), 200)!;
+            lead.Age = r.Age;
+            lead.Gender = Truncate(r.Gender.Trim(), 32);
+            lead.HeightCm = r.HeightCm;
+            lead.WeightKg = r.WeightKg;
+            lead.TargetWeightKg = r.TargetWeightKg;
+            lead.FitnessGoals = (r.FitnessGoals ?? new()).Where(g => !string.IsNullOrWhiteSpace(g)).Select(g => g.Trim()).Distinct().ToList();
+            lead.DietPreference = Truncate(r.DietPreference?.Trim(), 64);
+            lead.ActivityLevel = Truncate(r.ActivityLevel?.Trim(), 64);
+            lead.AssessmentNotes = Truncate(r.AssessmentNotes?.Trim(), 2000);
+            if (!string.IsNullOrWhiteSpace(r.AssessmentNotes) && string.IsNullOrWhiteSpace(lead.Notes))
+                lead.Notes = Truncate(r.AssessmentNotes.Trim(), 2000);
+
+            if (!string.IsNullOrWhiteSpace(r.MaritalStatus)) lead.MaritalStatus = Truncate(r.MaritalStatus.Trim(), 32);
+            if (!string.IsNullOrWhiteSpace(r.WorkType)) lead.WorkType = Truncate(r.WorkType.Trim(), 64);
+            lead.IsSmoking = r.IsSmoking;
+            lead.IsDrinking = r.IsDrinking;
+
+            lead.HasAssessment = true;
+            lead.AssessmentUpdatedAt = now;
+            lead.UpdatedAt = now;
+            await db.SaveChangesAsync();
+            return (true, "MidFit assessment saved successfully. Notes are now unlocked.");
+        }
+
         if (r.Age is < 10 or > 120) return (false, "Enter a valid age between 10 and 120.");
         if (string.IsNullOrWhiteSpace(r.Gender)) return (false, "Select Gender.");
         if (string.IsNullOrWhiteSpace(r.MaritalStatus)) return (false, "Select Marital Status.");
@@ -772,7 +811,7 @@ public class LeadService(NuraDbContext db, IOptions<WhatsAppOptions> options, IL
         if (primary.Contains("Others", StringComparer.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(r.OtherHealthConcern))
             return (false, "Specify the health concern in the 'Others' box.");
 
-        var now = DateTime.UtcNow;
+        now = DateTime.UtcNow;
         if (!string.IsNullOrWhiteSpace(r.Name))
             lead.Name = Truncate(r.Name.Trim(), 200)!;
         lead.Age = r.Age;

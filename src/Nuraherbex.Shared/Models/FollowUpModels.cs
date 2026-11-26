@@ -437,3 +437,30 @@ public class EmployeePerformanceReportResponse : ApiResult
     public List<EmployeeDailyPerformanceDto> DailyBreakdown { get; set; } = new();
 }
 
+public class EmployeePerformanceDetailItemDto
+{
+    public long Id { get; set; }
+    public long LeadId { get; set; }
+    public string LeadName { get; set; } = "";
+    public string LeadPhone { get; set; } = "";
+    public string EmployeeName { get; set; } = "";
+    public string Date { get; set; } = "";
+    public string Time { get; set; } = "";
+    public string Outcome { get; set; } = "";
+    public string Notes { get; set; } = "";
+    public string? Source { get; set; }
+    public string? OrderId { get; set; }
+    public decimal? OrderTotal { get; set; }
+}
+
+public class EmployeePerformanceDetailResponse : ApiResult
+{
+    public string Type { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Period { get; set; } = "";
+    public string? EmployeeName { get; set; }
+    public int TotalCount { get; set; }
+    public List<EmployeePerformanceDetailItemDto> Items { get; set; } = new();
+}
+
+
