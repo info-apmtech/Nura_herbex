@@ -59,11 +59,11 @@ else
             else if (_activeTab == "crm") { <AdminCrmDashboard /> }
             else if (_activeTab == "leads") { <AdminLeadsTab Mode="leads" /> }
             else if (_activeTab == "transfers") { <AdminLeadsTab Mode="transfers" /> }
-            else if (_activeTab == "no_answer") { <AdminLeadsTab Mode="no_answer" /> }
-            else if (_activeTab == "interested") { <AdminLeadsTab Mode="interested" /> }
+            else if (_activeTab == "no_answer") { <AdminFollowUpsTab @key="@("no_answer")" Category="no_answer" /> }
+            else if (_activeTab == "interested") { <AdminFollowUpsTab @key="@("interested")" Category="hot" /> }
             else if (_activeTab == "care") { <AdminLeadsTab Mode="care" /> }
             else if (_activeTab == "campaigns") { <AdminAdsDashboard /> }
-            else if (_activeTab == "followups") { <AdminFollowUpsTab /> }
+            else if (_activeTab == "followups") { <AdminFollowUpsTab @key="@("followups")" Category="normal" /> }
             else if (_activeTab == "bulk_messages") { <AdminBulkMessagesTab /> }
             else if (_activeTab == "drive_files") { <AdminDriveTab /> }
             else if (_activeTab == "whatsapp") { <AdminWhatsAppTab /> }
@@ -145,7 +145,7 @@ else
     /// <summary>Only the pages this person's designation allows. People who only see their own records get "My" wording.</summary>
     private NavItem[] Navigation => AllPages
         .Where(p => Project.IsMidFit ? !NeuraHerbexOnlyPages.Contains(p.Id) : !MidFitOnlyPages.Contains(p.Id))
-        .Where(p => AdminAuth.Can(p.Id) || (Project.IsMidFit && p.Id is "doctor_portal" or "doctor_completed") || (p.Id is "no_answer" or "transfers" or "interested" && (AdminAuth.Can("no_answer") || AdminAuth.Can("leads") || AdminAuth.Can("interested"))) || (p.Id == "stock" && (AdminAuth.Can("stock") || AdminAuth.Can("products") || AdminAuth.IsAdmin)) || (p.Id == "employee_report" && (AdminAuth.Can("employee_report") || AdminAuth.Can("reports") || AdminAuth.Can("leads") || AdminAuth.Can("followups"))) || (p.Id == "reports" && (AdminAuth.Can("leads") || AdminAuth.Can("followups") || AdminAuth.Can("tasks")))).Select(p => p.Id switch
+        .Where(p => AdminAuth.Can(p.Id) || (Project.IsMidFit && p.Id is "doctor_portal" or "doctor_completed") || (p.Id is "no_answer" or "transfers" or "interested" && (AdminAuth.Can("no_answer") || AdminAuth.Can("leads") || AdminAuth.Can("interested") || AdminAuth.Can("followups"))) || (p.Id == "stock" && (AdminAuth.Can("stock") || AdminAuth.Can("products") || AdminAuth.IsAdmin)) || (p.Id == "employee_report" && (AdminAuth.Can("employee_report") || AdminAuth.Can("reports") || AdminAuth.Can("leads") || AdminAuth.Can("followups"))) || (p.Id == "reports" && (AdminAuth.Can("leads") || AdminAuth.Can("followups") || AdminAuth.Can("tasks")))).Select(p => p.Id switch
     {
         "crm" when !AdminAuth.CanAll("crm") => p with { Label = "My dashboard" },
         "leads" when !AdminAuth.CanAll("leads") => p with { Label = "My leads" },
@@ -240,10 +240,30 @@ else
         }
         if (AdminAuth.Can("followups"))
         {
-            var r = await Api.AdminFollowUpsAsync();
+            var r = await Api.AdminFollowUpsAsync(category: "normal");
             var due = r.Counts.Overdue + r.Counts.Today;
             if (r.Success && due > 0)
                 next["followups"] = new NavBadge(due, r.Counts.Overdue > 0, $"{r.Counts.Overdue} overdue, {r.Counts.Today} due today");
+        }
+        if (AdminAuth.Can("no_answer") || AdminAuth.Can("leads") || AdminAuth.Can("followups"))
+        {
+            var rNa = await Api.AdminFollowUpsAsync(category: "no_answer");
+            if (rNa.Success)
+            {
+                var due = rNa.Counts.Overdue + rNa.Counts.Today;
+                if (due > 0)
+                    next["no_answer"] = new NavBadge(due, rNa.Counts.Overdue > 0, $"{rNa.Counts.Overdue} overdue, {rNa.Counts.Today} due today");
+            }
+        }
+        if (AdminAuth.Can("interested") || AdminAuth.Can("followups"))
+        {
+            var rHot = await Api.AdminFollowUpsAsync(category: "hot");
+            if (rHot.Success)
+            {
+                var due = rHot.Counts.Overdue + rHot.Counts.Today;
+                if (due > 0)
+                    next["interested"] = new NavBadge(due, rHot.Counts.Overdue > 0, $"{rHot.Counts.Overdue} overdue, {rHot.Counts.Today} due today");
+            }
         }
         if (AdminAuth.Can("tasks"))
         {

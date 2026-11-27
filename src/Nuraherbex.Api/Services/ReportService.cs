@@ -57,7 +57,7 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
         var perf = await EmployeePerformanceAsync(from, to, periodLabel, employeeId);
         return new ReportResponse
         {
-            Columns = ["Employee", "Role", "Designation", "Total Leads", "Leads Won", "Follow-ups Done", "No Answer Follow-up", "Pending", "Overdue", "Win Rate %"],
+            Columns = ["Employee", "Role", "Designation", "Total Leads", "Orders Booked", "Follow-ups Done", "No Answer Follow-up", "Hot Leads (Interested)", "Not Interested", "Pending", "Overdue", "Win Rate %"],
             Rows = perf.ByEmployee.Select(e => new List<string>
             {
                 e.Name,
@@ -67,15 +67,19 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
                 e.LeadsConverted.ToString(Inv),
                 e.FollowUpsDone.ToString(Inv),
                 e.NoAnswerCount.ToString(Inv),
+                e.InterestedCount.ToString(Inv),
+                e.NotInterestedCount.ToString(Inv),
                 e.PendingFollowUps.ToString(Inv),
                 e.OverdueFollowUps.ToString(Inv),
                 $"{e.WinRatePercent}%"
             }).ToList(),
             Summary =
             [
-                S("Leads Won", perf.TotalLeadsConverted, "Customers placed order in this period", "good"),
+                S("Orders Booked", perf.TotalLeadsConverted, "Customers placed orders in this period", "good"),
                 S("Follow-ups Done", perf.TotalFollowUpsDone, "Completed call / message tasks", "good"),
+                S("Hot Leads", perf.TotalInterestedCount, "Customers interested to buy", "good"),
                 S("No Answer", perf.TotalNoAnswerCount, "Calls or messages with no answer", "warn"),
+                S("Not Interested", perf.TotalNotInterestedCount, "Customers not interested", "neutral"),
                 S("Active Staff", perf.ByEmployee.Count, "Employees in this report period", "neutral")
             ]
         };
@@ -338,19 +342,31 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
             .GroupBy(l => l.EmployeeId)
             .ToDictionary(g => g.Key, g => g.Count());
 
-        // 3. Follow-ups completed within period (Follow-up ethana mudichirukanga)
+        // 3. Follow-ups completed within period (Connected / Responded only - No answer excluded)
         var doneFollowUps = await db.FollowUps.AsNoTracking()
             .Where(f => f.Status == FollowUpStatus.Done && f.CompletedAt >= fromUtc && f.CompletedAt < toUtc && f.AssignedToEmployeeId != null && empIds.Contains(f.AssignedToEmployeeId.Value))
             .Select(f => new { f.Id, EmployeeId = f.AssignedToEmployeeId!.Value, f.Outcome, f.CompletedAt })
             .ToListAsync();
 
+        // Follow-ups Done: No answer varakoodathu; call panni reply pannavanga (connected calls) mattum thaan varanum
         var doneByEmp = doneFollowUps
+            .Where(f => !IsNoAnswer(f.Outcome))
             .GroupBy(f => f.EmployeeId)
             .ToDictionary(g => g.Key, g => g.Count());
 
-        // 4. No Answer follow-ups within period
+        // 4. Outcomes breakdown within period
         var noAnswerByEmp = doneFollowUps
             .Where(f => IsNoAnswer(f.Outcome))
+            .GroupBy(f => f.EmployeeId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var interestedByEmp = doneFollowUps
+            .Where(f => IsInterested(f.Outcome))
+            .GroupBy(f => f.EmployeeId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var notInterestedByEmp = doneFollowUps
+            .Where(f => IsNotInterested(f.Outcome))
             .GroupBy(f => f.EmployeeId)
             .ToDictionary(g => g.Key, g => g.Count());
 
@@ -376,6 +392,8 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
             var won = convertedByEmp.GetValueOrDefault(emp.Id, 0);
             var fuDone = doneByEmp.GetValueOrDefault(emp.Id, 0);
             var naCount = noAnswerByEmp.GetValueOrDefault(emp.Id, 0);
+            var intCount = interestedByEmp.GetValueOrDefault(emp.Id, 0);
+            var notIntCount = notInterestedByEmp.GetValueOrDefault(emp.Id, 0);
             var pend = pendingByEmp.GetValueOrDefault(emp.Id, 0);
             var over = overdueByEmp.GetValueOrDefault(emp.Id, 0);
             var winRate = assigned > 0 ? Math.Round((decimal)won * 100m / assigned, 1) : 0m;
@@ -390,6 +408,8 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
                 LeadsConverted = won,
                 FollowUpsDone = fuDone,
                 NoAnswerCount = naCount,
+                InterestedCount = intCount,
+                NotInterestedCount = notIntCount,
                 PendingFollowUps = pend,
                 OverdueFollowUps = over,
                 WinRatePercent = winRate,
@@ -405,7 +425,7 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
             .ToDictionary(g => g.Key, g => g.Count());
 
         var doneByDateEmp = doneFollowUps
-            .Where(f => f.CompletedAt != null)
+            .Where(f => f.CompletedAt != null && !IsNoAnswer(f.Outcome))
             .GroupBy(f => (Date: FollowUpService.ToIst(f.CompletedAt!.Value).ToString("yyyy-MM-dd"), f.EmployeeId))
             .ToDictionary(g => g.Key, g => g.Count());
 
@@ -414,9 +434,21 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
             .GroupBy(f => (Date: FollowUpService.ToIst(f.CompletedAt!.Value).ToString("yyyy-MM-dd"), f.EmployeeId))
             .ToDictionary(g => g.Key, g => g.Count());
 
+        var intByDateEmp = doneFollowUps
+            .Where(f => f.CompletedAt != null && IsInterested(f.Outcome))
+            .GroupBy(f => (Date: FollowUpService.ToIst(f.CompletedAt!.Value).ToString("yyyy-MM-dd"), f.EmployeeId))
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var notIntByDateEmp = doneFollowUps
+            .Where(f => f.CompletedAt != null && IsNotInterested(f.Outcome))
+            .GroupBy(f => (Date: FollowUpService.ToIst(f.CompletedAt!.Value).ToString("yyyy-MM-dd"), f.EmployeeId))
+            .ToDictionary(g => g.Key, g => g.Count());
+
         var allDateEmpKeys = convByDateEmp.Keys
             .Union(doneByDateEmp.Keys)
             .Union(naByDateEmp.Keys)
+            .Union(intByDateEmp.Keys)
+            .Union(notIntByDateEmp.Keys)
             .OrderByDescending(k => k.Date)
             .ThenBy(k => empNames.GetValueOrDefault(k.EmployeeId, ""))
             .ToList();
@@ -430,7 +462,9 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
                 EmployeeName = empNames.GetValueOrDefault(k.EmployeeId, $"Employee #{k.EmployeeId}"),
                 LeadsConverted = convByDateEmp.GetValueOrDefault(k, 0),
                 FollowUpsDone = doneByDateEmp.GetValueOrDefault(k, 0),
-                NoAnswerCount = naByDateEmp.GetValueOrDefault(k, 0)
+                NoAnswerCount = naByDateEmp.GetValueOrDefault(k, 0),
+                InterestedCount = intByDateEmp.GetValueOrDefault(k, 0),
+                NotInterestedCount = notIntByDateEmp.GetValueOrDefault(k, 0),
             });
         }
 
@@ -441,8 +475,10 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
             FromUtc = fromUtc,
             ToUtc = toUtc,
             TotalLeadsConverted = convertedLeads.Count,
-            TotalFollowUpsDone = doneFollowUps.Count,
+            TotalFollowUpsDone = doneFollowUps.Count(f => !IsNoAnswer(f.Outcome)),
             TotalNoAnswerCount = doneFollowUps.Count(f => IsNoAnswer(f.Outcome)),
+            TotalInterestedCount = doneFollowUps.Count(f => IsInterested(f.Outcome)),
+            TotalNotInterestedCount = doneFollowUps.Count(f => IsNotInterested(f.Outcome)),
             ByEmployee = byEmployee.OrderByDescending(e => e.LeadsConverted).ThenByDescending(e => e.FollowUpsDone).ToList(),
             DailyBreakdown = dailyList
         };
@@ -456,6 +492,23 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
             || o.StartsWith(FollowUpOutcomes.Callback, StringComparison.OrdinalIgnoreCase)
             || o.StartsWith("No answer", StringComparison.OrdinalIgnoreCase)
             || o.StartsWith("Call back", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsInterested(string? outcome)
+    {
+        if (string.IsNullOrWhiteSpace(outcome)) return false;
+        var o = outcome.Trim();
+        return o.StartsWith(FollowUpOutcomes.Interested, StringComparison.OrdinalIgnoreCase)
+            || o.StartsWith("Interested", StringComparison.OrdinalIgnoreCase)
+            || o.StartsWith("Hot", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsNotInterested(string? outcome)
+    {
+        if (string.IsNullOrWhiteSpace(outcome)) return false;
+        var o = outcome.Trim();
+        return o.StartsWith(FollowUpOutcomes.NotInterested, StringComparison.OrdinalIgnoreCase)
+            || o.StartsWith("Not interested", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<EmployeePerformanceDetailResponse> EmployeePerformanceDetailsAsync(
@@ -482,13 +535,15 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
         var items = new List<EmployeePerformanceDetailItemDto>();
         string title = normType switch
         {
-            "leads_won" or "leads_converted" or "won" => "Leads Won (முடித்தவை)",
+            "leads_won" or "leads_converted" or "won" or "orders_booked" or "orders" => "Orders Booked (புக் செய்த ஆர்டர்கள்)",
             "followups_done" or "done" => "Follow-ups Done (முடித்தவை)",
-            "no_answer" or "noanswer" => "No Answer Follow-up",
+            "no_answer" or "noanswer" => "No Answer Follow-up (அழைப்பு எடுக்காதவை)",
+            "interested" or "hot" or "hot_leads" => "Hot Leads / Interested (ஆர்வம் காட்டியவை)",
+            "not_interested" or "notinterested" => "Not Interested (விருப்பமில்லை)",
             _ => "Performance Details"
         };
 
-        if (normType is "leads_won" or "leads_converted" or "won")
+        if (normType is "leads_won" or "leads_converted" or "won" or "orders_booked" or "orders")
         {
             var query = db.Leads.AsNoTracking()
                 .Where(l => l.ConvertedAt >= fromUtc && l.ConvertedAt < toUtc);
@@ -530,9 +585,8 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
                 });
             }
         }
-        else if (normType is "followups_done" or "done" or "no_answer" or "noanswer")
+        else if (normType is "followups_done" or "done" or "no_answer" or "noanswer" or "interested" or "hot" or "hot_leads" or "not_interested" or "notinterested")
         {
-            var isNoAnswerOnly = normType is "no_answer" or "noanswer";
             var query = db.FollowUps.AsNoTracking()
                 .Where(f => f.Status == FollowUpStatus.Done && f.CompletedAt >= fromUtc && f.CompletedAt < toUtc);
 
@@ -542,9 +596,21 @@ public class ReportService(NuraDbContext db, WhatsAppService whatsapp)
                 query = query.Where(f => f.AssignedToEmployeeId != null && activeEmpIds.Contains(f.AssignedToEmployeeId.Value));
 
             var list = await query.OrderByDescending(f => f.CompletedAt).Take(2000).ToListAsync();
-            if (isNoAnswerOnly)
+            if (normType is "followups_done" or "done")
+            {
+                list = list.Where(f => !IsNoAnswer(f.Outcome)).ToList();
+            }
+            else if (normType is "no_answer" or "noanswer")
             {
                 list = list.Where(f => IsNoAnswer(f.Outcome)).ToList();
+            }
+            else if (normType is "interested" or "hot" or "hot_leads")
+            {
+                list = list.Where(f => IsInterested(f.Outcome)).ToList();
+            }
+            else if (normType is "not_interested" or "notinterested")
+            {
+                list = list.Where(f => IsNotInterested(f.Outcome)).ToList();
             }
 
             var leadIds = list.Select(f => f.LeadId).Distinct().ToList();

@@ -80,7 +80,7 @@ public static class FuFmt
             FollowUpOutcomes.NotInterested => "Not interested",
             FollowUpOutcomes.Converted => "Ordered",
             FollowUpOutcomes.NoAnswer => "No answer",
-            FollowUpOutcomes.Callback => "No Answer Follow-up",
+            FollowUpOutcomes.Callback => "Call back later",
             "skipped" => "Skipped",
             _ => outcome,
         };

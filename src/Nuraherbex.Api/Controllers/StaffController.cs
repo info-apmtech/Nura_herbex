@@ -1269,6 +1269,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     [HttpPost("employees")]
     public async Task<IActionResult> CreateEmployee(EmployeeSaveRequest r)
     {
+        if (r.Role == EmployeeRoles.Admin && !IsAdmin) return BadRequest(new ApiResult { Success = false, Message = "Only an administrator can create an administrator account." });
         var error = Validate(r, creating: true) ?? await CheckOrgAsync(r, null);
         if (error is not null) return BadRequest(new ApiResult { Success = false, Message = error });
         var email = r.Email.Trim().ToLowerInvariant();
@@ -1291,6 +1292,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     {
         var emp = await db.Employees.FirstOrDefaultAsync(e => e.Id == id);
         if (emp is null) return NotFound(new ApiResult { Success = false, Message = "Employee not found" });
+        if (emp.Role == EmployeeRole.Admin && !IsAdmin) return BadRequest(new ApiResult { Success = false, Message = "Only an administrator can edit an administrator account." });
         var error = Validate(r, creating: false) ?? await CheckOrgAsync(r, emp);
         if (error is not null) return BadRequest(new ApiResult { Success = false, Message = error });
         var email = r.Email.Trim().ToLowerInvariant();
@@ -1328,6 +1330,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     [HttpGet("employees/{id:long}/handover")]
     public async Task<IActionResult> HandoverPreview(long id)
     {
+        if (!IsAdmin) return StatusCode(403, new ApiResult { Success = false, Message = "Only administrators can remove employees." });
         var emp = await db.Employees.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id);
         if (emp is null) return NotFound(new ApiResult { Success = false, Message = "Employee not found" });
         var (leadPeople, carePeople) = await HandoverPeopleAsync(id);
@@ -1358,6 +1361,7 @@ public class StaffController(NuraDbContext db, LeadService leads, WhatsAppServic
     [HttpDelete("employees/{id:long}")]
     public async Task<IActionResult> RemoveEmployee(long id, [FromQuery] string? reassign)
     {
+        if (!IsAdmin) return StatusCode(403, new ApiResult { Success = false, Message = "Only administrators can remove employees." });
         var emp = await db.Employees.FirstOrDefaultAsync(e => e.Id == id);
         if (emp is null) return NotFound(new ApiResult { Success = false, Message = "Employee not found" });
         if (id == MyId) return BadRequest(new ApiResult { Success = false, Message = "You cannot remove your own account." });

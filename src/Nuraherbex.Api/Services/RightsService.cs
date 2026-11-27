@@ -114,7 +114,9 @@ public static class PageRules
         if (path is "/api/admin/login" or "/api/admin/verify" or "/api/admin/team" or "/api/admin/team/departments") return Open;
         if (Is("/api/admin/notifications") || Is("/api/admin/presence")) return Open; // every signed-in staff member controls their own presence and WhatsApp switch
 
-        // team and organisation
+        // team and organisation: creating and updating employees is allowed for staff with Team access; removing requires Admin.
+        if (path == "/api/admin/employees" && (m == "GET" || m == "POST")) return For("GET", "team");
+        if (path.StartsWith("/api/admin/employees/") && (m == "GET" || m == "PUT")) return For("GET", "team");
         if (Is("/api/admin/employees") || Is("/api/admin/departments") || Is("/api/admin/designations") || Is("/api/admin/rights")) return For(m, "team");
         if (path == "/api/admin/ai/reply-settings") return Read(m) ? For(m, "leads", "interested", "care", "followups") : For(m, "team");
         if (path == "/api/admin/followups/settings") return Read(m) ? For(m, "followups") : For(m, "team");

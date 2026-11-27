@@ -153,8 +153,9 @@ public class FollowUpService(
         await leads.CloseOpenManualFollowUpsAsync(lead.Id, "Replaced by a newer follow-up", createdBy, r.Type);
         db.FollowUps.Add(item);
 
-        // Scheduling a follow-up from Interested (or NoAnswer) automatically moves the lead to Follow-up.
-        if (lead.Status is LeadStatus.Interested or LeadStatus.NoAnswer)
+        // Scheduling a follow-up: Hot Leads (Interested) and No Answer leads retain their dedicated status.
+        // Other general leads move to Follow-up.
+        if (lead.Status != LeadStatus.Interested && lead.Status != LeadStatus.NoAnswer && lead.Status != LeadStatus.Converted)
         {
             LeadStatus? fromStatus = Enum.IsDefined(lead.Status) ? lead.Status : null;
             db.LeadStatusHistory.Add(new LeadStatusHistory { LeadId = lead.Id, FromStatus = fromStatus, ToStatus = LeadStatus.FollowUp, Note = "Follow-up scheduled", ChangedBy = createdBy, CreatedAt = Clock() });

@@ -24,6 +24,18 @@
                 </select>
             }
 
+            <!-- Status Format Filter Dropdown -->
+            <select class="ld-select" style="padding:6px 12px;border-radius:8px;border:1px solid #cbd5e1;font-size:12px;background:#fff;font-weight:600;color:#1e293b;outline:none;cursor:pointer;"
+                    value="@_selectedStatus"
+                    @onchange="OnStatusFilterChanged">
+                <option value="">Status: All (எல்லா நிலைகளும்)</option>
+                <option value="orders_booked">Status: Orders Booked (புக் செய்தவை)</option>
+                <option value="followups_done">Status: Follow-ups Done (பேசியவை)</option>
+                <option value="interested">Status: Hot Leads (ஆர்வம்)</option>
+                <option value="no_answer">Status: No Answer (அழைப்பு எடுக்காதவை)</option>
+                <option value="not_interested">Status: Not Interested (விருப்பமில்லை)</option>
+            </select>
+
             <DateRangeFilter
                 SelectedDays="@_days"
                 IsCustom="@_isCustom"
@@ -59,43 +71,74 @@
     {
         <!-- Summary KPI Cards (Clickable to view detailed list) -->
         <div class="fr-kpis" style="margin-bottom:20px;">
-            <div class="fr-kpi em-kpi-clickable" style="border-left:4px solid #10b981;cursor:pointer;"
-                 title="Click to view all Leads Won list"
-                 @onclick='() => OpenDrillDown("leads_won", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+            <div class="fr-kpi em-kpi-clickable" style="@($"border-left:4px solid #10b981;cursor:pointer; {(_selectedStatus == "orders_booked" ? "border:2px solid #10b981;box-shadow:0 6px 16px rgba(16,185,129,0.25);background:#f0fdf4;" : "")}")"
+                 title="Click to filter by Orders Booked"
+                 @onclick='() => ToggleStatusFilter("orders_booked")'>
                 <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <span style="color:#059669;font-weight:600;"><Icon Name="Award" Size="14" /> Leads Won (முடித்தவை)</span>
-                    <span style="font-size:10px;padding:2px 8px;border-radius:12px;background:#d1fae5;color:#065f46;font-weight:600;display:inline-flex;align-items:center;gap:3px;">
+                    <span style="color:#059669;font-weight:600;"><Icon Name="ShoppingBag" Size="14" /> Orders Booked (புக் செய்தவை)</span>
+                    <button type="button" class="admin-btn admin-btn-small" style="font-size:10px;padding:1px 7px;border-radius:12px;background:#d1fae5;color:#065f46;border:none;font-weight:700;cursor:pointer;"
+                            @onclick:stopPropagation="true" @onclick='() => OpenDrillDown("orders_booked", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
                         List ↗
-                    </span>
+                    </button>
                 </div>
                 <strong style="color:#065f46;">@r.TotalLeadsConverted</strong>
-                <small>Customers placed order in this period (click to view list)</small>
+                <small>Customers placed order in this period @(_selectedStatus == "orders_booked" ? "(Active Filter)" : "")</small>
             </div>
 
-            <div class="fr-kpi em-kpi-clickable" style="border-left:4px solid #8b5cf6;cursor:pointer;"
-                 title="Click to view all Follow-ups Done list"
-                 @onclick='() => OpenDrillDown("followups_done", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+            <div class="fr-kpi em-kpi-clickable" style="@($"border-left:4px solid #8b5cf6;cursor:pointer; {(_selectedStatus == "followups_done" ? "border:2px solid #8b5cf6;box-shadow:0 6px 16px rgba(139,92,246,0.25);background:#faf5ff;" : "")}")"
+                 title="Click to filter by Follow-ups Done (Connected calls)"
+                 @onclick='() => ToggleStatusFilter("followups_done")'>
                 <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <span style="color:#7c3aed;font-weight:600;"><Icon Name="CheckCircle2" Size="14" /> Follow-ups Done (முடித்தவை)</span>
-                    <span style="font-size:10px;padding:2px 8px;border-radius:12px;background:#ede9fe;color:#5b21b6;font-weight:600;display:inline-flex;align-items:center;gap:3px;">
+                    <span style="color:#7c3aed;font-weight:600;"><Icon Name="CheckCircle2" Size="14" /> Follow-ups Done (பேசியவை)</span>
+                    <button type="button" class="admin-btn admin-btn-small" style="font-size:10px;padding:1px 7px;border-radius:12px;background:#ede9fe;color:#5b21b6;border:none;font-weight:700;cursor:pointer;"
+                            @onclick:stopPropagation="true" @onclick='() => OpenDrillDown("followups_done", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
                         List ↗
-                    </span>
+                    </button>
                 </div>
                 <strong style="color:#5b21b6;">@r.TotalFollowUpsDone</strong>
-                <small>Completed call / message tasks (click to view list)</small>
+                <small>Connected calls where customer responded @(_selectedStatus == "followups_done" ? "(Active Filter)" : "")</small>
             </div>
 
-            <div class="fr-kpi em-kpi-clickable" style="border-left:4px solid #f59e0b;cursor:pointer;"
-                 title="Click to view all No Answer Follow-up list"
-                 @onclick='() => OpenDrillDown("no_answer", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+            <div class="fr-kpi em-kpi-clickable" style="@($"border-left:4px solid #ea580c;cursor:pointer; {(_selectedStatus == "interested" ? "border:2px solid #ea580c;box-shadow:0 6px 16px rgba(234,88,12,0.25);background:#fff7ed;" : "")}")"
+                 title="Click to filter by Hot Leads / Interested"
+                 @onclick='() => ToggleStatusFilter("interested")'>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="color:#ea580c;font-weight:600;"><Icon Name="Flame" Size="14" /> Hot Leads (Interested)</span>
+                    <button type="button" class="admin-btn admin-btn-small" style="font-size:10px;padding:1px 7px;border-radius:12px;background:#ffedd5;color:#9a3412;border:none;font-weight:700;cursor:pointer;"
+                            @onclick:stopPropagation="true" @onclick='() => OpenDrillDown("interested", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                        List ↗
+                    </button>
+                </div>
+                <strong style="color:#9a3412;">@r.TotalInterestedCount</strong>
+                <small>Customers interested to buy @(_selectedStatus == "interested" ? "(Active Filter)" : "")</small>
+            </div>
+
+            <div class="fr-kpi em-kpi-clickable" style="@($"border-left:4px solid #f59e0b;cursor:pointer; {(_selectedStatus == "no_answer" ? "border:2px solid #f59e0b;box-shadow:0 6px 16px rgba(245,158,11,0.25);background:#fffbeb;" : "")}")"
+                 title="Click to filter by No Answer Follow-ups"
+                 @onclick='() => ToggleStatusFilter("no_answer")'>
                 <div style="display:flex;align-items:center;justify-content:space-between;">
                     <span style="color:#d97706;font-weight:600;"><Icon Name="PhoneMissed" Size="14" /> No Answer Follow-up</span>
-                    <span style="font-size:10px;padding:2px 8px;border-radius:12px;background:#fef3c7;color:#92400e;font-weight:600;display:inline-flex;align-items:center;gap:3px;">
+                    <button type="button" class="admin-btn admin-btn-small" style="font-size:10px;padding:1px 7px;border-radius:12px;background:#fef3c7;color:#92400e;border:none;font-weight:700;cursor:pointer;"
+                            @onclick:stopPropagation="true" @onclick='() => OpenDrillDown("no_answer", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
                         List ↗
-                    </span>
+                    </button>
                 </div>
                 <strong style="color:#92400e;">@r.TotalNoAnswerCount</strong>
-                <small>Calls or messages that got no answer (click to view list)</small>
+                <small>Calls or messages that got no answer @(_selectedStatus == "no_answer" ? "(Active Filter)" : "")</small>
+            </div>
+
+            <div class="fr-kpi em-kpi-clickable" style="@($"border-left:4px solid #ef4444;cursor:pointer; {(_selectedStatus == "not_interested" ? "border:2px solid #ef4444;box-shadow:0 6px 16px rgba(239,68,68,0.25);background:#fef2f2;" : "")}")"
+                 title="Click to filter by Not Interested"
+                 @onclick='() => ToggleStatusFilter("not_interested")'>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="color:#dc2626;font-weight:600;"><Icon Name="XCircle" Size="14" /> Not Interested (விருப்பமில்லை)</span>
+                    <button type="button" class="admin-btn admin-btn-small" style="font-size:10px;padding:1px 7px;border-radius:12px;background:#fee2e2;color:#991b1b;border:none;font-weight:700;cursor:pointer;"
+                            @onclick:stopPropagation="true" @onclick='() => OpenDrillDown("not_interested", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                        List ↗
+                    </button>
+                </div>
+                <strong style="color:#991b1b;">@r.TotalNotInterestedCount</strong>
+                <small>Leads closed not interested @(_selectedStatus == "not_interested" ? "(Active Filter)" : "")</small>
             </div>
 
             <div class="fr-kpi" style="border-left:4px solid #3b82f6;">
@@ -124,6 +167,25 @@
 
         @if (_viewMode == "summary")
         {
+            @if (!string.IsNullOrEmpty(_selectedStatus))
+            {
+                <div style="margin-bottom:12px;padding:8px 14px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                    <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+                        <span style="font-weight:600;color:#334155;">Filtered by:</span>
+                        <span style="padding:2px 10px;border-radius:12px;font-weight:700;font-size:12px;@GetStatusBadgeStyle(_selectedStatus)">
+                            @GetStatusLabel(_selectedStatus)
+                        </span>
+                        <span style="font-weight:700;color:#1e293b;font-size:13px;">
+                            (Total Count: @GetTotalCountForStatus(r, _selectedStatus))
+                        </span>
+                        <span style="color:#64748b;font-size:11px;">Showing employees sorted by this count</span>
+                    </div>
+                    <button type="button" class="admin-btn admin-btn-small" style="font-size:11px;padding:3px 10px;border-radius:6px;background:#e2e8f0;color:#334155;border:none;cursor:pointer;font-weight:600;" @onclick='() => _selectedStatus = ""'>
+                        ✕ Clear filter (Show all)
+                    </button>
+                </div>
+            }
+
             <!-- Employee Summary Table -->
             <div class="ld-card em-table-card" style="margin-bottom:24px;">
                 <div class="em-scroll">
@@ -134,9 +196,11 @@
                                 <th>Employee</th>
                                 <th>Designation</th>
                                 <th class="num">Total Leads</th>
-                                <th class="num" style="color:#059669;">Leads Won (முடித்தவை)</th>
-                                <th class="num" style="color:#7c3aed;">Follow-ups Done</th>
-                                <th class="num" style="color:#d97706;">No Answer Follow-up</th>
+                                <th class="num @(_selectedStatus == "orders_booked" ? "col-active-booked" : "")" style="color:#059669;">Orders Booked @(_selectedStatus == "orders_booked" ? "✓" : "")</th>
+                                <th class="num @(_selectedStatus == "followups_done" ? "col-active-done" : "")" style="color:#7c3aed;">Follow-ups Done @(_selectedStatus == "followups_done" ? "✓" : "")</th>
+                                <th class="num @(_selectedStatus == "no_answer" ? "col-active-na" : "")" style="color:#d97706;">No Answer Follow-up @(_selectedStatus == "no_answer" ? "✓" : "")</th>
+                                <th class="num @(_selectedStatus == "interested" ? "col-active-hot" : "")" style="color:#ea580c;">Hot Leads (Interested) @(_selectedStatus == "interested" ? "✓" : "")</th>
+                                <th class="num @(_selectedStatus == "not_interested" ? "col-active-notint" : "")" style="color:#dc2626;">Not Interested @(_selectedStatus == "not_interested" ? "✓" : "")</th>
                                 <th class="num">Pending</th>
                                 <th class="num" style="color:#dc2626;">Overdue</th>
                                 <th class="num">Win Rate %</th>
@@ -144,7 +208,7 @@
                         </thead>
                         <tbody>
                             @{ var sn = 0; }
-                            @foreach (var emp in r.ByEmployee)
+                            @foreach (var emp in DisplayEmployees(r))
                             {
                                 <tr>
                                     <td class="sn">@(++sn)</td>
@@ -156,12 +220,12 @@
                                     </td>
                                     <td><span style="font-size:11px;padding:2px 8px;border-radius:12px;background:#f1f5f9;color:#475569;">@emp.Designation</span></td>
                                     <td class="num">@emp.TotalLeads</td>
-                                    <td class="num font-bold">
+                                    <td class="num font-bold @(_selectedStatus == "orders_booked" ? "col-active-booked" : "")">
                                         @if (emp.LeadsConverted > 0)
                                         {
                                             <span class="em-clickable-pill pill-won"
-                                                  title="Click to view @emp.Name's Won Leads"
-                                                  @onclick='() => OpenDrillDown("leads_won", emp.EmployeeId, emp.Name)'>
+                                                  title="Click to view @emp.Name's Orders Booked"
+                                                  @onclick='() => OpenDrillDown("orders_booked", emp.EmployeeId, emp.Name)'>
                                                 @emp.LeadsConverted
                                             </span>
                                         }
@@ -170,7 +234,7 @@
                                             <span style="color:#94a3b8;">0</span>
                                         }
                                     </td>
-                                    <td class="num font-bold">
+                                    <td class="num font-bold @(_selectedStatus == "followups_done" ? "col-active-done" : "")">
                                         @if (emp.FollowUpsDone > 0)
                                         {
                                             <span class="em-clickable-pill pill-fu"
@@ -184,13 +248,41 @@
                                             <span style="color:#94a3b8;">0</span>
                                         }
                                     </td>
-                                    <td class="num font-bold">
+                                    <td class="num font-bold @(_selectedStatus == "no_answer" ? "col-active-na" : "")">
                                         @if (emp.NoAnswerCount > 0)
                                         {
                                             <span class="em-clickable-pill pill-na"
                                                   title="Click to view @emp.Name's No Answer Follow-ups"
                                                   @onclick='() => OpenDrillDown("no_answer", emp.EmployeeId, emp.Name)'>
                                                 @emp.NoAnswerCount
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:#94a3b8;">0</span>
+                                        }
+                                    </td>
+                                    <td class="num font-bold @(_selectedStatus == "interested" ? "col-active-hot" : "")">
+                                        @if (emp.InterestedCount > 0)
+                                        {
+                                            <span class="em-clickable-pill pill-hot"
+                                                  title="Click to view @emp.Name's Hot Leads / Interested"
+                                                  @onclick='() => OpenDrillDown("interested", emp.EmployeeId, emp.Name)'>
+                                                @emp.InterestedCount
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:#94a3b8;">0</span>
+                                        }
+                                    </td>
+                                    <td class="num font-bold @(_selectedStatus == "not_interested" ? "col-active-notint" : "")">
+                                        @if (emp.NotInterestedCount > 0)
+                                        {
+                                            <span class="em-clickable-pill pill-rej"
+                                                  title="Click to view @emp.Name's Not Interested leads"
+                                                  @onclick='() => OpenDrillDown("not_interested", emp.EmployeeId, emp.Name)'>
+                                                @emp.NotInterestedCount
                                             </span>
                                         }
                                         else
@@ -209,7 +301,7 @@
                             }
                             @if (r.ByEmployee.Count == 0)
                             {
-                                <tr><td colspan="10" class="em-empty">No employee performance data recorded for this period.</td></tr>
+                                <tr><td colspan="12" class="em-empty">No employee performance data recorded for this period.</td></tr>
                             }
                         </tbody>
                         @if (r.ByEmployee.Count > 0)
@@ -233,8 +325,8 @@
                                     </td>
                                     <td class="num font-bold">
                                         <span class="em-clickable-pill pill-won" style="font-size:13px;"
-                                              title="Click to view all Won Leads (@r.TotalLeadsConverted)"
-                                              @onclick='() => OpenDrillDown("leads_won", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                                              title="Click to view all Orders Booked (@r.TotalLeadsConverted)"
+                                              @onclick='() => OpenDrillDown("orders_booked", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
                                             @r.TotalLeadsConverted.ToString("N0")
                                         </span>
                                     </td>
@@ -250,6 +342,20 @@
                                               title="Click to view all No Answer Follow-ups (@r.TotalNoAnswerCount)"
                                               @onclick='() => OpenDrillDown("no_answer", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
                                             @r.TotalNoAnswerCount.ToString("N0")
+                                        </span>
+                                    </td>
+                                    <td class="num font-bold">
+                                        <span class="em-clickable-pill pill-hot" style="font-size:13px;"
+                                              title="Click to view all Hot Leads / Interested (@r.TotalInterestedCount)"
+                                              @onclick='() => OpenDrillDown("interested", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                                            @r.TotalInterestedCount.ToString("N0")
+                                        </span>
+                                    </td>
+                                    <td class="num font-bold">
+                                        <span class="em-clickable-pill pill-rej" style="font-size:13px;"
+                                              title="Click to view all Not Interested leads (@r.TotalNotInterestedCount)"
+                                              @onclick='() => OpenDrillDown("not_interested", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                                            @r.TotalNotInterestedCount.ToString("N0")
                                         </span>
                                     </td>
                                     <td class="num font-bold" style="font-size:13px;color:#475569;">
@@ -275,6 +381,25 @@
         }
         else
         {
+            @if (!string.IsNullOrEmpty(_selectedStatus))
+            {
+                <div style="margin-bottom:12px;padding:8px 14px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                    <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+                        <span style="font-weight:600;color:#334155;">Filtered by:</span>
+                        <span style="padding:2px 10px;border-radius:12px;font-weight:700;font-size:12px;@GetStatusBadgeStyle(_selectedStatus)">
+                            @GetStatusLabel(_selectedStatus)
+                        </span>
+                        <span style="font-weight:700;color:#1e293b;font-size:13px;">
+                            (Total Count: @GetTotalCountForStatus(r, _selectedStatus))
+                        </span>
+                        <span style="color:#64748b;font-size:11px;">Showing dates with activity in this status</span>
+                    </div>
+                    <button type="button" class="admin-btn admin-btn-small" style="font-size:11px;padding:3px 10px;border-radius:6px;background:#e2e8f0;color:#334155;border:none;cursor:pointer;font-weight:600;" @onclick='() => _selectedStatus = ""'>
+                        ✕ Clear filter (Show all)
+                    </button>
+                </div>
+            }
+
             <!-- Date-wise Daily Breakdown Table -->
             <div class="ld-card em-table-card" style="margin-bottom:24px;">
                 <div class="em-scroll">
@@ -284,25 +409,27 @@
                                 <th class="sn">S.No</th>
                                 <th>Date (தேதி)</th>
                                 <th>Employee</th>
-                                <th class="num" style="color:#059669;">Leads Won (முடித்தவை)</th>
-                                <th class="num" style="color:#7c3aed;">Follow-ups Done (முடித்தவை)</th>
-                                <th class="num" style="color:#d97706;">No Answer Follow-up</th>
+                                <th class="num @(_selectedStatus == "orders_booked" ? "col-active-booked" : "")" style="color:#059669;">Orders Booked @(_selectedStatus == "orders_booked" ? "✓" : "")</th>
+                                <th class="num @(_selectedStatus == "followups_done" ? "col-active-done" : "")" style="color:#7c3aed;">Follow-ups Done @(_selectedStatus == "followups_done" ? "✓" : "")</th>
+                                <th class="num @(_selectedStatus == "no_answer" ? "col-active-na" : "")" style="color:#d97706;">No Answer Follow-up @(_selectedStatus == "no_answer" ? "✓" : "")</th>
+                                <th class="num @(_selectedStatus == "interested" ? "col-active-hot" : "")" style="color:#ea580c;">Hot Leads (Interested) @(_selectedStatus == "interested" ? "✓" : "")</th>
+                                <th class="num @(_selectedStatus == "not_interested" ? "col-active-notint" : "")" style="color:#dc2626;">Not Interested @(_selectedStatus == "not_interested" ? "✓" : "")</th>
                             </tr>
                         </thead>
                         <tbody>
                             @{ var dsn = 0; }
-                            @foreach (var day in r.DailyBreakdown)
+                            @foreach (var day in DisplayDailyBreakdown(r))
                             {
                                 <tr>
                                     <td class="sn">@(++dsn)</td>
                                     <td><strong>@day.Date</strong></td>
                                     <td>@day.EmployeeName</td>
-                                    <td class="num font-bold">
+                                    <td class="num font-bold @(_selectedStatus == "orders_booked" ? "col-active-booked" : "")">
                                         @if (day.LeadsConverted > 0)
                                         {
                                             <span class="em-clickable-pill pill-won"
-                                                  title="Click to view @day.EmployeeName's Won Leads on @day.Date"
-                                                  @onclick='() => OpenDrillDown("leads_won", day.EmployeeId, $"{day.EmployeeName} ({day.Date})", date: day.Date)'>
+                                                  title="Click to view @day.EmployeeName's Orders Booked on @day.Date"
+                                                  @onclick='() => OpenDrillDown("orders_booked", day.EmployeeId, $"{day.EmployeeName} ({day.Date})", date: day.Date)'>
                                                 @day.LeadsConverted
                                             </span>
                                         }
@@ -311,7 +438,7 @@
                                             <span style="color:#94a3b8;">0</span>
                                         }
                                     </td>
-                                    <td class="num font-bold">
+                                    <td class="num font-bold @(_selectedStatus == "followups_done" ? "col-active-done" : "")">
                                         @if (day.FollowUpsDone > 0)
                                         {
                                             <span class="em-clickable-pill pill-fu"
@@ -325,7 +452,7 @@
                                             <span style="color:#94a3b8;">0</span>
                                         }
                                     </td>
-                                    <td class="num font-bold">
+                                    <td class="num font-bold @(_selectedStatus == "no_answer" ? "col-active-na" : "")">
                                         @if (day.NoAnswerCount > 0)
                                         {
                                             <span class="em-clickable-pill pill-na"
@@ -339,11 +466,39 @@
                                             <span style="color:#94a3b8;">0</span>
                                         }
                                     </td>
+                                    <td class="num font-bold @(_selectedStatus == "interested" ? "col-active-hot" : "")">
+                                        @if (day.InterestedCount > 0)
+                                        {
+                                            <span class="em-clickable-pill pill-hot"
+                                                  title="Click to view @day.EmployeeName's Hot Leads on @day.Date"
+                                                  @onclick='() => OpenDrillDown("interested", day.EmployeeId, $"{day.EmployeeName} ({day.Date})", date: day.Date)'>
+                                                @day.InterestedCount
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:#94a3b8;">0</span>
+                                        }
+                                    </td>
+                                    <td class="num font-bold @(_selectedStatus == "not_interested" ? "col-active-notint" : "")">
+                                        @if (day.NotInterestedCount > 0)
+                                        {
+                                            <span class="em-clickable-pill pill-rej"
+                                                  title="Click to view @day.EmployeeName's Not Interested leads on @day.Date"
+                                                  @onclick='() => OpenDrillDown("not_interested", day.EmployeeId, $"{day.EmployeeName} ({day.Date})", date: day.Date)'>
+                                                @day.NotInterestedCount
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:#94a3b8;">0</span>
+                                        }
+                                    </td>
                                 </tr>
                             }
                             @if (r.DailyBreakdown.Count == 0)
                             {
-                                <tr><td colspan="6" class="em-empty">No daily activity recorded for this period.</td></tr>
+                                <tr><td colspan="8" class="em-empty">No daily activity recorded for this period.</td></tr>
                             }
                         </tbody>
                         @if (r.DailyBreakdown.Count > 0)
@@ -359,8 +514,8 @@
                                     </td>
                                     <td class="num font-bold">
                                         <span class="em-clickable-pill pill-won" style="font-size:13px;"
-                                              title="Click to view all Won Leads"
-                                              @onclick='() => OpenDrillDown("leads_won", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                                              title="Click to view all Orders Booked"
+                                              @onclick='() => OpenDrillDown("orders_booked", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
                                             @r.DailyBreakdown.Sum(x => x.LeadsConverted).ToString("N0")
                                         </span>
                                     </td>
@@ -376,6 +531,20 @@
                                               title="Click to view all No Answer Follow-ups"
                                               @onclick='() => OpenDrillDown("no_answer", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
                                             @r.DailyBreakdown.Sum(x => x.NoAnswerCount).ToString("N0")
+                                        </span>
+                                    </td>
+                                    <td class="num font-bold">
+                                        <span class="em-clickable-pill pill-hot" style="font-size:13px;"
+                                              title="Click to view all Hot Leads / Interested"
+                                              @onclick='() => OpenDrillDown("interested", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                                            @r.DailyBreakdown.Sum(x => x.InterestedCount).ToString("N0")
+                                        </span>
+                                    </td>
+                                    <td class="num font-bold">
+                                        <span class="em-clickable-pill pill-rej" style="font-size:13px;"
+                                              title="Click to view all Not Interested leads"
+                                              @onclick='() => OpenDrillDown("not_interested", _selectedEmployeeId, CurrentFilterEmployeeLabel)'>
+                                            @r.DailyBreakdown.Sum(x => x.NotInterestedCount).ToString("N0")
                                         </span>
                                     </td>
                                 </tr>
@@ -590,6 +759,19 @@
         background: #fef3c7;
         color: #92400e;
     }
+    .pill-hot {
+        background: #ffedd5;
+        color: #9a3412;
+    }
+    .pill-rej {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+    .col-active-booked { background: #f0fdf4 !important; }
+    .col-active-done { background: #faf5ff !important; }
+    .col-active-na { background: #fffbeb !important; }
+    .col-active-hot { background: #fff7ed !important; }
+    .col-active-notint { background: #fef2f2 !important; }
     .em-modal-backdrop {
         position: fixed;
         inset: 0;
@@ -627,6 +809,99 @@
     private string _viewMode = "summary"; // "summary" | "daily"
     private bool _loading = true;
     private string? _error;
+
+    // Status Format Filter
+    private string _selectedStatus = "";
+
+    private void OnStatusFilterChanged(ChangeEventArgs e)
+    {
+        _selectedStatus = e.Value?.ToString() ?? "";
+    }
+
+    private void ToggleStatusFilter(string status)
+    {
+        _selectedStatus = _selectedStatus == status ? "" : status;
+    }
+
+    private IEnumerable<EmployeePerformanceDto> DisplayEmployees(EmployeePerformanceReportResponse r)
+    {
+        if (r.ByEmployee == null || r.ByEmployee.Count == 0) return Enumerable.Empty<EmployeePerformanceDto>();
+        switch (_selectedStatus)
+        {
+            case "orders_booked":
+                var wb = r.ByEmployee.Where(e => e.LeadsConverted > 0).OrderByDescending(e => e.LeadsConverted).ToList();
+                return wb.Count > 0 ? wb : r.ByEmployee.OrderByDescending(e => e.LeadsConverted);
+            case "followups_done":
+                var fb = r.ByEmployee.Where(e => e.FollowUpsDone > 0).OrderByDescending(e => e.FollowUpsDone).ToList();
+                return fb.Count > 0 ? fb : r.ByEmployee.OrderByDescending(e => e.FollowUpsDone);
+            case "interested":
+                var ib = r.ByEmployee.Where(e => e.InterestedCount > 0).OrderByDescending(e => e.InterestedCount).ToList();
+                return ib.Count > 0 ? ib : r.ByEmployee.OrderByDescending(e => e.InterestedCount);
+            case "no_answer":
+                var nb = r.ByEmployee.Where(e => e.NoAnswerCount > 0).OrderByDescending(e => e.NoAnswerCount).ToList();
+                return nb.Count > 0 ? nb : r.ByEmployee.OrderByDescending(e => e.NoAnswerCount);
+            case "not_interested":
+                var rb = r.ByEmployee.Where(e => e.NotInterestedCount > 0).OrderByDescending(e => e.NotInterestedCount).ToList();
+                return rb.Count > 0 ? rb : r.ByEmployee.OrderByDescending(e => e.NotInterestedCount);
+            default:
+                return r.ByEmployee;
+        }
+    }
+
+    private IEnumerable<EmployeeDailyPerformanceDto> DisplayDailyBreakdown(EmployeePerformanceReportResponse r)
+    {
+        if (r.DailyBreakdown == null || r.DailyBreakdown.Count == 0) return Enumerable.Empty<EmployeeDailyPerformanceDto>();
+        switch (_selectedStatus)
+        {
+            case "orders_booked":
+                var wb = r.DailyBreakdown.Where(d => d.LeadsConverted > 0).OrderByDescending(d => d.Date).ToList();
+                return wb.Count > 0 ? wb : r.DailyBreakdown;
+            case "followups_done":
+                var fb = r.DailyBreakdown.Where(d => d.FollowUpsDone > 0).OrderByDescending(d => d.Date).ToList();
+                return fb.Count > 0 ? fb : r.DailyBreakdown;
+            case "interested":
+                var ib = r.DailyBreakdown.Where(d => d.InterestedCount > 0).OrderByDescending(d => d.Date).ToList();
+                return ib.Count > 0 ? ib : r.DailyBreakdown;
+            case "no_answer":
+                var nb = r.DailyBreakdown.Where(d => d.NoAnswerCount > 0).OrderByDescending(d => d.Date).ToList();
+                return nb.Count > 0 ? nb : r.DailyBreakdown;
+            case "not_interested":
+                var rb = r.DailyBreakdown.Where(d => d.NotInterestedCount > 0).OrderByDescending(d => d.Date).ToList();
+                return rb.Count > 0 ? rb : r.DailyBreakdown;
+            default:
+                return r.DailyBreakdown;
+        }
+    }
+
+    private int GetTotalCountForStatus(EmployeePerformanceReportResponse r, string status) => status switch
+    {
+        "orders_booked" => r.TotalLeadsConverted,
+        "followups_done" => r.TotalFollowUpsDone,
+        "interested" => r.TotalInterestedCount,
+        "no_answer" => r.TotalNoAnswerCount,
+        "not_interested" => r.TotalNotInterestedCount,
+        _ => 0
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "orders_booked" => "Orders Booked (புக் செய்தவை)",
+        "followups_done" => "Follow-ups Done (பேசியவை)",
+        "interested" => "Hot Leads / Interested (ஆர்வம்)",
+        "no_answer" => "No Answer Follow-up (அழைப்பு எடுக்காதவை)",
+        "not_interested" => "Not Interested (விருப்பமில்லை)",
+        _ => "All"
+    };
+
+    private static string GetStatusBadgeStyle(string status) => status switch
+    {
+        "orders_booked" => "background:#d1fae5;color:#065f46;",
+        "followups_done" => "background:#ede9fe;color:#5b21b6;",
+        "interested" => "background:#ffedd5;color:#9a3412;",
+        "no_answer" => "background:#fef3c7;color:#92400e;",
+        "not_interested" => "background:#fee2e2;color:#991b1b;",
+        _ => "background:#e2e8f0;color:#334155;"
+    };
 
     private int _days = 30;
     private bool _isCustom;
@@ -766,9 +1041,11 @@
 
         _drillDownTitle = type switch
         {
-            "leads_won" => "Leads Won (முடித்தவை)",
+            "leads_won" or "orders_booked" or "orders" => "Orders Booked (புக் செய்தவை)",
             "followups_done" => "Follow-ups Done (முடித்தவை)",
             "no_answer" => "No Answer Follow-up",
+            "interested" or "hot" => "Hot Leads / Interested (ஆர்வம் காட்டியவை)",
+            "not_interested" => "Not Interested (விருப்பமில்லை)",
             _ => "Details"
         };
 
@@ -803,11 +1080,12 @@
     private async Task ExportDrillDownCsv()
     {
         if (_drillDownData is null || FilteredDrillDownItems.Count == 0) return;
-        var cols = _drillDownType == "leads_won"
+        var isOrders = _drillDownType is "leads_won" or "orders_booked" or "orders";
+        var cols = isOrders
             ? new[] { "S.No", "Customer Name", "Phone", "Date", "Time", "Handled By", "Status", "Order Total (₹)", "Notes" }
             : new[] { "S.No", "Customer Name", "Phone", "Date", "Time", "Handled By", "Outcome", "Source / Type", "Notes" };
 
-        var rows = FilteredDrillDownItems.Select((it, i) => (IReadOnlyList<string>)(_drillDownType == "leads_won"
+        var rows = FilteredDrillDownItems.Select((it, i) => (IReadOnlyList<string>)(isOrders
             ? new[]
             {
                 (i + 1).ToString(),
@@ -840,24 +1118,30 @@
 
     private static string HeaderBadgeStyle(string type) => type switch
     {
-        "leads_won" => "background:#d1fae5;color:#065f46;",
+        "leads_won" or "orders_booked" or "orders" => "background:#d1fae5;color:#065f46;",
         "followups_done" => "background:#ede9fe;color:#5b21b6;",
         "no_answer" => "background:#fef3c7;color:#92400e;",
+        "interested" or "hot" => "background:#ffedd5;color:#9a3412;",
+        "not_interested" => "background:#fee2e2;color:#991b1b;",
         _ => "background:#e2e8f0;color:#334155;"
     };
 
     private static string HeaderIconName(string type) => type switch
     {
-        "leads_won" => "Award",
+        "leads_won" or "orders_booked" or "orders" => "ShoppingBag",
         "followups_done" => "CheckCircle2",
         "no_answer" => "PhoneMissed",
+        "interested" or "hot" => "Flame",
+        "not_interested" => "XCircle",
         _ => "List"
     };
 
     private static string OutcomeBadgeStyle(string type, string outcome)
     {
-        if (type == "leads_won") return "background:#d1fae5;color:#065f46;";
+        if (type is "leads_won" or "orders_booked" or "orders") return "background:#d1fae5;color:#065f46;";
         if (type == "no_answer") return "background:#fef3c7;color:#92400e;";
+        if (type is "interested" or "hot") return "background:#ffedd5;color:#9a3412;";
+        if (type is "not_interested") return "background:#fee2e2;color:#991b1b;";
         var norm = outcome.ToLowerInvariant();
         if (norm.Contains("order") || norm.Contains("convert") || norm.Contains("interested"))
             return "background:#d1fae5;color:#065f46;";
@@ -869,8 +1153,8 @@
     }
 
     private string[] ExportColumns => _viewMode == "summary"
-        ? new[] { "Employee", "Designation", "Total Leads", "Leads Won", "Follow-ups Done", "No Answer Follow-up", "Pending", "Overdue", "Win Rate %" }
-        : new[] { "Date", "Employee", "Leads Won", "Follow-ups Done", "No Answer Follow-up" };
+        ? new[] { "Employee", "Designation", "Total Leads", "Orders Booked", "Follow-ups Done", "No Answer Follow-up", "Hot Leads (Interested)", "Not Interested", "Pending", "Overdue", "Win Rate %" }
+        : new[] { "Date", "Employee", "Orders Booked", "Follow-ups Done", "No Answer Follow-up", "Hot Leads (Interested)", "Not Interested" };
 
     private IEnumerable<IReadOnlyList<string>> ExportRows()
     {
@@ -886,6 +1170,8 @@
                 e.LeadsConverted.ToString(),
                 e.FollowUpsDone.ToString(),
                 e.NoAnswerCount.ToString(),
+                e.InterestedCount.ToString(),
+                e.NotInterestedCount.ToString(),
                 e.PendingFollowUps.ToString(),
                 e.OverdueFollowUps.ToString(),
                 $"{e.WinRatePercent}%"
@@ -899,7 +1185,9 @@
                 d.EmployeeName,
                 d.LeadsConverted.ToString(),
                 d.FollowUpsDone.ToString(),
-                d.NoAnswerCount.ToString()
+                d.NoAnswerCount.ToString(),
+                d.InterestedCount.ToString(),
+                d.NotInterestedCount.ToString()
             });
         }
     }

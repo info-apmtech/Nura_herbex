@@ -272,8 +272,8 @@ public class ApiClient(HttpClient http, SessionTokens tokens)
     public Task<ApiResult> AdminSaveReplySettingsAsync(ReplyAssistantSettingsRequest r) => Call<ApiResult>(HttpMethod.Put, "api/admin/ai/reply-settings", r, Who.Admin);
     public Task<ApiResult> AdminLeadConsentAsync(long id, string status) => Call<ApiResult>(HttpMethod.Put, $"api/admin/leads/{id}/consent", new LeadConsentRequest { Status = status }, Who.Admin);
 
-    public Task<FollowUpListResponse> AdminFollowUpsAsync(string? scope = null, string? assignee = null, string? type = null, long? leadId = null, string? priority = null) =>
-        Call<FollowUpListResponse>(HttpMethod.Get, $"api/admin/followups?scope={Uri.EscapeDataString(scope ?? "")}&assignee={Uri.EscapeDataString(assignee ?? "")}&type={Uri.EscapeDataString(type ?? "")}{(leadId is { } l ? $"&leadId={l}" : "")}{(!string.IsNullOrWhiteSpace(priority) ? $"&priority={Uri.EscapeDataString(priority)}" : "")}", null, Who.Admin);
+    public Task<FollowUpListResponse> AdminFollowUpsAsync(string? scope = null, string? assignee = null, string? type = null, long? leadId = null, string? priority = null, string? category = null) =>
+        Call<FollowUpListResponse>(HttpMethod.Get, $"api/admin/followups?scope={Uri.EscapeDataString(scope ?? "")}&assignee={Uri.EscapeDataString(assignee ?? "")}&type={Uri.EscapeDataString(type ?? "")}{(leadId is { } l ? $"&leadId={l}" : "")}{(!string.IsNullOrWhiteSpace(priority) ? $"&priority={Uri.EscapeDataString(priority)}" : "")}{(!string.IsNullOrWhiteSpace(category) ? $"&category={Uri.EscapeDataString(category)}" : "")}", null, Who.Admin);
     public Task<ApiResult> AdminCreateFollowUpAsync(FollowUpCreateRequest r) => Call<ApiResult>(HttpMethod.Post, "api/admin/followups", r, Who.Admin);
     public Task<ApiResult> AdminCompleteFollowUpAsync(long id, FollowUpCompleteRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/followups/{id}/complete", r, Who.Admin);
     public Task<ApiResult> AdminRescheduleFollowUpAsync(long id, FollowUpRescheduleRequest r) => Call<ApiResult>(HttpMethod.Put, $"api/admin/followups/{id}/reschedule", r, Who.Admin);

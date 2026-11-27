@@ -7,17 +7,20 @@
 
     <div class="fu-head">
         <div>
-            <p>@(AdminAuth.CanAll("followups") ? "Every call, message and order check across the team: what is late, what is due today, and what is coming." : "Your calls and messages to do. Late ones come first.")</p>
+            <p>@HeaderSubtitle</p>
         </div>
-        <ExportButton Title="Follow-ups" FileName="nura-followups" Columns="@(new[] { "Due", "Lead", "Phone", "Type", "Task", "Owner", "Status", "Completed", "Completed by", "Outcome", "Order" })" Rows="ExportRows" Disabled="@(_items.Count == 0)" />
-        <button type="button" class="ld-btn primary" @onclick="() => _composer = true"><Icon Name="Plus" Size="14" /> New follow-up</button>
+        <ExportButton Title="@ExportTitle" FileName="@ExportFileName" Columns="@(new[] { "Due", "Lead", "Phone", "Type", "Task", "Owner", "Status", "Completed", "Completed by", "Outcome", "Order" })" Rows="ExportRows" Disabled="@(_items.Count == 0)" />
+        <button type="button" class="ld-btn primary" @onclick="() => _composer = true"><Icon Name="Plus" Size="14" /> @NewButtonText</button>
     </div>
 
-    <nav class="fu-views" role="tablist">
-        <button type="button" role="tab" class="@ViewClass("tasks")" @onclick='() => _view = "tasks"'>To do</button>
-        <button type="button" role="tab" class="@ViewClass("report")" @onclick='() => _view = "report"'>Report</button>
-        <button type="button" role="tab" class="@ViewClass("plan")" @onclick='() => _view = "plan"'>15-day plan</button>
-    </nav>
+    @if (Category == "normal")
+    {
+        <nav class="fu-views" role="tablist">
+            <button type="button" role="tab" class="@ViewClass("tasks")" @onclick='() => _view = "tasks"'>To do</button>
+            <button type="button" role="tab" class="@ViewClass("report")" @onclick='() => _view = "report"'>Report</button>
+            <button type="button" role="tab" class="@ViewClass("plan")" @onclick='() => _view = "plan"'>15-day plan</button>
+        </nav>
+    }
 
     @if (!string.IsNullOrEmpty(_toast))
     {
@@ -130,6 +133,9 @@
 }
 
 @code {
+    [Parameter] public string Category { get; set; } = "normal";
+    private string _lastCategory = "";
+
     private bool Everyone => AdminAuth.CanAll("followups");
     private readonly CancellationTokenSource _cts = new();
     private List<FollowUpDto> _items = new();
@@ -150,36 +156,109 @@
     private bool _sendingAll;
     private WhatsAppUsageBar? _usageBar;
 
-    private string EmptyTitle => _scope switch
+    private string HeaderSubtitle => Category switch
     {
-        "overdue" => "Nothing is overdue",
-        "today" => "You are all caught up for today",
-        "tomorrow" => "Nothing is due tomorrow",
-        "later" => "Nothing scheduled for later dates",
-        "upcoming" => "Nothing scheduled ahead",
-        "done" => "Nothing completed yet",
-        "messages" => "No messages are waiting",
-        "sent" => "No messages sent yet",
-        _ => "No follow-ups",
+        "no_answer" => AdminAuth.CanAll("followups")
+            ? "Every unanswered lead scheduled for retry calls across the team: what is overdue, what is due today, and what is scheduled next."
+            : "Your unanswered retry calls to do. Late ones come first.",
+        "hot" or "interested" => AdminAuth.CanAll("followups")
+            ? "High-intent hot leads with scheduled follow-ups across the team: what is overdue, what is due today, and what is coming."
+            : "Your hot leads to follow up. Late ones come first.",
+        _ => AdminAuth.CanAll("followups")
+            ? "Every standard call, message and order check across the team: what is late, what is due today, and what is coming."
+            : "Your calls and messages to do. Late ones come first."
     };
 
-    private string EmptyText => _scope switch
+    private string ExportTitle => Category switch
     {
-        "overdue" => "Great — no follow-up has been missed.",
-        "today" => "New work appears here when a task falls due.",
-        "tomorrow" => "Follow-ups booked for tomorrow appear here.",
-        "later" => "Schedule a follow-up from a lead, or wait for the 15-day journey of a delivered order to be created. They are grouped by date.",
-        "upcoming" => "Schedule a follow-up from a lead, or wait for the 15-day journey of a delivered order to be created.",
-        "done" => "Finished follow-ups from the last 30 days are listed here.",
-        "messages" => "Welcome, thank-you and reorder messages appear here when they are due. Nothing is sent until you press Send.",
-        "sent" => "Every message sent from this list, by you or automatically, is kept here for 30 days.",
-        _ => "",
+        "no_answer" => "No Answer Follow-ups",
+        "hot" or "interested" => "Hot Leads Follow-ups",
+        _ => "Follow-ups"
+    };
+
+    private string ExportFileName => Category switch
+    {
+        "no_answer" => "nura-no-answer-followups",
+        "hot" or "interested" => "nura-hot-leads-followups",
+        _ => "nura-followups"
+    };
+
+    private string NewButtonText => Category switch
+    {
+        "no_answer" => "New retry follow-up",
+        "hot" or "interested" => "New hot lead follow-up",
+        _ => "New follow-up"
+    };
+
+    private string EmptyTitle => Category switch
+    {
+        "no_answer" => _scope switch
+        {
+            "overdue" => "No overdue unanswered retries",
+            "today" => "No unanswered follow-ups due today",
+            "tomorrow" => "No unanswered follow-ups due tomorrow",
+            "later" => "No unanswered follow-ups scheduled for later dates",
+            "done" => "No completed unanswered retries yet",
+            _ => "No unanswered follow-ups",
+        },
+        "hot" or "interested" => _scope switch
+        {
+            "overdue" => "No overdue hot leads",
+            "today" => "No hot leads follow-ups due today",
+            "tomorrow" => "No hot leads due tomorrow",
+            "later" => "No hot leads scheduled for later dates",
+            "done" => "No completed hot lead follow-ups yet",
+            _ => "No hot leads follow-ups",
+        },
+        _ => _scope switch
+        {
+            "overdue" => "Nothing is overdue",
+            "today" => "You are all caught up for today",
+            "tomorrow" => "Nothing is due tomorrow",
+            "later" => "Nothing scheduled for later dates",
+            "upcoming" => "Nothing scheduled ahead",
+            "done" => "Nothing completed yet",
+            "messages" => "No messages are waiting",
+            "sent" => "No messages sent yet",
+            _ => "No follow-ups",
+        }
+    };
+
+    private string EmptyText => Category switch
+    {
+        "no_answer" => "All leads who did not answer will appear here when a retry call or follow-up is scheduled.",
+        "hot" or "interested" => "Leads showing strong purchase intent scheduled for follow-up will appear here.",
+        _ => _scope switch
+        {
+            "overdue" => "Great — no follow-up has been missed.",
+            "today" => "New work appears here when a task falls due.",
+            "tomorrow" => "Follow-ups booked for tomorrow appear here.",
+            "later" => "Schedule a follow-up from a lead, or wait for the 15-day journey of a delivered order to be created. They are grouped by date.",
+            "upcoming" => "Schedule a follow-up from a lead, or wait for the 15-day journey of a delivered order to be created.",
+            "done" => "Finished follow-ups from the last 30 days are listed here.",
+            "messages" => "Welcome, thank-you and reorder messages appear here when they are due. Nothing is sent until you press Send.",
+            "sent" => "Every message sent from this list, by you or automatically, is kept here for 30 days.",
+            _ => "",
+        }
     };
 
     protected override async Task OnInitializedAsync()
     {
+        _lastCategory = Category;
         await Task.WhenAll(LoadTeamAsync(), LoadAsync(initial: true));
         _ = PollAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(Category) && Category != _lastCategory)
+        {
+            _lastCategory = Category;
+            _scope = "";
+            _page = 1;
+            _loading = true;
+            await LoadAsync(initial: true);
+        }
     }
 
     private async Task PollAsync()
@@ -199,7 +278,7 @@
     private async Task LoadAsync(bool initial)
     {
         if (_view != "tasks" && !initial) return;
-        var res = await Api.AdminFollowUpsAsync(string.IsNullOrEmpty(_scope) ? "today" : _scope, _assignee, _type, priority: _priority);
+        var res = await Api.AdminFollowUpsAsync(string.IsNullOrEmpty(_scope) ? "today" : _scope, _assignee, _type, priority: _priority, category: Category);
         if (_cts.IsCancellationRequested) return;
         if (res.Success)
         {
@@ -209,7 +288,7 @@
                 // Open on the most useful list: what is late, else what is due today.
                 var best = res.Counts.Overdue > 0 ? "overdue" : "today";
                 _scope = best;
-                if (best != "today") res = await Api.AdminFollowUpsAsync(best, _assignee, _type, priority: _priority);
+                if (best != "today") res = await Api.AdminFollowUpsAsync(best, _assignee, _type, priority: _priority, category: Category);
             }
             _items = res.Items; _error = null;
         }

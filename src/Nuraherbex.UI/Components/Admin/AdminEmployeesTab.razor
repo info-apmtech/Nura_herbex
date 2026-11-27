@@ -124,7 +124,7 @@
                             <td><i class="@($"tk-dot {(emp.IsOnline ? "on" : "")}")"></i>@(emp.IsOnline ? "Online · " : "")@(emp.LastLoginAt is { } t ? AdminFmt.DateTimeShort(t) : "Never")</td>
                             <td class="em-actions">
                                 @if (AdminAuth.IsAdmin || emp.Role != "admin") { <button type="button" class="ld-btn" @onclick="() => StartEdit(emp)">Edit</button> }
-                                @if (emp.IsActive && (AdminAuth.IsAdmin || emp.Role != "admin") && emp.Id != AdminAuth.EmployeeId)
+                                @if (emp.IsActive && AdminAuth.IsAdmin && emp.Id != AdminAuth.EmployeeId)
                                 {
                                     <button type="button" class="ld-btn danger-outline" title="Deactivate this login and hand over their leads and follow-ups" @onclick="() => OpenRemoveAsync(emp)">Remove</button>
                                 }

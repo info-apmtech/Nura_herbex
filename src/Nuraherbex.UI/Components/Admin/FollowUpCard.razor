@@ -210,9 +210,9 @@
     private sealed record OutcomeChoice(string Code, string Label, string Hint);
     private static readonly OutcomeChoice[] Outcomes =
     [
-        new(FollowUpOutcomes.Callback, "No Answer Follow-up", "Pick a time"),
+        new(FollowUpOutcomes.Callback, "Call back later", "Pick a date & time"),
         new(FollowUpOutcomes.NoAnswer, "No answer", "Try again tomorrow"),
-        new(FollowUpOutcomes.Interested, "Interested", "Wants to buy or needs time"),
+        new(FollowUpOutcomes.Interested, "Hot Lead / Interested", "Wants to buy or needs time"),
         new(FollowUpOutcomes.Converted, "Ordered", "Customer placed an order"),
         new(FollowUpOutcomes.NotInterested, "Not interested", "Close this lead"),
     ];

@@ -21,11 +21,12 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
 
     /// <param name="scope">overdue | today | tomorrow | later | upcoming (tomorrow and later) | done | messages | sent | open (default: everything not done)</param>
     /// <param name="assignee">admin only: "unassigned", "me" or an employee id</param>
+    /// <param name="category">no_answer | hot (or interested) | normal (default) | all</param>
     [HttpGet("followups")]
-    public async Task<FollowUpListResponse> List([FromQuery] string? scope, [FromQuery] string? assignee, [FromQuery] string? type, [FromQuery] string? priority, [FromQuery] long? leadId, [FromQuery] int take = 200)
+    public async Task<FollowUpListResponse> List([FromQuery] string? scope, [FromQuery] string? assignee, [FromQuery] string? type, [FromQuery] string? priority, [FromQuery] long? leadId, [FromQuery] string? category, [FromQuery] int take = 200)
     {
         var q = _db.FollowUps.AsNoTracking().AsQueryable();
-        if (!CanAll("followups")) q = q.Where(f => f.AssignedToEmployeeId == MyId);
+        if (!CanAll("followups") && !CanAll("leads")) q = q.Where(f => f.AssignedToEmployeeId == MyId);
         else if (assignee == "unassigned") q = q.Where(f => f.AssignedToEmployeeId == null);
         else if (assignee == "me") q = q.Where(f => f.AssignedToEmployeeId == MyId);
         else if (long.TryParse(assignee, out var aid)) q = q.Where(f => f.AssignedToEmployeeId == aid);
@@ -35,6 +36,39 @@ public class FollowUpController(NuraDbContext db, FollowUpService followUps, Wha
         {
             var pIds = await _db.Leads.AsNoTracking().Where(l => l.Priority == prioEnum).Select(l => l.Id).ToListAsync();
             q = q.Where(f => pIds.Contains(f.LeadId));
+        }
+
+        // Category filter: strict data separation between No Answer, Hot Leads, and Normal Follow-ups.
+        if (leadId is null)
+        {
+            var cat = (category ?? "normal").Trim().ToLowerInvariant();
+            if (cat == "no_answer")
+            {
+                // No Answer Follow Up: exclusively leads marked with No Answer status
+                q = q.Where(f =>
+                    (_db.Leads.Any(l => l.Id == f.LeadId && (l.Status == LeadStatus.NoAnswer || l.NoAnswerAttempts > 0) && l.Status != LeadStatus.Interested))
+                    || (f.Title.StartsWith("Retry:") && !_db.Leads.Any(l => l.Id == f.LeadId && l.Status == LeadStatus.Interested))
+                );
+            }
+            else if (cat is "hot" or "interested")
+            {
+                // Hot Leads Follow Up: exclusively leads marked with Hot Lead status
+                q = q.Where(f =>
+                    !(_db.Leads.Any(l => l.Id == f.LeadId && (l.Status == LeadStatus.NoAnswer || l.NoAnswerAttempts > 0)))
+                    && !f.Title.StartsWith("Retry:")
+                    && (_db.Leads.Any(l => l.Id == f.LeadId && l.Status == LeadStatus.Interested) || f.Title.StartsWith("Hot Leads"))
+                );
+            }
+            else if (cat == "normal")
+            {
+                // Normal Follow Ups: filter out and exclude all No Answer and Hot Leads records. Only standard follow-ups remain.
+                q = q.Where(f =>
+                    !(_db.Leads.Any(l => l.Id == f.LeadId && (l.Status == LeadStatus.NoAnswer || l.NoAnswerAttempts > 0 || l.Status == LeadStatus.Interested)))
+                    && !f.Title.StartsWith("Retry:")
+                    && !f.Title.StartsWith("Hot Leads")
+                );
+            }
+            // If cat == "all", no category filter is applied.
         }
 
         var today = FollowUpService.TodayStartUtc();
